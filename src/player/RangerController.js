@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ASSET_PATHS } from '../data/AssetPaths.js';
+
+const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 
 export class RangerController {
   constructor({ scene, camera, terrain }) {
@@ -16,13 +20,59 @@ export class RangerController {
     this.jumpVelocity = 0;
     this.grounded = true;
     this.walkPhase = 0;
+    this.assetMode = 'placeholder';
+    this.animationState = null;
+    this.actions = new Map();
     this.#bindKeyboard();
   }
 
   async load() {
-    this.model = this.#createFoundationRanger();
-    this.root.add(this.model);
+    try {
+      await this.#loadProductionRanger();
+      this.assetMode = 'kaykit';
+    } catch (error) {
+      console.error('[RANGER ASSET FALLBACK]', error);
+      this.model = this.#createFoundationRanger();
+      this.root.add(this.model);
+      this.assetMode = 'placeholder';
+    }
     this.#updateCamera(true);
+  }
+
+  async #loadProductionRanger() {
+    const loader = new GLTFLoader();
+    const [rangerGltf, movementGltf, generalGltf] = await Promise.all([
+      loader.loadAsync(ASSET_PATHS.ranger.model),
+      loader.loadAsync(ASSET_PATHS.ranger.movementBasic),
+      loader.loadAsync(ASSET_PATHS.ranger.general)
+    ]);
+
+    this.model = rangerGltf.scene;
+    this.model.name = 'kaykit-ranger';
+    this.model.traverse(object => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+      if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
+    });
+    this.root.add(this.model);
+
+    this.mixer = new THREE.AnimationMixer(this.model);
+    const clips = [...generalGltf.animations, ...movementGltf.animations];
+    for (const clip of clips) {
+      if (!clip?.name || this.actions.has(clip.name)) continue;
+      const action = this.mixer.clipAction(clip, this.model);
+      if (!LOOPING_CLIPS.has(clip.name)) {
+        action.setLoop(THREE.LoopOnce, 1);
+        action.clampWhenFinished = true;
+      }
+      this.actions.set(clip.name, action);
+    }
+
+    if (!this.actions.has('Idle_A') || !this.actions.has('Walking_A') || !this.actions.has('Running_A')) {
+      throw new Error('Required KayKit locomotion clips were not found');
+    }
+    this.#setAnimation('Idle_A', true);
   }
 
   #createFoundationRanger() {
@@ -73,6 +123,9 @@ export class RangerController {
     if (!this.grounded) return;
     this.grounded = false;
     this.jumpVelocity = 5.4;
+    if (this.assetMode === 'kaykit' && this.actions.has('Jump_Full_Short')) {
+      this.#setAnimation('Jump_Full_Short', true);
+    }
   }
 
   update(dt) {
@@ -82,6 +135,7 @@ export class RangerController {
     const inputX = Math.abs(this.input.x) > 0.05 ? this.input.x : keyboardX;
     const inputY = Math.abs(this.input.y) > 0.05 ? this.input.y : keyboardY;
     const length = Math.hypot(inputX, inputY);
+    const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
 
     if (length > 0.08) {
       const nx = inputX / Math.max(1, length);
@@ -89,16 +143,23 @@ export class RangerController {
       const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       const move = forward.multiplyScalar(ny).add(right.multiplyScalar(nx)).normalize();
-      const speed = (this.input.sprint || this.keys.has('ShiftLeft')) ? 6 : 3.4;
+      const speed = sprinting ? 6 : 3.4;
       this.root.position.addScaledVector(move, speed * dt);
       this.root.rotation.y = Math.atan2(move.x, move.z);
-      this.walkPhase += dt * speed * 2.6;
-      const swing = Math.sin(this.walkPhase) * 0.55;
-      this.leftLeg.rotation.x = swing;
-      this.rightLeg.rotation.x = -swing;
-    } else {
+
+      if (this.assetMode === 'placeholder') {
+        this.walkPhase += dt * speed * 2.6;
+        const swing = Math.sin(this.walkPhase) * 0.55;
+        this.leftLeg.rotation.x = swing;
+        this.rightLeg.rotation.x = -swing;
+      } else if (this.grounded) {
+        this.#setAnimation(sprinting ? 'Running_A' : 'Walking_A');
+      }
+    } else if (this.assetMode === 'placeholder') {
       this.leftLeg.rotation.x *= Math.max(0, 1 - dt * 12);
       this.rightLeg.rotation.x *= Math.max(0, 1 - dt * 12);
+    } else if (this.grounded) {
+      this.#setAnimation('Idle_A');
     }
 
     const radius = Math.hypot(this.root.position.x, this.root.position.z);
@@ -116,12 +177,23 @@ export class RangerController {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
         this.grounded = true;
+        this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
       }
     } else {
       this.root.position.y = ground;
     }
 
+    this.mixer?.update(dt);
     this.#updateCamera(false, dt);
+  }
+
+  #setAnimation(name, immediate = false) {
+    const next = this.actions.get(name);
+    if (!next || this.animationState === name) return;
+    const previous = this.animationState ? this.actions.get(this.animationState) : null;
+    if (previous && previous !== next) previous.fadeOut(immediate ? 0.05 : 0.16);
+    next.reset().fadeIn(immediate ? 0.05 : 0.16).play();
+    this.animationState = name;
   }
 
   #updateCamera(immediate = false, dt = 1 / 60) {
