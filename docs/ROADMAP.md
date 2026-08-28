@@ -4,20 +4,22 @@ This roadmap intentionally favors complete playable slices over a large feature 
 
 ## Phase 0 — Design and asset audit
 
-Status: in progress.
+Status: **complete for the first playable slice; additional packs may still be audited later.**
 
 Goals:
 
 - freeze the initial game vision and architecture;
-- receive and audit preferred itch.io packs;
+- receive and audit preferred asset packs;
 - verify licenses and commercial-use terms;
 - choose the primary character, environment, animal, building, prop and UI sets;
 - normalize intended scale and visual direction;
 - identify missing assets before coding around assumptions.
 
-No gameplay implementation should begin until the first vertical-slice asset set is selected.
+The first vertical-slice asset direction is sufficiently defined to begin the technical foundation without closing the registry to later supporting assets.
 
 ## Phase 1 — Stable technical foundation
+
+Status: **in progress — Foundation 0.1 started 2026-08-28.**
 
 Goals:
 
@@ -26,6 +28,8 @@ Goals:
 - establish automated build/smoke checks;
 - implement scene/camera foundations and mobile input shell;
 - create the data registries needed by the Day 1 slice.
+
+Foundation 0.1 intentionally uses a procedural Ranger/environment placeholder while proving boot, terrain and controls. The selected production GLB assets are integrated in the next isolated step so asset loading cannot destabilize the core boot path.
 
 Success condition: the game reliably boots on target mobile browsers and displays the selected Ranger in a test environment.
 
