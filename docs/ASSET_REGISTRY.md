@@ -1,8 +1,10 @@
 # Asset Registry
 
-Status: awaiting user-provided itch.io packs.
+Status: Batch 01 audited; awaiting additional user-provided itch.io packs before final production selection.
 
 This registry is the gate between downloaded asset packs and production integration. Packs may be reviewed and compared without being copied into the game immediately.
+
+Detailed Batch 01 notes: [`docs/assets/BATCH_01_AUDIT.md`](assets/BATCH_01_AUDIT.md)
 
 ## Audit fields
 
@@ -22,7 +24,7 @@ For each pack, record:
 | Animation coverage | Relevant clips and rig compatibility where applicable |
 | Visual compatibility | Strong / possible with adjustment / poor |
 | Required processing | Texture compression, mesh cleanup, atlas, conversion, LOD, collider generation, etc. |
-| Decision | Primary / supporting / reference-only / rejected / undecided |
+| Decision | Primary candidate / supporting candidate / reference-only / rejected / undecided |
 | Notes | Important limitations or opportunities |
 
 ## Selection rules
@@ -67,8 +69,56 @@ Before settlement implementation, select/confirm:
 
 ## Pack audit table
 
-No packs have been audited yet.
-
-| Pack | License | Category | Mobile | Compatibility | Decision |
+| Pack | License | Category / intended role | Mobile | Compatibility | Candidate decision |
 |---|---|---|---|---|---|
-| — | — | — | — | — | Awaiting packs |
+| Shikashi's Fantasy Icons Pack v2 | Commercial use permitted in supplied notes; many designs state CC BY 3.0 game-icons.net origin | Pixel UI/icons | Excellent cost; readability to test | Visual style differs from KayKit; attribution review required | Reference / optional supporting UI |
+| KayKit Fantasy Weapons Bits 1.0 FREE | CC0 | Spear, bows, axes, shields, fantasy weapons | Strong | Strong KayKit match | Primary candidate — weapons |
+| KayKit Halloween Bits 1.0 FREE | CC0 | Dark-region props, graves, bones, dead trees, paths | Strong | Strong KayKit match | Supporting candidate — danger/ruins |
+| KayKit Furniture Bits 1.0 FREE | CC0 | Beds, tables, shelves, home interiors, belongings | Strong | Strong KayKit match | Primary candidate — interiors |
+| KayKit RPG Tools Bits 1.0 FREE | CC0 | Axe, pickaxe, hammer, shovel, crafting/job tools | Strong | Strong KayKit match | Primary candidate — tools |
+| KayKit Resource Bits 1.0 FREE | CC0 | Logs, stone, planks, metals, physical storage resources | Strong | Strong KayKit match | Primary candidate — resources/storage |
+| KayKit Dungeon Pack 1.1 FREE | CC0 | Modular ruins/dungeons, props, treasure, later exploration | Strong when curated | Strong KayKit match | Supporting candidate — later exploration |
+| KayKit Forest Nature Pack 1.0 FREE | CC0 | Trees, bushes, grass, rocks | Excellent for instancing | Strong; canopy height still needs testing | Primary candidate — forest foundation |
+| KayKit Adventurers Character Pack 2.0 FREE | CC0 | Ranger/player, shared medium rig, character base | Strong with NPC update policy | Excellent character/animation foundation | Primary candidate — player/rig |
+| KayKit Skeletons Character Pack 1.1 FREE | CC0 | Initial hostile skeleton family | Strong in small groups | Excellent; shares medium-rig animation structure | Primary candidate — enemy family |
+
+## Batch 01 strongest foundation
+
+The most important result of Batch 01 is that a coherent KayKit-based core is now plausible:
+
+- **Player/character rig:** Adventurers 2.0
+- **Initial enemies:** Skeletons 1.1
+- **Forest:** Forest Nature Pack
+- **Physical resources:** Resource Bits
+- **Tools:** RPG Tools Bits
+- **Weapons:** Fantasy Weapons Bits
+- **Home/interior dressing:** Furniture Bits
+- **Later darker areas/ruins:** Halloween Bits + Dungeon Pack
+
+No production import is final until the user's remaining packs have been audited.
+
+## Outstanding asset gaps after Batch 01
+
+- beach/shore/water;
+- terrain/cliff/ravine/path solution;
+- boar and farm animals;
+- dedicated campfire/cooking/meat if supplied later;
+- modular log construction pieces;
+- villager prefab houses/workplaces;
+- broader villager appearance variety for up to roughly 30 named villagers;
+- final mobile UI system;
+- VFX;
+- audio.
+
+## Production import policy
+
+After final selection:
+
+1. Preserve/copy the relevant source license alongside imported production assets.
+2. Prefer GLB/GLTF for runtime use and avoid shipping duplicate FBX/OBJ versions.
+3. Keep original ZIP archives out of the runtime bundle.
+4. Normalize scale, orientation, filenames and asset identifiers once at import time.
+5. Keep gameplay colliders/metadata separate from render geometry.
+6. Preserve shared texture atlases/material reuse where the original pack is designed around them.
+7. Test character rigging/animations and environmental scale in an isolated asset test scene before wiring gameplay.
+8. Only ship assets used by the current game build.
