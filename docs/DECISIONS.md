@@ -74,13 +74,25 @@ Decision: the rebuild should use pinned local project dependencies and a bundler
 
 ## 2026-08-28 — Asset workflow
 
-Decision: preferred itch.io packs are audited before production integration. Licensing, performance, style, scale and role are recorded in `ASSET_REGISTRY.md` before selecting the game-ready set.
+Decision: preferred asset packs are audited before production integration. Licensing, performance, style, scale and role are recorded in `ASSET_REGISTRY.md` before selecting the game-ready set.
+
+## 2026-08-28 — Continuous island terrain
+
+Decision: the playable island uses one continuous terrain surface. Asset-pack cliff, rock, path and vegetation meshes are dressing/landmarks rather than the underlying terrain grid.
+
+Reason: this avoids visible repetition and seam problems while preserving the ability to use very cheap modular art as environmental dressing.
+
+## 2026-08-28 — Foundation boot isolation
+
+Decision: Foundation 0.1 proves bundled dependencies, rendering, continuous terrain, camera and mobile input with procedural world/player placeholders before integrating production GLB character/environment assets. The mobile HUD is loaded after world startup as an optional layer.
+
+Reason: model or HUD integration failures must not be able to prevent the core world from booting. Production assets are introduced in a separate verified step once the base build is clean.
 
 ## Open decisions
 
 The following are intentionally not locked yet:
 
-- exact visual identity after asset-pack audit;
+- exact visual identity after final in-engine asset comparison;
 - exact island dimensions and final regional layout;
 - exact Town unlock criteria;
 - exact City/end-game requirements;
