@@ -22,8 +22,7 @@ jobs:
         shell: bash
         run: |
           required=(
-            _asset_ingest/asset-0.2.part-00a
-            _asset_ingest/asset-0.2.part-00b
+            _asset_ingest/asset-0.2.part-00c
             _asset_ingest/asset-0.2.part-01
             _asset_ingest/asset-0.2.part-02
             _asset_ingest/asset-0.2.part-03
@@ -49,19 +48,14 @@ jobs:
               missing=$((missing + 1))
             fi
           done
-
           echo "missing=$missing" >> "$GITHUB_OUTPUT"
-          if [ "$missing" -ne 0 ]; then
-            echo "Foundation 0.2 payload is not complete yet ($missing required parts missing)."
-          fi
 
       - name: Reconstruct and commit curated assets
         if: steps.payload.outputs.missing == '0'
         shell: bash
         run: |
           cat \
-            _asset_ingest/asset-0.2.part-00a \
-            _asset_ingest/asset-0.2.part-00b \
+            _asset_ingest/asset-0.2.part-00c \
             _asset_ingest/asset-0.2.part-01 \
             _asset_ingest/asset-0.2.part-02 \
             _asset_ingest/asset-0.2.part-03 \
