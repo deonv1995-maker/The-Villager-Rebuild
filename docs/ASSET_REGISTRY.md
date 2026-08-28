@@ -1,10 +1,12 @@
 # Asset Registry
 
-Status: Batch 01 audited; awaiting additional user-provided itch.io packs before final production selection.
+Status: Batches 01 and 02 audited; awaiting remaining user-provided packs before final production selection.
 
 This registry is the gate between downloaded asset packs and production integration. Packs may be reviewed and compared without being copied into the game immediately.
 
-Detailed Batch 01 notes: [`docs/assets/BATCH_01_AUDIT.md`](assets/BATCH_01_AUDIT.md)
+Detailed audits:
+- [`docs/assets/BATCH_01_AUDIT.md`](assets/BATCH_01_AUDIT.md)
+- [`docs/assets/BATCH_02_AUDIT.md`](assets/BATCH_02_AUDIT.md)
 
 ## Audit fields
 
@@ -42,30 +44,30 @@ For each pack, record:
 
 ## Day 1 vertical-slice asset requirements
 
-The first playable slice requires enough selected assets for:
+Current candidate coverage:
 
-- main Ranger plus locomotion and spear-use-compatible animation coverage;
-- beach/shore environment;
-- tall forest trees and basic foliage;
-- sticks and stones or suitable resource props;
-- harvestable tree/log representation;
-- boar or suitable initial huntable animal;
-- spear/tool representation;
-- campfire and basic cooking presentation;
-- minimal food/meat representation;
-- simple mobile UI/icons;
-- environmental rocks/ground/terrain needed to make the opening area feel intentional.
+- main Ranger — **covered** by KayKit Adventurers 2.0;
+- locomotion/job/combat animations — **strongly covered** by KayKit Character Animations 1.1;
+- tall forest/rocks/grass — **covered pending scale/canopy test** by KayKit Forest Nature;
+- sticks/stones/logs/resources — **covered** by KayKit Resource Bits and forest props;
+- spear/tools — **covered** by Fantasy Weapons + RPG Tools;
+- boar — **candidate covered** by Stoneage Wild Hunt, with death-animation gap;
+- raw/cooked meat and cooking props — **covered** by Restaurant Bits;
+- shoreline/island terrain/water — **still open**;
+- final mobile UI/icons — **still open**.
 
-## Day 2 asset requirements
+## Day 2 settlement requirements
 
-Before settlement implementation, select/confirm:
+Current candidate coverage:
 
-- modular custom-building pieces for the Ranger's Home Base/Town Centre;
-- predefined villager house options;
-- first villager character variation;
-- survivor camp props/personal belongings;
-- Storage Flag or suitable marker asset;
-- basic construction/building animation coverage if available.
+- modular custom Ranger construction — **still open/custom kit planned**;
+- villager prefab homes — **candidate covered** by Medieval Hexagon home A/B;
+- workplace buildings — **candidate covered** by Medieval Hexagon buildings;
+- first villager character variation — **partially covered**, more variety required;
+- survivor camp props/belongings — **covered** by Furniture/RPG Tools/Medieval props;
+- Storage Flag — **candidate covered** by Medieval Hexagon flags;
+- construction/job animations — **strongly covered** by Character Animations 1.1;
+- farm animals — **candidate covered** by Quaternius cow/pig/sheep.
 
 ## Pack audit table
 
@@ -81,44 +83,51 @@ Before settlement implementation, select/confirm:
 | KayKit Forest Nature Pack 1.0 FREE | CC0 | Trees, bushes, grass, rocks | Excellent for instancing | Strong; canopy height still needs testing | Primary candidate — forest foundation |
 | KayKit Adventurers Character Pack 2.0 FREE | CC0 | Ranger/player, shared medium rig, character base | Strong with NPC update policy | Excellent character/animation foundation | Primary candidate — player/rig |
 | KayKit Skeletons Character Pack 1.1 FREE | CC0 | Initial hostile skeleton family | Strong in small groups | Excellent; shares medium-rig animation structure | Primary candidate — enemy family |
+| KayKit Medieval Hexagon Pack 1.0 FREE | CC0 | Villager prefab homes/workplaces, flags and settlement props | Strong when curated | Excellent KayKit match; hex terrain unsuitable for main seamless island | Primary candidate — prefab village buildings/storage flag |
+| Farm Animals Animated by Quaternius | Source page identifies CC0; archive lacks embedded license file | Cow/pig/sheep/horse farm animals | Likely strong after GLB conversion | Plausible low-poly fit; requires style/scale test | Primary candidate — farm animals |
+| Stoneage: Wild Hunt V1.1 | Creator permits commercial use/modification; raw redistribution prohibited | Wild boar | Likely strong after GLB conversion | Requires KayKit style/scale test | Primary candidate — Day 1 boar; death animation gap |
+| KayKit Restaurant Bits 1.0 FREE | CC0 | Raw/cooked food, kitchen/cooking props | Strong | Strong KayKit match | Primary candidate — food/cooking |
+| KayKit Character Animations 1.1 | CC0 | 139 confirmed medium-rig clips across locomotion, combat, work, rest and skeleton actions | Strong with animation update throttling | Excellent fit with KayKit medium-rig characters | Primary candidate — canonical humanoid animation library |
 
-## Batch 01 strongest foundation
+## Current strongest foundation
 
-The most important result of Batch 01 is that a coherent KayKit-based core is now plausible:
+Batches 01 and 02 now support a coherent KayKit-led core:
 
 - **Player/character rig:** Adventurers 2.0
+- **Canonical humanoid animations:** Character Animations 1.1
 - **Initial enemies:** Skeletons 1.1
 - **Forest:** Forest Nature Pack
 - **Physical resources:** Resource Bits
 - **Tools:** RPG Tools Bits
 - **Weapons:** Fantasy Weapons Bits
+- **Food/cooking:** Restaurant Bits
+- **Prefab villager settlement buildings:** Medieval Hexagon
 - **Home/interior dressing:** Furniture Bits
+- **Farm animals:** Quaternius animated animals candidate
+- **Wild boar:** Stoneage Wild Hunt candidate
 - **Later darker areas/ruins:** Halloween Bits + Dungeon Pack
 
-No production import is final until the user's remaining packs have been audited.
+## Outstanding gaps after Batch 02
 
-## Outstanding asset gaps after Batch 01
-
-- beach/shore/water;
-- terrain/cliff/ravine/path solution;
-- boar and farm animals;
-- dedicated campfire/cooking/meat if supplied later;
-- modular log construction pieces;
-- villager prefab houses/workplaces;
+- seamless beach/shore/water solution;
+- island terrain/cliff/ravine/path solution;
+- tall-canopy scale/LOD test;
+- modular player-built log construction kit;
 - broader villager appearance variety for up to roughly 30 named villagers;
 - final mobile UI system;
 - VFX;
-- audio.
+- audio;
+- polished boar hit/death presentation.
 
 ## Production import policy
 
 After final selection:
 
-1. Preserve/copy the relevant source license alongside imported production assets.
+1. Preserve/copy the relevant source license or recorded license provenance alongside imported production assets.
 2. Prefer GLB/GLTF for runtime use and avoid shipping duplicate FBX/OBJ versions.
-3. Keep original ZIP archives out of the runtime bundle.
+3. Keep original ZIP/RAR archives out of the runtime bundle.
 4. Normalize scale, orientation, filenames and asset identifiers once at import time.
 5. Keep gameplay colliders/metadata separate from render geometry.
 6. Preserve shared texture atlases/material reuse where the original pack is designed around them.
-7. Test character rigging/animations and environmental scale in an isolated asset test scene before wiring gameplay.
+7. Test character rigging/animations, animal conversion and environmental scale in an isolated asset test scene before wiring gameplay.
 8. Only ship assets used by the current game build.
