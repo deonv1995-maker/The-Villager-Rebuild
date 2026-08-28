@@ -23,11 +23,11 @@ jobs:
           shopt -s nullglob
           parts=(_asset_ingest/asset-0.2.part-*)
           echo "count=${#parts[@]}" >> "$GITHUB_OUTPUT"
-          if [ "${#parts[@]}" -ne 8 ]; then
-            echo "Foundation 0.2 payload is not complete yet (${#parts[@]}/8 parts)."
+          if [ "${#parts[@]}" -ne 15 ]; then
+            echo "Foundation 0.2 payload is not complete yet (${#parts[@]}/15 parts)."
           fi
       - name: Reconstruct and commit curated assets
-        if: steps.payload.outputs.count == '8'
+        if: steps.payload.outputs.count == '15'
         shell: bash
         run: |
           cat _asset_ingest/asset-0.2.part-* | base64 --decode > /tmp/villager-assets-0.2.tar.xz
