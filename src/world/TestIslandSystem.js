@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const seeded = (() => {
   let state = 0x71517;
@@ -14,6 +16,7 @@ export class TestIslandSystem {
     this.group = new THREE.Group();
     this.group.name = 'foundation-island';
     this.scene.add(this.group);
+    this.assetMode = 'procedural';
   }
 
   heightAt(x, z) {
@@ -31,9 +34,22 @@ export class TestIslandSystem {
   async load() {
     this.#createTerrain();
     this.#createWater();
-    this.#populateForest();
-    this.#dressCliffs();
     this.#createPath();
+
+    const [forestLoaded, cliffsLoaded] = await Promise.all([
+      this.#populateProductionForest().catch(error => {
+        console.error('[FOREST ASSET FALLBACK]', error);
+        return false;
+      }),
+      this.#dressProductionCliffs().catch(error => {
+        console.error('[CLIFF ASSET FALLBACK]', error);
+        return false;
+      })
+    ]);
+
+    if (!forestLoaded) this.#populateFallbackForest();
+    if (!cliffsLoaded) this.#dressFallbackCliffs();
+    this.assetMode = forestLoaded && cliffsLoaded ? 'production' : 'mixed';
   }
 
   #createTerrain() {
@@ -62,6 +78,7 @@ export class TestIslandSystem {
       new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.98 })
     );
     terrain.name = 'continuous-terrain';
+    terrain.receiveShadow = true;
     this.group.add(terrain);
   }
 
@@ -77,10 +94,111 @@ export class TestIslandSystem {
     );
     water.geometry.rotateX(-Math.PI / 2);
     water.position.y = -0.92;
+    water.name = 'foundation-water';
     this.group.add(water);
   }
 
-  #createTree(scale = 1, pine = false) {
+  async #populateProductionForest() {
+    const loader = new GLTFLoader();
+    const [broad, tall, rock] = await Promise.all([
+      loader.loadAsync(ASSET_PATHS.forest.treeBroad),
+      loader.loadAsync(ASSET_PATHS.forest.treeTall),
+      loader.loadAsync(ASSET_PATHS.forest.rock)
+    ]);
+
+    const treeTemplates = [broad.scene, tall.scene];
+    treeTemplates.forEach(template => this.#prepareStaticTemplate(template));
+    this.#prepareStaticTemplate(rock.scene);
+
+    const placements = this.#forestPlacements(78);
+    placements.forEach((p, index) => {
+      const tree = treeTemplates[index % treeTemplates.length].clone(true);
+      const scale = 1.55 + seeded() * 0.7;
+      tree.scale.setScalar(scale);
+      tree.rotation.y = seeded() * Math.PI * 2;
+      tree.position.set(p.x, this.heightAt(p.x, p.z), p.z);
+      tree.name = `forest-tree-${index}`;
+      this.group.add(tree);
+    });
+
+    for (let i = 0; i < 24; i += 1) {
+      const angle = seeded() * Math.PI * 2;
+      const radius = 11 + seeded() * 45;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      if (Math.hypot(x, z - 24) < 10) continue;
+      const instance = rock.scene.clone(true);
+      const scale = 0.8 + seeded() * 1.7;
+      instance.scale.set(scale * (0.9 + seeded() * 0.4), scale, scale * (0.85 + seeded() * 0.35));
+      instance.rotation.y = seeded() * Math.PI * 2;
+      instance.position.set(x, this.heightAt(x, z) - 0.04, z);
+      this.group.add(instance);
+    }
+    return true;
+  }
+
+  async #dressProductionCliffs() {
+    const loader = new GLTFLoader();
+    const [cliffAsset, rockAsset] = await Promise.all([
+      loader.loadAsync(ASSET_PATHS.cliffs.large),
+      loader.loadAsync(ASSET_PATHS.cliffs.rock)
+    ]);
+    this.#prepareStaticTemplate(cliffAsset.scene);
+    this.#prepareStaticTemplate(rockAsset.scene);
+
+    const cliffSpots = [
+      [-47, -6, 4.8, 0.35], [-43, -14, 5.6, 0.48], [-38, -22, 4.7, 0.62],
+      [38, -22, 4.8, -0.62], [44, -15, 5.5, -0.48], [49, -7, 4.7, -0.34]
+    ];
+
+    cliffSpots.forEach(([x, z, scale, yaw], index) => {
+      const cliff = cliffAsset.scene.clone(true);
+      cliff.scale.set(scale * 1.25, scale, scale * 1.15);
+      cliff.rotation.y = yaw + (index % 2 ? 0.12 : -0.08);
+      cliff.position.set(x, this.heightAt(x, z) - 0.65, z);
+      cliff.name = `kenney-cliff-${index}`;
+      this.group.add(cliff);
+    });
+
+    const rockSpots = [[-34, -28], [-29, -31], [31, -29], [35, -25], [-51, 1], [52, 0]];
+    rockSpots.forEach(([x, z], index) => {
+      const rock = rockAsset.scene.clone(true);
+      const scale = 3 + seeded() * 2.4;
+      rock.scale.setScalar(scale);
+      rock.rotation.y = seeded() * Math.PI * 2;
+      rock.position.set(x, this.heightAt(x, z) - 0.15, z);
+      rock.name = `kenney-rock-${index}`;
+      this.group.add(rock);
+    });
+    return true;
+  }
+
+  #prepareStaticTemplate(root) {
+    root.traverse(object => {
+      if (!object.isMesh) return;
+      object.castShadow = true;
+      object.receiveShadow = true;
+      if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
+    });
+  }
+
+  #forestPlacements(count) {
+    const placements = [];
+    let attempts = 0;
+    while (placements.length < count && attempts < 1400) {
+      attempts += 1;
+      const angle = seeded() * Math.PI * 2;
+      const radius = 13 + seeded() * 44;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      if (Math.hypot(x, z - 24) < 12) continue;
+      if (Math.abs(x) < 5.5 && z > -35 && z < 23) continue;
+      placements.push({ x, z });
+    }
+    return placements;
+  }
+
+  #createFallbackTree(scale = 1, pine = false) {
     const group = new THREE.Group();
     const trunk = new THREE.Mesh(
       new THREE.CylinderGeometry(0.22 * scale, 0.34 * scale, 4.8 * scale, 7),
@@ -105,30 +223,17 @@ export class TestIslandSystem {
     return group;
   }
 
-  #populateForest() {
-    const placements = [];
-    let attempts = 0;
-    while (placements.length < 86 && attempts < 1200) {
-      attempts += 1;
-      const angle = seeded() * Math.PI * 2;
-      const radius = 13 + seeded() * 44;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      if (Math.hypot(x, z - 24) < 12) continue;
-      if (Math.abs(x) < 5.5 && z > -35 && z < 23) continue;
-      placements.push({ x, z });
-    }
-
-    placements.forEach((p, index) => {
+  #populateFallbackForest() {
+    this.#forestPlacements(72).forEach((p, index) => {
       const scale = 0.85 + seeded() * 0.55;
-      const tree = this.#createTree(scale, index % 4 === 0);
+      const tree = this.#createFallbackTree(scale, index % 4 === 0);
       tree.rotation.y = seeded() * Math.PI * 2;
       tree.position.set(p.x, this.heightAt(p.x, p.z), p.z);
       this.group.add(tree);
     });
   }
 
-  #dressCliffs() {
+  #dressFallbackCliffs() {
     const material = new THREE.MeshStandardMaterial({ color: 0x73705f, roughness: 1, flatShading: true });
     const spots = [
       [-46, -8, 4.8], [-42, -15, 5.5], [-37, -21, 4.2],
@@ -151,6 +256,7 @@ export class TestIslandSystem {
       stone.position.set(x, this.heightAt(x, z) + 0.035, z);
       stone.scale.z = 1.7;
       stone.rotation.y = Math.sin(z) * 0.2;
+      stone.receiveShadow = true;
       this.group.add(stone);
     }
   }
