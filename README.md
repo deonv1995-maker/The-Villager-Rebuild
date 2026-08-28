@@ -8,6 +8,22 @@ The player always controls one main Ranger. The game begins with a shipwreck and
 
 Survive alone -> establish a home base -> recruit survivors -> give them homes and permanent jobs -> automate repetitive work -> develop food and production -> grow a camp into a village, town and eventually a fantasy island city.
 
+## Current milestone
+
+**Foundation 0.1 — boot, terrain and mobile-control test**
+
+This milestone deliberately tests only the stable technical base:
+
+- pinned local Three.js dependency bundled by Vite;
+- small explicit boot path with visible startup errors;
+- continuous generated island terrain rather than visible terrain tiles;
+- third-person movement/camera with a temporary procedural Ranger placeholder;
+- mobile joystick, sprint and jump controls;
+- optional HUD loaded only after the world starts;
+- clean-build verification in GitHub Actions.
+
+The selected KayKit Ranger, animation rigs and environment GLBs are the next isolated integration step after this base build passes CI. Asset loading is intentionally kept separate from boot/input architecture so a model-format problem cannot prevent the core game from starting.
+
 ## Project principles
 
 - `main` must remain a playable/stable build once gameplay development begins.
@@ -29,5 +45,3 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 - `docs/ROADMAP.md` — staged development plan.
 - `docs/DECISIONS.md` — important agreed design/technical decisions.
 - `docs/ASSET_REGISTRY.md` — asset-pack audit and selection record.
-
-No gameplay code should be added until the initial asset audit is complete and the first vertical-slice asset set has been chosen.
