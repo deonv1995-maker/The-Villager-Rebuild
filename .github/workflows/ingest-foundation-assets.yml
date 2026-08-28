@@ -16,24 +16,74 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Wait for complete payload
+
+      - name: Wait for complete verified payload set
         id: payload
         shell: bash
         run: |
-          shopt -s nullglob
-          parts=(_asset_ingest/asset-0.2.part-*)
-          echo "count=${#parts[@]}" >> "$GITHUB_OUTPUT"
-          if [ "${#parts[@]}" -ne 17 ]; then
-            echo "Foundation 0.2 payload is not complete yet (${#parts[@]}/17 parts)."
+          required=(
+            _asset_ingest/asset-0.2.part-00a
+            _asset_ingest/asset-0.2.part-00b
+            _asset_ingest/asset-0.2.part-01
+            _asset_ingest/asset-0.2.part-02
+            _asset_ingest/asset-0.2.part-03
+            _asset_ingest/asset-0.2.part-04
+            _asset_ingest/asset-0.2.part-05
+            _asset_ingest/asset-0.2.part-06
+            _asset_ingest/asset-0.2.part-07
+            _asset_ingest/asset-0.2.part-08
+            _asset_ingest/asset-0.2.part-09
+            _asset_ingest/asset-0.2.part-10
+            _asset_ingest/asset-0.2.part-11
+            _asset_ingest/asset-0.2.part-12
+            _asset_ingest/asset-0.2.part-13
+            _asset_ingest/asset-0.2.part-14
+            _asset_ingest/asset-0.2.part-15
+            _asset_ingest/asset-0.2.part-16
+          )
+
+          missing=0
+          for part in "${required[@]}"; do
+            if [ ! -f "$part" ]; then
+              echo "Missing $part"
+              missing=$((missing + 1))
+            fi
+          done
+
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+          if [ "$missing" -ne 0 ]; then
+            echo "Foundation 0.2 payload is not complete yet ($missing required parts missing)."
           fi
+
       - name: Reconstruct and commit curated assets
-        if: steps.payload.outputs.count == '17'
+        if: steps.payload.outputs.missing == '0'
         shell: bash
         run: |
-          cat _asset_ingest/asset-0.2.part-* | base64 --decode > /tmp/villager-assets-0.2.tar.xz
+          cat \
+            _asset_ingest/asset-0.2.part-00a \
+            _asset_ingest/asset-0.2.part-00b \
+            _asset_ingest/asset-0.2.part-01 \
+            _asset_ingest/asset-0.2.part-02 \
+            _asset_ingest/asset-0.2.part-03 \
+            _asset_ingest/asset-0.2.part-04 \
+            _asset_ingest/asset-0.2.part-05 \
+            _asset_ingest/asset-0.2.part-06 \
+            _asset_ingest/asset-0.2.part-07 \
+            _asset_ingest/asset-0.2.part-08 \
+            _asset_ingest/asset-0.2.part-09 \
+            _asset_ingest/asset-0.2.part-10 \
+            _asset_ingest/asset-0.2.part-11 \
+            _asset_ingest/asset-0.2.part-12 \
+            _asset_ingest/asset-0.2.part-13 \
+            _asset_ingest/asset-0.2.part-14 \
+            _asset_ingest/asset-0.2.part-15 \
+            _asset_ingest/asset-0.2.part-16 \
+            | base64 --decode > /tmp/villager-assets-0.2.tar.xz
+
           echo '5b40c506fae9d49b8bfed3bf3e240741ff5ced7da7d601dfe65512815221f52f  /tmp/villager-assets-0.2.tar.xz' | sha256sum --check --strict
           tar -xJf /tmp/villager-assets-0.2.tar.xz -C .
           rm -rf _asset_ingest
+
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/assets licenses _asset_ingest
