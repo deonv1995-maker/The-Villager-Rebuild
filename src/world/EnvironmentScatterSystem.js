@@ -127,6 +127,11 @@ export class EnvironmentScatterSystem {
   }
 
   #placeCliffFaceDressing({ cliff }) {
+    cliff.updateWorldMatrix(true, true);
+    const sourceBox = new THREE.Box3().setFromObject(cliff);
+    const sourceSize = new THREE.Vector3();
+    sourceBox.getSize(sourceSize);
+
     const facePieces = [
       [-43, 2, 10.5, 5.1, 4.2, 1.48],
       [-47, 25, 7.4, 7.3, 3.3, 1.34],
@@ -151,6 +156,36 @@ export class EnvironmentScatterSystem {
       instance.position.set(x, this.terrain.heightAt(x, z) - sy * 0.58, z);
       instance.name = `terrain-face-dressing-${index}`;
       this.group.add(instance);
+
+      instance.updateWorldMatrix(true, true);
+      const worldBox = new THREE.Box3().setFromObject(instance);
+      const worldCenter = new THREE.Vector3();
+      const worldSize = new THREE.Vector3();
+      worldBox.getCenter(worldCenter);
+      worldBox.getSize(worldSize);
+
+      // Broad cliff meshes need a broad collider footprint. Use an oriented
+      // box derived from the source mesh instead of a circular blocker so the
+      // visible wall is solid without creating large invisible corner walls.
+      const halfX = Math.max(0.65, sourceSize.x * sx * 0.46);
+      const halfZ = Math.max(0.65, sourceSize.z * sz * 0.46);
+      this.collision.addBox({
+        x: worldCenter.x,
+        z: worldCenter.z,
+        halfX,
+        halfZ,
+        yaw,
+        type: 'cliff-face',
+        label: instance.name,
+        bottomY: worldBox.min.y,
+        topY: worldBox.max.y,
+        standable: true,
+        supportHalfX: halfX * 0.72,
+        supportHalfZ: halfZ * 0.72,
+        supportY: worldBox.max.y - Math.min(0.12, worldSize.y * 0.025),
+        stepHeight: 0.56
+      });
+
       this.reservations.add({
         x,
         z,
