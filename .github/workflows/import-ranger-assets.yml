@@ -1,0 +1,55 @@
+name: Import Ranger production assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/import-ranger-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-ranger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download byte-identical KayKit assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/kaykit/adventurers public/assets/kaykit/animations
+
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/MJohnsonWellabe/Tetherbound/main/assets/characters/Ranger.glb \
+            -o public/assets/kaykit/adventurers/Ranger.glb
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/MJohnsonWellabe/Tetherbound/main/assets/characters/Rig_Medium_General.glb \
+            -o public/assets/kaykit/animations/Rig_Medium_General.glb
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/MJohnsonWellabe/Tetherbound/main/assets/characters/Rig_Medium_MovementBasic.glb \
+            -o public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb
+
+          test "$(git hash-object public/assets/kaykit/adventurers/Ranger.glb)" = "8edaf04430036130c3a7fcb6767049aac3c3f3a7"
+          test "$(git hash-object public/assets/kaykit/animations/Rig_Medium_General.glb)" = "5d16cb6815fc8371705147188813f851c10ba26a"
+          test "$(git hash-object public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb)" = "98e965e886ec539e80f8984a77a29b0c1c02e5e5"
+
+      - name: Commit curated Ranger assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/kaykit/adventurers/Ranger.glb \
+                  public/assets/kaykit/animations/Rig_Medium_General.glb \
+                  public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb
+          if git diff --cached --quiet; then
+            echo 'Ranger assets already match the selected production files.'
+            exit 0
+          fi
+          git commit -m 'Import KayKit Ranger production assets'
+          git push
