@@ -102,6 +102,49 @@ const blockedByCoast = collision.resolveMove({ x: 8, y: 0, z: 0 }, { x: 9.8, z: 
 assert.equal(blockedByCoast.blocked, true);
 assert.equal(blockedByCoast.x < 9.8, true);
 
+const broadCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  isPlayable: () => true
+});
+broadCollision.addBox({
+  x: 0,
+  z: 0,
+  halfX: 2.4,
+  halfZ: 0.55,
+  yaw: Math.PI / 4,
+  type: 'cliff-face',
+  bottomY: -0.4,
+  topY: 1.8
+});
+assert.equal(broadCollision.getObstacleCount(), 1);
+const blockedByCliffFace = broadCollision.resolveMove({ x: 0, y: 0, z: 2.5 }, { x: 0, z: 0 }, { radius: 0.42 });
+assert.equal(blockedByCliffFace.blocked, true, 'broad visible cliff faces must block traversal');
+const clearOutsideRotatedFace = broadCollision.resolveMove({ x: 1.7, y: 0, z: 1.9 }, { x: 1.55, z: 1.75 }, { radius: 0.18 });
+assert.equal(clearOutsideRotatedFace.blocked, false, 'oriented boxes must not behave like oversized circular invisible walls');
+
+const standableBoxCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  isPlayable: () => true
+});
+standableBoxCollision.addBox({
+  x: 2,
+  z: 0,
+  halfX: 1,
+  halfZ: 0.8,
+  yaw: 0.2,
+  type: 'cliff-face',
+  standable: true,
+  supportHalfX: 0.72,
+  supportHalfZ: 0.55,
+  supportY: 0.48,
+  topY: 0.48,
+  stepHeight: 0.6
+});
+assert.equal(standableBoxCollision.supportHeightAt(2, 0, 0), 0.48);
+const stepOntoBroadSupport = standableBoxCollision.resolveMove({ x: 0.8, y: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
+assert.equal(stepOntoBroadSupport.blocked, false);
+assert.equal(stepOntoBroadSupport.x, 2);
+
 const standableCollision = new WorldCollisionSystem({
   heightAt: () => 0,
   isPlayable: () => true
