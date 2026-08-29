@@ -1,0 +1,52 @@
+name: Ingest Qiwii animal candidate
+
+on:
+  push:
+    branches: [foundation-0.3.1-world-density-desktop-animal]
+    paths:
+      - '_asset_ingest/qiwii/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: qiwii-animal-ingest
+  cancel-in-progress: true
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wait for complete payload
+        id: payload
+        shell: bash
+        run: |
+          missing=0
+          for index in 00 01 02 03 04 05 06; do
+            part="_asset_ingest/qiwii/part-${index}"
+            if [ ! -f "$part" ]; then
+              echo "Missing $part"
+              missing=$((missing + 1))
+            fi
+          done
+          echo "missing=$missing" >> "$GITHUB_OUTPUT"
+
+      - name: Reconstruct selected Qiwii runtime asset
+        if: steps.payload.outputs.missing == '0'
+        shell: bash
+        run: |
+          cat _asset_ingest/qiwii/part-* | base64 --decode > /tmp/qiwii-assets.tar.xz
+          echo '756c35ffd414206171b611952239ae50f966d2d3bac087e76c8dda236d2b6b2e  /tmp/qiwii-assets.tar.xz' | sha256sum --check --strict
+          tar -xJf /tmp/qiwii-assets.tar.xz -C .
+          rm -rf _asset_ingest/qiwii
+          rm -f .github/workflows/ingest-qiwii-animal.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/animals/qiwii licenses/Animals_QiwiiPack_license.txt _asset_ingest .github/workflows/ingest-qiwii-animal.yml
+          git commit -m 'Import selected Qiwii pig runtime asset'
+          git push
