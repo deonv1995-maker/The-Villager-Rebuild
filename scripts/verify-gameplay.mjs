@@ -155,8 +155,54 @@ const regionalTerrain = new IslandTerrainSystem(new THREE.Group());
 assert.equal(regionalTerrain.isPlayable(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), true);
 assert.equal(regionalTerrain.isPlayable(200, 0), false);
 assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 12, true);
-assert.equal(regionalTerrain.heightAt(-77, 8) > regionalTerrain.heightAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) + 4, true);
-assert.equal(Math.abs(regionalTerrain.heightAt(-45, 8) - regionalTerrain.heightAt(-41, 8)) > 1.5, true);
+
+const centerHeights = [];
+for (let x = -28; x <= 28; x += 4) {
+  for (let z = -28; z <= 28; z += 4) {
+    if (Math.hypot(x, z) <= 28) centerHeights.push(regionalTerrain.heightAt(x, z));
+  }
+}
+assert.equal(Math.max(...centerHeights) < 2.25, true, 'central terrain must remain traversable lowland rather than a raised mass');
+
+const highlandHeights = [
+  regionalTerrain.heightAt(-94, 8),
+  regionalTerrain.heightAt(44, -81),
+  regionalTerrain.heightAt(98, -7),
+  regionalTerrain.heightAt(105, 30)
+];
+assert.equal(highlandHeights.filter(height => height > 3.4).length >= 3, true, 'major elevation must be distributed away from the centre');
+assert.equal(regionalTerrain.heightAt(-94, 8) > regionalTerrain.heightAt(0, 0) + 5, true);
+assert.equal(Math.abs(regionalTerrain.heightAt(-89, 11) - regionalTerrain.heightAt(-85, 11)) > 1.5, true, 'warped western escarpment should retain a real terrain-owned drop');
+
+const ringHeights = [];
+for (let i = 0; i < 24; i += 1) {
+  const angle = (i / 24) * Math.PI * 2;
+  ringHeights.push(regionalTerrain.heightAt(Math.cos(angle) * 70, regionalTerrain.centerZ + Math.sin(angle) * 70));
+}
+assert.equal(Math.max(...ringHeights) - Math.min(...ringHeights) > 2.5, true, 'equal-radius samples should not collapse into a radial height pattern');
+
+const terrainTraversal = new WorldCollisionSystem({
+  heightAt: (x, z) => regionalTerrain.heightAt(x, z),
+  isPlayable: (x, z, margin) => regionalTerrain.isPlayable(x, z, margin),
+  maxSlopeDegrees: 52,
+  dropFallThreshold: 0.5
+});
+let routePosition = {
+  x: WORLD_LAYOUT.spawn.x,
+  y: regionalTerrain.heightAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z),
+  z: WORLD_LAYOUT.spawn.z
+};
+for (let z = WORLD_LAYOUT.spawn.z - 1.5; z >= -24; z -= 1.5) {
+  const x = regionalTerrain.pathCenterX(z);
+  const resolved = terrainTraversal.resolveMove(routePosition, { x, z }, { radius: 0.42 });
+  assert.equal(resolved.blocked, false, `Day 1 route must remain walkable into the middle near z=${z.toFixed(1)}`);
+  routePosition = {
+    x: resolved.x,
+    y: regionalTerrain.heightAt(resolved.x, resolved.z),
+    z: resolved.z
+  };
+}
+assert.equal(routePosition.z <= -23, true);
 assert.equal(regionalTerrain.grassDensityAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) >= 0, true);
 
 console.log('gameplay contracts verified');
