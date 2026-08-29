@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "The Villager Rebuild",
+  "short_name": "The Villager",
+  "description": "The Villager Rebuild playable development build",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#10251c",
+  "theme_color": "#10251c",
+  "icons": [
+    {
+      "src": "./icons/villager-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/villager-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
