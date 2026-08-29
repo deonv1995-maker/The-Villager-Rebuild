@@ -200,6 +200,16 @@ assert.equal(regionalTerrain.isPlayable(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn
 assert.equal(regionalTerrain.isPlayable(200, 0), false);
 assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 12, true);
 
+assert.equal(regionalTerrain.isSandAt(0, 107), true, 'shoreline beach must be classified as sand');
+assert.equal(regionalTerrain.grassDensityAt(0, 107), 0, 'grass must never spawn on sand');
+assert.equal(regionalTerrain.treeDensityAt(0, 107), 0, 'trees must never spawn on sand');
+assert.equal(regionalTerrain.understoryDensityAt(0, 107), 0, 'understory must never spawn on sand');
+assert.equal(regionalTerrain.isSandAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), false, 'Day 1 spawn must remain inland of the beach vegetation cutoff');
+assert.equal(regionalTerrain.grassPatchStrengthAt(-70, -10) > 0.85, true, 'grass field should contain dense natural patches');
+assert.equal(regionalTerrain.grassPatchStrengthAt(-85, 30) < 0.05, true, 'grass field should contain open gaps between patches');
+const pathGrassX = regionalTerrain.pathCenterX(40);
+assert.equal(regionalTerrain.grassDensityAt(pathGrassX, 40), 0, 'the worn Day 1 path core must stay clear of grass');
+
 const centerHeights = [];
 for (let x = -28; x <= 28; x += 4) {
   for (let z = -28; z <= 28; z += 4) {
