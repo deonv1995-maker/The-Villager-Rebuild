@@ -1,0 +1,39 @@
+name: Import Kenney nature production assets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/import-kenney-cliffs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import-kenney:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download exact Kenney large rock
+        shell: bash
+        run: |
+          set -euo pipefail
+          out='public/assets/kenney/nature'
+          mkdir -p "$out"
+          curl -L --fail --retry 3 \
+            'https://raw.githubusercontent.com/MJohnsonWellabe/Tetherbound/main/assets/environment/nature/rock_largeA.glb' \
+            -o "$out/rock_largeA.glb"
+          test "$(git hash-object "$out/rock_largeA.glb")" = '40e1365a43b706bd78c2658b48b189c9a35f8923'
+      - name: Commit exact Kenney rock
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/kenney/nature/rock_largeA.glb
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Import exact Kenney large rock asset'
+          git push
