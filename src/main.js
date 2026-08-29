@@ -10,14 +10,14 @@ function setStatus(message, error = false) {
 
 async function boot() {
   try {
-    setStatus('FOUNDATION 0.1 · LOADING WORLD');
+    setStatus('FOUNDATION 0.2 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus });
     await game.start();
     window.__villager = game;
-    setStatus('FOUNDATION 0.1 · READY');
+    setStatus('DAY 1 · GATHER A STICK + STONE');
   } catch (error) {
     console.error('[BOOT]', error);
-    setStatus(`FOUNDATION 0.1 · ERROR · ${error?.message ?? error}`, true);
+    setStatus(`FOUNDATION 0.2 · ERROR · ${error?.message ?? error}`, true);
   }
 }
 

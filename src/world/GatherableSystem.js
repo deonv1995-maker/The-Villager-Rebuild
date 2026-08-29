@@ -1,0 +1,130 @@
+import * as THREE from 'three';
+import { RESOURCE_DEFINITIONS } from '../data/ResourceDefinitions.js';
+
+const INTERACTION_RADIUS = 2.4;
+const PLACEMENTS = Object.freeze([
+  ['stick', 1.5, 23.0],
+  ['stone', -1.7, 22.7],
+  ['stick', 4.3, 18.8],
+  ['stone', -5.1, 19.6],
+  ['stick', -3.2, 16.7],
+  ['stick', 6.7, 14.5],
+  ['stone', 2.8, 12.8],
+  ['stick', -7.1, 11.9],
+  ['stone', 8.0, 8.8],
+  ['stick', -1.5, 7.2]
+]);
+
+export class GatherableSystem {
+  constructor({ scene, terrain }) {
+    this.scene = scene;
+    this.terrain = terrain;
+    this.group = new THREE.Group();
+    this.group.name = 'day-one-gatherables';
+    this.scene.add(this.group);
+    this.items = [];
+    this.target = null;
+    this.#createIndicator();
+    this.#populate();
+  }
+
+  update(playerPosition) {
+    let nearest = null;
+    let nearestDistanceSq = INTERACTION_RADIUS * INTERACTION_RADIUS;
+
+    for (const item of this.items) {
+      if (!item.active) continue;
+      const dx = item.root.position.x - playerPosition.x;
+      const dz = item.root.position.z - playerPosition.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearest = item;
+      nearestDistanceSq = distanceSq;
+    }
+
+    this.target = nearest;
+    this.indicator.visible = Boolean(nearest);
+    if (nearest) {
+      this.indicator.position.set(
+        nearest.root.position.x,
+        this.terrain.heightAt(nearest.root.position.x, nearest.root.position.z) + 0.035,
+        nearest.root.position.z
+      );
+    }
+    return this.getTarget();
+  }
+
+  gather(playerPosition) {
+    this.update(playerPosition);
+    if (!this.target) return null;
+
+    const item = this.target;
+    item.active = false;
+    this.group.remove(item.root);
+    this.target = null;
+    this.indicator.visible = false;
+
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    return {
+      resourceId: definition.id,
+      label: definition.label,
+      quantity: definition.pickupQuantity
+    };
+  }
+
+  getTarget() {
+    if (!this.target) return null;
+    const definition = RESOURCE_DEFINITIONS[this.target.resourceId];
+    return { resourceId: definition.id, label: definition.label };
+  }
+
+  #populate() {
+    PLACEMENTS.forEach(([resourceId, x, z], index) => {
+      const root = resourceId === 'stick'
+        ? this.#createStick(index)
+        : this.#createStone(index);
+      root.position.set(x, this.terrain.heightAt(x, z), z);
+      root.name = `gatherable-${resourceId}-${index}`;
+      this.group.add(root);
+      this.items.push({ resourceId, root, active: true });
+    });
+  }
+
+  #createStick(index) {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: 0x6b4930, roughness: 1 });
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 1.05, 6), material);
+    stick.rotation.z = Math.PI / 2;
+    stick.rotation.y = (index % 5) * 0.27;
+    stick.position.y = 0.12;
+    stick.castShadow = true;
+    stick.receiveShadow = true;
+    group.add(stick);
+    return group;
+  }
+
+  #createStone(index) {
+    const group = new THREE.Group();
+    const stone = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.34 + (index % 2) * 0.05, 0),
+      new THREE.MeshStandardMaterial({ color: 0x77766f, roughness: 1, flatShading: true })
+    );
+    stone.position.y = 0.22;
+    stone.rotation.set(0.12 * index, 0.34 * index, 0.08 * index);
+    stone.castShadow = true;
+    stone.receiveShadow = true;
+    group.add(stone);
+    return group;
+  }
+
+  #createIndicator() {
+    this.indicator = new THREE.Mesh(
+      new THREE.RingGeometry(0.48, 0.62, 24),
+      new THREE.MeshBasicMaterial({ color: 0xffe29a, transparent: true, opacity: 0.88, side: THREE.DoubleSide })
+    );
+    this.indicator.name = 'gather-target-indicator';
+    this.indicator.rotation.x = -Math.PI / 2;
+    this.indicator.visible = false;
+    this.group.add(this.indicator);
+  }
+}

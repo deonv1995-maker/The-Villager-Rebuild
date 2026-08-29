@@ -19,7 +19,7 @@ The first vertical-slice asset direction is sufficiently defined to begin the te
 
 ## Phase 1 — Stable technical foundation
 
-Status: **in progress — Foundation 0.1 started 2026-08-28.**
+Status: **complete — Foundation 0.2 verified in CI on 2026-08-29.**
 
 Goals:
 
@@ -29,11 +29,21 @@ Goals:
 - implement scene/camera foundations and mobile input shell;
 - create the data registries needed by the Day 1 slice.
 
-Foundation 0.1 intentionally uses a procedural Ranger/environment placeholder while proving boot, terrain and controls. The selected production GLB assets are integrated in the next isolated step so asset loading cannot destabilize the core boot path.
+Foundation 0.2 replaces the procedural production path with the selected KayKit Ranger and animation sets, KayKit forest assets, and validated Kenney rock/cliff geometry while preserving procedural fallbacks. Runtime asset paths are held in one registry and CI verifies those same paths before and after the production build.
 
 Success condition: the game reliably boots on target mobile browsers and displays the selected Ranger in a test environment.
 
 ## Phase 2 — Day 1 survival vertical slice
+
+Status: **in progress — first gathering milestone started 2026-08-29.**
+
+Current playable milestone:
+
+- nearby stick and stone pickups exist around the shipwreck-beach start;
+- the nearest valid pickup is targeted within interaction range;
+- desktop uses E and mobile uses a contextual hand button;
+- gathered resources are removed from the world and added to a small visible inventory;
+- resource definitions, inventory state and world gatherables remain separate systems so later player/NPC harvesting can share the same data model.
 
 Target final-game sequence:
 

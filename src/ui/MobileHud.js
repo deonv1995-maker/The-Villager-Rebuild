@@ -1,19 +1,37 @@
 export class MobileHud {
-  constructor({ player, canvas }) {
+  constructor({ player, canvas, onInteract }) {
     this.player = player;
     this.canvas = canvas;
+    this.onInteract = onInteract;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
     this.root.innerHTML = `
-      <div class="hud-note">FOUNDATION TEST · drag right side to look</div>
+      <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0</div>
+      <div class="hud-note">DAY 1 · E / hand to gather</div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="./assets/ui/mobile/joystick-pad.svg" alt=""><img class="joystick-nub" src="./assets/ui/mobile/joystick-nub.svg" alt=""></div>
-      <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><img class="button-icon" src="./assets/ui/mobile/icon-hand.svg" alt=""></button>
+      <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><span class="button-glyph">RUN</span></button>
+      <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><img class="button-icon" src="./assets/ui/mobile/icon-hand.svg" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><img class="button-icon" src="./assets/ui/mobile/icon-jump.svg" alt=""></button>
     `;
     document.body.appendChild(this.root);
+    this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
+    this.interactButton = this.root.querySelector('.interact');
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
+  }
+
+  setInventory(entries) {
+    this.inventoryElement.textContent = entries
+      .map(entry => `${entry.label} ${entry.quantity}`)
+      .join(' · ');
+  }
+
+  setInteractionTarget(target) {
+    const available = Boolean(target);
+    this.interactButton.hidden = !available;
+    this.interactButton.disabled = !available;
+    this.interactButton.setAttribute('aria-label', available ? `Pick up ${target.label}` : 'Pick up');
   }
 
   #bindJoystick() {
@@ -62,6 +80,11 @@ export class MobileHud {
     jump.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.player.jump();
+    });
+
+    this.interactButton.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      this.onInteract?.();
     });
 
     const setSprint = value => this.player.setSprint(value);
