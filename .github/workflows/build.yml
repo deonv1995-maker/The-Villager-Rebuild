@@ -34,6 +34,7 @@ jobs:
           check public/assets/kaykit/adventurers/Ranger.glb 8edaf04430036130c3a7fcb6767049aac3c3f3a7
           check public/assets/kaykit/animations/Rig_Medium_General.glb 5d16cb6815fc8371705147188813f851c10ba26a
           check public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb 98e965e886ec539e80f8984a77a29b0c1c02e5e5
+          check public/assets/kaykit/animations/Rig_Medium_CombatMelee.glb 0ab63f221ca5d5c7c485a245199fb6107f1f3764
 
           check public/assets/kaykit/forest/Tree_1_A_Color1.gltf 1c453051b537f6dfab6c6b9d82531774ace25c85
           check public/assets/kaykit/forest/Tree_1_A_Color1.bin c96917f8f6b7cf59306af26d406ba36a597b888d

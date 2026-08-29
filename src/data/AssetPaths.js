@@ -9,7 +9,8 @@ export const ASSET_PATHS = Object.freeze({
   ranger: Object.freeze({
     model: asset('kaykit/adventurers/Ranger.glb'),
     movementBasic: asset('kaykit/animations/Rig_Medium_MovementBasic.glb'),
-    general: asset('kaykit/animations/Rig_Medium_General.glb')
+    general: asset('kaykit/animations/Rig_Medium_General.glb'),
+    combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb')
   }),
   forest: Object.freeze({
     treeBroad: asset('kaykit/forest/Tree_1_A_Color1.gltf'),

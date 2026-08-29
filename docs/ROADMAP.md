@@ -35,7 +35,7 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — gathering, spear crafting, first hunting and meat harvesting milestones implemented on 2026-08-29.**
+Status: **in progress — gathering, spear crafting, first hunting/meat harvesting and the first world/combat polish pass are implemented on 2026-08-29.**
 
 Current playable milestone:
 
@@ -48,12 +48,17 @@ Current playable milestone:
 - crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
 - desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
 - the HUD separates the current objective from inventory counts and records the crafted spear in inventory;
-- a first boar wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
+- the first boar wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
 - desktop uses F and mobile exposes the spear attack button only for a valid boar target;
+- the spear follows the Ranger's right-hand rig/socket and uses the KayKit one-handed stab animation, retaining a controlled fallback presentation if the combat clip is unavailable;
+- the boar presentation is now a dedicated stylized low-poly animal layer separated from health, targeting, damage and harvesting state;
 - the first boar takes two spear hits, provides hit feedback, falls when defeated, and advances the objective without mixing animal health into the Ranger controller;
 - the defeated carcass exposes the normal contextual hand interaction when the player moves close enough;
 - harvesting is one-time and data-driven from the animal definition, adding two Raw Meat to inventory without duplicating loot;
-- the same interaction input now routes between loose world resources and harvestable carcasses while inventory remains the single owner of carried item quantities.
+- the same interaction input now routes between loose world resources and harvestable carcasses while inventory remains the single owner of carried item quantities;
+- the island is larger and irregular rather than circular, with stronger highlands/ridges/ravine/terrace changes and a lighter fantasy atmosphere;
+- forest density is increased and decorative grass/bush ground cover is instanced to keep the denser scene mobile-conscious;
+- world collision now covers coastline limits, steep terrain, trees, rocks and cliff dressing while deliberate interior drops remain fallable/jumpable.
 
 Next playable milestone: **chop the first tree and gather logs.**
 

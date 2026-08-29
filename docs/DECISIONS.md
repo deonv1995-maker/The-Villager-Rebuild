@@ -88,6 +88,24 @@ Decision: Foundation 0.1 proves bundled dependencies, rendering, continuous terr
 
 Reason: model or HUD integration failures must not be able to prevent the core world from booting. Production assets are introduced in a separate verified step once the base build is clean.
 
+## 2026-08-29 — World collision ownership
+
+Decision: collision is a shared world service owned by the island rather than hard-coded inside the Ranger controller. Coast bounds, steep terrain and blocking environment props register with that service, while the Ranger asks it to resolve movement.
+
+Reason: future villagers, animals and other moving actors need one authoritative set of world-obstacle rules instead of separate player-only collision logic.
+
+## 2026-08-29 — Traversal over slopes and drops
+
+Decision: steep uphill terrain and solid trees/rocks/cliffs block grounded movement, but intentional interior drops remain traversable as falls. Airborne movement can cross a steep terrain edge while still respecting the island boundary and solid prop colliders.
+
+Reason: cliffs should create meaningful height changes without turning every drop into an invisible wall or preventing jump/fall traversal.
+
+## 2026-08-29 — Day 1 world presentation
+
+Decision: preserve the continuous-terrain architecture while making the island visibly irregular rather than circular, with stronger elevation regions, ravines/terraces, denser low-cost vegetation and a brighter fantasy atmosphere. Dense decorative grass/bush coverage should favor instancing; gameplay-blocking props keep explicit collision metadata.
+
+Decision: animal gameplay state remains separate from animal presentation. The current boar visual can therefore be replaced or upgraded again without moving health, targeting, harvesting or loot rules into the render model.
+
 ## Open decisions
 
 The following are intentionally not locked yet:

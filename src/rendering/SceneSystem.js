@@ -4,10 +4,10 @@ export class SceneSystem {
   constructor(canvas) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x9cc7c2);
-    this.scene.fog = new THREE.FogExp2(0x8eb5a9, 0.022);
+    this.scene.background = new THREE.Color(0xbfe6f8);
+    this.scene.fog = new THREE.FogExp2(0xc5dfd3, 0.0085);
 
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 180);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 280);
     this.camera.position.set(0, 5, 8);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -16,6 +16,8 @@ export class SceneSystem {
       powerPreference: 'high-performance'
     });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.shadowMap.enabled = false;
 
@@ -26,12 +28,19 @@ export class SceneSystem {
   }
 
   #createLighting() {
-    const hemi = new THREE.HemisphereLight(0xd8f1ff, 0x4f6241, 2.1);
+    const hemi = new THREE.HemisphereLight(0xe9f7ff, 0x5b7444, 2.7);
     this.scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff0cf, 2.5);
-    sun.position.set(-10, 18, 8);
+    const sun = new THREE.DirectionalLight(0xffedc7, 3.2);
+    sun.position.set(-28, 36, 18);
     this.scene.add(sun);
+
+    const skyFill = new THREE.DirectionalLight(0x9acfff, 0.72);
+    skyFill.position.set(24, 16, -20);
+    this.scene.add(skyFill);
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.2);
+    this.scene.add(ambient);
   }
 
   resize() {

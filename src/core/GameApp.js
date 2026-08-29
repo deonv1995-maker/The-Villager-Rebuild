@@ -29,7 +29,8 @@ export class GameApp {
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
-      terrain: this.island
+      terrain: this.island,
+      collision: this.island.collision
     });
     await this.player.load();
 
@@ -128,6 +129,7 @@ export class GameApp {
     const hit = this.boar.attack(this.playerPosition);
     if (!hit) return;
 
+    this.player.faceWorldPoint(hit.position);
     this.player.playSpearAttack();
     this.#refreshTargets(0);
 
