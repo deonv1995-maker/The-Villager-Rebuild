@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class GrassFieldSystem {
-  constructor({ group, terrain, scatter, maxInstances = 7200 }) {
+  constructor({ group, terrain, scatter, maxInstances = 10800 }) {
     this.group = group;
     this.terrain = terrain;
     this.scatter = scatter;
@@ -47,18 +47,18 @@ export class GrassFieldSystem {
 
     let placed = 0;
     let attempts = 0;
-    while (placed < this.maxInstances && attempts < this.maxInstances * 7) {
+    while (placed < this.maxInstances && attempts < this.maxInstances * 8) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 132;
-      const z = (this.random() * 2 - 1) * 109 - 4;
+      const x = (this.random() * 2 - 1) * 134;
+      const z = (this.random() * 2 - 1) * 111 - 4;
       const density = this.terrain.grassDensityAt(x, z);
       if (density <= 0 || this.random() > density) continue;
-      if (!this.scatter.isGrassClear(x, z, 0.06)) continue;
+      if (!this.scatter.isGrassClear(x, z, 0.05)) continue;
 
       const pathDistance = Math.abs(x - this.terrain.pathCenterX(z));
-      if (z < 88 && z > -90 && pathDistance < 1.5 && this.random() > 0.15) continue;
+      if (z < 88 && z > -90 && pathDistance < 1.3 && this.random() > 0.2) continue;
 
-      const scaleY = 0.58 + this.random() * 0.72;
+      const scaleY = 0.54 + this.random() * 0.8;
       const entry = {
         index: placed,
         x,
@@ -67,9 +67,9 @@ export class GrassFieldSystem {
         baseYaw: this.random() * Math.PI * 2,
         baseLeanX: (this.random() - 0.5) * 0.1,
         baseLeanZ: (this.random() - 0.5) * 0.1,
-        scaleX: 0.72 + this.random() * 0.58,
+        scaleX: 0.68 + this.random() * 0.68,
         scaleY,
-        scaleZ: 0.72 + this.random() * 0.58,
+        scaleZ: 0.68 + this.random() * 0.68,
         bendX: 0,
         bendZ: 0,
         compression: 0
@@ -160,10 +160,10 @@ export class GrassFieldSystem {
   #buildTuftGeometry() {
     const positions = [];
     const indices = [];
-    const bladeCount = 5;
+    const bladeCount = 6;
     const segments = 3;
     const baseHeight = 0.84;
-    const baseWidth = 0.095;
+    const baseWidth = 0.088;
 
     for (let blade = 0; blade < bladeCount; blade += 1) {
       const angle = blade * (Math.PI * 2 / bladeCount) + (blade % 2 ? -0.12 : 0.08);
@@ -171,7 +171,7 @@ export class GrassFieldSystem {
       const dirZ = Math.sin(angle);
       const acrossX = -dirZ;
       const acrossZ = dirX;
-      const height = baseHeight * (0.78 + (blade % 4) * 0.075);
+      const height = baseHeight * (0.76 + (blade % 4) * 0.08);
       const bend = 0.11 + (blade % 3) * 0.045;
       const sideBend = (blade % 2 ? 1 : -1) * (0.018 + (blade % 3) * 0.01);
       const base = positions.length / 3;
