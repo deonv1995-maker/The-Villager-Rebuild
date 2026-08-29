@@ -24,6 +24,20 @@ Large positive formations must not overlap into a single raised central mass. Th
 
 The archived `deonv1995-maker/The-Villager-` project is reference material only. Its useful terrain characteristic is the combination of broad non-radial variation, separated regional features, localized knolls/basins and irregular cliff edges. The rebuild keeps that *feel* without copying the archived terrain architecture wholesale.
 
+## Vegetation distribution contract
+
+Vegetation placement is terrain-driven rather than renderer-driven. `IslandTerrainSystem` is the single source of truth for surface classification and ecological suitability; the grass and environment-scatter systems only sample those values.
+
+- `isSandAt()` defines the dry beach/low sand surface and must return zero vegetation suitability.
+- Grass, trees and understory may never spawn on sand.
+- Vegetation thins progressively as it approaches the beach instead of ending in a hard inland wall.
+- Slope, regional habitat and broad moisture variation influence the shared vegetation suitability field.
+- Grass uses a separate deterministic multi-scale patch field so it forms dense irregular clumps with real open ground between them instead of being uniformly sprinkled across the island.
+- Tree placement uses a slower independent grove field so woodland forms pockets, edges and clearings instead of a uniform grid or a copy of the grass pattern.
+- Understory follows suitable woodland/grass habitat and shares the same sand and slope exclusions.
+- The worn Day 1 path core remains free of grass, with a soft transition back into vegetation at its edges.
+- Existing occupancy reservations still keep vegetation away from spawn, the hunt clearing, trees, rocks and cliff dressing.
+
 ## Traversal and collision invariants
 
 - The larger Foundation 0.3 island dimensions remain unchanged.
@@ -45,6 +59,9 @@ The archived `deonv1995-maker/The-Villager-` project is reference material only.
 - a terrain-owned escarpment still produces a multi-metre height change;
 - equal-radius samples have substantial height variation instead of a radial pattern;
 - shared collision can walk the Day 1 route from spawn into the middle without a steep-terrain block;
+- sand returns zero grass, tree and understory density;
+- the grass field contains both dense patch samples and open gaps;
+- the Day 1 path core remains grass-free;
 - broad oriented environment colliders block traversal through visible cliff faces without behaving like oversized circular invisible walls;
 - standable oriented supports still expose a valid top surface for traversal.
 
