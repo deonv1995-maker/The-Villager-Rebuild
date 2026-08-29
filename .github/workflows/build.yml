@@ -46,3 +46,6 @@ jobs:
 
           check public/assets/kenney/nature/cliff_large_rock.glb e90dd116216dd0c59d3dffb3d5b21252fd6da3ce
           check public/assets/kenney/nature/rock_largeA.glb 40e1365a43b706bd78c2658b48b189c9a35f8923
+
+          check public/assets/animals/qiwii/Pig.fbx 2d81b8e17da9887039edb96cf2441c7245f2e639
+          check public/assets/animals/qiwii/Texture.png 216a2e4a6dc1e71225acc5922a31b9a1f0992e28
