@@ -14,8 +14,9 @@ export class TestIslandSystem {
     this.terrain = new IslandTerrainSystem(this.group);
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
+      baseHeightAt: (x, z) => this.baseHeightAt(x, z),
       isPlayable: (x, z, margin) => this.isPlayable(x, z, margin),
-      maxSlopeDegrees: 52,
+      maxSlopeDegrees: 58,
       dropFallThreshold: 0.5
     });
     this.scatter = new EnvironmentScatterSystem({
