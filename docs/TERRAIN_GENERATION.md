@@ -32,6 +32,8 @@ The archived `deonv1995-maker/The-Villager-` project is reference material only.
 - The Day 1 route from the beach must remain continuously walkable into the central interior.
 - Major terrain-owned drops remain present away from the centre.
 - Dense deterministic forest, interactive grass and occupancy-aware scatter remain separate systems and must continue sampling this same terrain surface.
+- A visible solid environment mesh may not be reservation-only. Trees and compact rocks may use circular footprints, while broad cliff faces and future wall-like props use geometry-proportional oriented box footprints in the same shared collision service.
+- Broad cliff dressing keeps an inset standable support footprint so the Ranger can land on a plausible top surface without the collider expanding into large invisible corner walls.
 
 ## Automated regression checks
 
@@ -42,6 +44,8 @@ The archived `deonv1995-maker/The-Villager-` project is reference material only.
 - several major highlands exist away from the centre;
 - a terrain-owned escarpment still produces a multi-metre height change;
 - equal-radius samples have substantial height variation instead of a radial pattern;
-- shared collision can walk the Day 1 route from spawn into the middle without a steep-terrain block.
+- shared collision can walk the Day 1 route from spawn into the middle without a steep-terrain block;
+- broad oriented environment colliders block traversal through visible cliff faces without behaving like oversized circular invisible walls;
+- standable oriented supports still expose a valid top surface for traversal.
 
 Tree chopping remains gated until this terrain presentation is visually accepted in the deployed build.
