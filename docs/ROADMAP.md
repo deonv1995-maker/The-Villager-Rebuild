@@ -35,15 +35,21 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — first gathering milestone started 2026-08-29.**
+Status: **in progress — gathering and first crafting milestones implemented on 2026-08-29.**
 
 Current playable milestone:
 
 - nearby stick and stone pickups exist around the shipwreck-beach start;
 - the nearest valid pickup is targeted within interaction range;
-- desktop uses E and mobile uses a contextual hand button;
+- desktop uses E and mobile uses a contextual hand button for gathering;
 - gathered resources are removed from the world and added to a small visible inventory;
-- resource definitions, inventory state and world gatherables remain separate systems so later player/NPC harvesting can share the same data model.
+- resource definitions, inventory state and world gatherables remain separate systems so later player/NPC harvesting can share the same data model;
+- the first recipe is data-driven: one stick + one stone crafts one spear;
+- crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
+- desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
+- the HUD now separates the current objective from inventory counts and records the crafted spear in inventory.
+
+Next playable milestone: **hunt the first boar with the crafted spear.**
 
 Target final-game sequence:
 
