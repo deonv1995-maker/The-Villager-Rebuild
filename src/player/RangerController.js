@@ -3,14 +3,16 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
+const PLAYER_RADIUS = 0.42;
 
 export class RangerController {
-  constructor({ scene, camera, terrain }) {
+  constructor({ scene, camera, terrain, collision = null }) {
     this.scene = scene;
     this.camera = camera;
     this.terrain = terrain;
+    this.collision = collision;
     this.root = new THREE.Group();
-    this.root.position.set(0, terrain.heightAt(0, 24), 24);
+    this.root.position.set(0, terrain.heightAt(0, 39), 39);
     this.scene.add(this.root);
 
     this.input = { x: 0, y: 0, sprint: false };
@@ -23,9 +25,19 @@ export class RangerController {
     this.assetMode = 'placeholder';
     this.animationState = null;
     this.actions = new Map();
+    this.attackAnimation = null;
     this.spearEquipped = false;
     this.spearVisual = null;
+    this.spearMount = null;
+    this.spearHandAnchor = null;
+    this.spearRestPosition = new THREE.Vector3(0.48, 1.18, 0.1);
     this.spearThrust = 0;
+    this.spearAttackDuration = 0.44;
+    this.tempHandWorld = new THREE.Vector3();
+    this.tempHandLocal = new THREE.Vector3();
+    this.tempHandQuaternion = new THREE.Quaternion();
+    this.tempRootQuaternion = new THREE.Quaternion();
+    this.spearRestQuaternion = new THREE.Quaternion();
     this.#bindKeyboard();
   }
 
@@ -44,10 +56,11 @@ export class RangerController {
 
   async #loadProductionRanger() {
     const loader = new GLTFLoader();
-    const [rangerGltf, movementGltf, generalGltf] = await Promise.all([
+    const [rangerGltf, movementGltf, generalGltf, combatMeleeGltf] = await Promise.all([
       loader.loadAsync(ASSET_PATHS.ranger.model),
       loader.loadAsync(ASSET_PATHS.ranger.movementBasic),
-      loader.loadAsync(ASSET_PATHS.ranger.general)
+      loader.loadAsync(ASSET_PATHS.ranger.general),
+      loader.loadAsync(ASSET_PATHS.ranger.combatMelee)
     ]);
 
     this.model = rangerGltf.scene;
@@ -59,9 +72,15 @@ export class RangerController {
       if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
     });
     this.root.add(this.model);
+    this.spearHandAnchor = this.#findRightHandAnchor(this.model);
 
     this.mixer = new THREE.AnimationMixer(this.model);
-    const clips = [...generalGltf.animations, ...movementGltf.animations];
+    const clips = [
+      ...rangerGltf.animations,
+      ...generalGltf.animations,
+      ...movementGltf.animations,
+      ...combatMeleeGltf.animations
+    ];
     for (const clip of clips) {
       if (!clip?.name || this.actions.has(clip.name)) continue;
       const action = this.mixer.clipAction(clip, this.model);
@@ -75,15 +94,17 @@ export class RangerController {
     if (!this.actions.has('Idle_A') || !this.actions.has('Walking_A') || !this.actions.has('Running_A')) {
       throw new Error('Required KayKit locomotion clips were not found');
     }
+
+    this.attackAnimation = this.#selectAttackAnimation();
     this.#setAnimation('Idle_A', true);
   }
 
   #createFoundationRanger() {
     const group = new THREE.Group();
     group.name = 'foundation-ranger-placeholder';
-    const cloth = new THREE.MeshStandardMaterial({ color: 0x596a43, roughness: 0.95 });
-    const leather = new THREE.MeshStandardMaterial({ color: 0x60452f, roughness: 1 });
-    const skin = new THREE.MeshStandardMaterial({ color: 0xd5a176, roughness: 0.95 });
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x637a48, roughness: 0.95 });
+    const leather = new THREE.MeshStandardMaterial({ color: 0x65482f, roughness: 1 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xd9a67a, roughness: 0.95 });
 
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.7, 5, 8), cloth);
     body.position.y = 1.12;
@@ -121,18 +142,32 @@ export class RangerController {
     return target.copy(this.root.position);
   }
 
+  faceWorldPoint(point) {
+    if (!point) return;
+    const dx = point.x - this.root.position.x;
+    const dz = point.z - this.root.position.z;
+    if (Math.hypot(dx, dz) < 0.001) return;
+    this.root.rotation.y = Math.atan2(dx, dz);
+  }
+
   setSpearEquipped(equipped) {
     this.spearEquipped = Boolean(equipped);
     if (this.spearEquipped && !this.spearVisual) {
+      this.spearMount = new THREE.Group();
+      this.spearMount.name = 'ranger-spear-mount';
       this.spearVisual = this.#createSpearVisual();
-      this.root.add(this.spearVisual);
+      this.spearMount.add(this.spearVisual);
+      this.root.add(this.spearMount);
+      this.#updateSpearAnchor();
     }
-    if (this.spearVisual) this.spearVisual.visible = this.spearEquipped;
+    if (this.spearMount) this.spearMount.visible = this.spearEquipped;
   }
 
   playSpearAttack() {
-    if (!this.spearEquipped || !this.spearVisual) return;
-    this.spearThrust = 0.24;
+    if (!this.spearEquipped || !this.spearVisual) return false;
+    this.spearThrust = this.spearAttackDuration;
+    if (this.attackAnimation) this.#setAnimation(this.attackAnimation, true);
+    return true;
   }
 
   rotateCamera(deltaX, deltaY) {
@@ -157,6 +192,8 @@ export class RangerController {
     const inputY = Math.abs(this.input.y) > 0.05 ? this.input.y : keyboardY;
     const length = Math.hypot(inputX, inputY);
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
+    const attacking = this.spearThrust > 0;
+    const previousGround = this.terrain.heightAt(this.root.position.x, this.root.position.z);
 
     if (length > 0.08) {
       const nx = inputX / Math.max(1, length);
@@ -165,32 +202,41 @@ export class RangerController {
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       const move = forward.multiplyScalar(ny).add(right.multiplyScalar(nx)).normalize();
       const speed = sprinting ? 6 : 3.4;
-      this.root.position.addScaledVector(move, speed * dt);
-      this.root.rotation.y = Math.atan2(move.x, move.z);
+      const desired = {
+        x: this.root.position.x + move.x * speed * dt,
+        z: this.root.position.z + move.z * speed * dt
+      };
+      const resolved = this.collision
+        ? this.collision.resolveMove(this.root.position, desired, { radius: PLAYER_RADIUS, airborne: !this.grounded })
+        : { x: desired.x, z: desired.z };
+      const movedX = resolved.x - this.root.position.x;
+      const movedZ = resolved.z - this.root.position.z;
+      this.root.position.x = resolved.x;
+      this.root.position.z = resolved.z;
+      if (Math.hypot(movedX, movedZ) > 0.0001) this.root.rotation.y = Math.atan2(movedX, movedZ);
 
       if (this.assetMode === 'placeholder') {
         this.walkPhase += dt * speed * 2.6;
         const swing = Math.sin(this.walkPhase) * 0.55;
         this.leftLeg.rotation.x = swing;
         this.rightLeg.rotation.x = -swing;
-      } else if (this.grounded) {
+      } else if (this.grounded && !attacking) {
         this.#setAnimation(sprinting ? 'Running_A' : 'Walking_A');
       }
     } else if (this.assetMode === 'placeholder') {
       this.leftLeg.rotation.x *= Math.max(0, 1 - dt * 12);
       this.rightLeg.rotation.x *= Math.max(0, 1 - dt * 12);
-    } else if (this.grounded) {
+    } else if (this.grounded && !attacking) {
       this.#setAnimation('Idle_A');
     }
 
-    const radius = Math.hypot(this.root.position.x, this.root.position.z);
-    if (radius > 58) {
-      const scale = 58 / radius;
-      this.root.position.x *= scale;
-      this.root.position.z *= scale;
+    const ground = this.terrain.heightAt(this.root.position.x, this.root.position.z);
+    if (this.grounded && previousGround - ground > 0.5) {
+      this.grounded = false;
+      this.jumpVelocity = Math.min(0, this.jumpVelocity);
+      this.root.position.y = previousGround;
     }
 
-    const ground = this.terrain.heightAt(this.root.position.x, this.root.position.z);
     if (!this.grounded) {
       this.jumpVelocity -= 13.5 * dt;
       this.root.position.y += this.jumpVelocity * dt;
@@ -198,14 +244,16 @@ export class RangerController {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
         this.grounded = true;
-        this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
+        if (!attacking) {
+          this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
+        }
       }
     } else {
       this.root.position.y = ground;
     }
 
-    this.#updateSpearVisual(dt);
     this.mixer?.update(dt);
+    this.#updateSpearVisual(dt);
     this.#updateCamera(false, dt);
   }
 
@@ -213,33 +261,113 @@ export class RangerController {
     const spear = new THREE.Group();
     spear.name = 'ranger-spear-presentation';
     const wood = new THREE.MeshStandardMaterial({ color: 0x76502f, roughness: 1 });
-    const stone = new THREE.MeshStandardMaterial({ color: 0x858a82, roughness: 0.9, flatShading: true });
+    const stone = new THREE.MeshStandardMaterial({ color: 0x969b91, roughness: 0.88, flatShading: true });
+    const binding = new THREE.MeshStandardMaterial({ color: 0xb58a58, roughness: 1 });
 
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.9, 8), wood);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.043, 2.05, 8), wood);
+    shaft.position.y = 0.12;
     shaft.castShadow = true;
     spear.add(shaft);
 
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 6), stone);
-    head.position.y = 1.1;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.125, 0.37, 6), stone);
+    head.position.y = 1.32;
     head.castShadow = true;
     spear.add(head);
 
-    spear.rotation.x = Math.PI / 2;
-    spear.rotation.z = -0.08;
-    spear.position.set(0.42, 1.08, 0.08);
+    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.22, 8), binding);
+    wrap.position.y = 1.02;
+    spear.add(wrap);
+
+    // KayKit weapon meshes are authored along local +Y from the hand socket.
+    // Keeping the spear on the same axis lets the rig's stab animation carry it naturally.
+    spear.rotation.z = -0.04;
     return spear;
   }
 
   #updateSpearVisual(dt) {
-    if (!this.spearVisual) return;
+    if (!this.spearMount) return;
+    this.#updateSpearAnchor();
+
     if (this.spearThrust <= 0) {
-      this.spearVisual.position.z = 0.08;
+      this.spearMount.position.copy(this.spearRestPosition);
+      this.spearMount.quaternion.copy(this.spearRestQuaternion);
+      if (this.assetMode === 'kaykit' && this.animationState === this.attackAnimation && this.grounded) {
+        this.#setAnimation('Idle_A', true);
+      }
+      if (this.model) {
+        this.model.position.z *= Math.max(0, 1 - dt * 18);
+        this.model.rotation.x *= Math.max(0, 1 - dt * 18);
+      }
       return;
     }
 
     this.spearThrust = Math.max(0, this.spearThrust - dt);
-    const progress = 1 - this.spearThrust / 0.24;
-    this.spearVisual.position.z = 0.08 + Math.sin(progress * Math.PI) * 0.52;
+    const progress = 1 - this.spearThrust / this.spearAttackDuration;
+    const thrust = Math.sin(progress * Math.PI);
+    this.spearMount.position.copy(this.spearRestPosition);
+    this.spearMount.quaternion.copy(this.spearRestQuaternion);
+    const visualPush = this.attackAnimation ? 0.18 : 0.56;
+    this.spearMount.position.z += thrust * visualPush;
+    if (this.model) {
+      this.model.position.z = thrust * 0.16;
+      this.model.rotation.x = -thrust * 0.055;
+    }
+  }
+
+  #updateSpearAnchor() {
+    if (!this.spearMount) return;
+    if (!this.spearHandAnchor) {
+      this.spearRestPosition.set(0.48, 1.2, 0.16);
+      this.spearRestQuaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, -0.08));
+      return;
+    }
+
+    this.root.updateMatrixWorld(true);
+    this.spearHandAnchor.getWorldPosition(this.tempHandWorld);
+    this.spearHandAnchor.getWorldQuaternion(this.tempHandQuaternion);
+    this.root.getWorldQuaternion(this.tempRootQuaternion);
+
+    this.tempHandLocal.copy(this.tempHandWorld);
+    this.root.worldToLocal(this.tempHandLocal);
+    this.spearRestPosition.copy(this.tempHandLocal);
+
+    const anchorName = this.spearHandAnchor.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!anchorName.startsWith('handslot')) {
+      this.spearRestPosition.add(new THREE.Vector3(0.03, -0.08, 0.1));
+    }
+
+    this.tempRootQuaternion.invert();
+    this.spearRestQuaternion.copy(this.tempRootQuaternion).multiply(this.tempHandQuaternion);
+  }
+
+  #findRightHandAnchor(root) {
+    let best = null;
+    let bestScore = -1;
+    root.traverse(object => {
+      if (!object.name) return;
+      const name = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!name.includes('hand')) return;
+      if (name.includes('left') || name.includes('handslotl') || name === 'handl' || name.startsWith('lhand')) return;
+
+      let score = object.isBone ? 2 : 0;
+      if (name === 'handslotr') score += 30;
+      if (name.includes('right')) score += 8;
+      if (name === 'handr' || name.startsWith('rhand') || name.endsWith('handr')) score += 7;
+      if (name.includes('wrist')) score += 2;
+      if (score > bestScore) {
+        best = object;
+        bestScore = score;
+      }
+    });
+    return best;
+  }
+
+  #selectAttackAnimation() {
+    const names = [...this.actions.keys()];
+    return names.find(name => /^Melee_1H_Attack_Stab$/i.test(name))
+      ?? names.find(name => /thrust|stab|spear/i.test(name))
+      ?? names.find(name => /attack|strike|melee/i.test(name))
+      ?? null;
   }
 
   #setAnimation(name, immediate = false) {
@@ -253,11 +381,11 @@ export class RangerController {
 
   #updateCamera(immediate = false, dt = 1 / 60) {
     const target = this.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
-    const distance = 6.2;
+    const distance = 6.5;
     const horizontal = Math.cos(this.pitch) * distance;
     const desired = new THREE.Vector3(
       target.x + Math.sin(this.yaw) * horizontal,
-      target.y + 2 + Math.sin(-this.pitch) * distance,
+      target.y + 2.2 + Math.sin(-this.pitch) * distance,
       target.z + Math.cos(this.yaw) * horizontal
     );
     if (immediate) this.camera.position.copy(desired);
