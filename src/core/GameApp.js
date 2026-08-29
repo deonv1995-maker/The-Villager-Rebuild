@@ -20,12 +20,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.2 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.2 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -70,9 +70,10 @@ export class GameApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.player?.update(dt);
 
-    if (this.player && this.gatherables && this.boar) {
+    if (this.player) {
       this.player.getPosition(this.playerPosition);
-      this.#refreshTargets(dt);
+      this.island?.update(dt, this.playerPosition);
+      if (this.gatherables && this.boar) this.#refreshTargets(dt);
     }
 
     this.sceneSystem.render();

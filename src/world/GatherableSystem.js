@@ -1,19 +1,8 @@
 import * as THREE from 'three';
 import { RESOURCE_DEFINITIONS } from '../data/ResourceDefinitions.js';
+import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 
 const INTERACTION_RADIUS = 2.4;
-const PLACEMENTS = Object.freeze([
-  ['stick', 1.5, 23.0],
-  ['stone', -1.7, 22.7],
-  ['stick', 4.3, 18.8],
-  ['stone', -5.1, 19.6],
-  ['stick', -3.2, 16.7],
-  ['stick', 6.7, 14.5],
-  ['stone', 2.8, 12.8],
-  ['stick', -7.1, 11.9],
-  ['stone', 8.0, 8.8],
-  ['stick', -1.5, 7.2]
-]);
 
 export class GatherableSystem {
   constructor({ scene, terrain }) {
@@ -79,7 +68,7 @@ export class GatherableSystem {
   }
 
   #populate() {
-    PLACEMENTS.forEach(([resourceId, x, z], index) => {
+    WORLD_LAYOUT.dayOneResources.forEach(([resourceId, x, z], index) => {
       const root = resourceId === 'stick'
         ? this.#createStick(index)
         : this.#createStone(index);

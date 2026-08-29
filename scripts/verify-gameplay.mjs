@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
+import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
 import { GatherableSystem } from '../src/world/GatherableSystem.js';
 import { BoarSystem } from '../src/world/BoarSystem.js';
+import { IslandTerrainSystem } from '../src/world/IslandTerrainSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const inventory = new InventorySystem();
@@ -41,18 +43,22 @@ assert.equal(duplicateInventory.consume([
 assert.equal(duplicateInventory.get('stick'), 1);
 
 const scene = new THREE.Scene();
-const terrain = { heightAt: () => 0 };
-const gatherables = new GatherableSystem({ scene, terrain });
-const playerPosition = new THREE.Vector3(0, 0, 24);
+const flatTerrain = { heightAt: () => 0 };
+const gatherables = new GatherableSystem({ scene, terrain: flatTerrain });
+const firstResource = WORLD_LAYOUT.dayOneResources[0];
+const playerPosition = new THREE.Vector3(firstResource[1], 0, firstResource[2]);
 const firstTarget = gatherables.update(playerPosition);
 assert.equal(firstTarget?.resourceId, 'stick');
 const pickup = gatherables.gather(playerPosition);
 assert.equal(pickup?.resourceId, 'stick');
 assert.equal(pickup?.quantity, 1);
+
+const secondResource = WORLD_LAYOUT.dayOneResources[1];
+playerPosition.set(secondResource[1], 0, secondResource[2]);
 assert.equal(gatherables.update(playerPosition)?.resourceId, 'stone');
 
-const boar = new BoarSystem({ scene, terrain });
-const hunterPosition = new THREE.Vector3(4.5, 0, 12.5);
+const boar = new BoarSystem({ scene, terrain: flatTerrain });
+const hunterPosition = new THREE.Vector3(WORLD_LAYOUT.boar.x, 0, WORLD_LAYOUT.boar.z);
 assert.equal(boar.getHarvestTarget(hunterPosition), null);
 assert.equal(boar.update(0, hunterPosition, false), null);
 const attackTarget = boar.update(0, hunterPosition, true);
@@ -68,7 +74,7 @@ assert.equal(finalHit?.defeated, true);
 assert.equal(boar.getState().defeated, true);
 assert.equal(boar.attack(hunterPosition), null);
 
-const farPosition = new THREE.Vector3(20, 0, 20);
+const farPosition = new THREE.Vector3(WORLD_LAYOUT.boar.x + 20, 0, WORLD_LAYOUT.boar.z + 20);
 assert.equal(boar.getHarvestTarget(farPosition), null);
 assert.equal(boar.getHarvestTarget(hunterPosition)?.actionLabel, 'Gather meat');
 const loot = boar.harvest(hunterPosition);
@@ -86,20 +92,67 @@ const collision = new WorldCollisionSystem({
 });
 collision.addCircle({ x: 2, z: 0, radius: 1, type: 'tree' });
 assert.equal(collision.getObstacleCount(), 1);
-const blockedByTree = collision.resolveMove({ x: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
+const blockedByTree = collision.resolveMove({ x: 0, y: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
 assert.equal(blockedByTree.blocked, true);
 assert.equal(blockedByTree.x < 1, true);
-const blockedByCoast = collision.resolveMove({ x: 8, z: 0 }, { x: 9.8, z: 0 }, { radius: 0.42 });
+const blockedByCoast = collision.resolveMove({ x: 8, y: 0, z: 0 }, { x: 9.8, z: 0 }, { radius: 0.42 });
 assert.equal(blockedByCoast.blocked, true);
 assert.equal(blockedByCoast.x < 9.8, true);
+
+const standableCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  isPlayable: () => true
+});
+standableCollision.addObstacle({
+  x: 2,
+  z: 0,
+  radius: 1,
+  type: 'rock',
+  standable: true,
+  supportRadius: 0.7,
+  supportY: 0.45,
+  topY: 0.45,
+  stepHeight: 0.6
+});
+assert.equal(standableCollision.supportHeightAt(2, 0, 0), 0.45);
+const stepOntoRock = standableCollision.resolveMove({ x: 0.8, y: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
+assert.equal(stepOntoRock.blocked, false);
+assert.equal(stepOntoRock.x, 2);
+
+const tallCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  isPlayable: () => true
+});
+tallCollision.addObstacle({
+  x: 2,
+  z: 0,
+  radius: 1,
+  type: 'cliff',
+  standable: true,
+  supportRadius: 0.72,
+  supportY: 1.4,
+  topY: 1.4,
+  stepHeight: 0.55
+});
+const blockedTallStep = tallCollision.resolveMove({ x: 0.8, y: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
+assert.equal(blockedTallStep.blocked, true);
+const airborneOntoCliff = tallCollision.resolveMove({ x: 0.8, y: 1.8, z: 0 }, { x: 2, z: 0 }, { radius: 0.42, airborne: true });
+assert.equal(airborneOntoCliff.blocked, false);
 
 const dropCollision = new WorldCollisionSystem({
   heightAt: x => (x < 1 ? 0 : -2),
   isPlayable: () => true,
   dropFallThreshold: 0.5
 });
-const dropMove = dropCollision.resolveMove({ x: 0.5, z: 0 }, { x: 1.2, z: 0 }, { radius: 0.42 });
+const dropMove = dropCollision.resolveMove({ x: 0.5, y: 0, z: 0 }, { x: 1.2, z: 0 }, { radius: 0.42 });
 assert.equal(dropMove.blocked, false);
 assert.equal(dropMove.x, 1.2);
+
+const regionalTerrain = new IslandTerrainSystem(new THREE.Group());
+assert.equal(regionalTerrain.isPlayable(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), true);
+assert.equal(regionalTerrain.isPlayable(200, 0), false);
+assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 12, true);
+assert.equal(regionalTerrain.heightAt(-70, 5) > regionalTerrain.heightAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) + 2, true);
+assert.equal(regionalTerrain.grassDensityAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) >= 0, true);
 
 console.log('gameplay contracts verified');

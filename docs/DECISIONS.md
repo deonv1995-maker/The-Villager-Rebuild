@@ -106,6 +106,30 @@ Decision: preserve the continuous-terrain architecture while making the island v
 
 Decision: animal gameplay state remains separate from animal presentation. The current boar visual can therefore be replaced or upgraded again without moving health, targeting, harvesting or loot rules into the render model.
 
+## 2026-08-29 — Foundation 0.3 world responsibilities
+
+Decision: `TestIslandSystem` is an orchestrator rather than the owner of every world implementation detail. Continuous terrain belongs to `IslandTerrainSystem`, environment placement belongs to `EnvironmentScatterSystem`, interactive fine grass belongs to `GrassFieldSystem`, and movement/traversal rules remain in `WorldCollisionSystem`.
+
+Reason: terrain shaping, vegetation density, collision and grass interaction must be independently tunable as the island grows. This also prevents future NPC navigation and harvesting work from depending on one oversized island class.
+
+## 2026-08-29 — Environment placement reservations
+
+Decision: world scatter reserves spatial footprints as objects are accepted. Landmark rocks/cliffs are reserved first, then trees/rocks, then understory; later placement candidates must respect those reservations, path clearance, spawn/tutorial clearings, terrain slope and shoreline margins.
+
+Reason: tree/rock/cliff intersections are a placement-data problem, not something that should be repaired by manually moving individual generated props.
+
+## 2026-08-29 — Interactive fine grass
+
+Decision: fine grass uses instanced segmented blade tufts rather than cone placeholders. Player interaction follows the proven legacy behavior concept — nearby grass bends/compresses away from the Ranger and recovers — but is rebuilt inside the new architecture with a spatial grid so only nearby/active instances receive per-frame matrix updates.
+
+Reason: this restores the tactile vegetation response without reintroducing the archived project's broader technical coupling or making thousands of distant grass instances expensive on mobile.
+
+## 2026-08-29 — Walkable environment surfaces
+
+Decision: rocks and broad cliff dressing distinguish their blocking side footprint from a smaller standable support footprint. Trees remain trunk blockers. Low supports can be stepped onto; taller supports require airborne traversal; deliberate terrain drops remain fallable.
+
+Reason: visible surfaces that look walkable should not behave like oversized invisible circular walls, while solid sides and trunks still need predictable shared collision for player/NPC movement.
+
 ## Open decisions
 
 The following are intentionally not locked yet:

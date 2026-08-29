@@ -12,7 +12,8 @@ export class RangerController {
     this.terrain = terrain;
     this.collision = collision;
     this.root = new THREE.Group();
-    this.root.position.set(0, terrain.heightAt(0, 39), 39);
+    const spawn = terrain.getSpawnPoint?.() ?? { x: 0, z: 39 };
+    this.root.position.set(spawn.x, terrain.heightAt(spawn.x, spawn.z), spawn.z);
     this.scene.add(this.root);
 
     this.input = { x: 0, y: 0, sprint: false };
