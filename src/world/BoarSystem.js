@@ -8,6 +8,7 @@ export class BoarSystem {
     this.definition = definition;
     this.health = definition.maxHealth;
     this.defeated = false;
+    this.harvested = false;
     this.time = 0;
     this.hitFlash = 0;
     this.center = new THREE.Vector3(2.2, 0, 9.5);
@@ -23,19 +24,13 @@ export class BoarSystem {
     this.lastPosition.copy(this.group.position);
     this.scene.add(this.group);
 
-    this.targetRing = new THREE.Mesh(
-      new THREE.RingGeometry(0.82, 1.03, 28),
-      new THREE.MeshBasicMaterial({
-        color: 0xe0a54c,
-        transparent: true,
-        opacity: 0.72,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      })
-    );
-    this.targetRing.rotation.x = -Math.PI / 2;
-    this.targetRing.visible = false;
+    this.targetRing = this.#createRing(0xe0a54c, 0.82, 1.03);
+    this.targetRing.name = 'boar-attack-target';
     this.scene.add(this.targetRing);
+
+    this.harvestRing = this.#createRing(0xffe29a, 0.88, 1.09);
+    this.harvestRing.name = 'boar-harvest-target';
+    this.scene.add(this.harvestRing);
   }
 
   update(dt, playerPosition, armed = false) {
@@ -62,13 +57,12 @@ export class BoarSystem {
 
     const target = this.#targetFor(playerPosition, armed);
     this.targetRing.visible = Boolean(target);
-    if (target) {
-      this.targetRing.position.set(
-        this.group.position.x,
-        this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.055,
-        this.group.position.z
-      );
-    }
+    if (target) this.#positionRing(this.targetRing);
+
+    const harvestTarget = this.getHarvestTarget(playerPosition);
+    this.harvestRing.visible = Boolean(harvestTarget);
+    if (harvestTarget) this.#positionRing(this.harvestRing);
+
     return target;
   }
 
@@ -98,12 +92,43 @@ export class BoarSystem {
     };
   }
 
+  getHarvestTarget(playerPosition) {
+    if (!this.defeated || this.harvested || !playerPosition) return null;
+    const distance = Math.hypot(
+      playerPosition.x - this.group.position.x,
+      playerPosition.z - this.group.position.z
+    );
+    if (distance > this.definition.harvestRange) return null;
+
+    return {
+      type: 'carcass',
+      animalId: this.definition.id,
+      label: this.definition.loot.label,
+      actionLabel: 'Gather meat'
+    };
+  }
+
+  harvest(playerPosition) {
+    const target = this.getHarvestTarget(playerPosition);
+    if (!target) return null;
+
+    this.harvested = true;
+    this.harvestRing.visible = false;
+    return {
+      animalId: this.definition.id,
+      itemId: this.definition.loot.itemId,
+      label: this.definition.loot.label,
+      quantity: this.definition.loot.quantity
+    };
+  }
+
   getState() {
     return {
       animalId: this.definition.id,
       health: this.health,
       maxHealth: this.definition.maxHealth,
-      defeated: this.defeated
+      defeated: this.defeated,
+      harvested: this.harvested
     };
   }
 
@@ -177,5 +202,29 @@ export class BoarSystem {
     }
 
     return group;
+  }
+
+  #createRing(color, innerRadius, outerRadius) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(innerRadius, outerRadius, 28),
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.78,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    return ring;
+  }
+
+  #positionRing(ring) {
+    ring.position.set(
+      this.group.position.x,
+      this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.055,
+      this.group.position.z
+    );
   }
 }

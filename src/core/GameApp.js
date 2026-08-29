@@ -15,6 +15,7 @@ export class GameApp {
     this.running = false;
     this.playerPosition = new THREE.Vector3();
     this.currentBoarTarget = null;
+    this.currentInteractionTarget = null;
   }
 
   async start() {
@@ -52,14 +53,12 @@ export class GameApp {
         this.hud = new MobileHud({
           player: this.player,
           canvas: this.canvas,
-          onInteract: () => this.#tryGather(),
+          onInteract: () => this.#tryInteract(),
           onCraft: () => this.#tryCraftSpear(),
           onAttack: () => this.#tryAttackBoar()
         });
         this.player.getPosition(this.playerPosition);
-        this.hud.setInteractionTarget(this.gatherables.update(this.playerPosition));
-        this.currentBoarTarget = this.boar.update(0, this.playerPosition, false);
-        this.hud.setAttackTarget(this.currentBoarTarget);
+        this.#refreshTargets(0);
         this.#syncProgress();
       })
       .catch(error => console.error('[OPTIONAL HUD]', error));
@@ -70,28 +69,45 @@ export class GameApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.player?.update(dt);
 
-    if (this.player && this.gatherables) {
+    if (this.player && this.gatherables && this.boar) {
       this.player.getPosition(this.playerPosition);
-      const target = this.gatherables.update(this.playerPosition);
-      this.hud?.setInteractionTarget(target);
-
-      const armed = Boolean(this.inventory?.get('spear'));
-      this.currentBoarTarget = this.boar?.update(dt, this.playerPosition, armed) ?? null;
-      this.hud?.setAttackTarget(this.currentBoarTarget);
+      this.#refreshTargets(dt);
     }
 
     this.sceneSystem.render();
     requestAnimationFrame(this.#frame);
   };
 
-  #tryGather() {
-    if (!this.player || !this.gatherables || !this.inventory) return;
+  #refreshTargets(dt = 0) {
+    const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
+    const armed = Boolean(this.inventory?.get('spear'));
+    this.currentBoarTarget = this.boar?.update(dt, this.playerPosition, armed) ?? null;
+    const carcassTarget = this.boar?.getHarvestTarget(this.playerPosition) ?? null;
+    this.currentInteractionTarget = carcassTarget ?? resourceTarget;
+
+    this.hud?.setInteractionTarget(this.currentInteractionTarget);
+    this.hud?.setAttackTarget(this.currentBoarTarget);
+  }
+
+  #tryInteract() {
+    if (!this.player || !this.inventory) return;
     this.player.getPosition(this.playerPosition);
-    const pickup = this.gatherables.gather(this.playerPosition);
+
+    const carcassTarget = this.boar?.getHarvestTarget(this.playerPosition);
+    if (carcassTarget) {
+      const loot = this.boar.harvest(this.playerPosition);
+      if (!loot) return;
+      this.inventory.add(loot.itemId, loot.quantity);
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      return;
+    }
+
+    const pickup = this.gatherables?.gather(this.playerPosition);
     if (!pickup) return;
 
     this.inventory.add(pickup.resourceId, pickup.quantity);
-    this.hud?.setInteractionTarget(this.gatherables.update(this.playerPosition));
+    this.#refreshTargets(0);
     this.#syncProgress();
   }
 
@@ -102,8 +118,7 @@ export class GameApp {
 
     this.player?.setSpearEquipped(true);
     this.player?.getPosition(this.playerPosition);
-    this.currentBoarTarget = this.boar?.update(0, this.playerPosition, true) ?? null;
-    this.hud?.setAttackTarget(this.currentBoarTarget);
+    this.#refreshTargets(0);
     this.#syncProgress();
   }
 
@@ -114,8 +129,7 @@ export class GameApp {
     if (!hit) return;
 
     this.player.playSpearAttack();
-    this.currentBoarTarget = this.boar.update(0, this.playerPosition, true);
-    this.hud?.setAttackTarget(this.currentBoarTarget);
+    this.#refreshTargets(0);
 
     if (hit.defeated) {
       this.#syncProgress();
@@ -130,16 +144,29 @@ export class GameApp {
     if (!this.inventory || !this.crafting) return;
 
     const hasSpear = this.inventory.get('spear') > 0;
+    const meatCount = this.inventory.get('meat');
     const canCraftSpear = !hasSpear && this.crafting.canCraft('spear');
-    const boarDefeated = this.boar?.getState().defeated ?? false;
+    const boarState = this.boar?.getState();
+    const boarDefeated = boarState?.defeated ?? false;
 
     this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setCraftAvailable(canCraftSpear);
     this.player?.setSpearEquipped(hasSpear);
 
+    if (boarDefeated && meatCount > 0) {
+      this.setStatus(`DAY 1 · RAW MEAT ${meatCount}`);
+      this.hud?.setObjective('DAY 1 · Meat gathered · chop a tree next');
+      this.hud?.setAttackTarget(null);
+      return;
+    }
+
     if (boarDefeated) {
       this.setStatus('DAY 1 · BOAR DOWN');
-      this.hud?.setObjective('DAY 1 · Boar down · gather meat next');
+      this.hud?.setObjective(
+        this.currentInteractionTarget?.type === 'carcass'
+          ? 'DAY 1 · Hand / E to gather meat'
+          : 'DAY 1 · Move closer · gather meat'
+      );
       this.hud?.setAttackTarget(null);
       return;
     }
@@ -168,7 +195,7 @@ export class GameApp {
 
       if (event.code === 'KeyE') {
         event.preventDefault();
-        this.#tryGather();
+        this.#tryInteract();
       } else if (event.code === 'KeyC') {
         event.preventDefault();
         this.#tryCraftSpear();

@@ -18,7 +18,7 @@ export class MobileHud {
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
       <button class="hud-button craft" type="button" aria-label="Craft spear" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button attack" type="button" aria-label="Attack boar" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
-      <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
+      <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
@@ -45,9 +45,10 @@ export class MobileHud {
 
   setInteractionTarget(target) {
     const available = Boolean(target);
+    const actionLabel = target?.actionLabel ?? (target ? `Pick up ${target.label}` : 'Interact');
     this.interactButton.hidden = !available;
     this.interactButton.disabled = !available;
-    this.interactButton.setAttribute('aria-label', available ? `Pick up ${target.label}` : 'Pick up');
+    this.interactButton.setAttribute('aria-label', actionLabel);
   }
 
   setCraftAvailable(available) {

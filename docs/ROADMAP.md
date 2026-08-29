@@ -35,7 +35,7 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — gathering, first crafting and first hunting milestones implemented on 2026-08-29.**
+Status: **in progress — gathering, spear crafting, first hunting and meat harvesting milestones implemented on 2026-08-29.**
 
 Current playable milestone:
 
@@ -48,12 +48,14 @@ Current playable milestone:
 - crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
 - desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
 - the HUD separates the current objective from inventory counts and records the crafted spear in inventory;
-- a first boar now wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
+- a first boar wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
 - desktop uses F and mobile exposes the spear attack button only for a valid boar target;
 - the first boar takes two spear hits, provides hit feedback, falls when defeated, and advances the objective without mixing animal health into the Ranger controller;
-- animal definition data, boar world state and Ranger spear presentation are kept behind separate boundaries so a production animal asset/animation pack can replace the current procedural boar without rewriting the hunting rules.
+- the defeated carcass exposes the normal contextual hand interaction when the player moves close enough;
+- harvesting is one-time and data-driven from the animal definition, adding two Raw Meat to inventory without duplicating loot;
+- the same interaction input now routes between loose world resources and harvestable carcasses while inventory remains the single owner of carried item quantities.
 
-Next playable milestone: **gather meat from the defeated boar.**
+Next playable milestone: **chop the first tree and gather logs.**
 
 Target final-game sequence:
 
