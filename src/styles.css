@@ -99,7 +99,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   width: 62px;
   height: 62px;
 }
-.hud-button.craft {
+.hud-button.craft,
+.hud-button.attack {
   right: max(100px, calc(env(safe-area-inset-right) + 96px));
   bottom: max(103px, calc(env(safe-area-inset-bottom) + 97px));
   width: 60px;
