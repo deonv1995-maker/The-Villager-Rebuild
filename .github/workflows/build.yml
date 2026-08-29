@@ -43,5 +43,5 @@ jobs:
           check public/assets/kaykit/forest/Rock_1_A_Color1.bin df23c5d4e393fc366f992340aea4433ec7fc3c8e
           check public/assets/kaykit/forest/forest_texture.png 3674554457d00bb06e0fb481a4bb637d232a25fa
 
-          check public/assets/kenney/nature/cliff_large_rock.glb 4d554f89bbef8063a43fbd86a452dc4b7d78bba7
+          check public/assets/kenney/nature/cliff_large_rock.glb e90dd116216dd0c59d3dffb3d5b21252fd6da3ce
           check public/assets/kenney/nature/rock_largeA.glb 40e1365a43b706bd78c2658b48b189c9a35f8923
