@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "check": "npm run build"
+    "verify:assets": "node scripts/verify-runtime-assets.mjs public",
+    "verify:dist-assets": "node scripts/verify-runtime-assets.mjs dist",
+    "check": "npm run verify:assets && npm run build && npm run verify:dist-assets"
   },
   "dependencies": {
     "three": "0.180.0"
