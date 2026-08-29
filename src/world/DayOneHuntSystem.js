@@ -132,6 +132,8 @@ export class DayOneHuntSystem {
 
     this.harvested = true;
     this.harvestRing.visible = false;
+    this.targetRing.visible = false;
+    this.scene.remove(this.group);
     return {
       animalId: this.definition.id,
       itemId: this.definition.loot.itemId,
