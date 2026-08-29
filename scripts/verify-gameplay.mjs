@@ -86,6 +86,7 @@ assert.equal(loot?.quantity, 2);
 inventory.add(loot.itemId, loot.quantity);
 assert.equal(inventory.get('meat'), 2);
 assert.equal(hunt.getState().harvested, true);
+assert.equal(scene.children.includes(hunt.group), false, 'harvested animal presentation must be removed from the scene');
 assert.equal(hunt.getHarvestTarget(hunterPosition), null);
 assert.equal(hunt.harvest(hunterPosition), null);
 
