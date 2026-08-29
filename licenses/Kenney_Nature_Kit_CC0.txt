@@ -1,0 +1,6 @@
+Kenney Nature Kit
+
+License: Creative Commons Zero (CC0)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The source pack supplied by the user identifies these assets as CC0. Selected production assets are preserved separately from source archives and are used only in the game runtime as needed.
