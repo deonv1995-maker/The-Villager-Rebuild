@@ -1,4 +1,4 @@
-import { GameApp } from './core/GameApp.js';
+import { GameApp } from './core/GameApp.js?v=day1-boar-2';
 
 const canvas = document.getElementById('game-canvas');
 const status = document.getElementById('boot-status');
