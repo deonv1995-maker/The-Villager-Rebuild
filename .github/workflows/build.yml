@@ -20,3 +20,40 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - name: Verify selected production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          check() {
+            local path="$1"
+            local expected="$2"
+            test -f "$path"
+            test "$(git hash-object "$path")" = "$expected"
+          }
+
+          check public/assets/kaykit/adventurers/Ranger.glb 8edaf04430036130c3a7fcb6767049aac3c3f3a7
+          check public/assets/kaykit/animations/Rig_Medium_General.glb 5d16cb6815fc8371705147188813f851c10ba26a
+          check public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb 98e965e886ec539e80f8984a77a29b0c1c02e5e5
+
+          check public/assets/kaykit/forest/Tree_1_A_Color1.gltf 1c453051b537f6dfab6c6b9d82531774ace25c85
+          check public/assets/kaykit/forest/Tree_1_A_Color1.bin c96917f8f6b7cf59306af26d406ba36a597b888d
+          check public/assets/kaykit/forest/Tree_2_A_Color1.gltf f1d34cbbc103593c8b53f2bb01e0d07edc305446
+          check public/assets/kaykit/forest/Tree_2_A_Color1.bin 420b678bd60994af497c9d18abe6a64d87595936
+          check public/assets/kaykit/forest/Rock_1_A_Color1.gltf cfee4dd720002583c195f1e4f6ce35eeb984b51d
+          check public/assets/kaykit/forest/Rock_1_A_Color1.bin df23c5d4e393fc366f992340aea4433ec7fc3c8e
+          check public/assets/kaykit/forest/forest_texture.png 3674554457d00bb06e0fb481a4bb637d232a25fa
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          for (const name of ['Tree_1_A_Color1.gltf', 'Tree_2_A_Color1.gltf', 'Rock_1_A_Color1.gltf']) {
+            const file = path.join('public/assets/kaykit/forest', name);
+            const gltf = JSON.parse(fs.readFileSync(file, 'utf8'));
+            for (const buffer of gltf.buffers ?? []) {
+              if (!fs.existsSync(path.join(path.dirname(file), buffer.uri))) throw new Error(`${name}: missing ${buffer.uri}`);
+            }
+            for (const image of gltf.images ?? []) {
+              if (image.uri && !fs.existsSync(path.join(path.dirname(file), image.uri))) throw new Error(`${name}: missing ${image.uri}`);
+            }
+          }
+          NODE
