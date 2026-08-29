@@ -33,10 +33,14 @@ jobs:
           curl -L --fail --retry 3 \
             https://raw.githubusercontent.com/MJohnsonWellabe/Tetherbound/main/assets/characters/Rig_Medium_MovementBasic.glb \
             -o public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb
+          curl -L --fail --retry 3 \
+            https://raw.githubusercontent.com/raymondBporter/App2d/64d5a3ece174a8ce5522ca62d751872e53b77778/Assets/Sources/third-party/kaykit-character-animations-1.1/Animations/gltf/Rig_Medium/Rig_Medium_CombatMelee.glb \
+            -o public/assets/kaykit/animations/Rig_Medium_CombatMelee.glb
 
           test "$(git hash-object public/assets/kaykit/adventurers/Ranger.glb)" = "8edaf04430036130c3a7fcb6767049aac3c3f3a7"
           test "$(git hash-object public/assets/kaykit/animations/Rig_Medium_General.glb)" = "5d16cb6815fc8371705147188813f851c10ba26a"
           test "$(git hash-object public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb)" = "98e965e886ec539e80f8984a77a29b0c1c02e5e5"
+          test "$(git hash-object public/assets/kaykit/animations/Rig_Medium_CombatMelee.glb)" = "0ab63f221ca5d5c7c485a245199fb6107f1f3764"
 
       - name: Commit curated Ranger assets
         shell: bash
@@ -46,7 +50,8 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add public/assets/kaykit/adventurers/Ranger.glb \
                   public/assets/kaykit/animations/Rig_Medium_General.glb \
-                  public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb
+                  public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb \
+                  public/assets/kaykit/animations/Rig_Medium_CombatMelee.glb
           if git diff --cached --quiet; then
             echo 'Ranger assets already match the selected production files.'
             exit 0
