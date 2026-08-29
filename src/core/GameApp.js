@@ -4,6 +4,7 @@ import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
+import { CraftingSystem } from '../gameplay/CraftingSystem.js';
 
 export class GameApp {
   constructor({ canvas, setStatus }) {
@@ -30,6 +31,7 @@ export class GameApp {
     await this.player.load();
 
     this.inventory = new InventorySystem();
+    this.crafting = new CraftingSystem({ inventory: this.inventory });
     this.gatherables = new GatherableSystem({
       scene: this.sceneSystem.scene,
       terrain: this.island
@@ -44,11 +46,12 @@ export class GameApp {
         this.hud = new MobileHud({
           player: this.player,
           canvas: this.canvas,
-          onInteract: () => this.#tryGather()
+          onInteract: () => this.#tryGather(),
+          onCraft: () => this.#tryCraftSpear()
         });
-        this.hud.setInventory(this.inventory.snapshot());
         this.player.getPosition(this.playerPosition);
         this.hud.setInteractionTarget(this.gatherables.update(this.playerPosition));
+        this.#syncProgress();
       })
       .catch(error => console.error('[OPTIONAL HUD]', error));
   }
@@ -75,19 +78,53 @@ export class GameApp {
     if (!pickup) return;
 
     this.inventory.add(pickup.resourceId, pickup.quantity);
-    this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setInteractionTarget(this.gatherables.update(this.playerPosition));
+    this.#syncProgress();
+  }
 
-    const stickCount = this.inventory.get('stick');
-    const stoneCount = this.inventory.get('stone');
-    this.setStatus(`DAY 1 · STICK ${stickCount} · STONE ${stoneCount}`);
+  #tryCraftSpear() {
+    if (!this.crafting || !this.inventory || this.inventory.get('spear') > 0) return;
+    const crafted = this.crafting.craft('spear');
+    if (!crafted) return;
+    this.#syncProgress();
+  }
+
+  #syncProgress() {
+    if (!this.inventory || !this.crafting) return;
+
+    const hasSpear = this.inventory.get('spear') > 0;
+    const canCraftSpear = !hasSpear && this.crafting.canCraft('spear');
+
+    this.hud?.setInventory(this.inventory.snapshot());
+    this.hud?.setCraftAvailable(canCraftSpear);
+
+    if (hasSpear) {
+      this.setStatus('DAY 1 · SPEAR CRAFTED');
+      this.hud?.setObjective('DAY 1 · Spear ready');
+      return;
+    }
+
+    if (canCraftSpear) {
+      this.setStatus('DAY 1 · CRAFT A SPEAR');
+      this.hud?.setObjective('DAY 1 · C / spear to craft');
+      return;
+    }
+
+    this.setStatus('DAY 1 · GATHER A STICK + STONE');
+    this.hud?.setObjective('DAY 1 · E / hand to gather');
   }
 
   #bindGameplayInput() {
     window.addEventListener('keydown', event => {
-      if (event.code !== 'KeyE' || event.repeat) return;
-      event.preventDefault();
-      this.#tryGather();
+      if (event.repeat) return;
+
+      if (event.code === 'KeyE') {
+        event.preventDefault();
+        this.#tryGather();
+      } else if (event.code === 'KeyC') {
+        event.preventDefault();
+        this.#tryCraftSpear();
+      }
     });
   }
 }
