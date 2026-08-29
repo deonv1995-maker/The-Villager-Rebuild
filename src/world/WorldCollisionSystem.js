@@ -3,14 +3,16 @@ const DEFAULT_PLAYER_RADIUS = 0.42;
 export class WorldCollisionSystem {
   constructor({
     heightAt,
+    baseHeightAt = null,
     isPlayable,
     maxSlopeDegrees = 50,
     dropFallThreshold = 0.5,
     slopeSampleDistance = 0.72
   }) {
     this.heightAt = heightAt;
+    this.baseHeightAt = typeof baseHeightAt === 'function' ? baseHeightAt : heightAt;
     this.isPlayable = isPlayable;
-    this.maxSlopeRise = Math.tan((maxSlopeDegrees * Math.PI) / 180) * slopeSampleDistance;
+    this.maxSlopeGradient = Math.tan((maxSlopeDegrees * Math.PI) / 180);
     this.dropFallThreshold = dropFallThreshold;
     this.slopeSampleDistance = slopeSampleDistance;
     this.obstacles = [];
@@ -187,6 +189,22 @@ export class WorldCollisionSystem {
     return dx * dx + dz * dz <= supportDistance * supportDistance;
   }
 
+  #terrainSlopeAllows(from, x, z) {
+    const dx = x - from.x;
+    const dz = z - from.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.0001) return true;
+
+    const dirX = dx / distance;
+    const dirZ = dz / distance;
+    const d = this.slopeSampleDistance;
+    const center = this.baseHeightAt(x, z);
+    const behind = this.baseHeightAt(x - dirX * d, z - dirZ * d);
+    const ahead = this.baseHeightAt(x + dirX * d, z + dirZ * d);
+    const uphillRise = Math.max(0, center - behind, ahead - center);
+    return uphillRise <= this.maxSlopeGradient * d;
+  }
+
   #canOccupy(from, x, z, radius, airborne) {
     if (!this.isPlayable(x, z, radius + 0.35)) return false;
 
@@ -195,6 +213,18 @@ export class WorldCollisionSystem {
     for (const obstacle of this.obstacles) {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
       if (feetY > obstacle.topY + 0.12) continue;
+
+      const fromSupported = (
+        obstacle.standable &&
+        obstacle.supportY !== null &&
+        this.#withinSupport(obstacle, from.x, from.z, radius * 0.12) &&
+        Math.abs(feetY - obstacle.supportY) <= 0.3
+      );
+
+      // Once the Ranger is standing on a support, its own side blocker must
+      // not trap the Ranger on top. Lateral movement can leave the support;
+      // the normal ground/drop logic then transitions the Ranger into a fall.
+      if (fromSupported && feetY >= obstacle.supportY - 0.16) continue;
 
       if (airborne) {
         if (
@@ -208,7 +238,7 @@ export class WorldCollisionSystem {
       if (obstacle.standable && obstacle.supportY !== null) {
         if (this.#withinSupport(obstacle, x, z, radius * 0.25)) {
           const step = obstacle.supportY - fromGround;
-          const alreadySupported = Math.abs(fromGround - obstacle.supportY) <= 0.28;
+          const alreadySupported = Math.abs(feetY - obstacle.supportY) <= 0.28;
           if (alreadySupported || (!airborne && step <= obstacle.stepHeight)) continue;
         }
       }
@@ -220,14 +250,6 @@ export class WorldCollisionSystem {
     const toGround = this.heightAt(x, z);
     if (fromGround - toGround > this.dropFallThreshold) return true;
 
-    const d = this.slopeSampleDistance;
-    const center = toGround;
-    const samples = [
-      this.heightAt(x + d, z),
-      this.heightAt(x - d, z),
-      this.heightAt(x, z + d),
-      this.heightAt(x, z - d)
-    ];
-    return samples.every(sample => Math.abs(sample - center) <= this.maxSlopeRise);
+    return this.#terrainSlopeAllows(from, x, z);
   }
 }
