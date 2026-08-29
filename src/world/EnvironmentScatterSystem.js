@@ -99,7 +99,7 @@ export class EnvironmentScatterSystem {
       this.#prepareStaticTemplate(template);
     }
 
-    this.#placeLandmarks(assets);
+    this.#placeCliffFaceDressing(assets);
     this.#placeForest(assets);
     this.#placeUnderstory();
     return true;
@@ -107,9 +107,9 @@ export class EnvironmentScatterSystem {
 
   #reserveGameplayRoute() {
     const spawn = WORLD_LAYOUT.spawn;
-    const boar = WORLD_LAYOUT.boar;
-    this.reservations.add({ x: spawn.x, z: spawn.z, radius: 12, grassRadius: 5.2, type: 'spawn' });
-    this.reservations.add({ x: boar.x, z: boar.z, radius: 9.5, grassRadius: 2.8, type: 'boar-clearing' });
+    const hunt = WORLD_LAYOUT.huntAnimal;
+    this.reservations.add({ x: spawn.x, z: spawn.z, radius: 8.2, grassRadius: 4.5, type: 'spawn' });
+    this.reservations.add({ x: hunt.x, z: hunt.z, radius: 7.2, grassRadius: 2.5, type: 'hunt-clearing' });
   }
 
   #prepareStaticTemplate(root) {
@@ -126,39 +126,38 @@ export class EnvironmentScatterSystem {
     return Math.abs(x - this.terrain.pathCenterX(z)) >= width;
   }
 
-  #placeLandmarks({ cliff, cliffRock }) {
-    const cliffSpots = [
-      [-96, -5, 6.6, 0.35], [-88, -23, 7.1, 0.58], [-76, -40, 6.2, 0.82],
-      [91, -37, 6.4, -0.72], [101, -18, 7.2, -0.5], [96, 4, 6.0, -0.3],
-      [-103, 27, 5.8, 0.08], [-95, 47, 5.2, -0.08], [94, 43, 5.5, 0.08],
-      [-52, -81, 5.6, 0.18], [49, -88, 5.9, -0.2]
+  #placeCliffFaceDressing({ cliff }) {
+    const facePieces = [
+      [-43, 2, 10.5, 5.1, 4.2, 1.48],
+      [-47, 25, 7.4, 7.3, 3.3, 1.34],
+      [-52, -18, 8.6, 4.2, 5.8, 1.7],
+      [21, -43, 5.2, 4.4, 8.5, 0.08],
+      [31, 19, 4.7, 5.6, 7.1, -0.02],
+      [22, -8, 4.1, 5.2, 6.7, 0.03],
+      [49, -48, 9.6, 5.6, 3.9, -0.12],
+      [71, -73, 6.2, 6.8, 4.1, -0.2],
+      [76, -52, 7.7, 4.5, 5.2, -0.04],
+      [74, 22, 7.8, 4.7, 4.6, -0.33],
+      [92, 3, 5.3, 6.5, 4.2, -0.42],
+      [105, 41, 8.4, 5.5, 3.7, -0.5]
     ];
 
-    cliffSpots.forEach(([x, z, scale, yaw], index) => {
-      if (!this.terrain.isPlayable(x, z, 4)) return;
+    facePieces.forEach(([x, z, sx, sy, sz, yaw], index) => {
+      if (!this.terrain.isPlayable(x, z, 2.5)) return;
       const instance = cliff.clone(true);
-      instance.scale.set(scale * 1.28, scale, scale * 1.16);
-      instance.rotation.y = yaw + (index % 2 ? 0.07 : -0.06);
-      instance.position.set(x, this.terrain.heightAt(x, z) - 0.72, z);
-      instance.name = `landmark-cliff-${index}`;
+      instance.scale.set(sx, sy, sz);
+      instance.rotation.y = yaw;
+      instance.rotation.z = (index % 3 - 1) * 0.08;
+      instance.position.set(x, this.terrain.heightAt(x, z) - sy * 0.58, z);
+      instance.name = `terrain-face-dressing-${index}`;
       this.group.add(instance);
-      this.#registerStandableObject(instance, 'cliff', 1.15);
-    });
-
-    const rockSpots = [
-      [-67, -62], [-40, -72], [70, -60], [79, -48], [-109, 3], [111, 8],
-      [-77, 65], [71, 67], [-24, -96], [28, -99], [-102, -51], [104, 57]
-    ];
-    rockSpots.forEach(([x, z], index) => {
-      if (!this.terrain.isPlayable(x, z, 4)) return;
-      const instance = cliffRock.clone(true);
-      const scale = 3.3 + this.random() * 2.5;
-      instance.scale.set(scale * (0.9 + this.random() * 0.24), scale, scale * (0.86 + this.random() * 0.28));
-      instance.rotation.y = this.random() * Math.PI * 2;
-      instance.position.set(x, this.terrain.heightAt(x, z) - 0.12, z);
-      instance.name = `landmark-rock-${index}`;
-      this.group.add(instance);
-      this.#registerStandableObject(instance, 'rock', 0.72);
+      this.reservations.add({
+        x,
+        z,
+        radius: Math.max(2.8, Math.min(sx, sz) * 0.55),
+        grassRadius: Math.max(1.3, Math.min(sx, sz) * 0.32),
+        type: 'cliff-face'
+      });
     });
   }
 
@@ -191,114 +190,180 @@ export class EnvironmentScatterSystem {
     this.reservations.add({
       x: center.x,
       z: center.z,
-      radius: blockRadius * reserveScale + 2.1,
-      grassRadius: blockRadius * 0.86,
+      radius: blockRadius * reserveScale + 1.65,
+      grassRadius: blockRadius * 0.82,
       type
     });
   }
 
-  #placeForest({ trees, forestRock }) {
+  #placeForest({ trees, forestRock, cliffRock }) {
     const regionDensity = {
-      lowlands: 0.58,
-      westernHighland: 0.72,
-      northernRidge: 0.54,
-      easternShelf: 0.5,
-      southernWood: 0.82,
-      centralRavine: 0.46,
-      westernValley: 0.88
+      lowlands: 0.76,
+      westernHighland: 0.86,
+      northernRidge: 0.72,
+      easternShelf: 0.74,
+      southernWood: 1,
+      centralRavine: 0.68,
+      westernValley: 1
     };
 
+    const placementsByType = [[], []];
     let treesPlaced = 0;
     let attempts = 0;
-    while (treesPlaced < 190 && attempts < 6500) {
+    while (treesPlaced < 440 && attempts < 15000) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 128;
-      const z = (this.random() * 2 - 1) * 105 - 4;
-      if (!this.terrain.isPlayable(x, z, 6)) continue;
-      if (!this.#pathClearance(x, z, 6.2)) continue;
+      const x = (this.random() * 2 - 1) * 132;
+      const z = (this.random() * 2 - 1) * 109 - 4;
+      if (!this.terrain.isPlayable(x, z, 4.6)) continue;
+      if (!this.#pathClearance(x, z, 3.7)) continue;
       const slope = this.terrain.slopeAt(x, z);
-      if (slope > 0.48) continue;
+      if (slope > 0.5) continue;
       const region = this.terrain.regionAt(x, z).name;
-      const habitat = 0.62 + (Math.sin(x * 0.054 + z * 0.019) + Math.cos(z * 0.047 - x * 0.016) + 2) * 0.11;
-      if (this.random() > (regionDensity[region] ?? 0.58) * habitat) continue;
+      const habitat = 0.72 + (Math.sin(x * 0.054 + z * 0.019) + Math.cos(z * 0.047 - x * 0.016) + 2) * 0.105;
+      if (this.random() > (regionDensity[region] ?? 0.74) * habitat) continue;
 
-      const scale = 1.28 + this.random() * 0.94;
-      const reserveRadius = 1.55 + scale * 0.78;
+      const hero = this.random() < 0.12;
+      const scale = hero ? 2.45 + this.random() * 1.35 : 1.18 + this.random() * 1.38;
+      const reserveRadius = hero ? 2.9 + scale * 0.34 : 1.8 + scale * 0.32;
       if (!this.reservations.isClear(x, z, reserveRadius)) continue;
 
-      const tree = trees[treesPlaced % trees.length].clone(true);
-      tree.scale.setScalar(scale);
-      tree.rotation.y = this.random() * Math.PI * 2;
-      tree.position.set(x, this.terrain.heightAt(x, z), z);
-      tree.name = `forest-tree-${treesPlaced}`;
-      this.group.add(tree);
+      const typeIndex = treesPlaced % trees.length;
+      placementsByType[typeIndex].push({
+        x,
+        y: this.terrain.heightAt(x, z),
+        z,
+        yaw: this.random() * Math.PI * 2,
+        scale,
+        stretch: hero ? 1.06 + this.random() * 0.16 : 0.96 + this.random() * 0.12
+      });
 
-      const trunkRadius = 0.38 + scale * 0.18;
-      this.collision.addObstacle({ x, z, radius: trunkRadius, type: 'tree', label: tree.name });
+      const trunkRadius = 0.34 + scale * 0.15;
+      this.collision.addObstacle({ x, z, radius: trunkRadius, type: 'tree', label: `forest-tree-${treesPlaced}` });
       this.reservations.add({
         x,
         z,
         radius: reserveRadius,
-        grassRadius: trunkRadius + 0.18,
+        grassRadius: trunkRadius + 0.14,
         type: 'tree'
       });
       treesPlaced += 1;
     }
 
+    placementsByType.forEach((placements, index) => {
+      this.#createInstancedTemplate(trees[index], placements, `forest-tree-batch-${index}`);
+    });
+
+    const rockTemplates = [forestRock, cliffRock];
     let rocksPlaced = 0;
     attempts = 0;
-    while (rocksPlaced < 42 && attempts < 2600) {
+    while (rocksPlaced < 34 && attempts < 3600) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 123;
-      const z = (this.random() * 2 - 1) * 102 - 4;
-      if (!this.terrain.isPlayable(x, z, 6)) continue;
-      if (!this.#pathClearance(x, z, 4.2)) continue;
+      const x = (this.random() * 2 - 1) * 126;
+      const z = (this.random() * 2 - 1) * 104 - 4;
+      if (!this.terrain.isPlayable(x, z, 5)) continue;
+      if (!this.#pathClearance(x, z, 3.4)) continue;
       const slope = this.terrain.slopeAt(x, z);
-      if (slope > 0.68) continue;
-      const scale = 0.9 + this.random() * 1.65;
-      const reserveRadius = 1.5 + scale * 0.9;
+      if (slope > 0.64) continue;
+      const large = this.random() < 0.24;
+      const scale = large ? 3.8 + this.random() * 3.9 : 0.72 + this.random() * 2.7;
+      const reserveRadius = 1.15 + scale * 0.66;
       if (!this.reservations.isClear(x, z, reserveRadius)) continue;
 
-      const rock = forestRock.clone(true);
-      rock.scale.set(scale * (0.9 + this.random() * 0.35), scale, scale * (0.86 + this.random() * 0.32));
-      rock.rotation.y = this.random() * Math.PI * 2;
-      rock.position.set(x, this.terrain.heightAt(x, z) - 0.04, z);
+      const rock = rockTemplates[rocksPlaced % rockTemplates.length].clone(true);
+      const width = scale * (0.62 + this.random() * 0.85);
+      const height = scale * (0.5 + this.random() * 0.82);
+      const depth = scale * (0.58 + this.random() * 0.9);
+      rock.scale.set(width, height, depth);
+      rock.rotation.set((this.random() - 0.5) * 0.22, this.random() * Math.PI * 2, (this.random() - 0.5) * 0.18);
+      rock.position.set(x, this.terrain.heightAt(x, z) - 0.05, z);
       rock.name = `forest-rock-${rocksPlaced}`;
       this.group.add(rock);
-      this.#registerStandableObject(rock, 'rock', 0.65);
+      this.#registerStandableObject(rock, 'rock', large ? 0.85 : 0.58);
       rocksPlaced += 1;
     }
   }
 
+  #createInstancedTemplate(root, placements, name) {
+    if (!placements.length) return;
+    root.updateMatrixWorld(true);
+    let meshIndex = 0;
+    root.traverse(source => {
+      if (!source.isMesh) return;
+      const material = Array.isArray(source.material)
+        ? source.material.map(item => item.clone())
+        : source.material.clone();
+      const batch = new THREE.InstancedMesh(source.geometry, material, placements.length);
+      batch.name = `${name}-${meshIndex}`;
+      batch.castShadow = false;
+      batch.receiveShadow = true;
+      batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+
+      const sourceMatrix = source.matrixWorld.clone();
+      const placementMatrix = new THREE.Matrix4();
+      const finalMatrix = new THREE.Matrix4();
+      const position = new THREE.Vector3();
+      const rotation = new THREE.Quaternion();
+      const scale = new THREE.Vector3();
+      const euler = new THREE.Euler();
+
+      placements.forEach((placement, index) => {
+        position.set(placement.x, placement.y, placement.z);
+        euler.set(0, placement.yaw, 0);
+        rotation.setFromEuler(euler);
+        scale.set(placement.scale, placement.scale * placement.stretch, placement.scale);
+        placementMatrix.compose(position, rotation, scale);
+        finalMatrix.copy(placementMatrix).multiply(sourceMatrix);
+        batch.setMatrixAt(index, finalMatrix);
+      });
+      batch.instanceMatrix.needsUpdate = true;
+      batch.computeBoundingSphere();
+      this.group.add(batch);
+      meshIndex += 1;
+    });
+  }
+
   #placeUnderstory() {
+    const geometry = new THREE.IcosahedronGeometry(1, 0);
+    const matrices = [];
+    const dummy = new THREE.Object3D();
     let placed = 0;
     let attempts = 0;
-    while (placed < 72 && attempts < 2500) {
+    while (placed < 185 && attempts < 6200) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 126;
-      const z = (this.random() * 2 - 1) * 105 - 4;
-      if (!this.terrain.isPlayable(x, z, 5)) continue;
-      if (!this.#pathClearance(x, z, 3.2)) continue;
-      if (this.terrain.slopeAt(x, z) > 0.55) continue;
-      const radius = 1.0 + this.random() * 0.65;
+      const x = (this.random() * 2 - 1) * 129;
+      const z = (this.random() * 2 - 1) * 107 - 4;
+      if (!this.terrain.isPlayable(x, z, 4.5)) continue;
+      if (!this.#pathClearance(x, z, 2.7)) continue;
+      if (this.terrain.slopeAt(x, z) > 0.56) continue;
+      const radius = 0.72 + this.random() * 0.7;
       if (!this.reservations.isClear(x, z, radius)) continue;
 
-      const shrub = new THREE.Group();
-      shrub.name = `understory-shrub-${placed}`;
-      const size = 0.52 + this.random() * 0.42;
+      const size = 0.42 + this.random() * 0.52;
+      const yaw = this.random() * Math.PI * 2;
       for (let lobe = 0; lobe < 3; lobe += 1) {
-        const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(size * (0.78 + lobe * 0.1), 0), this.shrubMaterial);
-        const angle = lobe * (Math.PI * 2 / 3) + this.random() * 0.35;
-        leaf.position.set(Math.cos(angle) * size * 0.48, size * (0.55 + lobe * 0.08), Math.sin(angle) * size * 0.48);
-        leaf.scale.y = 0.82 + this.random() * 0.28;
-        leaf.receiveShadow = true;
-        shrub.add(leaf);
+        const angle = yaw + lobe * (Math.PI * 2 / 3) + this.random() * 0.3;
+        const lobeScale = size * (0.72 + lobe * 0.09);
+        dummy.position.set(
+          x + Math.cos(angle) * size * 0.48,
+          this.terrain.heightAt(x, z) + size * (0.5 + lobe * 0.08),
+          z + Math.sin(angle) * size * 0.48
+        );
+        dummy.rotation.set(0, angle, 0);
+        dummy.scale.set(lobeScale, lobeScale * (0.76 + this.random() * 0.26), lobeScale);
+        dummy.updateMatrix();
+        matrices.push(dummy.matrix.clone());
       }
-      shrub.rotation.y = this.random() * Math.PI * 2;
-      shrub.position.set(x, this.terrain.heightAt(x, z), z);
-      this.group.add(shrub);
-      this.reservations.add({ x, z, radius, grassRadius: 0.28, type: 'shrub' });
+      this.reservations.add({ x, z, radius, grassRadius: 0.22, type: 'shrub' });
       placed += 1;
     }
+
+    const shrubs = new THREE.InstancedMesh(geometry, this.shrubMaterial, matrices.length);
+    shrubs.name = 'understory-shrub-batch';
+    shrubs.castShadow = false;
+    shrubs.receiveShadow = true;
+    matrices.forEach((matrix, index) => shrubs.setMatrixAt(index, matrix));
+    shrubs.instanceMatrix.needsUpdate = true;
+    shrubs.computeBoundingSphere();
+    this.group.add(shrubs);
   }
 }
