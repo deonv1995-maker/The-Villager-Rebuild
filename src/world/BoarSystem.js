@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../data/AnimalDefinitions.js';
+import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 import { BoarPresentation } from './BoarPresentation.js';
 
 export class BoarSystem {
@@ -12,7 +13,7 @@ export class BoarSystem {
     this.harvested = false;
     this.time = 0;
     this.hitFlash = 0;
-    this.center = new THREE.Vector3(4.5, 0, 12.5);
+    this.center = new THREE.Vector3(WORLD_LAYOUT.boar.x, 0, WORLD_LAYOUT.boar.z);
     this.lastPosition = new THREE.Vector3();
 
     this.presentation = new BoarPresentation();

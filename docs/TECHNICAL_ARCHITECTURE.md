@@ -40,6 +40,19 @@ The exact folder names may evolve, but the responsibilities should remain separa
 - `data/` — declarative definitions for items, jobs, buildings, animals and progression.
 - `assets/` — selected game-ready source assets with documented provenance.
 
+## Foundation 0.3 world boundaries
+
+The Day 1 island keeps one continuous terrain but no longer relies on one monolithic island implementation:
+
+- `TestIslandSystem` — world composition/orchestration only;
+- `IslandTerrainSystem` — authoritative coastline, regional height, slope, terrain mesh, water and Day 1 path surface;
+- `EnvironmentScatterSystem` — production environment asset loading, deterministic placement, exclusion/reservation footprints and environment collision registration;
+- `GrassFieldSystem` — instanced fine-grass geometry and localized player interaction/recovery;
+- `WorldCollisionSystem` — shared coastline/slope/obstacle/support traversal policy;
+- `WorldLayout` — shared Day 1 spatial anchors such as spawn, tutorial pickups, boar clearing and path center function.
+
+These boundaries are deliberately usable by future villagers/animals. An NPC controller may make different movement decisions than the Ranger, but it should query the same terrain/collision world rather than inventing a second obstacle model.
+
 ## Shared systems over duplicated systems
 
 The same world concepts should be used by the player and villagers.
@@ -51,7 +64,9 @@ Examples:
 - one settlement storage API;
 - one building-resource requirement model;
 - one day/night clock;
-- one item registry.
+- one item registry;
+- one world collision/traversal service;
+- one accepted environment-placement footprint map during world generation.
 
 Player input and NPC decision-making can differ, but they should invoke shared domain actions rather than maintain separate copies of game logic.
 
@@ -83,6 +98,8 @@ The architecture must assume mobile hardware from the beginning.
 Key strategies include:
 
 - instanced repeated vegetation where appropriate;
+- localized grass interaction: spatially index instances and update only grass near/recovering from the player rather than every blade every frame;
+- deterministic scatter with reserved footprints so density can increase without creating costly overlap-repair passes;
 - LOD/culling for environment assets;
 - limited active AI updates based on distance/relevance;
 - bounded villager population;

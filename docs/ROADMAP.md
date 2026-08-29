@@ -35,7 +35,7 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — gathering, spear crafting, first hunting/meat harvesting and the first world/combat polish pass are implemented on 2026-08-29.**
+Status: **in progress — Foundation 0.3 world-believability pass is in verification on 2026-08-29.**
 
 Current playable milestone:
 
@@ -48,19 +48,29 @@ Current playable milestone:
 - crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
 - desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
 - the HUD separates the current objective from inventory counts and records the crafted spear in inventory;
-- the first boar wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
+- the first boar wanders near the clear Day 1 route and becomes a spear target only when the player is armed and within attack range;
 - desktop uses F and mobile exposes the spear attack button only for a valid boar target;
 - the spear follows the Ranger's right-hand rig/socket and uses the KayKit one-handed stab animation, retaining a controlled fallback presentation if the combat clip is unavailable;
-- the boar presentation is now a dedicated stylized low-poly animal layer separated from health, targeting, damage and harvesting state;
+- the boar gameplay/presentation boundary remains intact and the temporary visual has received a stronger stylized v2 silhouette, gait and proportions while the final audited animal asset remains an asset-integration task;
 - the first boar takes two spear hits, provides hit feedback, falls when defeated, and advances the objective without mixing animal health into the Ranger controller;
 - the defeated carcass exposes the normal contextual hand interaction when the player moves close enough;
 - harvesting is one-time and data-driven from the animal definition, adding two Raw Meat to inventory without duplicating loot;
-- the same interaction input now routes between loose world resources and harvestable carcasses while inventory remains the single owner of carried item quantities;
-- the island is larger and irregular rather than circular, with stronger highlands/ridges/ravine/terrace changes and a lighter fantasy atmosphere;
-- forest density is increased and decorative grass/bush ground cover is instanced to keep the denser scene mobile-conscious;
-- world collision now covers coastline limits, steep terrain, trees, rocks and cliff dressing while deliberate interior drops remain fallable/jumpable.
+- Day 1 spawn, resource and boar coordinates now come from one shared world-layout definition;
+- the island terrain is substantially wider/longer and divided into recognizable regional forms including western highlands, northern ridge, eastern shelf, southern woodland, ravine and valley areas;
+- environmental placement is footprint-aware, preventing accepted cliffs/rocks/trees from being scattered through one another and preserving the tutorial route/clearings;
+- cone grass is replaced by thousands of instanced segmented blade tufts with spatially bounded Ranger bending/compression/recovery inspired by the proven archived-game behavior;
+- rocks and broad cliff props expose smaller standable support zones while their sides remain blocking, so traversal matches the visible shape more closely;
+- coastline, steep terrain, tree trunks and solid prop sides remain shared collision rules while deliberate interior drops remain fallable/jumpable.
 
-Next playable milestone: **chop the first tree and gather logs.**
+Foundation 0.3 acceptance gate before adding tree chopping:
+
+- no obvious generated tree/rock/cliff intersections in the Day 1 route and surrounding forest;
+- grass reads as grass rather than spikes/cones and visibly parts/rebounds around the Ranger;
+- broad rocks/cliff tops that visually read as reachable can be stepped/jumped onto without making their sides non-solid;
+- the island no longer reads as a small round arena from ordinary play routes;
+- Foundation 0.3 passes gameplay contracts, runtime-asset verification, production build and mobile Pages deployment.
+
+Next playable milestone after this gate: **chop the first tree and gather logs.**
 
 Target final-game sequence:
 
