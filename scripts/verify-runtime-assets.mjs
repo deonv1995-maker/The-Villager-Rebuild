@@ -49,13 +49,31 @@ async function verifyGltf(filePath) {
   }
 }
 
+async function verifyFbx(filePath) {
+  const data = await readFile(filePath);
+  if (data.length < 64) throw new Error(`${filePath}: FBX is too small`);
+  const header = data.toString('ascii', 0, 21);
+  if (!header.startsWith('Kaydara FBX Binary')) {
+    throw new Error(`${filePath}: expected binary FBX header`);
+  }
+}
+
+async function verifyPng(filePath) {
+  const data = await readFile(filePath);
+  if (data.length < 24) throw new Error(`${filePath}: PNG is too small`);
+  const expected = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (!data.subarray(0, 8).equals(expected)) throw new Error(`${filePath}: invalid PNG signature`);
+}
+
 for (const [name, runtimePath] of flattenAssetPaths(ASSET_PATHS)) {
   const filePath = resolveRuntimePath(runtimePath);
   const info = await stat(filePath);
   if (!info.isFile() || info.size === 0) throw new Error(`${name}: missing ${filePath}`);
 
   if (filePath.endsWith('.glb')) await verifyGlb(filePath);
-  if (filePath.endsWith('.gltf')) await verifyGltf(filePath);
+  else if (filePath.endsWith('.gltf')) await verifyGltf(filePath);
+  else if (filePath.endsWith('.fbx')) await verifyFbx(filePath);
+  else if (filePath.endsWith('.png')) await verifyPng(filePath);
 
   console.log(`verified ${name}: ${filePath}`);
 }
