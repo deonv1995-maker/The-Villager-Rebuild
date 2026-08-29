@@ -9,6 +9,7 @@ const inventory = new InventorySystem();
 assert.equal(inventory.get('stick'), 0);
 assert.equal(inventory.get('stone'), 0);
 assert.equal(inventory.get('spear'), 0);
+assert.equal(inventory.get('meat'), 0);
 assert.equal(inventory.add('stick', 1), 1);
 assert.equal(inventory.snapshot().find(entry => entry.id === 'stick')?.quantity, 1);
 assert.throws(() => inventory.add('unknown', 1), /Unknown item/);
@@ -51,6 +52,7 @@ assert.equal(gatherables.update(playerPosition)?.resourceId, 'stone');
 
 const boar = new BoarSystem({ scene, terrain });
 const hunterPosition = new THREE.Vector3(2.2, 0, 9.5);
+assert.equal(boar.getHarvestTarget(hunterPosition), null);
 assert.equal(boar.update(0, hunterPosition, false), null);
 assert.equal(boar.update(0, hunterPosition, true)?.animalId, 'boar');
 const firstHit = boar.attack(hunterPosition);
@@ -61,5 +63,17 @@ assert.equal(finalHit?.health, 0);
 assert.equal(finalHit?.defeated, true);
 assert.equal(boar.getState().defeated, true);
 assert.equal(boar.attack(hunterPosition), null);
+
+const farPosition = new THREE.Vector3(20, 0, 20);
+assert.equal(boar.getHarvestTarget(farPosition), null);
+assert.equal(boar.getHarvestTarget(hunterPosition)?.actionLabel, 'Gather meat');
+const loot = boar.harvest(hunterPosition);
+assert.equal(loot?.itemId, 'meat');
+assert.equal(loot?.quantity, 2);
+inventory.add(loot.itemId, loot.quantity);
+assert.equal(inventory.get('meat'), 2);
+assert.equal(boar.getState().harvested, true);
+assert.equal(boar.getHarvestTarget(hunterPosition), null);
+assert.equal(boar.harvest(hunterPosition), null);
 
 console.log('gameplay contracts verified');
