@@ -165,6 +165,53 @@ assert.equal(standableCollision.supportHeightAt(2, 0, 0), 0.45);
 const stepOntoRock = standableCollision.resolveMove({ x: 0.8, y: 0, z: 0 }, { x: 2, z: 0 }, { radius: 0.42 });
 assert.equal(stepOntoRock.blocked, false);
 assert.equal(stepOntoRock.x, 2);
+const stepOffRock = standableCollision.resolveMove({ x: 2, y: 0.45, z: 0 }, { x: 2.9, z: 0 }, { radius: 0.42 });
+assert.equal(stepOffRock.blocked, false, 'a Ranger already supported on a rock must be able to walk off its edge');
+assert.equal(stepOffRock.x, 2.9);
+
+const baseFlat = () => 0;
+let supportIsolationCollision;
+supportIsolationCollision = new WorldCollisionSystem({
+  heightAt: (x, z) => supportIsolationCollision.supportHeightAt(x, z, baseFlat(x, z)),
+  baseHeightAt: baseFlat,
+  isPlayable: () => true,
+  maxSlopeDegrees: 52
+});
+supportIsolationCollision.addObstacle({
+  x: 1,
+  z: 0,
+  radius: 0.35,
+  type: 'rock',
+  standable: true,
+  supportRadius: 0.55,
+  supportY: 1.1,
+  topY: 1.1,
+  stepHeight: 0.6
+});
+const clearBesideSupport = supportIsolationCollision.resolveMove(
+  { x: -0.45, y: 0, z: 0 },
+  { x: -0.2, z: 0 },
+  { radius: 0.42 }
+);
+assert.equal(clearBesideSupport.blocked, false, 'prop support height must not contaminate base-terrain slope checks beside rocks');
+
+const climbableHill = new WorldCollisionSystem({
+  heightAt: x => x * 1.35,
+  baseHeightAt: x => x * 1.35,
+  isPlayable: () => true,
+  maxSlopeDegrees: 58
+});
+const hillMove = climbableHill.resolveMove({ x: 0, y: 0, z: 0 }, { x: 0.25, z: 0 }, { radius: 0.42 });
+assert.equal(hillMove.blocked, false, 'stylized hills below the walkable slope limit should not require repeated jumping');
+
+const steepCliffTerrain = new WorldCollisionSystem({
+  heightAt: x => x * 3,
+  baseHeightAt: x => x * 3,
+  isPlayable: () => true,
+  maxSlopeDegrees: 58
+});
+const cliffSlopeMove = steepCliffTerrain.resolveMove({ x: 0, y: 0, z: 0 }, { x: 0.25, z: 0 }, { radius: 0.42 });
+assert.equal(cliffSlopeMove.blocked, true, 'very steep terrain must remain non-walkable even after hill traversal is relaxed');
 
 const tallCollision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -188,6 +235,7 @@ assert.equal(airborneOntoCliff.blocked, false);
 
 const dropCollision = new WorldCollisionSystem({
   heightAt: x => (x < 1 ? 0 : -2),
+  baseHeightAt: x => (x < 1 ? 0 : -2),
   isPlayable: () => true,
   dropFallThreshold: 0.5
 });
@@ -237,8 +285,9 @@ assert.equal(Math.max(...ringHeights) - Math.min(...ringHeights) > 2.5, true, 'e
 
 const terrainTraversal = new WorldCollisionSystem({
   heightAt: (x, z) => regionalTerrain.heightAt(x, z),
+  baseHeightAt: (x, z) => regionalTerrain.heightAt(x, z),
   isPlayable: (x, z, margin) => regionalTerrain.isPlayable(x, z, margin),
-  maxSlopeDegrees: 52,
+  maxSlopeDegrees: 58,
   dropFallThreshold: 0.5
 });
 let routePosition = {
