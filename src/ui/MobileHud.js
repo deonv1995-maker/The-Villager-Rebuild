@@ -1,11 +1,12 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 export class MobileHud {
-  constructor({ player, canvas, onInteract, onCraft }) {
+  constructor({ player, canvas, onInteract, onCraft, onAttack }) {
     this.player = player;
     this.canvas = canvas;
     this.onInteract = onInteract;
     this.onCraft = onCraft;
+    this.onAttack = onAttack;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
@@ -16,6 +17,7 @@ export class MobileHud {
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
       <button class="hud-button craft" type="button" aria-label="Craft spear" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
+      <button class="hud-button attack" type="button" aria-label="Attack boar" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
@@ -24,6 +26,7 @@ export class MobileHud {
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.interactButton = this.root.querySelector('.interact');
     this.craftButton = this.root.querySelector('.craft');
+    this.attackButton = this.root.querySelector('.attack');
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
@@ -51,6 +54,16 @@ export class MobileHud {
     const canCraft = Boolean(available);
     this.craftButton.hidden = !canCraft;
     this.craftButton.disabled = !canCraft;
+  }
+
+  setAttackTarget(target) {
+    const available = Boolean(target);
+    this.attackButton.hidden = !available;
+    this.attackButton.disabled = !available;
+    this.attackButton.setAttribute(
+      'aria-label',
+      available ? `Attack ${target.label} with spear` : 'Attack with spear'
+    );
   }
 
   #bindJoystick() {
@@ -109,6 +122,11 @@ export class MobileHud {
     this.craftButton.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.onCraft?.();
+    });
+
+    this.attackButton.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      this.onAttack?.();
     });
 
     const setSprint = value => this.player.setSprint(value);

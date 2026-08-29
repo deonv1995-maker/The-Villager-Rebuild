@@ -23,6 +23,9 @@ export class RangerController {
     this.assetMode = 'placeholder';
     this.animationState = null;
     this.actions = new Map();
+    this.spearEquipped = false;
+    this.spearVisual = null;
+    this.spearThrust = 0;
     this.#bindKeyboard();
   }
 
@@ -118,6 +121,20 @@ export class RangerController {
     return target.copy(this.root.position);
   }
 
+  setSpearEquipped(equipped) {
+    this.spearEquipped = Boolean(equipped);
+    if (this.spearEquipped && !this.spearVisual) {
+      this.spearVisual = this.#createSpearVisual();
+      this.root.add(this.spearVisual);
+    }
+    if (this.spearVisual) this.spearVisual.visible = this.spearEquipped;
+  }
+
+  playSpearAttack() {
+    if (!this.spearEquipped || !this.spearVisual) return;
+    this.spearThrust = 0.24;
+  }
+
   rotateCamera(deltaX, deltaY) {
     this.yaw -= deltaX * 0.005;
     this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, -0.75, 0.25);
@@ -187,8 +204,42 @@ export class RangerController {
       this.root.position.y = ground;
     }
 
+    this.#updateSpearVisual(dt);
     this.mixer?.update(dt);
     this.#updateCamera(false, dt);
+  }
+
+  #createSpearVisual() {
+    const spear = new THREE.Group();
+    spear.name = 'ranger-spear-presentation';
+    const wood = new THREE.MeshStandardMaterial({ color: 0x76502f, roughness: 1 });
+    const stone = new THREE.MeshStandardMaterial({ color: 0x858a82, roughness: 0.9, flatShading: true });
+
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.9, 8), wood);
+    shaft.castShadow = true;
+    spear.add(shaft);
+
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 6), stone);
+    head.position.y = 1.1;
+    head.castShadow = true;
+    spear.add(head);
+
+    spear.rotation.x = Math.PI / 2;
+    spear.rotation.z = -0.08;
+    spear.position.set(0.42, 1.08, 0.08);
+    return spear;
+  }
+
+  #updateSpearVisual(dt) {
+    if (!this.spearVisual) return;
+    if (this.spearThrust <= 0) {
+      this.spearVisual.position.z = 0.08;
+      return;
+    }
+
+    this.spearThrust = Math.max(0, this.spearThrust - dt);
+    const progress = 1 - this.spearThrust / 0.24;
+    this.spearVisual.position.z = 0.08 + Math.sin(progress * Math.PI) * 0.52;
   }
 
   #setAnimation(name, immediate = false) {
