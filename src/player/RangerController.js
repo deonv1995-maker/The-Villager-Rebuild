@@ -212,34 +212,40 @@ export class RangerController {
   #createSpearVisual() {
     const spear = new THREE.Group();
     spear.name = 'ranger-spear-presentation';
-    const wood = new THREE.MeshStandardMaterial({ color: 0x76502f, roughness: 1 });
-    const stone = new THREE.MeshStandardMaterial({ color: 0x858a82, roughness: 0.9, flatShading: true });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5b32, roughness: 1 });
+    const stone = new THREE.MeshStandardMaterial({ color: 0xaeb3ad, roughness: 0.82, flatShading: true });
+    const wrap = new THREE.MeshStandardMaterial({ color: 0x4f3424, roughness: 1 });
 
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.9, 8), wood);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 2.15, 8), wood);
     shaft.castShadow = true;
     spear.add(shaft);
 
-    const head = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 6), stone);
-    head.position.y = 1.1;
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.061, 0.061, 0.28, 8), wrap);
+    grip.position.y = 0.15;
+    grip.castShadow = true;
+    spear.add(grip);
+
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.145, 0.4, 6), stone);
+    head.position.y = 1.27;
     head.castShadow = true;
     spear.add(head);
 
-    spear.rotation.x = Math.PI / 2;
-    spear.rotation.z = -0.08;
-    spear.position.set(0.42, 1.08, 0.08);
+    spear.rotation.x = 0.72;
+    spear.rotation.z = -0.2;
+    spear.position.set(0.56, 1.22, 0.02);
     return spear;
   }
 
   #updateSpearVisual(dt) {
     if (!this.spearVisual) return;
     if (this.spearThrust <= 0) {
-      this.spearVisual.position.z = 0.08;
+      this.spearVisual.position.z = 0.02;
       return;
     }
 
     this.spearThrust = Math.max(0, this.spearThrust - dt);
     const progress = 1 - this.spearThrust / 0.24;
-    this.spearVisual.position.z = 0.08 + Math.sin(progress * Math.PI) * 0.52;
+    this.spearVisual.position.z = 0.02 + Math.sin(progress * Math.PI) * 0.58;
   }
 
   #setAnimation(name, immediate = false) {
