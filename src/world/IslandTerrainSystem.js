@@ -4,14 +4,26 @@ import { WORLD_LAYOUT, dayOnePathCenterX } from '../data/WorldLayout.js';
 const gaussian = (x, z, cx, cz, sx, sz) =>
   Math.exp(-(((x - cx) ** 2) / (2 * sx * sx) + ((z - cz) ** 2) / (2 * sz * sz)));
 
-const rotatedGaussian = (x, z, cx, cz, yaw, sx, sz) => {
+const rotatedCoordinates = (x, z, cx, cz, yaw) => {
   const dx = x - cx;
   const dz = z - cz;
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
-  const u = dx * c + dz * s;
-  const v = -dx * s + dz * c;
+  return {
+    u: dx * c + dz * s,
+    v: -dx * s + dz * c
+  };
+};
+
+const rotatedGaussian = (x, z, cx, cz, yaw, sx, sz) => {
+  const { u, v } = rotatedCoordinates(x, z, cx, cz, yaw);
   return Math.exp(-((u * u) / (2 * sx * sx) + (v * v) / (2 * sz * sz)));
+};
+
+const roundedPlateau = (x, z, cx, cz, yaw, halfX, halfZ, edge = 0.085) => {
+  const { u, v } = rotatedCoordinates(x, z, cx, cz, yaw);
+  const normalized = Math.sqrt((u * u) / (halfX * halfX) + (v * v) / (halfZ * halfZ));
+  return 1 - THREE.MathUtils.smoothstep(normalized, 1 - edge, 1);
 };
 
 export class IslandTerrainSystem {
@@ -59,12 +71,12 @@ export class IslandTerrainSystem {
 
   regionAt(x, z) {
     const regions = [
-      ['westernHighland', rotatedGaussian(x, z, -70, 5, 0.3, 42, 31)],
-      ['northernRidge', rotatedGaussian(x, z, 5, -68, -0.13, 58, 17)],
-      ['easternShelf', rotatedGaussian(x, z, 74, -15, -0.46, 39, 29)],
-      ['southernWood', rotatedGaussian(x, z, -38, 58, 0.18, 33, 29)],
-      ['centralRavine', rotatedGaussian(x, z, 18, -4, 0.08, 13, 45)],
-      ['westernValley', rotatedGaussian(x, z, -65, -44, -0.38, 37, 22)]
+      ['westernHighland', rotatedGaussian(x, z, -72, 7, 0.24, 46, 34)],
+      ['northernRidge', rotatedGaussian(x, z, 8, -69, -0.12, 61, 19)],
+      ['easternShelf', rotatedGaussian(x, z, 77, -13, -0.42, 42, 31)],
+      ['southernWood', rotatedGaussian(x, z, -38, 58, 0.18, 36, 31)],
+      ['centralRavine', rotatedGaussian(x, z, 21, -7, 0.08, 15, 47)],
+      ['westernValley', rotatedGaussian(x, z, -65, -44, -0.38, 39, 24)]
     ];
     let best = { name: 'lowlands', weight: 0 };
     for (const [name, weight] of regions) {
@@ -84,29 +96,36 @@ export class IslandTerrainSystem {
       Math.sin((x + z) * 0.029) * 0.32 +
       Math.cos((x - z) * 0.021) * 0.2;
 
-    const westHighland = rotatedGaussian(x, z, -70, 5, 0.3, 37, 27) * 8.1;
-    const westCrown = gaussian(x, z, -82, -1, 19, 18) * 2.2;
-    const northRidge = rotatedGaussian(x, z, 2, -67, -0.13, 56, 13) * 5.7;
-    const northKnoll = gaussian(x, z, 50, -74, 24, 18) * 2.2;
-    const eastShelf = rotatedGaussian(x, z, 75, -14, -0.46, 34, 24) * 4.7;
-    const southWood = gaussian(x, z, -39, 58, 27, 24) * 2.1;
-    const westernValley = rotatedGaussian(x, z, -66, -43, -0.38, 34, 17) * 2.15;
-    const ravine = rotatedGaussian(x, z, 18, -5, 0.08, 9, 40) * 3.35;
-    const easternCut = rotatedGaussian(x, z, 52, 31, -0.25, 15, 25) * 1.35;
+    const westHighland = rotatedGaussian(x, z, -70, 5, 0.3, 37, 27) * 5.9;
+    const westCrown = gaussian(x, z, -82, -1, 19, 18) * 1.5;
+    const northRidge = rotatedGaussian(x, z, 2, -67, -0.13, 56, 13) * 4.1;
+    const northKnoll = gaussian(x, z, 50, -74, 24, 18) * 1.6;
+    const eastShelf = rotatedGaussian(x, z, 75, -14, -0.46, 34, 24) * 3.2;
+    const southWood = gaussian(x, z, -39, 58, 27, 24) * 1.8;
+    const westernValley = rotatedGaussian(x, z, -66, -43, -0.38, 34, 17) * 1.8;
+    const ravine = rotatedGaussian(x, z, 18, -5, 0.08, 9, 40) * 2.25;
+    const easternCut = rotatedGaussian(x, z, 52, 31, -0.25, 15, 25) * 1.2;
+
+    // Authored shelves create large continuous-terrain drops. Cliff meshes are
+    // only dressing around these edges, so the terrain remains the source of truth.
+    const westernMesa = roundedPlateau(x, z, -77, 8, 0.18, 34, 43, 0.075) * 4.9;
+    const northernMesa = roundedPlateau(x, z, 49, -70, -0.12, 38, 25, 0.08) * 4.2;
+    const easternMesa = roundedPlateau(x, z, 91, 31, -0.28, 22, 34, 0.085) * 3.55;
+    const ravineCut = roundedPlateau(x, z, 25, -14, 0.06, 8.5, 35, 0.11) * 2.65;
 
     let height = this.seabedLevel + interior * 2.76;
     height += interior * interior * (
       micro + westHighland + westCrown + northRidge + northKnoll + eastShelf + southWood -
-      westernValley - ravine - easternCut
+      westernValley - ravine - easternCut + westernMesa + northernMesa + easternMesa - ravineCut
     );
 
     const pathX = this.pathCenterX(z);
-    const pathBlend = Math.exp(-((x - pathX) ** 2) / 31) * gaussian(x, z, 0, 25, 125, 83);
+    const pathBlend = Math.exp(-((x - pathX) ** 2) / 29) * gaussian(x, z, 0, 25, 125, 83);
     const pathFloor = 0.68 + Math.sin(z * 0.028) * 0.16;
     height = THREE.MathUtils.lerp(height, Math.max(pathFloor, height * 0.66), pathBlend * 0.5);
 
     const spawn = WORLD_LAYOUT.spawn;
-    const spawnBlend = gaussian(x, z, spawn.x, spawn.z, 14, 12) * 0.88;
+    const spawnBlend = gaussian(x, z, spawn.x, spawn.z, 12, 10) * 0.9;
     height = THREE.MathUtils.lerp(height, 0.64, spawnBlend);
     return height;
   }
@@ -126,20 +145,20 @@ export class IslandTerrainSystem {
     const normalized = this.normalizedRadius(x, z);
     if (normalized > 0.92) return 0;
     const slope = this.slopeAt(x, z);
-    if (slope > 0.54) return 0;
+    if (slope > 0.56) return 0;
     const region = this.regionAt(x, z).name;
     const regionDensity = {
-      lowlands: 0.68,
-      westernHighland: 0.58,
-      northernRidge: 0.44,
-      easternShelf: 0.62,
-      southernWood: 0.88,
-      centralRavine: 0.72,
-      westernValley: 0.92
-    }[region] ?? 0.68;
-    const habitat = 0.68 + (Math.sin(x * 0.071 + z * 0.023) + Math.cos(z * 0.063 - x * 0.018) + 2) * 0.09;
-    const slopeFade = 1 - THREE.MathUtils.smoothstep(slope, 0.28, 0.54);
-    return THREE.MathUtils.clamp(regionDensity * habitat * (0.42 + slopeFade * 0.58), 0, 1);
+      lowlands: 0.8,
+      westernHighland: 0.69,
+      northernRidge: 0.57,
+      easternShelf: 0.72,
+      southernWood: 0.98,
+      centralRavine: 0.79,
+      westernValley: 1
+    }[region] ?? 0.8;
+    const habitat = 0.7 + (Math.sin(x * 0.071 + z * 0.023) + Math.cos(z * 0.063 - x * 0.018) + 2) * 0.085;
+    const slopeFade = 1 - THREE.MathUtils.smoothstep(slope, 0.3, 0.56);
+    return THREE.MathUtils.clamp(regionDensity * habitat * (0.48 + slopeFade * 0.52), 0, 1);
   }
 
   create() {
@@ -149,7 +168,7 @@ export class IslandTerrainSystem {
   }
 
   #createTerrainMesh() {
-    const geometry = new THREE.PlaneGeometry(320, 280, 180, 156);
+    const geometry = new THREE.PlaneGeometry(320, 280, 204, 178);
     geometry.rotateX(-Math.PI / 2);
     const position = geometry.attributes.position;
     const colors = [];
@@ -160,9 +179,12 @@ export class IslandTerrainSystem {
       const z = position.getZ(i);
       const y = this.heightAt(x, z);
       const normalized = this.normalizedRadius(x, z);
+      const slope = this.slopeAt(x, z, 1.15);
       position.setY(i, y);
 
       if (normalized > 0.958 || y < -0.12) color.set(0xdfc993);
+      else if (slope > 0.82) color.set(0x776d5d);
+      else if (slope > 0.56) color.set(0x827861);
       else if (y < 0.9) color.set(0x88b861);
       else if (y < 3.1) color.set(0x60994f);
       else if (y < 5.6) color.set(0x5a864a);
