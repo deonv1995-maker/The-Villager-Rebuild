@@ -97,7 +97,6 @@ export class DayOneAnimalPresentation {
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
-    box.getCenter(center);
 
     const horizontalLength = Math.max(size.x, size.z, 0.001);
     let scale = presentation.targetLength / horizontalLength;
@@ -105,10 +104,15 @@ export class DayOneAnimalPresentation {
       scale = presentation.maxHeight / Math.max(size.y, 0.001);
     }
 
+    // Apply scale before grounding/recentering. FBX exporters can carry large
+    // root translations; Object3D.position is not scaled by its own scale.
+    model.scale.multiplyScalar(scale);
+    model.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(model);
+    box.getCenter(center);
     model.position.x -= center.x;
     model.position.y -= box.min.y;
     model.position.z -= center.z;
-    model.scale.multiplyScalar(scale);
 
     if (size.x > size.z) model.rotation.y += Math.PI / 2;
     model.rotation.y += presentation.yawOffset ?? 0;
@@ -117,6 +121,7 @@ export class DayOneAnimalPresentation {
     box = new THREE.Box3().setFromObject(model);
     box.getCenter(center);
     model.position.x -= center.x;
+    model.position.y -= box.min.y;
     model.position.z -= center.z;
   }
 
