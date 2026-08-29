@@ -22,7 +22,7 @@ Decision: use light survival centered on health, hunger and stamina. Avoid exces
 
 ## 2026-08-28 — Opening tutorial
 
-Decision: the Ranger washes ashore after a shipwreck. Day 1 teaches stick, stone, spear, boar hunting, meat, tree chopping, logs, campfire, cooking, eating and sleeping.
+Decision: the Ranger washes ashore after a shipwreck. Day 1 teaches stick, stone, spear, hunting, meat, tree chopping, logs, campfire, cooking, eating and sleeping. The exact hunt species is presentation/data, not a hard-coded progression requirement.
 
 ## 2026-08-28 — First-discovery information
 
@@ -104,7 +104,7 @@ Reason: cliffs should create meaningful height changes without turning every dro
 
 Decision: preserve the continuous-terrain architecture while making the island visibly irregular rather than circular, with stronger elevation regions, ravines/terraces, denser low-cost vegetation and a brighter fantasy atmosphere. Dense decorative grass/bush coverage should favor instancing; gameplay-blocking props keep explicit collision metadata.
 
-Decision: animal gameplay state remains separate from animal presentation. The current boar visual can therefore be replaced or upgraded again without moving health, targeting, harvesting or loot rules into the render model.
+Decision: animal gameplay state remains separate from animal presentation. The current hunt animal visual can therefore be replaced or upgraded again without moving health, targeting, harvesting or loot rules into the render model.
 
 ## 2026-08-29 — Foundation 0.3 world responsibilities
 
@@ -130,6 +130,30 @@ Decision: rocks and broad cliff dressing distinguish their blocking side footpri
 
 Reason: visible surfaces that look walkable should not behave like oversized invisible circular walls, while solid sides and trunks still need predictable shared collision for player/NPC movement.
 
+## 2026-08-29 — Foundation 0.3.1 terrain escarpments
+
+Decision: the large drops requested for the island are authored in the continuous terrain height field itself. Major shelves, ravines and escarpments therefore affect traversal and terrain normals directly; Kenney cliff meshes are embedded selectively as rock-face dressing rather than repeated standalone platforms.
+
+Reason: repeating one cliff prefab at similar scales made the world read as a set of placed platforms. Terrain-owned drops give different silhouettes and preserve one authoritative traversal surface.
+
+## 2026-08-29 — Horizon enclosure through instanced forest density
+
+Decision: ordinary exploration should rarely expose the whole island. Foundation 0.3.1 increases the deterministic forest substantially and mixes ordinary trees with much taller/larger hero variants. Repeated KayKit trees and understory are instanced for rendering, while trunk collision remains individual world data.
+
+Reason: perceived scale should come from occlusion and changing local spaces, but density must not multiply draw calls enough to undermine the mobile-first target.
+
+## 2026-08-29 — Species-neutral Day 1 hunt
+
+Decision: Day 1 hunting is owned by `DayOneHuntSystem` and a data definition rather than a `BoarSystem`. The Qiwii Wild Pig is the current production-style presentation candidate, but another licensed animal can replace it without changing spear damage, targeting, carcass harvesting or tutorial progression.
+
+Reason: the opening loop requires hunting and meat, not a hard-coded species. Separating species presentation avoids another rewrite when the final wildlife art direction is chosen.
+
+## 2026-08-29 — Desktop testing through the same PWA build
+
+Decision: desktop testing uses an installable Progressive Web App shell built from the same production bundle as mobile/GitHub Pages. Do not introduce Electron or a second native desktop code path merely for easier access at this stage.
+
+Reason: one deployable build keeps gameplay, assets and verification identical across phone and desktop testing while still allowing a desktop/Start-menu launch experience.
+
 ## Open decisions
 
 The following are intentionally not locked yet:
@@ -142,4 +166,5 @@ The following are intentionally not locked yet:
 - detailed production chains beyond the deliberately simple initial design;
 - final save format;
 - final hostile-creature roster;
+- final Day 1 hunt species after in-engine asset comparison;
 - exact number and type of advanced production/civic buildings.
