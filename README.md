@@ -10,19 +10,32 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.1 — boot, terrain and mobile-control test**
+**Foundation 0.3.1 — world density, escarpments, hunt-asset and desktop-install test**
 
-This milestone deliberately tests only the stable technical base:
+This milestone keeps the Day 1 survival loop stable while improving the world presentation before tree chopping is added:
 
-- pinned local Three.js dependency bundled by Vite;
-- small explicit boot path with visible startup errors;
-- continuous generated island terrain rather than visible terrain tiles;
-- third-person movement/camera with a temporary procedural Ranger placeholder;
-- mobile joystick, sprint and jump controls;
-- optional HUD loaded only after the world starts;
-- clean-build verification in GitHub Actions.
+- continuous irregular island terrain with authored large shelves, ravines and multi-metre drops;
+- steep terrain is visually exposed as rock while cliff meshes remain dressing rather than the terrain source of truth;
+- denser deterministic forest with roughly 440 collision-aware trees, including larger hero-tree variation;
+- instanced repeated tree and understory rendering to preserve a mobile-conscious draw-call budget;
+- more than ten thousand interactive grass tufts that bend/recover around the Ranger using localized spatial updates;
+- wider size/aspect variation for standable rocks and reduced repeated-platform presentation;
+- species-neutral Day 1 hunt gameplay with the Qiwii Wild Pig as the current production-asset style test;
+- installable Progressive Web App shell so the same verified build can launch from a desktop shortcut/window;
+- automated gameplay, runtime-asset, production-build and selected-asset integrity checks.
 
-The selected KayKit Ranger, animation rigs and environment GLBs are the next isolated integration step after this base build passes CI. Asset loading is intentionally kept separate from boot/input architecture so a model-format problem cannot prevent the core game from starting.
+Tree chopping/log gathering remains intentionally gated until the 0.3.1 world presentation is visually accepted in playtesting.
+
+## Desktop installation
+
+The deployed GitHub Pages build is also the desktop test build; there is no separate gameplay fork.
+
+1. Open the deployed game in a Chromium-based desktop browser such as Chrome or Edge.
+2. When the game is installable, use the in-game **INSTALL GAME** button at the lower-left, or the browser's install-app control in the address bar/menu.
+3. Accept the install prompt.
+4. Launch **The Villager Rebuild** from the desktop/Start menu like a standalone app.
+
+The installed app still receives the same verified production deployment as mobile testing. Its service worker caches visited same-origin assets to make repeat access more convenient; fresh deployments remain network-first when the app is online.
 
 ## Project principles
 

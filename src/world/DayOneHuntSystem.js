@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../data/AnimalDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
-import { BoarPresentation } from './BoarPresentation.js';
+import { DayOneAnimalPresentation } from './DayOneAnimalPresentation.js';
 
-export class BoarSystem {
-  constructor({ scene, terrain, definition = ANIMAL_DEFINITIONS.boar }) {
+export class DayOneHuntSystem {
+  constructor({ scene, terrain, definition = ANIMAL_DEFINITIONS.dayOneHunt }) {
     this.scene = scene;
     this.terrain = terrain;
     this.definition = definition;
@@ -13,12 +13,12 @@ export class BoarSystem {
     this.harvested = false;
     this.time = 0;
     this.hitFlash = 0;
-    this.center = new THREE.Vector3(WORLD_LAYOUT.boar.x, 0, WORLD_LAYOUT.boar.z);
+    this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
     this.lastPosition = new THREE.Vector3();
 
-    this.presentation = new BoarPresentation();
+    this.presentation = new DayOneAnimalPresentation({ definition });
     this.group = this.presentation.root;
-    this.group.name = 'day-1-boar';
+    this.group.name = `day-1-${definition.id}`;
     this.group.position.set(
       this.center.x,
       this.terrain.heightAt(this.center.x, this.center.z),
@@ -28,12 +28,21 @@ export class BoarSystem {
     this.scene.add(this.group);
 
     this.targetRing = this.#createRing(0xe6a94d, 0.86, 1.08);
-    this.targetRing.name = 'boar-attack-target';
+    this.targetRing.name = 'hunt-attack-target';
     this.scene.add(this.targetRing);
 
     this.harvestRing = this.#createRing(0xffe29a, 0.9, 1.12);
-    this.harvestRing.name = 'boar-harvest-target';
+    this.harvestRing.name = 'hunt-harvest-target';
     this.scene.add(this.harvestRing);
+  }
+
+  async load() {
+    try {
+      return await this.presentation.load();
+    } catch (error) {
+      console.error('[DAY ONE ANIMAL FALLBACK]', error);
+      return this.presentation.assetMode;
+    }
   }
 
   update(dt, playerPosition, armed = false) {
@@ -134,10 +143,12 @@ export class BoarSystem {
   getState() {
     return {
       animalId: this.definition.id,
+      label: this.definition.label,
       health: this.health,
       maxHealth: this.definition.maxHealth,
       defeated: this.defeated,
-      harvested: this.harvested
+      harvested: this.harvested,
+      assetMode: this.presentation.assetMode
     };
   }
 

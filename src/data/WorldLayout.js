@@ -1,6 +1,6 @@
 export const WORLD_LAYOUT = Object.freeze({
   spawn: Object.freeze({ x: 0, z: 91 }),
-  boar: Object.freeze({ x: 7.5, z: 55 }),
+  huntAnimal: Object.freeze({ x: 8.5, z: 54 }),
   dayOneResources: Object.freeze([
     Object.freeze(['stick', 1.6, 78.5]),
     Object.freeze(['stone', -1.8, 78.1]),

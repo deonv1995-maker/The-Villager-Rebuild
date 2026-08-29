@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { SceneSystem } from '../rendering/SceneSystem.js';
 import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
-import { BoarSystem } from '../world/BoarSystem.js';
+import { DayOneHuntSystem } from '../world/DayOneHuntSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
 import { CraftingSystem } from '../gameplay/CraftingSystem.js';
@@ -14,18 +14,18 @@ export class GameApp {
     this.clock = new THREE.Clock();
     this.running = false;
     this.playerPosition = new THREE.Vector3();
-    this.currentBoarTarget = null;
+    this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
   }
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.1 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.1 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -40,10 +40,11 @@ export class GameApp {
       scene: this.sceneSystem.scene,
       terrain: this.island
     });
-    this.boar = new BoarSystem({
+    this.hunt = new DayOneHuntSystem({
       scene: this.sceneSystem.scene,
       terrain: this.island
     });
+    await this.hunt.load();
     this.#bindGameplayInput();
 
     this.running = true;
@@ -56,7 +57,7 @@ export class GameApp {
           canvas: this.canvas,
           onInteract: () => this.#tryInteract(),
           onCraft: () => this.#tryCraftSpear(),
-          onAttack: () => this.#tryAttackBoar()
+          onAttack: () => this.#tryAttackAnimal()
         });
         this.player.getPosition(this.playerPosition);
         this.#refreshTargets(0);
@@ -73,7 +74,7 @@ export class GameApp {
     if (this.player) {
       this.player.getPosition(this.playerPosition);
       this.island?.update(dt, this.playerPosition);
-      if (this.gatherables && this.boar) this.#refreshTargets(dt);
+      if (this.gatherables && this.hunt) this.#refreshTargets(dt);
     }
 
     this.sceneSystem.render();
@@ -83,21 +84,21 @@ export class GameApp {
   #refreshTargets(dt = 0) {
     const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
     const armed = Boolean(this.inventory?.get('spear'));
-    this.currentBoarTarget = this.boar?.update(dt, this.playerPosition, armed) ?? null;
-    const carcassTarget = this.boar?.getHarvestTarget(this.playerPosition) ?? null;
+    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed) ?? null;
+    const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     this.currentInteractionTarget = carcassTarget ?? resourceTarget;
 
     this.hud?.setInteractionTarget(this.currentInteractionTarget);
-    this.hud?.setAttackTarget(this.currentBoarTarget);
+    this.hud?.setAttackTarget(this.currentHuntTarget);
   }
 
   #tryInteract() {
     if (!this.player || !this.inventory) return;
     this.player.getPosition(this.playerPosition);
 
-    const carcassTarget = this.boar?.getHarvestTarget(this.playerPosition);
+    const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition);
     if (carcassTarget) {
-      const loot = this.boar.harvest(this.playerPosition);
+      const loot = this.hunt.harvest(this.playerPosition);
       if (!loot) return;
       this.inventory.add(loot.itemId, loot.quantity);
       this.#refreshTargets(0);
@@ -124,10 +125,10 @@ export class GameApp {
     this.#syncProgress();
   }
 
-  #tryAttackBoar() {
-    if (!this.player || !this.boar || !this.inventory || this.inventory.get('spear') < 1) return;
+  #tryAttackAnimal() {
+    if (!this.player || !this.hunt || !this.inventory || this.inventory.get('spear') < 1) return;
     this.player.getPosition(this.playerPosition);
-    const hit = this.boar.attack(this.playerPosition);
+    const hit = this.hunt.attack(this.playerPosition);
     if (!hit) return;
 
     this.player.faceWorldPoint(hit.position);
@@ -139,8 +140,8 @@ export class GameApp {
       return;
     }
 
-    this.setStatus(`DAY 1 · BOAR WOUNDED · ${hit.health}/${hit.maxHealth}`);
-    this.hud?.setObjective('DAY 1 · Strike the boar again');
+    this.setStatus(`DAY 1 · ${hit.label.toUpperCase()} WOUNDED · ${hit.health}/${hit.maxHealth}`);
+    this.hud?.setObjective(`DAY 1 · Strike the ${hit.label.toLowerCase()} again`);
   }
 
   #syncProgress() {
@@ -149,22 +150,23 @@ export class GameApp {
     const hasSpear = this.inventory.get('spear') > 0;
     const meatCount = this.inventory.get('meat');
     const canCraftSpear = !hasSpear && this.crafting.canCraft('spear');
-    const boarState = this.boar?.getState();
-    const boarDefeated = boarState?.defeated ?? false;
+    const huntState = this.hunt?.getState();
+    const animalDefeated = huntState?.defeated ?? false;
+    const animalLabel = huntState?.label ?? 'animal';
 
     this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setCraftAvailable(canCraftSpear);
     this.player?.setSpearEquipped(hasSpear);
 
-    if (boarDefeated && meatCount > 0) {
+    if (animalDefeated && meatCount > 0) {
       this.setStatus(`DAY 1 · RAW MEAT ${meatCount}`);
       this.hud?.setObjective('DAY 1 · Meat gathered · chop a tree next');
       this.hud?.setAttackTarget(null);
       return;
     }
 
-    if (boarDefeated) {
-      this.setStatus('DAY 1 · BOAR DOWN');
+    if (animalDefeated) {
+      this.setStatus(`DAY 1 · ${animalLabel.toUpperCase()} DOWN`);
       this.hud?.setObjective(
         this.currentInteractionTarget?.type === 'carcass'
           ? 'DAY 1 · Hand / E to gather meat'
@@ -175,9 +177,9 @@ export class GameApp {
     }
 
     if (hasSpear) {
-      this.setStatus('DAY 1 · HUNT THE BOAR');
+      this.setStatus(`DAY 1 · HUNT THE ${animalLabel.toUpperCase()}`);
       this.hud?.setObjective(
-        this.currentBoarTarget ? 'DAY 1 · F / spear to attack' : 'DAY 1 · Follow the path · hunt boar'
+        this.currentHuntTarget ? 'DAY 1 · F / spear to attack' : `DAY 1 · Follow the path · hunt ${animalLabel.toLowerCase()}`
       );
       return;
     }
@@ -204,7 +206,7 @@ export class GameApp {
         this.#tryCraftSpear();
       } else if (event.code === 'KeyF') {
         event.preventDefault();
-        this.#tryAttackBoar();
+        this.#tryAttackAnimal();
       }
     });
   }

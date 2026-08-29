@@ -4,7 +4,7 @@ import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
 import { GatherableSystem } from '../src/world/GatherableSystem.js';
-import { BoarSystem } from '../src/world/BoarSystem.js';
+import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
 import { IslandTerrainSystem } from '../src/world/IslandTerrainSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
@@ -57,34 +57,37 @@ const secondResource = WORLD_LAYOUT.dayOneResources[1];
 playerPosition.set(secondResource[1], 0, secondResource[2]);
 assert.equal(gatherables.update(playerPosition)?.resourceId, 'stone');
 
-const boar = new BoarSystem({ scene, terrain: flatTerrain });
-const hunterPosition = new THREE.Vector3(WORLD_LAYOUT.boar.x, 0, WORLD_LAYOUT.boar.z);
-assert.equal(boar.getHarvestTarget(hunterPosition), null);
-assert.equal(boar.update(0, hunterPosition, false), null);
-const attackTarget = boar.update(0, hunterPosition, true);
-assert.equal(attackTarget?.animalId, 'boar');
+const hunt = new DayOneHuntSystem({ scene, terrain: flatTerrain });
+const hunterPosition = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
+assert.equal(hunt.getState().animalId, 'wild_pig');
+assert.equal(hunt.getState().label, 'Wild Pig');
+assert.equal(hunt.getHarvestTarget(hunterPosition), null);
+assert.equal(hunt.update(0, hunterPosition, false), null);
+const attackTarget = hunt.update(0, hunterPosition, true);
+assert.equal(attackTarget?.animalId, 'wild_pig');
+assert.equal(attackTarget?.label, 'Wild Pig');
 assert.equal(Number.isFinite(attackTarget?.position?.x), true);
-const firstHit = boar.attack(hunterPosition);
+const firstHit = hunt.attack(hunterPosition);
 assert.equal(firstHit?.health, 1);
 assert.equal(firstHit?.defeated, false);
 assert.equal(Number.isFinite(firstHit?.position?.z), true);
-const finalHit = boar.attack(hunterPosition);
+const finalHit = hunt.attack(hunterPosition);
 assert.equal(finalHit?.health, 0);
 assert.equal(finalHit?.defeated, true);
-assert.equal(boar.getState().defeated, true);
-assert.equal(boar.attack(hunterPosition), null);
+assert.equal(hunt.getState().defeated, true);
+assert.equal(hunt.attack(hunterPosition), null);
 
-const farPosition = new THREE.Vector3(WORLD_LAYOUT.boar.x + 20, 0, WORLD_LAYOUT.boar.z + 20);
-assert.equal(boar.getHarvestTarget(farPosition), null);
-assert.equal(boar.getHarvestTarget(hunterPosition)?.actionLabel, 'Gather meat');
-const loot = boar.harvest(hunterPosition);
+const farPosition = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x + 20, 0, WORLD_LAYOUT.huntAnimal.z + 20);
+assert.equal(hunt.getHarvestTarget(farPosition), null);
+assert.equal(hunt.getHarvestTarget(hunterPosition)?.actionLabel, 'Gather meat');
+const loot = hunt.harvest(hunterPosition);
 assert.equal(loot?.itemId, 'meat');
 assert.equal(loot?.quantity, 2);
 inventory.add(loot.itemId, loot.quantity);
 assert.equal(inventory.get('meat'), 2);
-assert.equal(boar.getState().harvested, true);
-assert.equal(boar.getHarvestTarget(hunterPosition), null);
-assert.equal(boar.harvest(hunterPosition), null);
+assert.equal(hunt.getState().harvested, true);
+assert.equal(hunt.getHarvestTarget(hunterPosition), null);
+assert.equal(hunt.harvest(hunterPosition), null);
 
 const collision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -152,7 +155,8 @@ const regionalTerrain = new IslandTerrainSystem(new THREE.Group());
 assert.equal(regionalTerrain.isPlayable(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), true);
 assert.equal(regionalTerrain.isPlayable(200, 0), false);
 assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 12, true);
-assert.equal(regionalTerrain.heightAt(-70, 5) > regionalTerrain.heightAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) + 2, true);
+assert.equal(regionalTerrain.heightAt(-77, 8) > regionalTerrain.heightAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) + 4, true);
+assert.equal(Math.abs(regionalTerrain.heightAt(-45, 8) - regionalTerrain.heightAt(-41, 8)) > 1.5, true);
 assert.equal(regionalTerrain.grassDensityAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z) >= 0, true);
 
 console.log('gameplay contracts verified');
