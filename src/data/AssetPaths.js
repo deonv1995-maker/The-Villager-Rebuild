@@ -26,7 +26,8 @@ export const ASSET_PATHS = Object.freeze({
       joystickNub: asset('ui/mobile/joystick-nub.svg'),
       buttonCircle: asset('ui/mobile/button-circle.svg'),
       hand: asset('ui/mobile/icon-hand.svg'),
-      jump: asset('ui/mobile/icon-jump.svg')
+      jump: asset('ui/mobile/icon-jump.svg'),
+      spear: asset('ui/mobile/icon-spear.svg')
     })
   })
 });

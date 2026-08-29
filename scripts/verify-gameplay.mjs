@@ -1,14 +1,41 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
+import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
 import { GatherableSystem } from '../src/world/GatherableSystem.js';
 
 const inventory = new InventorySystem();
 assert.equal(inventory.get('stick'), 0);
 assert.equal(inventory.get('stone'), 0);
+assert.equal(inventory.get('spear'), 0);
 assert.equal(inventory.add('stick', 1), 1);
 assert.equal(inventory.snapshot().find(entry => entry.id === 'stick')?.quantity, 1);
-assert.throws(() => inventory.add('unknown', 1), /Unknown resource/);
+assert.throws(() => inventory.add('unknown', 1), /Unknown item/);
+
+const crafting = new CraftingSystem({ inventory });
+assert.equal(crafting.canCraft('spear'), false);
+assert.equal(crafting.craft('spear'), null);
+assert.equal(inventory.get('stick'), 1);
+assert.equal(inventory.get('stone'), 0);
+assert.equal(inventory.get('spear'), 0);
+
+inventory.add('stone', 1);
+assert.equal(crafting.canCraft('spear'), true);
+const crafted = crafting.craft('spear');
+assert.equal(crafted?.output.itemId, 'spear');
+assert.equal(crafted?.output.quantity, 1);
+assert.equal(inventory.get('stick'), 0);
+assert.equal(inventory.get('stone'), 0);
+assert.equal(inventory.get('spear'), 1);
+assert.equal(crafting.canCraft('spear'), false);
+
+const duplicateInventory = new InventorySystem();
+duplicateInventory.add('stick', 1);
+assert.equal(duplicateInventory.consume([
+  { itemId: 'stick', quantity: 1 },
+  { itemId: 'stick', quantity: 1 }
+]), false);
+assert.equal(duplicateInventory.get('stick'), 1);
 
 const scene = new THREE.Scene();
 const terrain = { heightAt: () => 0 };

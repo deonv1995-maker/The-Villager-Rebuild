@@ -1,25 +1,29 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 export class MobileHud {
-  constructor({ player, canvas, onInteract }) {
+  constructor({ player, canvas, onInteract, onCraft }) {
     this.player = player;
     this.canvas = canvas;
     this.onInteract = onInteract;
+    this.onCraft = onCraft;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
     const ui = ASSET_PATHS.ui.mobile;
     this.root.innerHTML = `
       <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0</div>
-      <div class="hud-note">DAY 1 · E / hand to gather</div>
+      <div class="hud-note" data-role="objective">DAY 1 · Gather a stick + stone</div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
+      <button class="hud-button craft" type="button" aria-label="Craft spear" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
+    this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.interactButton = this.root.querySelector('.interact');
+    this.craftButton = this.root.querySelector('.craft');
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
@@ -27,8 +31,13 @@ export class MobileHud {
 
   setInventory(entries) {
     this.inventoryElement.textContent = entries
+      .filter(entry => entry.quantity > 0 || entry.id === 'stick' || entry.id === 'stone')
       .map(entry => `${entry.label} ${entry.quantity}`)
       .join(' · ');
+  }
+
+  setObjective(message) {
+    this.objectiveElement.textContent = message;
   }
 
   setInteractionTarget(target) {
@@ -36,6 +45,12 @@ export class MobileHud {
     this.interactButton.hidden = !available;
     this.interactButton.disabled = !available;
     this.interactButton.setAttribute('aria-label', available ? `Pick up ${target.label}` : 'Pick up');
+  }
+
+  setCraftAvailable(available) {
+    const canCraft = Boolean(available);
+    this.craftButton.hidden = !canCraft;
+    this.craftButton.disabled = !canCraft;
   }
 
   #bindJoystick() {
@@ -89,6 +104,11 @@ export class MobileHud {
     this.interactButton.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.onInteract?.();
+    });
+
+    this.craftButton.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      this.onCraft?.();
     });
 
     const setSprint = value => this.player.setSprint(value);

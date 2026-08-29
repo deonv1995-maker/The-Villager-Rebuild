@@ -99,6 +99,12 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   width: 62px;
   height: 62px;
 }
+.hud-button.craft {
+  right: max(100px, calc(env(safe-area-inset-right) + 96px));
+  bottom: max(103px, calc(env(safe-area-inset-bottom) + 97px));
+  width: 60px;
+  height: 60px;
+}
 .hud-button.sprint {
   right: max(30px, calc(env(safe-area-inset-right) + 26px));
   bottom: max(108px, calc(env(safe-area-inset-bottom) + 102px));
