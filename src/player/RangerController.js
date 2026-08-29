@@ -114,6 +114,10 @@ export class RangerController {
 
   setSprint(active) { this.input.sprint = Boolean(active); }
 
+  getPosition(target = new THREE.Vector3()) {
+    return target.copy(this.root.position);
+  }
+
   rotateCamera(deltaX, deltaY) {
     this.yaw -= deltaX * 0.005;
     this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, -0.75, 0.25);
