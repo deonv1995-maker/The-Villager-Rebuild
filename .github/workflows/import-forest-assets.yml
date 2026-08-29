@@ -32,6 +32,7 @@ jobs:
             Rock_1_A_Color1.gltf Rock_1_A_Color1.bin \
             forest_texture.png; do
             curl -L --fail --retry 3 "$base/$file" -o "$out/$file"
+            printf '%s  %s\n' "$(git hash-object "$out/$file")" "$file"
           done
 
           test "$(git hash-object "$out/Tree_1_A_Color1.gltf")" = '1c453051b537f6dfab6c6b9d82531774ace25c85'
