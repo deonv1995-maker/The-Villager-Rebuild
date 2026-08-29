@@ -133,25 +133,95 @@ export class IslandTerrainSystem {
     ) / distance;
   }
 
-  grassDensityAt(x, z) {
-    if (!this.isPlayable(x, z, 3.8)) return 0;
-    const normalized = this.normalizedRadius(x, z);
-    if (normalized > 0.92) return 0;
+  isSandAt(x, z) {
+    return this.normalizedRadius(x, z) >= 0.925 || this.heightAt(x, z) < -0.12;
+  }
+
+  vegetationSuitabilityAt(x, z, maxSlope = 0.56) {
+    if (!this.isPlayable(x, z, 3.2) || this.isSandAt(x, z)) return 0;
     const slope = this.slopeAt(x, z);
-    if (slope > 0.56) return 0;
+    if (slope > maxSlope) return 0;
+
     const region = this.regionAt(x, z).name;
     const regionDensity = {
-      lowlands: 0.8,
-      westernHighland: 0.69,
-      northernRidge: 0.57,
+      lowlands: 0.82,
+      westernHighland: 0.72,
+      northernRidge: 0.62,
       easternShelf: 0.72,
-      southernWood: 0.98,
-      centralRavine: 0.79,
-      westernValley: 1
+      southernWood: 1,
+      centralRavine: 0.83,
+      westernValley: 0.96
     }[region] ?? 0.8;
-    const habitat = 0.7 + (Math.sin(x * 0.071 + z * 0.023) + Math.cos(z * 0.063 - x * 0.018) + 2) * 0.085;
-    const slopeFade = 1 - THREE.MathUtils.smoothstep(slope, 0.3, 0.56);
-    return THREE.MathUtils.clamp(regionDensity * habitat * (0.48 + slopeFade * 0.52), 0, 1);
+
+    const moisture = 0.72 + (
+      Math.sin(x * 0.033 + z * 0.017 + 1.1) +
+      Math.cos(z * 0.029 - x * 0.012 - 0.6) +
+      2
+    ) * 0.07;
+    const slopeFade = 1 - THREE.MathUtils.smoothstep(slope, 0.28, maxSlope);
+    const shoreFade = 1 - THREE.MathUtils.smoothstep(this.normalizedRadius(x, z), 0.82, 0.925);
+    return THREE.MathUtils.clamp(regionDensity * moisture * (0.5 + slopeFade * 0.5) * shoreFade, 0, 1);
+  }
+
+  grassPatchStrengthAt(x, z) {
+    const broad = 0.5 + (
+      Math.sin(x * 0.043 + z * 0.019 + 0.8) +
+      Math.cos(z * 0.051 - x * 0.021 - 1.1) +
+      Math.sin((x + z) * 0.027 + 2.4)
+    ) / 6;
+    const detail = 0.5 + (
+      Math.sin(x * 0.098 - z * 0.061 + 0.4) +
+      Math.cos(z * 0.083 + x * 0.047 - 2.2)
+    ) / 4;
+    const patchField = broad * 0.68 + detail * 0.32;
+    return THREE.MathUtils.smoothstep(patchField, 0.46, 0.66);
+  }
+
+  grassDensityAt(x, z) {
+    const suitability = this.vegetationSuitabilityAt(x, z);
+    if (suitability <= 0) return 0;
+
+    const patchStrength = this.grassPatchStrengthAt(x, z);
+    if (patchStrength <= 0.025) return 0;
+
+    let pathFade = 1;
+    if (z < 88 && z > -90) {
+      const pathDistance = Math.abs(x - this.pathCenterX(z));
+      pathFade = THREE.MathUtils.smoothstep(pathDistance, 1.1, 3.2);
+    }
+
+    return THREE.MathUtils.clamp(suitability * patchStrength * pathFade, 0, 1);
+  }
+
+  treeDensityAt(x, z) {
+    const suitability = this.vegetationSuitabilityAt(x, z, 0.5);
+    if (suitability <= 0) return 0;
+
+    const groveField = 0.5 + (
+      Math.sin(x * 0.031 - z * 0.018 + 1.4) +
+      Math.cos(z * 0.038 + x * 0.014 - 0.7) +
+      Math.sin((x - z) * 0.022 + 2)
+    ) / 6;
+    const groveStrength = THREE.MathUtils.smoothstep(groveField, 0.43, 0.64);
+    const region = this.regionAt(x, z).name;
+    const regionDensity = {
+      lowlands: 0.74,
+      westernHighland: 0.9,
+      northernRidge: 0.72,
+      easternShelf: 0.78,
+      southernWood: 1,
+      centralRavine: 0.62,
+      westernValley: 0.92
+    }[region] ?? 0.74;
+
+    return THREE.MathUtils.clamp(suitability * regionDensity * groveStrength, 0, 1);
+  }
+
+  understoryDensityAt(x, z) {
+    const suitability = this.vegetationSuitabilityAt(x, z);
+    if (suitability <= 0) return 0;
+    const woodland = Math.max(this.treeDensityAt(x, z), this.grassPatchStrengthAt(x, z) * 0.42);
+    return THREE.MathUtils.clamp(suitability * woodland, 0, 1);
   }
 
   create() {
@@ -171,10 +241,9 @@ export class IslandTerrainSystem {
       const x = position.getX(i);
       const z = position.getZ(i);
       const y = this.heightAt(x, z);
-      const normalized = this.normalizedRadius(x, z);
       const slope = this.slopeAt(x, z, 1.15);
       position.setY(i, y);
-      if (normalized > 0.958 || y < -0.12) color.set(0xdfc993);
+      if (this.isSandAt(x, z)) color.set(0xdfc993);
       else if (slope > 0.82) color.set(0x776d5d);
       else if (slope > 0.56) color.set(0x827861);
       else if (y < 0.9) color.set(0x88b861);
