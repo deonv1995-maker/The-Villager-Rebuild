@@ -232,30 +232,18 @@ export class EnvironmentScatterSystem {
   }
 
   #placeForest({ trees, forestRock, cliffRock }) {
-    const regionDensity = {
-      lowlands: 0.76,
-      westernHighland: 0.86,
-      northernRidge: 0.72,
-      easternShelf: 0.74,
-      southernWood: 1,
-      centralRavine: 0.68,
-      westernValley: 1
-    };
-
     const placementsByType = [[], []];
     let treesPlaced = 0;
     let attempts = 0;
-    while (treesPlaced < 440 && attempts < 15000) {
+    while (treesPlaced < 440 && attempts < 18000) {
       attempts += 1;
       const x = (this.random() * 2 - 1) * 132;
       const z = (this.random() * 2 - 1) * 109 - 4;
       if (!this.terrain.isPlayable(x, z, 4.6)) continue;
       if (!this.#pathClearance(x, z, 3.7)) continue;
-      const slope = this.terrain.slopeAt(x, z);
-      if (slope > 0.5) continue;
-      const region = this.terrain.regionAt(x, z).name;
-      const habitat = 0.72 + (Math.sin(x * 0.054 + z * 0.019) + Math.cos(z * 0.047 - x * 0.016) + 2) * 0.105;
-      if (this.random() > (regionDensity[region] ?? 0.74) * habitat) continue;
+
+      const density = this.terrain.treeDensityAt(x, z);
+      if (density <= 0 || this.random() > density) continue;
 
       const hero = this.random() < 0.12;
       const scale = hero ? 2.45 + this.random() * 1.35 : 1.18 + this.random() * 1.38;
@@ -363,13 +351,16 @@ export class EnvironmentScatterSystem {
     const dummy = new THREE.Object3D();
     let placed = 0;
     let attempts = 0;
-    while (placed < 185 && attempts < 6200) {
+    while (placed < 185 && attempts < 7200) {
       attempts += 1;
       const x = (this.random() * 2 - 1) * 129;
       const z = (this.random() * 2 - 1) * 107 - 4;
       if (!this.terrain.isPlayable(x, z, 4.5)) continue;
       if (!this.#pathClearance(x, z, 2.7)) continue;
-      if (this.terrain.slopeAt(x, z) > 0.56) continue;
+
+      const density = this.terrain.understoryDensityAt(x, z);
+      if (density <= 0 || this.random() > density) continue;
+
       const radius = 0.72 + this.random() * 0.7;
       if (!this.reservations.isClear(x, z, radius)) continue;
 
