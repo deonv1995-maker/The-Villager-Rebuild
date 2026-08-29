@@ -1,8 +1,8 @@
 export const ASSET_PATHS = Object.freeze({
   ranger: Object.freeze({
     model: './assets/kaykit/adventurers/Ranger.glb',
-    movementBasic: './assets/kaykit/animations/Ranger_Movement_Locomotion.glb',
-    general: './assets/kaykit/animations/Ranger_General_Locomotion.glb'
+    movementBasic: './assets/kaykit/animations/Rig_Medium_MovementBasic.glb',
+    general: './assets/kaykit/animations/Rig_Medium_General.glb'
   }),
   forest: Object.freeze({
     treeBroad: './assets/kaykit/forest/Tree_1_A_Color1.gltf',
