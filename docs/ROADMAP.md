@@ -35,7 +35,7 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — gathering and first crafting milestones implemented on 2026-08-29.**
+Status: **in progress — gathering, first crafting and first hunting milestones implemented on 2026-08-29.**
 
 Current playable milestone:
 
@@ -47,9 +47,13 @@ Current playable milestone:
 - the first recipe is data-driven: one stick + one stone crafts one spear;
 - crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
 - desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
-- the HUD now separates the current objective from inventory counts and records the crafted spear in inventory.
+- the HUD separates the current objective from inventory counts and records the crafted spear in inventory;
+- a first boar now wanders near the clear central path and becomes a spear target only when the player is armed and within attack range;
+- desktop uses F and mobile exposes the spear attack button only for a valid boar target;
+- the first boar takes two spear hits, provides hit feedback, falls when defeated, and advances the objective without mixing animal health into the Ranger controller;
+- animal definition data, boar world state and Ranger spear presentation are kept behind separate boundaries so a production animal asset/animation pack can replace the current procedural boar without rewriting the hunting rules.
 
-Next playable milestone: **hunt the first boar with the crafted spear.**
+Next playable milestone: **gather meat from the defeated boar.**
 
 Target final-game sequence:
 
