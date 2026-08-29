@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { SceneSystem } from '../rendering/SceneSystem.js';
 import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
-import { BoarSystem } from '../world/BoarSystem.js';
-import { RangerController } from '../player/RangerController.js';
+import { BoarSystem } from '../world/BoarSystem.js?v=day1-boar-2';
+import { RangerController } from '../player/RangerController.js?v=day1-boar-2';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
 import { CraftingSystem } from '../gameplay/CraftingSystem.js';
 
@@ -47,7 +47,7 @@ export class GameApp {
     this.running = true;
     this.#frame();
 
-    import('../ui/MobileHud.js')
+    import('../ui/MobileHud.js?v=day1-boar-2')
       .then(({ MobileHud }) => {
         this.hud = new MobileHud({
           player: this.player,
