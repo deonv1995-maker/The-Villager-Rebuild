@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
 import { GatherableSystem } from '../src/world/GatherableSystem.js';
+import { BoarSystem } from '../src/world/BoarSystem.js';
 
 const inventory = new InventorySystem();
 assert.equal(inventory.get('stick'), 0);
@@ -47,5 +48,18 @@ const pickup = gatherables.gather(playerPosition);
 assert.equal(pickup?.resourceId, 'stick');
 assert.equal(pickup?.quantity, 1);
 assert.equal(gatherables.update(playerPosition)?.resourceId, 'stone');
+
+const boar = new BoarSystem({ scene, terrain });
+const hunterPosition = new THREE.Vector3(2.2, 0, 9.5);
+assert.equal(boar.update(0, hunterPosition, false), null);
+assert.equal(boar.update(0, hunterPosition, true)?.animalId, 'boar');
+const firstHit = boar.attack(hunterPosition);
+assert.equal(firstHit?.health, 1);
+assert.equal(firstHit?.defeated, false);
+const finalHit = boar.attack(hunterPosition);
+assert.equal(finalHit?.health, 0);
+assert.equal(finalHit?.defeated, true);
+assert.equal(boar.getState().defeated, true);
+assert.equal(boar.attack(hunterPosition), null);
 
 console.log('gameplay contracts verified');
