@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download selected KayKit forest assets
+      - name: Download byte-identical KayKit forest payloads
         shell: bash
         run: |
           set -euo pipefail
@@ -27,12 +27,11 @@ jobs:
           mkdir -p "$out"
 
           for file in \
-            Tree_1_A_Color1.gltf Tree_1_A_Color1.bin \
-            Tree_2_A_Color1.gltf Tree_2_A_Color1.bin \
-            Rock_1_A_Color1.gltf Rock_1_A_Color1.bin \
+            Tree_1_A_Color1.bin \
+            Tree_2_A_Color1.bin \
+            Rock_1_A_Color1.bin \
             forest_texture.png; do
             curl -L --fail --retry 3 "$base/$file" -o "$out/$file"
-            printf '%s  %s\n' "$(git hash-object "$out/$file")" "$file"
           done
 
           test "$(git hash-object "$out/Tree_1_A_Color1.gltf")" = '1c453051b537f6dfab6c6b9d82531774ace25c85'
@@ -43,7 +42,7 @@ jobs:
           test "$(git hash-object "$out/Rock_1_A_Color1.bin")"  = 'df23c5d4e393fc366f992340aea4433ec7fc3c8e'
           test "$(git hash-object "$out/forest_texture.png")"  = '3674554457d00bb06e0fb481a4bb637d232a25fa'
 
-      - name: Commit selected forest assets
+      - name: Commit selected forest payloads
         shell: bash
         run: |
           set -euo pipefail
@@ -54,5 +53,5 @@ jobs:
             echo 'Forest assets already match the selected production files.'
             exit 0
           fi
-          git commit -m 'Import selected KayKit forest assets'
+          git commit -m 'Import selected KayKit forest payloads'
           git push
