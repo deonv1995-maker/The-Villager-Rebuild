@@ -42,6 +42,10 @@ Vegetation placement is terrain-driven rather than renderer-driven. `IslandTerra
 
 - The larger Foundation 0.3 island dimensions remain unchanged.
 - Coast bounds, steep terrain and prop collision continue through `WorldCollisionSystem`.
+- Base terrain height and standable support height are separate concerns: base terrain owns slope classification, while support-adjusted height is only used for standing, stepping, landing and falling from rocks/cliff tops.
+- Prop support height must never make nearby flat ground appear steep or make a Ranger standing on a rock fail a terrain-slope test.
+- Walkable terrain slope is evaluated along the attempted travel direction rather than by unrelated cardinal samples around the destination. The current stylized walk limit is 58 degrees; steeper terrain remains blocked uphill.
+- A Ranger already standing on a valid rock/cliff support must be able to move laterally off the support. Once the support disappears beneath the Ranger, the existing drop/fall logic owns the transition back to terrain.
 - Intentional drops remain fallable according to the existing collision rules.
 - The Day 1 route from the beach must remain continuously walkable into the central interior.
 - Major terrain-owned drops remain present away from the centre.
@@ -63,6 +67,10 @@ Vegetation placement is terrain-driven rather than renderer-driven. `IslandTerra
 - the grass field contains both dense patch samples and open gaps;
 - the Day 1 path core remains grass-free;
 - broad oriented environment colliders block traversal through visible cliff faces without behaving like oversized circular invisible walls;
-- standable oriented supports still expose a valid top surface for traversal.
+- standable oriented supports still expose a valid top surface for traversal;
+- support height does not contaminate base-terrain slope checks beside rocks;
+- a Ranger already standing on a rock can walk off its support without being trapped by the side collider;
+- stylized hills below the configured walkable slope limit do not require repeated jumping;
+- very steep terrain remains non-walkable uphill.
 
 Tree chopping remains gated until this terrain presentation is visually accepted in the deployed build.
