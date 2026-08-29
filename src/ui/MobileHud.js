@@ -1,3 +1,5 @@
+import { ASSET_PATHS } from '../data/AssetPaths.js';
+
 export class MobileHud {
   constructor({ player, canvas, onInteract }) {
     this.player = player;
@@ -5,13 +7,15 @@ export class MobileHud {
     this.onInteract = onInteract;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
+
+    const ui = ASSET_PATHS.ui.mobile;
     this.root.innerHTML = `
       <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0</div>
       <div class="hud-note">DAY 1 · E / hand to gather</div>
-      <div class="joystick" data-role="joystick"><img class="joystick-pad" src="./assets/ui/mobile/joystick-pad.svg" alt=""><img class="joystick-nub" src="./assets/ui/mobile/joystick-nub.svg" alt=""></div>
-      <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><span class="button-glyph">RUN</span></button>
-      <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><img class="button-icon" src="./assets/ui/mobile/icon-hand.svg" alt=""></button>
-      <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="./assets/ui/mobile/button-circle.svg" alt=""><img class="button-icon" src="./assets/ui/mobile/icon-jump.svg" alt=""></button>
+      <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
+      <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
+      <button class="hud-button interact" type="button" aria-label="Pick up" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
+      <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
