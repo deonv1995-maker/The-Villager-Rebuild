@@ -5,9 +5,9 @@ export class SceneSystem {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0xaeddec);
-    this.scene.fog = new THREE.FogExp2(0xa9c7bc, 0.0052);
+    this.scene.fog = new THREE.FogExp2(0xa9c7bc, 0.0043);
 
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 440);
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 560);
     this.camera.position.set(0, 5, 8);
 
     this.renderer = new THREE.WebGLRenderer({
