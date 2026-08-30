@@ -124,6 +124,13 @@ export class WorldCollisionSystem {
     return true;
   }
 
+  isCircleClear(x, z, radius) {
+    if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) {
+      throw new Error('Collision clearance requires finite x, z and a positive radius');
+    }
+    return this.obstacles.every(obstacle => !this.#overlapsObstacle(obstacle, x, z, radius));
+  }
+
   supportHeightAt(x, z, baseHeight) {
     let height = baseHeight;
     for (const obstacle of this.obstacles) {
@@ -232,9 +239,6 @@ export class WorldCollisionSystem {
         Math.abs(feetY - obstacle.supportY) <= 0.3
       );
 
-      // Once the Ranger is standing on a support, its own side blocker must
-      // not trap the Ranger on top. Lateral movement can leave the support;
-      // the normal ground/drop logic then transitions the Ranger into a fall.
       if (fromSupported && feetY >= obstacle.supportY - 0.16) continue;
 
       if (airborne) {
