@@ -36,26 +36,49 @@ const distanceToSegment = (x, z, x1, z1, x2, z2) => {
   return { distance: Math.hypot(x - px, z - pz), t };
 };
 
+const curvedShoalDistance = (x, z, bar) => {
+  const vx = bar.x2 - bar.x1;
+  const vz = bar.z2 - bar.z1;
+  const length = Math.max(0.001, Math.hypot(vx, vz));
+  const nx = -vz / length;
+  const nz = vx / length;
+  const midX = (bar.x1 + bar.x2) * 0.5 + nx * (bar.bend ?? 0);
+  const midZ = (bar.z1 + bar.z2) * 0.5 + nz * (bar.bend ?? 0);
+  const first = distanceToSegment(x, z, bar.x1, bar.z1, midX, midZ);
+  const second = distanceToSegment(x, z, midX, midZ, bar.x2, bar.z2);
+  if (first.distance <= second.distance) return { distance: first.distance, t: first.t * 0.5 };
+  return { distance: second.distance, t: 0.5 + second.t * 0.5 };
+};
+
+const shoalWidthAt = (bar, t, x, z) => {
+  const endpoint = Math.abs(t - 0.5) * 2;
+  const flare = THREE.MathUtils.smoothstep(endpoint, 0.3, 1);
+  const organic = 1
+    + Math.sin(t * Math.PI * 4.6 + bar.phase) * 0.09
+    + Math.cos((x - z) * 0.052 + bar.phase * 0.7) * 0.055;
+  return bar.width * (1 + flare * (bar.flare ?? 0.58)) * organic;
+};
+
 const SATELLITE_ISLANDS = Object.freeze([
   Object.freeze({
     id: 'northwest-cay', x: -157, z: -111, halfX: 24, halfZ: 15, yaw: 0.42, warp: 1.8, phase: 1.4, rise: 0.72,
-    bar: Object.freeze({ x1: -124, z1: -91, x2: -145, z2: -104, width: 6.5, phase: 0.4 })
+    bar: Object.freeze({ x1: -124, z1: -91, x2: -145, z2: -104, width: 12.5, flare: 0.62, bend: 3.8, phase: 0.4 })
   }),
   Object.freeze({
     id: 'northeast-cay', x: 151, z: -94, halfX: 25, halfZ: 15, yaw: -0.34, warp: 2.1, phase: 3.7, rise: 0.95,
-    bar: Object.freeze({ x1: 117, z1: -72, x2: 139, z2: -87, width: 6.1, phase: 2.2 })
+    bar: Object.freeze({ x1: 117, z1: -72, x2: 139, z2: -87, width: 11.8, flare: 0.66, bend: -3.2, phase: 2.2 })
   }),
   Object.freeze({
     id: 'eastern-cay', x: 205, z: 72, halfX: 23, halfZ: 16, yaw: 0.2, warp: 1.9, phase: -1.8, rise: 0.8,
-    bar: Object.freeze({ x1: 171, z1: 58, x2: 193, z2: 68, width: 6.8, phase: 4.8 })
+    bar: Object.freeze({ x1: 171, z1: 58, x2: 193, z2: 68, width: 13.2, flare: 0.7, bend: 4.5, phase: 4.8 })
   }),
   Object.freeze({
     id: 'southern-cay', x: 72, z: 145, halfX: 21, halfZ: 15, yaw: -0.18, warp: 1.7, phase: 5.4, rise: 0.62,
-    bar: Object.freeze({ x1: 65, z1: 109, x2: 70, z2: 133, width: 6.4, phase: 1.1 })
+    bar: Object.freeze({ x1: 65, z1: 109, x2: 70, z2: 133, width: 11.9, flare: 0.68, bend: -3.8, phase: 1.1 })
   }),
   Object.freeze({
     id: 'southwest-cay', x: -184, z: 119, halfX: 22, halfZ: 15, yaw: -0.42, warp: 1.8, phase: -3.2, rise: 0.78,
-    bar: Object.freeze({ x1: -147, z1: 99, x2: -172, z2: 113, width: 6.6, phase: 3.3 })
+    bar: Object.freeze({ x1: -147, z1: 99, x2: -172, z2: 113, width: 12.8, flare: 0.64, bend: 4.2, phase: 3.3 })
   })
 ]);
 
@@ -122,11 +145,10 @@ export class IslandTerrainSystem {
       const normalized = this.#satelliteNormalizedRadius(island, x, z);
       const inset = (2.1 + margin) / Math.min(island.halfX, island.halfZ);
       if (normalized <= Math.max(0.34, 1 - inset)) return true;
-
-      const bar = island.bar;
-      const segment = distanceToSegment(x, z, bar.x1, bar.z1, bar.x2, bar.z2);
-      if (segment.distance <= Math.max(0.65, bar.width - margin)) return true;
     }
+
+    const shoal = this.#sandbarInfoAt(x, z);
+    if (shoal && shoal.distance <= Math.max(0.9, shoal.width - margin)) return true;
     return false;
   }
 
@@ -176,12 +198,15 @@ export class IslandTerrainSystem {
 
     const sandbar = this.#sandbarInfoAt(x, z);
     if (sandbar) {
-      const { bar, distance, t } = sandbar;
-      const lateral = 1 - THREE.MathUtils.smoothstep(distance, bar.width * 0.46, bar.width);
-      const endpointFade = THREE.MathUtils.smoothstep(t, 0.02, 0.16) * (1 - THREE.MathUtils.smoothstep(t, 0.84, 0.98));
-      const strength = THREE.MathUtils.clamp(Math.max(lateral * 0.78, lateral * endpointFade), 0, 1);
-      const ripple = 0.5 + Math.sin(t * Math.PI * 5 + bar.phase) * 0.28 + Math.cos(t * Math.PI * 3 - bar.phase) * 0.18;
-      const crest = this.waterLevel - 0.2 + THREE.MathUtils.clamp(ripple, 0, 1) * 0.31;
+      const { bar, distance, t, width } = sandbar;
+      const lateral = 1 - THREE.MathUtils.smoothstep(distance / width, 0.5, 1);
+      const endpoint = Math.abs(t - 0.5) * 2;
+      const endpointLift = THREE.MathUtils.smoothstep(endpoint, 0.42, 1);
+      const strength = THREE.MathUtils.clamp(lateral * (0.84 + endpointLift * 0.16), 0, 1);
+      const patch = 0.5
+        + Math.sin(t * Math.PI * 4.2 + bar.phase) * 0.19
+        + Math.cos((x + z) * 0.063 - bar.phase) * 0.15;
+      const crest = this.waterLevel - 0.18 + THREE.MathUtils.clamp(patch, 0, 1) * 0.24 + endpointLift * 0.08;
       const barHeight = THREE.MathUtils.lerp(this.seabedLevel, crest, strength);
       height = Math.max(height, barHeight);
     }
@@ -475,9 +500,12 @@ export class IslandTerrainSystem {
     let best = null;
     for (const island of this.satelliteIslands) {
       const bar = island.bar;
-      const segment = distanceToSegment(x, z, bar.x1, bar.z1, bar.x2, bar.z2);
-      if (segment.distance > bar.width * 1.08) continue;
-      if (!best || segment.distance < best.distance) best = { bar, ...segment };
+      const segment = curvedShoalDistance(x, z, bar);
+      const width = shoalWidthAt(bar, segment.t, x, z);
+      if (segment.distance > width * 1.08) continue;
+      if (!best || segment.distance / width < best.distance / best.width) {
+        best = { bar, ...segment, width };
+      }
     }
     return best;
   }
