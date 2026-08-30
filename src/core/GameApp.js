@@ -20,12 +20,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.3 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.4 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.3 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.4 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
