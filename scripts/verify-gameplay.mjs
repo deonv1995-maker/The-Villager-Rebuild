@@ -245,18 +245,28 @@ assert.equal(dropMove.x, 1.2);
 
 const regionalTerrain = new IslandTerrainSystem(new THREE.Group());
 assert.equal(regionalTerrain.isPlayable(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), true);
-assert.equal(regionalTerrain.isPlayable(200, 0), false);
-assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 12, true);
+assert.equal(regionalTerrain.isPlayable(210, 0), false);
+assert.equal(regionalTerrain.coastRadiusAt(0) > 185, true, 'expanded island must retain a substantially wider east-west span');
+assert.equal(regionalTerrain.coastRadiusAt(Math.PI / 2) > 125, true, 'expanded island must retain a larger north-south span');
+assert.equal(Math.abs(regionalTerrain.coastRadiusAt(0) - regionalTerrain.coastRadiusAt(Math.PI / 2)) > 25, true, 'expanded coastline should remain strongly non-round');
+const scatterBounds = regionalTerrain.getScatterBounds(18);
+assert.equal(scatterBounds.halfX >= 170 && scatterBounds.halfZ >= 130, true, 'vegetation scatter bounds must scale with the expanded terrain');
 
-assert.equal(regionalTerrain.isSandAt(0, 107), true, 'shoreline beach must be classified as sand');
-assert.equal(regionalTerrain.grassDensityAt(0, 107), 0, 'grass must never spawn on sand');
-assert.equal(regionalTerrain.treeDensityAt(0, 107), 0, 'trees must never spawn on sand');
-assert.equal(regionalTerrain.understoryDensityAt(0, 107), 0, 'understory must never spawn on sand');
+const beachZ = regionalTerrain.centerZ + regionalTerrain.coastRadiusAt(Math.PI / 2) * 0.95;
+assert.equal(regionalTerrain.isSandAt(0, beachZ), true, 'shoreline beach must be classified as sand');
+assert.equal(regionalTerrain.grassDensityAt(0, beachZ), 0, 'grass must never spawn on sand');
+assert.equal(regionalTerrain.treeDensityAt(0, beachZ), 0, 'trees must never spawn on sand');
+assert.equal(regionalTerrain.understoryDensityAt(0, beachZ), 0, 'understory must never spawn on sand');
 assert.equal(regionalTerrain.isSandAt(WORLD_LAYOUT.spawn.x, WORLD_LAYOUT.spawn.z), false, 'Day 1 spawn must remain inland of the beach vegetation cutoff');
 assert.equal(regionalTerrain.grassPatchStrengthAt(-70, -10) > 0.85, true, 'grass field should contain dense natural patches');
 assert.equal(regionalTerrain.grassPatchStrengthAt(-85, 30) < 0.05, true, 'grass field should contain open gaps between patches');
-const pathGrassX = regionalTerrain.pathCenterX(40);
-assert.equal(regionalTerrain.grassDensityAt(pathGrassX, 40), 0, 'the worn Day 1 path core must stay clear of grass');
+
+const trailSamples = [];
+for (let z = 48; z <= 90; z += 2) trailSamples.push(regionalTerrain.trailWearAt(z));
+assert.equal(Math.max(...trailSamples) > 0.85, true, 'the Day 1 area should still contain readable worn trail patches');
+assert.equal(trailSamples.filter(value => value < 0.05).length >= 5, true, 'trail wear must break into gaps instead of forming a continuous line');
+assert.equal(regionalTerrain.trailWearAt(20), 0, 'visible trail wear must not continue through the island interior');
+assert.equal(regionalTerrain.routeCorridorStrengthAt(-24) > 0.5, true, 'the hidden traversal corridor must still protect access into the middle');
 
 const centerHeights = [];
 for (let x = -28; x <= 28; x += 4) {
