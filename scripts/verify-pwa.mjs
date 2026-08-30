@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'current-chrome-icons-1';
+const shellRevision = 'ranger-icon-1';
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -23,11 +23,14 @@ async function requireMissing(relativePath) {
   }
 }
 
-async function verifySvg(relativePath) {
+async function verifySvg(relativePath, marker) {
   const filePath = await requireFile(relativePath);
   const source = await readFile(filePath, 'utf8');
   if (!source.includes('<svg') || !source.includes('viewBox="0 0 512 512"')) {
     throw new Error(`${filePath}: invalid Villager SVG icon`);
+  }
+  if (marker && !source.includes(marker)) {
+    throw new Error(`${filePath}: expected Ranger vector fallback marker ${marker}`);
   }
 }
 
@@ -42,6 +45,14 @@ async function verifyPng(relativePath, expectedSize) {
   const height = data.readUInt32BE(20);
   if (width !== expectedSize || height !== expectedSize) {
     throw new Error(`${filePath}: expected ${expectedSize}x${expectedSize}, got ${width}x${height}`);
+  }
+}
+
+async function requireSameFile(leftPath, rightPath) {
+  const left = await readFile(await requireFile(leftPath));
+  const right = await readFile(await requireFile(rightPath));
+  if (!left.equals(right)) {
+    throw new Error(`${leftPath} must remain byte-identical to ${rightPath}`);
   }
 }
 
@@ -76,16 +87,19 @@ if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || png
   throw new Error('Android launcher presentation requires the 512x512 maskable PNG icon');
 }
 if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.purpose !== 'any') {
-  throw new Error('Original Villager standard SVG fallback changed');
+  throw new Error('Villager standard SVG fallback changed');
 }
 if (svgMaskable?.sizes !== 'any' || svgMaskable?.type !== 'image/svg+xml' || svgMaskable?.purpose !== 'maskable') {
-  throw new Error('Original Villager maskable SVG fallback changed');
+  throw new Error('Villager maskable SVG fallback changed');
 }
 await verifyPng('icons/icon-192.png', 192);
 await verifyPng('icons/icon-512.png', 512);
 await verifyPng('icons/icon-maskable-512.png', 512);
-await verifySvg('icons/icon.svg');
-await verifySvg('icons/icon-maskable.svg');
+await requireSameFile('icons/icon-192.png', 'icons/ranger-192.png');
+await requireSameFile('icons/icon-512.png', 'icons/ranger-512.png');
+await requireSameFile('icons/icon-maskable-512.png', 'icons/ranger-maskable-512.png');
+await verifySvg('icons/icon.svg', 'data-icon-art="ranger-v1"');
+await verifySvg('icons/icon-maskable.svg', 'data-icon-art="ranger-v1-maskable"');
 await requireFile('.nojekyll', true);
 
 const serviceWorkerPath = await requireFile('sw.js');
@@ -113,9 +127,9 @@ for (const forbidden of ['caches.open(', 'caches.match(', 'cache.addAll(', 'LEGA
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
-  throw new Error('Built index must link the current Chrome install manifest revision');
+  throw new Error('Built index must link the Ranger icon manifest revision');
 }
-if (!index.includes('./icons/icon.svg')) throw new Error('Built index must expose the original Villager SVG favicon');
+if (!index.includes('./icons/icon.svg')) throw new Error('Built index must expose the Villager SVG favicon');
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
   throw new Error('Built index must use the simple versioned service-worker registration pattern');
 }
@@ -142,4 +156,4 @@ if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDAT
 await requireMissing('pwa-install.js');
 await requireMissing('pwa-install.css');
 
-console.log(`Villager current Chrome PWA contract verified in ${root}`);
+console.log(`Villager Ranger icon PWA contract verified in ${root}`);
