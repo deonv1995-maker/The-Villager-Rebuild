@@ -10,32 +10,28 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.2 — landscape enclosure and island-scale pass**
+**Foundation 0.3.3 — first tree chopping and log gathering**
 
-This milestone preserves the accepted Foundation 0.3.1 main terrain/traversal work while improving the world presentation before tree chopping is added:
+This milestone advances the accepted Foundation 0.3.2 landscape/install foundation without replacing its terrain, collision, ecology or PWA architecture:
 
-- the Foundation 0.3.1 main island height field, central lowland access, cliffs, drops and collision architecture remain authoritative;
-- five smaller irregular satellite islands extend the coastline composition without turning the world into another radial landmass;
-- terrain-owned sandbars/shallow-water crossings connect the satellite islands through the same `heightAt()` / `isPlayable()` collision path as the main island;
-- procedural fern-like understory uses the same localized Ranger bend/compression/recovery engine as interactive grass;
-- grass and fern reaction share one spatially bounded instanced-vegetation implementation rather than duplicated per-frame logic;
-- forest-cover data now also gives dense groves subtle terrain shading, while cooler fog/light balance makes woodland and clearings read more cohesively;
-- two instanced rings of distant, off-limits mountain silhouettes close empty ocean sightlines and increase perceived world scale without adding fake collision terrain;
-- the camera/water horizon presentation extends far enough to support the distant silhouettes while remaining mobile-conscious;
-- automated landscape contracts now run beside gameplay, runtime-asset, production-build and PWA checks.
+- the Day 1 sequence now advances from harvested meat to the first tree-chopping objective;
+- existing deterministic forest trees remain the authoritative tree population rather than spawning a second harvest-only tree set;
+- a dedicated tree-harvest system references the existing tree collision handles and instanced render batches;
+- the first tutorial tree requires three deliberate swings, driven by a data definition rather than a hard-coded one-hit removal;
+- desktop continues to use the shared E interaction while mobile keeps one contextual interaction button and switches its glyph from the hand to an axe only when a tree is targeted;
+- a lightweight Ranger axe presentation temporarily replaces the equipped spear presentation during each chop without changing spear inventory state;
+- when the tree is felled, only that tree instance is hidden, its trunk collider is removed through the shared collision system and a stump remains at the same terrain position;
+- the felled tree spawns three normal Log pickups through the existing `GatherableSystem`, so logs enter the same inventory/resource path used by sticks, stones and later shared player/NPC resource handling;
+- after the first tree falls, tutorial targeting prioritizes the dropped logs until all three are gathered;
+- tree/log regression checks run beside the existing gameplay, landscape, runtime-asset, production-build and PWA contracts.
 
-Tree chopping/log gathering remains intentionally gated until the 0.3.2 landscape presentation is visually accepted in the deployed build.
+Foundation 0.3.3 remains under device/gameplay acceptance before the next Day 1 step is added. The next playable milestone is **build the first campfire**.
 
-## Desktop installation
+## Installation
 
-The deployed GitHub Pages build is also the desktop test build; there is no separate gameplay fork.
+The deployed GitHub Pages build is the shared mobile/desktop production test build; there is no separate gameplay fork.
 
-1. Open the deployed game in a Chromium-based desktop browser such as Chrome or Edge.
-2. When the game is installable, use the in-game **INSTALL GAME** button at the lower-left, or the browser's install-app control in the address bar/menu.
-3. Accept the install prompt.
-4. Launch **The Villager Rebuild** from the desktop/Start menu like a standalone app.
-
-The installed app still receives the same verified production deployment as mobile testing. Its service worker caches visited same-origin assets to make repeat access more convenient; fresh deployments remain network-first when the app is online.
+On Android Chrome or a Chromium desktop browser, use the browser-owned **Install app** flow. The manifest, launcher PNGs and simple service worker intentionally avoid custom install interception. The deterministic Pages workflow waits for GitHub's branch-source Pages run for the same commit and then deploys the verified production `dist` artifact last.
 
 ## Project principles
 

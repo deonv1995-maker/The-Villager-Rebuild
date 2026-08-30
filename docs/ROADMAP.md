@@ -35,60 +35,57 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — Foundation 0.3.2 landscape-enclosure/island-scale pass is under visual acceptance on 2026-08-30.**
+Status: **in progress — Foundation 0.3.3 first-tree/log-gathering pass is under device acceptance on 2026-08-30.**
 
-Current playable milestone:
+Accepted foundation carried forward from 0.3.2:
 
-- nearby stick and stone pickups exist around the shipwreck-beach start;
-- the nearest valid pickup is targeted within interaction range;
-- desktop uses E and mobile uses a contextual hand button for gathering;
-- gathered resources are removed from the world and added to a small visible inventory;
-- resource definitions, inventory state and world gatherables remain separate systems so later player/NPC harvesting can share the same data model;
-- the first recipe is data-driven: one stick + one stone crafts one spear;
-- crafting checks requirements before consuming anything, so failed recipes cannot partially remove materials;
-- desktop uses C and mobile exposes a contextual spear button only when the recipe can be completed;
-- the HUD separates the current objective from inventory counts and records the crafted spear in inventory;
-- desktop uses F and mobile exposes the spear attack button only for a valid Day 1 hunt target;
-- the spear follows the Ranger's right-hand rig/socket and uses the KayKit one-handed stab animation, retaining a controlled fallback presentation if the combat clip is unavailable;
-- Day 1 hunting is species-neutral at the gameplay layer; the Qiwii Wild Pig is the current asset/style candidate and can be replaced without rewriting targeting, damage, carcass harvesting or loot;
-- the hunt target takes two spear hits, provides hit feedback, falls when defeated and advances the objective;
-- the defeated carcass exposes the normal contextual hand interaction when the player moves close enough;
-- harvesting is one-time and data-driven from the animal definition, adding two Raw Meat to inventory without duplicating loot;
-- Day 1 spawn, resource and hunt coordinates come from one shared world-layout definition;
-- the Foundation 0.3.1 main-island height field remains authoritative, including the traversable central lowland, distributed highlands, cliffs, shelves, ravines and deliberate drops;
-- Foundation 0.3.2 adds five irregular satellite islands around the main island without rescaling or reorganizing the accepted main-island terrain;
-- satellite islands and their sandbar/shallow-water connectors are terrain-owned and use the same height, sand, playability and collision path as the main island;
-- steep terrain is rock-colored while Kenney cliff meshes are used selectively as embedded face dressing;
-- environment placement remains footprint-aware, preventing accepted cliffs/rocks/trees from being scattered through one another and preserving the tutorial route/clearings;
-- forest generation targets roughly 540 collision-aware trees with broad scale variation and larger hero trees to close sightlines;
-- repeated KayKit tree meshes and understory render as instanced batches while individual trunk collision remains world data;
-- standalone rocks use a wider size/aspect range instead of reading as one repeated platform family;
-- interactive fine grass targets roughly 13,800 segmented blade tufts with spatially bounded Ranger bending/compression/recovery inspired by the archived-game behavior;
-- procedural fern understory targets roughly 2,200 instanced plants and shares the same localized reaction engine as grass rather than duplicating movement logic;
-- forest-cover data now drives both tree density and subtle terrain darkening so dense groves read as more cohesive enclosed spaces without enabling full dynamic shadow maps;
-- two deterministic instanced rings of off-limits mountain silhouettes close distant ocean sightlines and increase perceived scale without entering terrain or collision logic;
-- rocks and broad cliff props still expose smaller standable support zones while their sides remain blocking;
-- coastline, satellite bounds, sandbars, steep terrain, tree trunks and solid prop sides remain shared collision rules while deliberate interior drops remain fallable/jumpable;
-- the GitHub Pages production build is also installable as a desktop Progressive Web App, avoiding a separate desktop gameplay fork;
-- gameplay and landscape regression contracts run before the production build, runtime-asset checks and PWA verification.
+- the main-island height field, traversable central lowland, irregular highlands, cliffs, shelves, ravines and deliberate drops remain authoritative;
+- five irregular satellite islands and their terrain-owned sandbar/shallow-water connectors remain part of the same `heightAt()` / `isPlayable()` path;
+- environment placement remains footprint-aware and preserves the Day 1 route/clearings;
+- roughly 540 collision-aware trees, wider-variety rocks, interactive grass, reactive ferns, forest-cover shading and distant mountain silhouettes remain the accepted landscape presentation;
+- tree trunks, coastline, satellite bounds, steep terrain and solid prop sides remain shared collision rules;
+- the native Chromium PWA install flow, PNG-only launcher manifest, simple service worker and deterministic branch-source-first / production-dist-last Pages deployment architecture are established and must not be replaced by gameplay work;
+- gameplay, landscape, runtime-asset, production-build and PWA checks remain required before merge.
 
-Foundation 0.3.2 acceptance gate before adding tree chopping:
+Current playable sequence:
 
-- ordinary exploration views are sufficiently enclosed by tree/grass/fern density and forest-cover shading that the island does not read as one open field;
-- large terrain drops/rock faces create recognizably different vertical spaces without becoming invisible traversal walls;
-- cliff/rock dressing no longer reads as many copies of one similarly sized platform;
-- no obvious generated tree/rock/cliff intersections in the Day 1 route and surrounding forest;
-- grass and fern vegetation visibly part/rebound around the Ranger and remain acceptable on target mobile hardware;
-- satellite islands read as irregular natural extensions of the landscape rather than repeated circular props;
-- sandbar/shallow-water connectors are visibly understandable and traversable without creating a second collision system;
-- distant mountain silhouettes increase world scale while remaining clearly atmospheric/off-limits rather than suggesting reachable collision terrain;
-- the Qiwii Wild Pig remains correctly grounded/scaled/oriented against the KayKit Ranger;
-- the desktop build can be installed/launched from the desktop or Start menu;
-- gameplay contracts, landscape contracts, runtime-asset verification, production build, selected-asset integrity and Pages deployment are green.
+Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> **chop first tree -> gather logs**.
 
-Next playable milestone after this gate: **chop the first tree and gather logs.**
+Foundation 0.3.3 adds:
 
-Target final-game sequence:
+- `log` as a shared resource/inventory definition rather than a tutorial-only counter;
+- a data-driven forest-tree harvest definition containing interaction radius, swing count and log yield;
+- a dedicated tree-harvest system that references the existing deterministic forest tree colliders and instanced render batches instead of spawning a duplicate harvest-tree population;
+- tree targeting only after the Day 1 meat objective is complete;
+- desktop E and the existing mobile contextual interaction button for chopping, with the mobile glyph switching from hand to axe when the target is a tree;
+- three deliberate swings for the first tree rather than one-hit removal;
+- a lightweight Ranger axe presentation that temporarily hides the equipped spear presentation during each chop without consuming or replacing the spear item;
+- removal of only the felled tree's collision handle through `WorldCollisionSystem`, leaving the rest of the forest collision set unchanged;
+- hiding of only the corresponding instanced tree entry while retaining instancing for the rest of the forest;
+- a visible stump at the felled tree position;
+- three world Log pickups spawned through the existing `GatherableSystem`;
+- post-fell tutorial targeting restricted to those dropped logs until all three are collected;
+- a dedicated tree-harvest regression contract beside the existing gameplay and landscape checks.
+
+Foundation 0.3.3 acceptance gate before adding the campfire:
+
+- after Raw Meat is harvested, the objective clearly changes to tree chopping;
+- approaching a valid tree exposes the axe interaction on mobile and E interaction on desktop;
+- the Ranger visibly performs the axe swing without showing the spear in the same hand;
+- the target tree requires three distinct swings and cannot be felled by rapid duplicate input during one swing;
+- only the targeted tree disappears from the instanced forest;
+- the targeted tree trunk stops blocking movement after it is felled while unrelated tree/rock/cliff collision remains unchanged;
+- the stump remains correctly grounded at the original tree position;
+- exactly three visible Log pickups appear around the stump and use the normal hand pickup interaction;
+- inventory reaches Log 3 after all three are gathered and the objective advances to the campfire step;
+- the existing Day 1 gather/craft/hunt/meat sequence still works from a clean page load;
+- the landscape and PWA/install architecture remain visually and behaviorally unchanged;
+- target mobile performance remains acceptable;
+- gameplay, tree-harvest, landscape, runtime-asset, production-build, PWA and Pages deployment checks are green.
+
+Next playable milestone after this gate: **build the first campfire.**
+
+Target final-game Day 1 sequence:
 
 Shipwreck beach -> movement/camera -> gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> chop tree -> gather logs -> build campfire -> cook meat -> eat -> night -> sleep until morning.
 
@@ -101,6 +98,7 @@ Required supporting systems:
 - simple inventory/material carrying as required;
 - simple crafting;
 - animal/hunting loop;
+- tree/log harvesting;
 - campfire/cooking;
 - day/night and sleeping;
 - tutorial objectives;

@@ -3,9 +3,12 @@ import { SceneSystem } from '../rendering/SceneSystem.js';
 import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
 import { DayOneHuntSystem } from '../world/DayOneHuntSystem.js';
+import { TreeHarvestSystem } from '../world/TreeHarvestSystem.js';
 import { RangerController } from '../player/RangerController.js';
+import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
 import { CraftingSystem } from '../gameplay/CraftingSystem.js';
+import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
 
 export class GameApp {
   constructor({ canvas, setStatus }) {
@@ -20,12 +23,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.2 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.3 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.2 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.3 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -45,6 +48,13 @@ export class GameApp {
       terrain: this.island
     });
     await this.hunt.load();
+    this.treeHarvest = new TreeHarvestSystem({
+      group: this.island.group,
+      terrain: this.island,
+      collision: this.island.collision,
+      gatherables: this.gatherables
+    });
+    this.toolPresentation = new RangerToolPresentation({ player: this.player });
     this.#bindGameplayInput();
 
     this.running = true;
@@ -70,6 +80,7 @@ export class GameApp {
     if (!this.running) return;
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.player?.update(dt);
+    this.toolPresentation?.update(dt);
 
     if (this.player) {
       this.player.getPosition(this.playerPosition);
@@ -82,11 +93,21 @@ export class GameApp {
   };
 
   #refreshTargets(dt = 0) {
-    const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
+    const huntState = this.hunt?.getState();
+    const animalDefeated = huntState?.defeated ?? false;
+    const meatCount = this.inventory?.get('meat') ?? 0;
+    const firstTreeChopped = this.treeHarvest?.hasChoppedTree() ?? false;
+    const logOnly = firstTreeChopped && meatCount > 0;
+    const resourceTarget = this.gatherables?.update(
+      this.playerPosition,
+      logOnly ? resourceId => resourceId === 'log' : null
+    ) ?? null;
     const armed = Boolean(this.inventory?.get('spear'));
     this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed) ?? null;
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
-    this.currentInteractionTarget = carcassTarget ?? resourceTarget;
+    const treeUnlocked = animalDefeated && meatCount > 0 && !firstTreeChopped;
+    const treeTarget = this.treeHarvest?.update(this.playerPosition, treeUnlocked) ?? null;
+    this.currentInteractionTarget = carcassTarget ?? treeTarget ?? resourceTarget;
 
     this.hud?.setInteractionTarget(this.currentInteractionTarget);
     this.hud?.setAttackTarget(this.currentHuntTarget);
@@ -106,7 +127,34 @@ export class GameApp {
       return;
     }
 
-    const pickup = this.gatherables?.gather(this.playerPosition);
+    const huntState = this.hunt?.getState();
+    const treeUnlocked = Boolean(huntState?.defeated && this.inventory.get('meat') > 0 && !this.treeHarvest?.hasChoppedTree());
+    if (treeUnlocked) {
+      const treeTarget = this.treeHarvest?.update(this.playerPosition, true);
+      if (treeTarget) {
+        if (this.toolPresentation?.isBusy()) return;
+        this.player.faceWorldPoint(treeTarget.position);
+        if (this.toolPresentation && !this.toolPresentation.playChop()) return;
+        const hit = this.treeHarvest.chop(this.playerPosition);
+        if (!hit) return;
+        this.#refreshTargets(0);
+
+        if (hit.chopped) {
+          this.#syncProgress();
+          return;
+        }
+
+        this.setStatus(`DAY 1 · TREE · ${hit.remainingHits} SWING${hit.remainingHits === 1 ? '' : 'S'} LEFT`);
+        this.hud?.setObjective(`DAY 1 · Keep chopping · ${hit.remainingHits} swing${hit.remainingHits === 1 ? '' : 's'} left`);
+        return;
+      }
+    }
+
+    const logOnly = Boolean(this.treeHarvest?.hasChoppedTree());
+    const pickup = this.gatherables?.gather(
+      this.playerPosition,
+      logOnly ? resourceId => resourceId === 'log' : null
+    );
     if (!pickup) return;
 
     this.inventory.add(pickup.resourceId, pickup.quantity);
@@ -149,18 +197,43 @@ export class GameApp {
 
     const hasSpear = this.inventory.get('spear') > 0;
     const meatCount = this.inventory.get('meat');
+    const logCount = this.inventory.get('log');
+    const requiredLogs = HARVESTABLE_DEFINITIONS.forestTree.dropCount;
     const canCraftSpear = !hasSpear && this.crafting.canCraft('spear');
     const huntState = this.hunt?.getState();
     const animalDefeated = huntState?.defeated ?? false;
     const animalLabel = huntState?.label ?? 'animal';
+    const firstTreeChopped = this.treeHarvest?.hasChoppedTree() ?? false;
 
     this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setCraftAvailable(canCraftSpear);
-    this.player?.setSpearEquipped(hasSpear);
+    this.player?.setSpearEquipped(hasSpear && !this.toolPresentation?.isBusy());
+
+    if (animalDefeated && meatCount > 0 && logCount >= requiredLogs) {
+      this.setStatus(`DAY 1 · LOGS ${logCount}`);
+      this.hud?.setObjective('DAY 1 · Logs gathered · campfire next');
+      this.hud?.setAttackTarget(null);
+      return;
+    }
+
+    if (animalDefeated && meatCount > 0 && firstTreeChopped) {
+      this.setStatus(`DAY 1 · GATHER LOGS ${logCount}/${requiredLogs}`);
+      this.hud?.setObjective(
+        this.currentInteractionTarget?.resourceId === 'log'
+          ? 'DAY 1 · E / hand to gather logs'
+          : `DAY 1 · Gather the fallen logs · ${logCount}/${requiredLogs}`
+      );
+      this.hud?.setAttackTarget(null);
+      return;
+    }
 
     if (animalDefeated && meatCount > 0) {
-      this.setStatus(`DAY 1 · RAW MEAT ${meatCount}`);
-      this.hud?.setObjective('DAY 1 · Meat gathered · chop a tree next');
+      this.setStatus('DAY 1 · CHOP A TREE');
+      this.hud?.setObjective(
+        this.currentInteractionTarget?.type === 'tree'
+          ? 'DAY 1 · E / axe to chop'
+          : 'DAY 1 · Find a nearby tree'
+      );
       this.hud?.setAttackTarget(null);
       return;
     }
