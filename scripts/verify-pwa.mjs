@@ -6,7 +6,7 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'ranger-icon-4';
+const shellRevision = 'ranger-icon-5';
 const installIcons = {
   png192: 'icons/ranger-install-192-v4.png',
   png512: 'icons/ranger-install-512-v4.png',
@@ -33,17 +33,6 @@ async function requireMissing(relativePath) {
     throw new Error(`Competing install file must not be emitted: ${filePath}`);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
-  }
-}
-
-async function verifySvg(relativePath, marker) {
-  const filePath = await requireFile(relativePath);
-  const source = await readFile(filePath, 'utf8');
-  if (!source.includes('<svg') || !source.includes('viewBox="0 0 512 512"')) {
-    throw new Error(`${filePath}: invalid Villager SVG icon`);
-  }
-  if (marker && !source.includes(marker)) {
-    throw new Error(`${filePath}: expected Ranger vector fallback marker ${marker}`);
   }
 }
 
@@ -128,25 +117,25 @@ if (manifest.orientation !== 'any') throw new Error('Villager manifest orientati
 if (manifest.prefer_related_applications === true) throw new Error('PWA must not prefer a related native application');
 
 const icons = manifest.icons ?? [];
+if (icons.length !== 3) {
+  throw new Error('Manifest must expose exactly the three approved PNG launcher candidates');
+}
+for (const icon of icons) {
+  if (icon.type !== 'image/png' || icon.sizes === 'any' || /\.svg(?:\?|$)/i.test(icon.src ?? '')) {
+    throw new Error('Manifest must not advertise SVG or sizes=any launcher candidates');
+  }
+}
 const png192 = icons.find(icon => icon.src === installIcons.png192);
 const png512 = icons.find(icon => icon.src === installIcons.png512);
 const pngMaskable = icons.find(icon => icon.src === installIcons.maskable512);
-const svgIcon = icons.find(icon => icon.src === `icons/icon.svg?v=${shellRevision}`);
-const svgMaskable = icons.find(icon => icon.src === `icons/icon-maskable.svg?v=${shellRevision}`);
 if (png192?.sizes !== '192x192' || png192?.type !== 'image/png' || png192?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires the fresh physical 192x192 Ranger PNG resource');
+  throw new Error('Current Chromium installability requires the approved 192x192 Ranger PNG resource');
 }
 if (png512?.sizes !== '512x512' || png512?.type !== 'image/png' || png512?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires the fresh physical 512x512 Ranger PNG resource');
+  throw new Error('Current Chromium installability requires the approved 512x512 Ranger PNG resource');
 }
 if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || pngMaskable?.purpose !== 'maskable') {
-  throw new Error('Android launcher presentation requires the fresh physical 512x512 maskable Ranger PNG resource');
-}
-if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.purpose !== 'any') {
-  throw new Error('Villager standard SVG fallback changed');
-}
-if (svgMaskable?.sizes !== 'any' || svgMaskable?.type !== 'image/svg+xml' || svgMaskable?.purpose !== 'maskable') {
-  throw new Error('Villager maskable SVG fallback changed');
+  throw new Error('Android launcher presentation requires the approved 512x512 maskable Ranger PNG resource');
 }
 await verifyPng('icons/icon-192.png', 192, expectedPixelHashes['icons/icon-192.png']);
 await verifyPng('icons/icon-512.png', 512, expectedPixelHashes['icons/icon-512.png']);
@@ -157,8 +146,6 @@ await requireSameFile('icons/icon-maskable-512.png', 'icons/ranger-maskable-512.
 await requireSameFile('icons/icon-192.png', installIcons.png192);
 await requireSameFile('icons/icon-512.png', installIcons.png512);
 await requireSameFile('icons/icon-maskable-512.png', installIcons.maskable512);
-await verifySvg('icons/icon.svg', 'data-icon-art="ranger-v1"');
-await verifySvg('icons/icon-maskable.svg', 'data-icon-art="ranger-v1-maskable"');
 await requireFile('.nojekyll', true);
 
 const serviceWorkerPath = await requireFile('sw.js');
@@ -186,10 +173,10 @@ for (const forbidden of ['caches.open(', 'caches.match(', 'cache.addAll(', 'LEGA
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
-  throw new Error('Built index must link the approved Ranger icon manifest revision');
+  throw new Error('Built index must link the approved Ranger-only manifest revision');
 }
 if (!index.includes(`./${installIcons.png192}`)) {
-  throw new Error('Built index must expose the fresh physical Ranger PNG favicon/touch icon');
+  throw new Error('Built index must expose the approved Ranger PNG favicon/touch icon');
 }
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
   throw new Error('Built index must use the simple versioned service-worker registration pattern');
@@ -217,4 +204,4 @@ if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDAT
 await requireMissing('pwa-install.js');
 await requireMissing('pwa-install.css');
 
-console.log(`Villager approved in-game Ranger icon PWA contract verified in ${root}`);
+console.log(`Villager approved Ranger-only PNG PWA contract verified in ${root}`);
