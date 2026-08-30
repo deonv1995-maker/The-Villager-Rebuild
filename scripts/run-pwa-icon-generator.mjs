@@ -14,14 +14,14 @@ if (compressed.length < 6) {
   throw new Error('Approved Ranger icon source payload is too short');
 }
 
-// Recover the raw DEFLATE stream so CI can distinguish transport-checksum
-// damage from source-geometry damage without weakening the final pixel locks.
 const packed = inflateRawSync(compressed.subarray(2, -4));
-const expectedPackedLength = (128 * 3) + (160 * 160);
+const paletteBytes = 128 * 3;
+const expectedPackedLength = paletteBytes + (160 * 160);
 if (packed.length !== expectedPackedLength) {
+  const sourceTail = [...packed.subarray(Math.max(paletteBytes, packed.length - 32))].join(',');
   throw new Error(
-    `Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength} ` +
-    `(compressed payload: ${compressed.length} bytes)`
+    `Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength}; ` +
+    `source tail indices: [${sourceTail}]`
   );
 }
 
