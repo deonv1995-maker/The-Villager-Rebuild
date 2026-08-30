@@ -35,7 +35,7 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — Foundation 0.3.1 world-density/escarpment/animal/desktop pass is in verification on 2026-08-29.**
+Status: **in progress — Foundation 0.3.2 landscape-enclosure/island-scale pass is under visual acceptance on 2026-08-30.**
 
 Current playable milestone:
 
@@ -55,28 +55,36 @@ Current playable milestone:
 - the defeated carcass exposes the normal contextual hand interaction when the player moves close enough;
 - harvesting is one-time and data-driven from the animal definition, adding two Raw Meat to inventory without duplicating loot;
 - Day 1 spawn, resource and hunt coordinates come from one shared world-layout definition;
-- the island terrain is wider/longer and divided into recognizable regional forms including western highlands, northern ridge, eastern shelf, southern woodland, ravine and valley areas;
-- Foundation 0.3.1 adds authored multi-metre mesas/shelves and a ravine cut to the continuous height field so large drops and rock faces are genuine terrain rather than repeated platform props;
+- the Foundation 0.3.1 main-island height field remains authoritative, including the traversable central lowland, distributed highlands, cliffs, shelves, ravines and deliberate drops;
+- Foundation 0.3.2 adds five irregular satellite islands around the main island without rescaling or reorganizing the accepted main-island terrain;
+- satellite islands and their sandbar/shallow-water connectors are terrain-owned and use the same height, sand, playability and collision path as the main island;
 - steep terrain is rock-colored while Kenney cliff meshes are used selectively as embedded face dressing;
 - environment placement remains footprint-aware, preventing accepted cliffs/rocks/trees from being scattered through one another and preserving the tutorial route/clearings;
-- forest generation targets roughly 440 collision-aware trees with much broader scale variation and larger hero trees to close distant sightlines;
+- forest generation targets roughly 540 collision-aware trees with broad scale variation and larger hero trees to close sightlines;
 - repeated KayKit tree meshes and understory render as instanced batches while individual trunk collision remains world data;
-- standalone rocks use a much wider size/aspect range instead of reading as one repeated platform family;
-- interactive fine grass targets roughly 10,800 segmented blade tufts with spatially bounded Ranger bending/compression/recovery inspired by the archived-game behavior;
+- standalone rocks use a wider size/aspect range instead of reading as one repeated platform family;
+- interactive fine grass targets roughly 13,800 segmented blade tufts with spatially bounded Ranger bending/compression/recovery inspired by the archived-game behavior;
+- procedural fern understory targets roughly 2,200 instanced plants and shares the same localized reaction engine as grass rather than duplicating movement logic;
+- forest-cover data now drives both tree density and subtle terrain darkening so dense groves read as more cohesive enclosed spaces without enabling full dynamic shadow maps;
+- two deterministic instanced rings of off-limits mountain silhouettes close distant ocean sightlines and increase perceived scale without entering terrain or collision logic;
 - rocks and broad cliff props still expose smaller standable support zones while their sides remain blocking;
-- coastline, steep terrain, tree trunks and solid prop sides remain shared collision rules while deliberate interior drops remain fallable/jumpable;
-- the GitHub Pages production build is also installable as a desktop Progressive Web App, avoiding a separate desktop gameplay fork.
+- coastline, satellite bounds, sandbars, steep terrain, tree trunks and solid prop sides remain shared collision rules while deliberate interior drops remain fallable/jumpable;
+- the GitHub Pages production build is also installable as a desktop Progressive Web App, avoiding a separate desktop gameplay fork;
+- gameplay and landscape regression contracts run before the production build, runtime-asset checks and PWA verification.
 
-Foundation 0.3.1 acceptance gate before adding tree chopping:
+Foundation 0.3.2 acceptance gate before adding tree chopping:
 
-- ordinary exploration views are sufficiently enclosed by tree/vegetation density that the island does not read as one open field;
+- ordinary exploration views are sufficiently enclosed by tree/grass/fern density and forest-cover shading that the island does not read as one open field;
 - large terrain drops/rock faces create recognizably different vertical spaces without becoming invisible traversal walls;
 - cliff/rock dressing no longer reads as many copies of one similarly sized platform;
 - no obvious generated tree/rock/cliff intersections in the Day 1 route and surrounding forest;
-- grass visibly parts/rebounds around the Ranger and remains acceptable on target mobile hardware;
-- the Qiwii Wild Pig is correctly grounded/scaled/oriented and judged visually against the KayKit Ranger;
+- grass and fern vegetation visibly part/rebound around the Ranger and remain acceptable on target mobile hardware;
+- satellite islands read as irregular natural extensions of the landscape rather than repeated circular props;
+- sandbar/shallow-water connectors are visibly understandable and traversable without creating a second collision system;
+- distant mountain silhouettes increase world scale while remaining clearly atmospheric/off-limits rather than suggesting reachable collision terrain;
+- the Qiwii Wild Pig remains correctly grounded/scaled/oriented against the KayKit Ranger;
 - the desktop build can be installed/launched from the desktop or Start menu;
-- gameplay contracts, runtime-asset verification, production build, selected-asset integrity and Pages deployment are green.
+- gameplay contracts, landscape contracts, runtime-asset verification, production build, selected-asset integrity and Pages deployment are green.
 
 Next playable milestone after this gate: **chop the first tree and gather logs.**
 

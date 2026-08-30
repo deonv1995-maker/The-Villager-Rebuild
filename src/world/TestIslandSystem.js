@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
+import { FernFieldSystem } from './FernFieldSystem.js';
+import { DistantMountainSystem } from './DistantMountainSystem.js';
 import { WorldCollisionSystem } from './WorldCollisionSystem.js';
 
 export class TestIslandSystem {
@@ -28,6 +30,15 @@ export class TestIslandSystem {
       group: this.group,
       terrain: this.terrain,
       scatter: this.scatter
+    });
+    this.ferns = new FernFieldSystem({
+      group: this.group,
+      terrain: this.terrain,
+      scatter: this.scatter
+    });
+    this.mountains = new DistantMountainSystem({
+      group: this.group,
+      centerZ: this.terrain.centerZ
     });
     this.assetMode = 'terrain-only';
   }
@@ -60,6 +71,7 @@ export class TestIslandSystem {
   async load() {
     this.collision.clear();
     this.terrain.create();
+    const mountainCount = this.mountains.create();
 
     let environmentLoaded = false;
     try {
@@ -69,11 +81,13 @@ export class TestIslandSystem {
     }
 
     const grassCount = this.grass.populate();
+    const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
-    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts`);
+    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon mountains`);
   }
 
   update(dt, playerPosition) {
     this.grass.update(dt, playerPosition);
+    this.ferns.update(dt, playerPosition);
   }
 }

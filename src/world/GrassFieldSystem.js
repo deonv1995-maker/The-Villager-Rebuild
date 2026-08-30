@@ -1,24 +1,54 @@
 import * as THREE from 'three';
 
-export class GrassFieldSystem {
-  constructor({ group, terrain, scatter, maxInstances = 12800 }) {
+export class ReactiveVegetationFieldSystem {
+  constructor({
+    group,
+    terrain,
+    scatter,
+    geometry,
+    material,
+    densityAt,
+    scaleAt,
+    maxInstances,
+    seed,
+    meshName,
+    clearancePadding = 0.05,
+    cellSize = 3.6,
+    interactionRadius = 2.75,
+    innerRadius = 0.5,
+    maxBend = 0.6,
+    maxCompression = 0.15,
+    followSpeed = 16,
+    recoverySpeed = 8,
+    minimumMoveSpeed = 0.16,
+    baseLean = 0.1,
+    heightOffset = 0.01
+  }) {
     this.group = group;
     this.terrain = terrain;
     this.scatter = scatter;
+    this.geometry = geometry;
+    this.material = material;
+    this.densityAt = densityAt;
+    this.scaleAt = scaleAt;
     this.maxInstances = maxInstances;
-    this.state = 0x19a72;
+    this.state = seed >>> 0;
+    this.meshName = meshName;
+    this.clearancePadding = clearancePadding;
+    this.cellSize = cellSize;
+    this.interactionRadius = interactionRadius;
+    this.innerRadius = innerRadius;
+    this.maxBend = maxBend;
+    this.maxCompression = maxCompression;
+    this.followSpeed = followSpeed;
+    this.recoverySpeed = recoverySpeed;
+    this.minimumMoveSpeed = minimumMoveSpeed;
+    this.baseLean = baseLean;
+    this.heightOffset = heightOffset;
     this.mesh = null;
     this.entries = [];
     this.grid = new Map();
     this.active = new Set();
-    this.cellSize = 3.6;
-    this.interactionRadius = 2.75;
-    this.innerRadius = 0.5;
-    this.maxBend = 0.6;
-    this.maxCompression = 0.15;
-    this.followSpeed = 16;
-    this.recoverySpeed = 8;
-    this.minimumMoveSpeed = 0.16;
     this.lastPlayerX = null;
     this.lastPlayerZ = null;
     this.velocityX = 0;
@@ -32,15 +62,12 @@ export class GrassFieldSystem {
   }
 
   populate() {
-    const geometry = this.#buildTuftGeometry();
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x6fa957,
-      roughness: 0.96,
-      metalness: 0,
-      side: THREE.DoubleSide
-    });
-    this.mesh = new THREE.InstancedMesh(geometry, material, this.maxInstances);
-    this.mesh.name = 'interactive-fine-grass';
+    this.entries.length = 0;
+    this.grid.clear();
+    this.active.clear();
+
+    this.mesh = new THREE.InstancedMesh(this.geometry, this.material, this.maxInstances);
+    this.mesh.name = this.meshName;
     this.mesh.castShadow = false;
     this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = true;
@@ -53,26 +80,26 @@ export class GrassFieldSystem {
 
     let placed = 0;
     let attempts = 0;
-    while (placed < this.maxInstances && attempts < this.maxInstances * 8) {
+    while (placed < this.maxInstances && attempts < this.maxInstances * 10) {
       attempts += 1;
       const x = (this.random() * 2 - 1) * bounds.halfX;
       const z = (this.random() * 2 - 1) * bounds.halfZ + bounds.centerZ;
-      const density = this.terrain.grassDensityAt(x, z);
+      const density = this.densityAt(x, z);
       if (density <= 0 || this.random() > density) continue;
-      if (!this.scatter.isGrassClear(x, z, 0.05)) continue;
+      if (!this.scatter.isGrassClear(x, z, this.clearancePadding)) continue;
 
-      const scaleY = 0.54 + this.random() * 0.8;
+      const scale = this.scaleAt(this.random.bind(this));
       const entry = {
         index: placed,
         x,
-        y: this.terrain.heightAt(x, z) + 0.01,
+        y: this.terrain.heightAt(x, z) + this.heightOffset,
         z,
         baseYaw: this.random() * Math.PI * 2,
-        baseLeanX: (this.random() - 0.5) * 0.1,
-        baseLeanZ: (this.random() - 0.5) * 0.1,
-        scaleX: 0.68 + this.random() * 0.68,
-        scaleY,
-        scaleZ: 0.68 + this.random() * 0.68,
+        baseLeanX: (this.random() - 0.5) * this.baseLean,
+        baseLeanZ: (this.random() - 0.5) * this.baseLean,
+        scaleX: scale.x,
+        scaleY: scale.y,
+        scaleZ: scale.z,
         bendX: 0,
         bendZ: 0,
         compression: 0
@@ -85,6 +112,7 @@ export class GrassFieldSystem {
 
     this.mesh.count = placed;
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.computeBoundingSphere();
     this.group.add(this.mesh);
     return placed;
   }
@@ -160,55 +188,6 @@ export class GrassFieldSystem {
     if (changed) this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  #buildTuftGeometry() {
-    const positions = [];
-    const indices = [];
-    const bladeCount = 6;
-    const segments = 3;
-    const baseHeight = 0.84;
-    const baseWidth = 0.088;
-
-    for (let blade = 0; blade < bladeCount; blade += 1) {
-      const angle = blade * (Math.PI * 2 / bladeCount) + (blade % 2 ? -0.12 : 0.08);
-      const dirX = Math.cos(angle);
-      const dirZ = Math.sin(angle);
-      const acrossX = -dirZ;
-      const acrossZ = dirX;
-      const height = baseHeight * (0.76 + (blade % 4) * 0.08);
-      const bend = 0.11 + (blade % 3) * 0.045;
-      const sideBend = (blade % 2 ? 1 : -1) * (0.018 + (blade % 3) * 0.01);
-      const base = positions.length / 3;
-
-      for (let level = 0; level <= segments; level += 1) {
-        const t = level / segments;
-        const eased = t * t;
-        const centerX = dirX * bend * eased + acrossX * sideBend * Math.sin(Math.PI * t);
-        const centerZ = dirZ * bend * eased + acrossZ * sideBend * Math.sin(Math.PI * t);
-        const taper = Math.max(0.06, 1 - t * 0.92);
-        const half = baseWidth * taper * 0.5;
-        positions.push(
-          centerX - acrossX * half, height * t, centerZ - acrossZ * half,
-          centerX + acrossX * half, height * t, centerZ + acrossZ * half
-        );
-      }
-
-      for (let segment = 0; segment < segments; segment += 1) {
-        const a = base + segment * 2;
-        const b = a + 1;
-        const c = a + 3;
-        const d = a + 2;
-        indices.push(a, b, c, a, c, d);
-      }
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices);
-    geometry.computeVertexNormals();
-    geometry.computeBoundingSphere();
-    return geometry;
-  }
-
   #key(ix, iz) {
     return `${ix}:${iz}`;
   }
@@ -267,4 +246,79 @@ export class GrassFieldSystem {
     this.lastPlayerZ = position.z;
     return Math.hypot(this.velocityX, this.velocityZ);
   }
+}
+
+export class GrassFieldSystem extends ReactiveVegetationFieldSystem {
+  constructor({ group, terrain, scatter, maxInstances = 13800 }) {
+    super({
+      group,
+      terrain,
+      scatter,
+      geometry: buildGrassTuftGeometry(),
+      material: new THREE.MeshStandardMaterial({
+        color: 0x6fa957,
+        roughness: 0.96,
+        metalness: 0,
+        side: THREE.DoubleSide
+      }),
+      densityAt: (x, z) => terrain.grassDensityAt(x, z),
+      scaleAt: random => ({
+        x: 0.68 + random() * 0.68,
+        y: 0.54 + random() * 0.8,
+        z: 0.68 + random() * 0.68
+      }),
+      maxInstances,
+      seed: 0x19a72,
+      meshName: 'interactive-fine-grass'
+    });
+  }
+}
+
+function buildGrassTuftGeometry() {
+  const positions = [];
+  const indices = [];
+  const bladeCount = 6;
+  const segments = 3;
+  const baseHeight = 0.84;
+  const baseWidth = 0.088;
+
+  for (let blade = 0; blade < bladeCount; blade += 1) {
+    const angle = blade * (Math.PI * 2 / bladeCount) + (blade % 2 ? -0.12 : 0.08);
+    const dirX = Math.cos(angle);
+    const dirZ = Math.sin(angle);
+    const acrossX = -dirZ;
+    const acrossZ = dirX;
+    const height = baseHeight * (0.76 + (blade % 4) * 0.08);
+    const bend = 0.11 + (blade % 3) * 0.045;
+    const sideBend = (blade % 2 ? 1 : -1) * (0.018 + (blade % 3) * 0.01);
+    const base = positions.length / 3;
+
+    for (let level = 0; level <= segments; level += 1) {
+      const t = level / segments;
+      const eased = t * t;
+      const centerX = dirX * bend * eased + acrossX * sideBend * Math.sin(Math.PI * t);
+      const centerZ = dirZ * bend * eased + acrossZ * sideBend * Math.sin(Math.PI * t);
+      const taper = Math.max(0.06, 1 - t * 0.92);
+      const half = baseWidth * taper * 0.5;
+      positions.push(
+        centerX - acrossX * half, height * t, centerZ - acrossZ * half,
+        centerX + acrossX * half, height * t, centerZ + acrossZ * half
+      );
+    }
+
+    for (let segment = 0; segment < segments; segment += 1) {
+      const a = base + segment * 2;
+      const b = a + 1;
+      const c = a + 3;
+      const d = a + 2;
+      indices.push(a, b, c, a, c, d);
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  return geometry;
 }
