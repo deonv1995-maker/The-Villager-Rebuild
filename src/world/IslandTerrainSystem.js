@@ -31,17 +31,25 @@ export class IslandTerrainSystem {
     this.seabedLevel = -1.65;
     this.waterLevel = -0.92;
     this.centerZ = -4;
-    this.extentX = 160;
-    this.extentZ = 140;
+    this.extentX = 195;
+    this.extentZ = 152;
   }
 
   getSpawnPoint() { return { ...WORLD_LAYOUT.spawn }; }
   pathCenterX(z) { return dayOnePathCenterX(z); }
 
+  getScatterBounds(margin = 18) {
+    return {
+      halfX: Math.max(1, this.extentX - margin),
+      halfZ: Math.max(1, this.extentZ - margin),
+      centerZ: this.centerZ
+    };
+  }
+
   coastRadiusAt(angle) {
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
-    const ellipse = 1 / Math.sqrt((cos * cos) / (142 * 142) + (sin * sin) / (118 * 118));
+    const ellipse = 1 / Math.sqrt((cos * cos) / (172 * 172) + (sin * sin) / (132 * 132));
     const irregularity = 1 + Math.sin(angle * 3 + 0.42) * 0.095 + Math.cos(angle * 5 - 0.78) * 0.068 + Math.sin(angle * 8 + 1.35) * 0.038 + Math.cos(angle * 13 + 0.2) * 0.018;
     return ellipse * irregularity;
   }
@@ -56,6 +64,19 @@ export class IslandTerrainSystem {
     const shiftedZ = z - this.centerZ;
     const angle = Math.atan2(shiftedZ, x);
     return Math.hypot(x, shiftedZ) <= this.coastRadiusAt(angle) - 2.7 - margin;
+  }
+
+  routeCorridorStrengthAt(z) {
+    const enter = THREE.MathUtils.smoothstep(z, -34, -20);
+    const leave = 1 - THREE.MathUtils.smoothstep(z, 90, 99);
+    return THREE.MathUtils.clamp(enter * leave, 0, 1);
+  }
+
+  trailWearAt(z) {
+    if (z < 47 || z > 91) return 0;
+    const envelope = THREE.MathUtils.smoothstep(z, 47, 54) * (1 - THREE.MathUtils.smoothstep(z, 86, 92));
+    const broken = 0.5 + Math.sin(z * 0.31 + 0.8) * 0.28 + Math.cos(z * 0.17 - 1.2) * 0.22;
+    return envelope * THREE.MathUtils.smoothstep(broken, 0.43, 0.69);
   }
 
   regionAt(x, z) {
@@ -94,11 +115,15 @@ export class IslandTerrainSystem {
     const easternShoulder = gaussian(x, z, 78, 43, 20, 18) * 1.15;
     const southernWood = gaussian(x, z, -57, 61, 25, 21) * 1.35;
     const southernKnoll = gaussian(x, z, 18, 72, 17, 14) * 0.95;
+    const northwestRise = rotatedGaussian(x, z, -132, -59, 0.3, 27, 17) * 1.15;
+    const farEastRise = gaussian(x, z, 132, 50, 23, 20) * 0.95;
+    const southwestRise = rotatedGaussian(x, z, -119, 83, -0.34, 25, 14) * 0.9;
 
     const westernValley = rotatedGaussian(x, z, -43, -43, -0.27, 27, 14) * 1.25;
     const centralLowland = rotatedGaussian(x, z, 6, -5, 0.43, 37, 19) * 1.25;
     const easternCut = rotatedGaussian(x, z, 48, 20, -0.18, 17, 28) * 1.05;
     const southwestCut = gaussian(x, z, -79, 43, 16, 19) * 0.7;
+    const northeastBasin = rotatedGaussian(x, z, 124, -68, -0.25, 22, 16) * 0.55;
 
     const westernMesa = irregularPlateau(x, z, -103, 11, 0.16, 20, 27, { edge: 0.12, warp: 3.2, phase: 4.1 }) * 2.8;
     const northernMesa = irregularPlateau(x, z, 44, -81, -0.18, 23, 13, { edge: 0.14, warp: 2.5, phase: -2.8 }) * 2.15;
@@ -106,17 +131,20 @@ export class IslandTerrainSystem {
     const southwestShelf = irregularPlateau(x, z, -72, 66, 0.36, 17, 11, { edge: 0.16, warp: 2.2, phase: 5.2 }) * 1.35;
     const ravineCut = irregularPlateau(x, z, 38, -20, 0.45, 6.5, 21, { edge: 0.17, warp: 1.9, phase: -4.4 }) * 1.4;
 
-    const terrainShape = broad + westernHighland + westernSpur + northernRidgeWest + northernRidgeEast + northernKnoll + easternShelf + easternShoulder + southernWood + southernKnoll - westernValley - centralLowland - easternCut - southwestCut + westernMesa + northernMesa + easternMesa + southwestShelf - ravineCut;
+    const terrainShape = broad + westernHighland + westernSpur + northernRidgeWest + northernRidgeEast + northernKnoll + easternShelf + easternShoulder + southernWood + southernKnoll + northwestRise + farEastRise + southwestRise - westernValley - centralLowland - easternCut - southwestCut - northeastBasin + westernMesa + northernMesa + easternMesa + southwestShelf - ravineCut;
 
     let height = this.seabedLevel + landBlend * 2.58 + landBlend * terrainShape;
 
-    // Preserve a narrow Day 1 route into the middle without making it the
-    // generator's organizing axis. The rest of the island remains irregular.
-    const pathX = this.pathCenterX(z);
-    const pathBlend = Math.exp(-((x - pathX) ** 2) / 30) * gaussian(x, z, 0, 18, 125, 88);
-    const pathFloor = 0.7 + Math.sin(z * 0.028) * 0.14;
-    const pathTarget = Math.max(pathFloor, Math.min(1.5, height));
-    height = THREE.MathUtils.lerp(height, pathTarget, pathBlend * 0.48);
+    // Keep a narrow, mostly invisible Day 1 traversal corridor without turning
+    // it into the island's visual or geometric organizing axis.
+    const routeStrength = this.routeCorridorStrengthAt(z);
+    if (routeStrength > 0) {
+      const pathX = this.pathCenterX(z);
+      const pathBlend = Math.exp(-((x - pathX) ** 2) / 18) * routeStrength;
+      const pathFloor = 0.7 + Math.sin(z * 0.028) * 0.14;
+      const pathTarget = Math.max(pathFloor, Math.min(1.5, height));
+      height = THREE.MathUtils.lerp(height, pathTarget, pathBlend * 0.26);
+    }
 
     const spawn = WORLD_LAYOUT.spawn;
     const spawnBlend = gaussian(x, z, spawn.x, spawn.z, 12, 10) * 0.9;
@@ -184,10 +212,12 @@ export class IslandTerrainSystem {
     const patchStrength = this.grassPatchStrengthAt(x, z);
     if (patchStrength <= 0.025) return 0;
 
+    const trailWear = this.trailWearAt(z);
     let pathFade = 1;
-    if (z < 88 && z > -90) {
+    if (trailWear > 0) {
       const pathDistance = Math.abs(x - this.pathCenterX(z));
-      pathFade = THREE.MathUtils.smoothstep(pathDistance, 1.1, 3.2);
+      const wornCenter = THREE.MathUtils.smoothstep(pathDistance, 0.55, 1.9);
+      pathFade = THREE.MathUtils.lerp(1, wornCenter, trailWear * 0.58);
     }
 
     return THREE.MathUtils.clamp(suitability * patchStrength * pathFade, 0, 1);
@@ -231,7 +261,7 @@ export class IslandTerrainSystem {
   }
 
   #createTerrainMesh() {
-    const geometry = new THREE.PlaneGeometry(320, 280, 204, 178);
+    const geometry = new THREE.PlaneGeometry(this.extentX * 2, this.extentZ * 2, 228, 190);
     geometry.rotateX(-Math.PI / 2);
     const position = geometry.attributes.position;
     const colors = [];
@@ -265,7 +295,7 @@ export class IslandTerrainSystem {
 
   #createWater() {
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(390, 350),
+      new THREE.PlaneGeometry(this.extentX * 2 + 80, this.extentZ * 2 + 90),
       new THREE.MeshStandardMaterial({ color: 0x59bccc, transparent: true, opacity: 0.82, roughness: 0.2, metalness: 0.02 })
     );
     water.geometry.rotateX(-Math.PI / 2);
@@ -275,15 +305,32 @@ export class IslandTerrainSystem {
   }
 
   #createPath() {
-    const material = new THREE.MeshStandardMaterial({ color: 0xb09a70, roughness: 1 });
-    for (let z = 84; z > -88; z -= 3.2) {
-      const x = this.pathCenterX(z);
-      const stone = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.24, 0.07, 8), material);
-      stone.position.set(x, this.heightAt(x, z) + 0.035, z);
-      stone.scale.z = 1.85;
-      stone.rotation.y = Math.sin(z * 0.63) * 0.24;
-      stone.receiveShadow = true;
-      this.group.add(stone);
+    const geometry = new THREE.CircleGeometry(1, 9);
+    geometry.rotateX(-Math.PI / 2);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x81825f,
+      roughness: 1,
+      transparent: true,
+      opacity: 0.3,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1
+    });
+
+    let index = 0;
+    for (let z = 87; z > 48; z -= 3.8) {
+      const wear = this.trailWearAt(z);
+      if (wear < 0.28) continue;
+      const x = this.pathCenterX(z) + Math.sin(z * 1.73 + 0.4) * 0.65;
+      const patch = new THREE.Mesh(geometry, material);
+      patch.name = `worn-trail-patch-${index}`;
+      patch.position.set(x, this.heightAt(x, z) + 0.028, z);
+      patch.scale.set(0.85 + wear * 0.7, 1, 1.15 + wear * 1.05);
+      patch.rotation.y = Math.sin(z * 0.41) * 0.42;
+      patch.receiveShadow = true;
+      this.group.add(patch);
+      index += 1;
     }
   }
 }
