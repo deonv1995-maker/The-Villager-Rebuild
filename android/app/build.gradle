@@ -1,0 +1,70 @@
+import groovy.json.JsonSlurper
+
+plugins {
+    id 'com.android.application'
+}
+
+def rootPackage = new JsonSlurper().parse(file('../../package.json'))
+def semverParts = rootPackage.version.tokenize('.').collect { Integer.parseInt(it) }
+if (semverParts.size() != 3) {
+    throw new GradleException("Expected package.json version to be major.minor.patch, got ${rootPackage.version}")
+}
+
+def testVersionCode = semverParts[0] * 10000 + semverParts[1] * 100 + semverParts[2]
+def liveGameUrl = 'https://deonv1995-maker.github.io/The-Villager-Rebuild/?shell=android'
+def launcherSource = file('../../public/icons/ranger-maskable-512.png')
+def generatedLauncherRes = file("$buildDir/generated/res/launcher")
+
+android {
+    namespace 'io.github.deonv1995maker.thevillager.test'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'io.github.deonv1995maker.thevillager.test'
+        minSdk 26
+        targetSdk 35
+        versionCode testVersionCode
+        versionName rootPackage.version
+        buildConfigField 'String', 'GAME_URL', "\"${liveGameUrl}\""
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    sourceSets {
+        main {
+            res.srcDir generatedLauncherRes
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError true
+    }
+}
+
+tasks.register('prepareLauncherIcon', Copy) {
+    doFirst {
+        if (!launcherSource.exists()) {
+            throw new GradleException("Missing Ranger launcher artwork: ${launcherSource}")
+        }
+    }
+    from launcherSource
+    into new File(generatedLauncherRes, 'mipmap-xxxhdpi')
+    rename { 'ic_launcher.png' }
+}
+
+tasks.named('preBuild').configure {
+    dependsOn tasks.named('prepareLauncherIcon')
+}

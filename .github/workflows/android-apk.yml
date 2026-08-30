@@ -1,0 +1,62 @@
+name: Build Android test APK
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'package.json'
+      - 'scripts/verify-android-wrapper.mjs'
+      - 'public/pwa-install.js'
+      - 'public/icons/ranger-maskable-512.png'
+      - '.github/workflows/android-apk.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'package.json'
+      - 'scripts/verify-android-wrapper.mjs'
+      - 'public/pwa-install.js'
+      - 'public/icons/ranger-maskable-512.png'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Ensure Android SDK 35 is available
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build debug APK
+        run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK identity
+        run: |
+          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | grep "package: name='io.github.deonv1995maker.thevillager.test'"
+          mkdir -p artifacts
+          cp "$APK" 'artifacts/The-Villager-Test.apk'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: the-villager-test-apk
+          path: artifacts/The-Villager-Test.apk
+          if-no-files-found: error
+          retention-days: 14
