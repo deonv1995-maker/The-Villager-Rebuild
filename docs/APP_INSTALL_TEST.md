@@ -1,1 +1,13 @@
-Android acceptance for the in-game install affordance: open the deployed Pages build in full Chrome. While running in a normal browser tab, an **Install App** button must appear at the bottom center without blocking movement or action controls. If Chrome emits `beforeinstallprompt`, tapping Install App must open Chrome's native installation prompt; cancelling may leave the button available for a later retry. If Chrome does not emit the event, tapping the button must clearly report that Chrome has not made app installation available rather than claiming installation succeeded. After a successful install, the button must disappear in the installed standalone/fullscreen app. The canonical PR #16 Villager icon remains expected for this test; do not evaluate the Ranger replacement icon until installation itself is proven again. Do not resume water work until the install layer is accepted on-device.
+# Android Chrome install acceptance
+
+Test only the deployed GitHub Pages build in full Google Chrome on Android.
+
+1. Remove any previous Villager shortcut/WebAPK from the phone before the clean test. If Chrome still remembers the old site state, clear site data for the Villager Pages origin and reopen the deployed game.
+2. Open the game normally in Chrome and allow the page/service worker to finish loading.
+3. The game itself must not show a custom Install App button. Chrome owns installation.
+4. Chrome must recognize the site as an installable PWA. The browser menu should expose **Install app** rather than only **Create shortcut**. Chrome may also surface its own install promotion automatically; timing is browser-controlled.
+5. Starting installation must open Google's native install UI/WebAPK flow.
+6. After installation, launch The Villager from the Android launcher. It must open the same deployed game in fullscreen/landscape presentation and use the Ranger launcher artwork.
+7. Reopening the installed app after a normal Pages deployment must load the current game build without requiring an APK reinstall.
+
+Do not resume unrelated gameplay work until this native install path is accepted on-device.

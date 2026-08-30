@@ -4,7 +4,6 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install8`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -13,11 +12,13 @@ async function requireFile(relativePath, allowEmpty = false) {
   return filePath;
 }
 
-async function verifySvg(relativePath) {
-  const filePath = await requireFile(relativePath);
-  const source = await readFile(filePath, 'utf8');
-  if (!source.includes('<svg') || !source.includes('viewBox="0 0 512 512"')) {
-    throw new Error(`${filePath}: invalid Villager SVG icon`);
+async function requireMissing(relativePath) {
+  const filePath = path.join(root, relativePath);
+  try {
+    await stat(filePath);
+    throw new Error(`Legacy install file must not be emitted: ${filePath}`);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
   }
 }
 
@@ -38,94 +39,66 @@ async function verifyPng(relativePath, expectedSize) {
 const manifestPath = await requireFile('manifest.webmanifest');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 if (manifest.name !== 'The Villager' || manifest.short_name !== 'Villager') {
-  throw new Error('PWA identity must match the proven PR #16 Villager manifest');
+  throw new Error('PWA identity must remain The Villager / Villager');
+}
+if (manifest.id !== './' || manifest.start_url !== './' || manifest.scope !== './') {
+  throw new Error('PWA id, start_url and scope must resolve from the GitHub Pages project root');
 }
 if (manifest.display !== 'fullscreen') throw new Error('PWA manifest must use fullscreen display mode');
-if (!Array.isArray(manifest.display_override) || !manifest.display_override.includes('standalone')) {
-  throw new Error('PWA manifest must keep standalone fallback');
-}
 if (manifest.orientation !== 'landscape') throw new Error('PWA manifest must prefer landscape orientation');
-if (manifest.start_url !== './' || manifest.scope !== './') {
-  throw new Error('PWA start_url and scope must remain relative for GitHub Pages hosting');
-}
-if (manifest.prefer_related_applications !== false) {
-  throw new Error('PWA manifest must not prefer a native related application');
-}
 
 const icons = manifest.icons ?? [];
-const icon192 = icons.find(icon => icon.src === 'icons/icon-192.png');
-const icon512 = icons.find(icon => icon.src === 'icons/icon-512.png');
-const maskable512 = icons.find(icon => icon.src === 'icons/icon-maskable-512.png');
-const normalSvg = icons.find(icon => icon.src === 'icons/icon.svg');
-const maskableSvg = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
+if (icons.length !== 3) throw new Error('PWA manifest must expose exactly the three canonical Ranger launcher icons');
+const icon192 = icons.find(icon => icon.src === 'icons/ranger-192.png');
+const icon512 = icons.find(icon => icon.src === 'icons/ranger-512.png');
+const maskable512 = icons.find(icon => icon.src === 'icons/ranger-maskable-512.png');
 if (icon192?.sizes !== '192x192' || icon192?.type !== 'image/png' || icon192?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires an explicit 192x192 PNG app icon');
+  throw new Error('Chrome install contract requires the 192x192 Ranger PNG icon');
 }
 if (icon512?.sizes !== '512x512' || icon512?.type !== 'image/png' || icon512?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires an explicit 512x512 PNG app icon');
+  throw new Error('Chrome install contract requires the 512x512 Ranger PNG icon');
 }
 if (maskable512?.sizes !== '512x512' || maskable512?.type !== 'image/png' || maskable512?.purpose !== 'maskable') {
-  throw new Error('Android shell requires a 512x512 maskable PNG icon');
+  throw new Error('Android WebAPK install contract requires the 512x512 maskable Ranger PNG icon');
 }
-if (normalSvg?.sizes !== 'any' || normalSvg?.type !== 'image/svg+xml' || normalSvg?.purpose !== 'any') {
-  throw new Error('Archived Villager SVG app icon must remain available');
-}
-if (maskableSvg?.sizes !== 'any' || maskableSvg?.type !== 'image/svg+xml' || maskableSvg?.purpose !== 'maskable') {
-  throw new Error('Archived Villager maskable SVG icon must remain available');
-}
-await verifyPng('icons/icon-192.png', 192);
-await verifyPng('icons/icon-512.png', 512);
-await verifyPng('icons/icon-maskable-512.png', 512);
-await verifySvg('icons/icon.svg');
-await verifySvg('icons/icon-maskable.svg');
+await verifyPng('icons/ranger-192.png', 192);
+await verifyPng('icons/ranger-512.png', 512);
+await verifyPng('icons/ranger-maskable-512.png', 512);
 await requireFile('.nojekyll', true);
-
-const installScriptPath = await requireFile('pwa-install.js');
-const installScript = await readFile(installScriptPath, 'utf8');
-for (const requirement of ['beforeinstallprompt', 'event.preventDefault()', 'prompt.prompt()', 'appinstalled', 'display-mode: standalone']) {
-  if (!installScript.includes(requirement)) {
-    throw new Error(`In-game install controller is missing required behavior: ${requirement}`);
-  }
-}
-await requireFile('pwa-install.css');
 
 const serviceWorkerPath = await requireFile('sw.js');
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
-if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
-  throw new Error(`Service worker revision must match ${shellRevision}`);
-}
-for (const requirement of ['self.skipWaiting()', 'caches.keys()', 'caches.delete(', 'self.clients.claim()', "cache: 'no-store'"]) {
+for (const requirement of ["self.addEventListener('install'", "self.addEventListener('activate'", "self.addEventListener('fetch'", 'self.skipWaiting()', 'self.clients.claim()', 'fetch(request)']) {
   if (!serviceWorker.includes(requirement)) {
-    throw new Error(`Network-fresh service worker is missing required behavior: ${requirement}`);
+    throw new Error(`Native-PWA service worker is missing required behavior: ${requirement}`);
   }
 }
 for (const forbidden of ['cache.addAll(', 'caches.open(', 'caches.match(']) {
   if (serviceWorker.includes(forbidden)) {
-    throw new Error(`PWA service worker must not keep a replayable shell cache: ${forbidden}`);
+    throw new Error(`PWA service worker must not replay a cached application shell: ${forbidden}`);
   }
 }
 
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
-const manifestRef = `./manifest.webmanifest?v=${shellRevision}`;
-const workerRef = `./sw.js?v=${shellRevision}`;
-const installScriptRef = `./pwa-install.js?v=${shellRevision}`;
-const installStyleRef = `./pwa-install.css?v=${shellRevision}`;
-if (!index.includes(manifestRef)) throw new Error('Built index is not linked to the current PWA manifest revision');
-if (!index.includes(workerRef)) throw new Error('Built index is not registering the current service worker revision');
-if (!index.includes(installScriptRef)) throw new Error('Built index is missing the in-game install controller');
-if (!index.includes(installStyleRef)) throw new Error('Built index is missing the in-game install styles');
-if (!index.includes('id="install-app-button"')) throw new Error('Built index is missing the Install App button');
-if (index.includes('id="install-app-button" type="button" hidden')) {
-  throw new Error('Install App button must remain visible by default even if the controller fails to initialize');
+if (!index.includes('<link rel="manifest" href="./manifest.webmanifest"')) {
+  throw new Error('Built index must link the canonical manifest without a competing revision URL');
 }
-if (!index.includes('id="install-app-status"')) throw new Error('Built index is missing install status feedback');
-if (!index.includes("scope: './'")) throw new Error('Service worker registration must keep explicit relative scope');
-if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
+if (!index.includes('./icons/ranger-192.png')) throw new Error('Built index must expose the Ranger launcher icon');
+if (!index.includes(".register('./sw.js', { scope: './', updateViaCache: 'none' })")) {
+  throw new Error('Built index must register the canonical service worker at project-root scope');
+}
+if (!index.includes('registration.update()')) throw new Error('Built index must request the current service-worker update');
 if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is missing Android mobile-app metadata');
-if (!index.includes(`./icons/icon.svg?v=${shellRevision}`)) throw new Error('Built index must expose the canonical Villager icon to Chrome');
 if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
   throw new Error(`Built index version labels must match package version ${expectedVersion}`);
 }
+for (const forbidden of ['beforeinstallprompt', 'preventDefault()', 'install-app-button', 'install-app-status', 'pwa-install.js', 'pwa-install.css']) {
+  if (index.includes(forbidden)) {
+    throw new Error(`Chrome-native install flow must not be intercepted by legacy install UI: ${forbidden}`);
+  }
+}
+await requireMissing('pwa-install.js');
+await requireMissing('pwa-install.css');
 
-console.log(`Villager PWA install contract verified in ${root} for ${shellRevision}`);
+console.log(`Villager native Chrome PWA contract verified in ${root}`);

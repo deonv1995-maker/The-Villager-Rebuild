@@ -1,1 +1,1 @@
-PWA shell restored from archived Villager reference; gameplay remains Foundation 0.3.2.
+The Villager PWA shell is standards-first and Chrome-owned: one manifest, one service worker, Ranger launcher icons, no custom install interception, and no native APK wrapper. Gameplay remains Foundation 0.3.2.

@@ -2,9 +2,6 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#101d15" />
   <meta name="application-name" content="The Villager" />
@@ -12,12 +9,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>The Villager — Foundation 0.3.2</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=0.3.2-install8" />
-  <link rel="icon" href="./icons/icon.svg?v=0.3.2-install8" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=0.3.2-install8" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/ranger-192.png" type="image/png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="./icons/ranger-192.png" />
   <link rel="stylesheet" href="./src/styles.css" />
-  <link rel="stylesheet" href="./pwa-install.css?v=0.3.2-install8" />
-  <script src="./pwa-install.js?v=0.3.2-install8"></script>
   <script type="importmap">
     {
       "imports": {
@@ -32,13 +27,11 @@
     <canvas id="game-canvas" aria-label="The Villager test world"></canvas>
     <div id="boot-status">FOUNDATION 0.3.2 · STARTING</div>
   </div>
-  <button id="install-app-button" type="button">Install App</button>
-  <div id="install-app-status" role="status" aria-live="polite" hidden></div>
   <script>
     if ('serviceWorker' in navigator) {
-      addEventListener('load', () => {
+      window.addEventListener('load', () => {
         navigator.serviceWorker
-          .register('./sw.js?v=0.3.2-install8', { scope: './', updateViaCache: 'none' })
+          .register('./sw.js', { scope: './', updateViaCache: 'none' })
           .then(registration => registration.update())
           .catch(error => console.warn('[PWA]', error));
       }, { once: true });
