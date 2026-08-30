@@ -1,28 +1,27 @@
 {
-  "id": "/The-Villager-Rebuild/",
-  "name": "The Villager Rebuild",
+  "id": "./",
+  "name": "The Villager",
   "short_name": "The Villager",
-  "description": "The Villager Rebuild playable development build",
-  "start_url": "/The-Villager-Rebuild/",
-  "scope": "/The-Villager-Rebuild/",
-  "display": "standalone",
+  "description": "A mobile-first low-poly survival and building game.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
   "orientation": "landscape",
-  "background_color": "#10251c",
-  "theme_color": "#10251c",
-  "prefer_related_applications": false,
-  "categories": ["games"],
+  "background_color": "#101d15",
+  "theme_color": "#101d15",
   "icons": [
     {
-      "src": "./icons/villager-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "./icons/villager-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "src": "./icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

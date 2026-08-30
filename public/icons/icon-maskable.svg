@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges">
+  <rect width="512" height="512" fill="#101d15"/>
+  <rect x="96" y="96" width="320" height="320" fill="#2f5c35"/>
+  <rect x="226" y="154" width="60" height="150" fill="#6f4529"/>
+  <rect x="204" y="244" width="104" height="82" fill="#865535"/>
+  <rect x="144" y="118" width="224" height="148" fill="#214b2b"/>
+  <rect x="126" y="154" width="260" height="92" fill="#2f6c37"/>
+  <rect x="164" y="124" width="184" height="70" fill="#4b8b45"/>
+  <rect x="198" y="110" width="116" height="48" fill="#6ca454"/>
+  <rect x="216" y="304" width="80" height="72" fill="#203f2b"/>
+  <rect x="226" y="278" width="60" height="44" fill="#d49a68"/>
+  <rect x="224" y="264" width="64" height="20" fill="#5a3424"/>
+  <rect x="214" y="376" width="30" height="46" fill="#5b3b28"/>
+  <rect x="268" y="376" width="30" height="46" fill="#5b3b28"/>
+  <rect x="304" y="324" width="20" height="82" fill="#7a4b2b" transform="rotate(-35 314 365)"/>
+  <rect x="298" y="306" width="46" height="20" fill="#aeb5a8" transform="rotate(-35 321 316)"/>
+</svg>

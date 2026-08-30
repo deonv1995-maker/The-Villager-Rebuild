@@ -1,0 +1,1 @@
+Reference implementation: archived repository `deonv1995-maker/The-Villager-`, specifically `manifest.webmanifest`, `icons/icon.svg`, `icons/icon-maskable.svg`, and `sw.js`. The rebuild ports the install-shell behavior without importing old gameplay code.
