@@ -113,6 +113,17 @@ export class WorldCollisionSystem {
     return this.obstacles.length;
   }
 
+  getObstaclesByType(type) {
+    return this.obstacles.filter(obstacle => obstacle.type === type);
+  }
+
+  removeObstacle(obstacle) {
+    const index = this.obstacles.indexOf(obstacle);
+    if (index < 0) return false;
+    this.obstacles.splice(index, 1);
+    return true;
+  }
+
   supportHeightAt(x, z, baseHeight) {
     let height = baseHeight;
     for (const obstacle of this.obstacles) {
