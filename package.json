@@ -1,6 +1,6 @@
 {
   "name": "the-villager-rebuild",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,9 +9,10 @@
     "preview": "vite preview --host 0.0.0.0",
     "verify:assets": "node scripts/verify-runtime-assets.mjs public",
     "verify:gameplay": "node scripts/verify-gameplay.mjs",
+    "verify:landscape": "node scripts/verify-landscape.mjs",
     "verify:dist-assets": "node scripts/verify-runtime-assets.mjs dist",
     "verify:pwa": "node scripts/verify-pwa.mjs dist",
-    "check": "npm run verify:assets && npm run verify:gameplay && npm run build && npm run verify:dist-assets && npm run verify:pwa"
+    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:landscape && npm run build && npm run verify:dist-assets && npm run verify:pwa"
   },
   "dependencies": {
     "three": "0.180.0"
