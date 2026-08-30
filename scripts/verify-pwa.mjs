@@ -1,17 +1,24 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { inflateSync } from 'node:zlib';
 
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install6`;
+const shellRevision = `${expectedVersion}-install4`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
   const info = await stat(filePath);
   if (!info.isFile() || (!allowEmpty && info.size === 0)) throw new Error(`Missing PWA file: ${filePath}`);
   return filePath;
+}
+
+async function verifySvg(relativePath) {
+  const filePath = await requireFile(relativePath);
+  const source = await readFile(filePath, 'utf8');
+  if (!source.includes('<svg') || !source.includes('viewBox="0 0 512 512"')) {
+    throw new Error(`${filePath}: invalid Villager SVG icon`);
+  }
 }
 
 async function verifyPng(relativePath, expectedSize) {
@@ -21,43 +28,10 @@ async function verifyPng(relativePath, expectedSize) {
   if (data.length < 24 || !data.subarray(0, 8).equals(signature)) {
     throw new Error(`${filePath}: invalid PNG signature`);
   }
-
   const width = data.readUInt32BE(16);
   const height = data.readUInt32BE(20);
   if (width !== expectedSize || height !== expectedSize) {
     throw new Error(`${filePath}: expected ${expectedSize}x${expectedSize}, got ${width}x${height}`);
-  }
-
-  let offset = 8;
-  let sawIhdr = false;
-  let sawIend = false;
-  const idat = [];
-  while (offset + 12 <= data.length) {
-    const length = data.readUInt32BE(offset);
-    const typeStart = offset + 4;
-    const dataStart = typeStart + 4;
-    const dataEnd = dataStart + length;
-    const chunkEnd = dataEnd + 4;
-    if (chunkEnd > data.length) throw new Error(`${filePath}: truncated PNG chunk`);
-
-    const type = data.toString('ascii', typeStart, dataStart);
-    if (type === 'IHDR') sawIhdr = true;
-    if (type === 'IDAT') idat.push(data.subarray(dataStart, dataEnd));
-    if (type === 'IEND') {
-      sawIend = true;
-      break;
-    }
-    offset = chunkEnd;
-  }
-
-  if (!sawIhdr || !sawIend || idat.length === 0) {
-    throw new Error(`${filePath}: incomplete PNG structure`);
-  }
-
-  try {
-    inflateSync(Buffer.concat(idat));
-  } catch (error) {
-    throw new Error(`${filePath}: PNG image data cannot be decoded: ${error.message}`);
   }
 }
 
@@ -79,35 +53,37 @@ if (manifest.prefer_related_applications !== false) {
 }
 
 const icons = manifest.icons ?? [];
-const icon192 = icons.find(icon => icon.src === 'icons/ranger-192.png');
-const icon512 = icons.find(icon => icon.src === 'icons/ranger-512.png');
-const maskable512 = icons.find(icon => icon.src === 'icons/ranger-maskable-512.png');
+const icon192 = icons.find(icon => icon.src === 'icons/icon-192.png');
+const icon512 = icons.find(icon => icon.src === 'icons/icon-512.png');
+const maskable512 = icons.find(icon => icon.src === 'icons/icon-maskable-512.png');
+const normalSvg = icons.find(icon => icon.src === 'icons/icon.svg');
+const maskableSvg = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
 if (icon192?.sizes !== '192x192' || icon192?.type !== 'image/png' || icon192?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires a clean 192x192 Ranger PNG app icon');
+  throw new Error('Chrome install contract requires an explicit 192x192 PNG app icon');
 }
 if (icon512?.sizes !== '512x512' || icon512?.type !== 'image/png' || icon512?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires a clean 512x512 Ranger PNG app icon');
+  throw new Error('Chrome install contract requires an explicit 512x512 PNG app icon');
 }
 if (maskable512?.sizes !== '512x512' || maskable512?.type !== 'image/png' || maskable512?.purpose !== 'maskable') {
-  throw new Error('Android shell requires a clean 512x512 Ranger maskable PNG icon');
+  throw new Error('Android shell requires a 512x512 maskable PNG icon');
 }
-await verifyPng('icons/ranger-192.png', 192);
-await verifyPng('icons/ranger-512.png', 512);
-await verifyPng('icons/ranger-maskable-512.png', 512);
+if (normalSvg?.sizes !== 'any' || normalSvg?.type !== 'image/svg+xml' || normalSvg?.purpose !== 'any') {
+  throw new Error('Archived Villager SVG app icon must remain available');
+}
+if (maskableSvg?.sizes !== 'any' || maskableSvg?.type !== 'image/svg+xml' || maskableSvg?.purpose !== 'maskable') {
+  throw new Error('Archived Villager maskable SVG icon must remain available');
+}
+await verifyPng('icons/icon-192.png', 192);
+await verifyPng('icons/icon-512.png', 512);
+await verifyPng('icons/icon-maskable-512.png', 512);
+await verifySvg('icons/icon.svg');
+await verifySvg('icons/icon-maskable.svg');
 await requireFile('.nojekyll', true);
 
 const serviceWorkerPath = await requireFile('sw.js');
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
   throw new Error(`Service worker shell revision must match ${shellRevision}`);
-}
-for (const asset of [
-  './manifest.webmanifest',
-  './icons/ranger-192.png',
-  './icons/ranger-512.png',
-  './icons/ranger-maskable-512.png'
-]) {
-  if (!serviceWorker.includes(`'${asset}'`)) throw new Error(`Service worker must pre-cache clean shell asset ${asset}`);
 }
 if (!serviceWorker.includes('cache.addAll(SHELL_ASSETS)')) {
   throw new Error('Service worker must pre-cache the install shell like the archived Villager PWA');
@@ -123,18 +99,12 @@ const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 const manifestRef = `./manifest.webmanifest?v=${shellRevision}`;
 const workerRef = `./sw.js?v=${shellRevision}`;
-const pngIconRef = './icons/ranger-192.png';
 if (!index.includes(manifestRef)) throw new Error('Built index is not linked to the current PWA manifest revision');
 if (!index.includes(workerRef)) throw new Error('Built index is not registering the current service worker revision');
 if (!index.includes("scope: './'")) throw new Error('Service worker registration must use the archived explicit relative scope');
 if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
 if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is missing Android mobile-app metadata');
-if (!index.includes(`<link rel="icon" href="${pngIconRef}" type="image/png" sizes="192x192" />`)) {
-  throw new Error('Built index must expose the clean Ranger PNG icon to Chrome');
-}
-if (!index.includes(`<link rel="apple-touch-icon" href="${pngIconRef}" />`)) {
-  throw new Error('Built index must expose the clean Ranger touch icon');
-}
+if (!index.includes(`./icons/icon.svg?v=${shellRevision}`)) throw new Error('Built index must expose the archived Villager icon to Chrome');
 if (index.includes('pwa-shell.js') || index.includes('beforeinstallprompt') || index.includes('preventDefault()')) {
   throw new Error('Android install flow must not suppress or replace Chrome native installation UI');
 }

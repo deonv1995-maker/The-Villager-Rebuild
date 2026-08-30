@@ -3,12 +3,11 @@
 The Villager gameplay and the install/delivery shell are intentionally separate.
 
 - Gameplay/world code must not depend on PWA or Android packaging.
-- The current install shell is based on the archived `deonv1995-maker/The-Villager-` PWA structure that previously installed cleanly on Android.
-- `public/manifest.webmanifest` owns app identity, fullscreen display, landscape preference and launcher icon declarations.
-- Android/Chrome launcher selection uses the explicit Ranger PNG set: `public/icons/ranger-192.png`, `public/icons/ranger-512.png` and `public/icons/ranger-maskable-512.png`.
-- Manifest launcher-icon URLs must remain clean relative asset paths, matching the proven PR #16 pattern. Do not append cache-busting query strings to manifest icon `src` values.
-- When launcher artwork changes, use new physical icon filenames and bump only the shared install-shell revision used by `index.html`, `public/sw.js` and `scripts/verify-pwa.mjs`.
-- `public/sw.js` may cache only the small install shell. It must not cache or rewrite the rapidly changing game/module graph; other same-origin GET requests use `cache: 'no-store'`.
-- `public/.nojekyll` keeps the GitHub Pages shell unprocessed.
+- PR #16 (`64a4ee7eb85da5f912c014855b6bc39bf661375f`) is the proven Android/Chrome install baseline.
+- Until a replacement shell is independently proven on-device, `index.html`, `public/manifest.webmanifest`, `public/sw.js`, `scripts/verify-pwa.mjs`, and the five canonical launcher icon assets must remain compatible with that PR #16 contract.
+- `public/manifest.webmanifest` owns app identity, fullscreen display, landscape preference, and launcher icon declarations.
+- The canonical launcher files are `public/icons/icon-192.png`, `public/icons/icon-512.png`, `public/icons/icon-maskable-512.png`, `public/icons/icon.svg`, and `public/icons/icon-maskable.svg`.
 - Chrome's native install UI remains authoritative. Do not add custom `beforeinstallprompt` interception or replace the browser install flow.
-- Changes to installability must stay in shell/platform files and must not require gameplay, terrain, wildlife or rendering changes.
+- `public/sw.js` may cache only the small install shell. Gameplay, terrain, Ranger, water, runtime modules, and other changing assets remain network-fresh.
+- Ranger replacement artwork may remain in the repository as unused source/reference assets while installability is being isolated, but it must not replace the canonical PR #16 icon set until a dedicated icon-only change has passed on-device install verification.
+- Any launcher-art change must be isolated from gameplay and tested against the known-good install baseline before merge.
