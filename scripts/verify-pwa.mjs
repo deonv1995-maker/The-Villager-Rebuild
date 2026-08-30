@@ -1,16 +1,17 @@
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { inflateSync } from 'node:zlib';
 
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
 const shellRevision = 'scene-icon-1';
 
-const expectedIconHashes = {
-  'icons/icon-192.png': '889b5d53d4be78fcc1d1f99019f333bfa6d8e8fb2a43a5423d418e6a8bddb911',
-  'icons/icon-512.png': '6505468c076cd137ab81e4e944d5677b1ba2660875c6e2ff9d79e7331c2e5990',
-  'icons/icon-maskable-512.png': '6505468c076cd137ab81e4e944d5677b1ba2660875c6e2ff9d79e7331c2e5990'
+const expectedPixelHashes = {
+  'icons/icon-192.png': '66c292dda6bc8eb84539659f4670ba1f9c09dd628cfce5ec8a6a2f192cf55009',
+  'icons/icon-512.png': '27cae13f77d47a32a3e554d4727416b5835691990e1d7c2e095f8559c53d8ab0',
+  'icons/icon-maskable-512.png': '27cae13f77d47a32a3e554d4727416b5835691990e1d7c2e095f8559c53d8ab0'
 };
 
 async function requireFile(relativePath, allowEmpty = false) {
@@ -41,7 +42,39 @@ async function verifySvg(relativePath, marker) {
   }
 }
 
-async function verifyPng(relativePath, expectedSize, expectedSha256) {
+function decodeGeneratedRgbPng(data, expectedSize, filePath) {
+  const idatChunks = [];
+  let offset = 8;
+  while (offset + 12 <= data.length) {
+    const length = data.readUInt32BE(offset);
+    const type = data.toString('ascii', offset + 4, offset + 8);
+    const end = offset + 12 + length;
+    if (end > data.length) throw new Error(`${filePath}: truncated PNG chunk ${type}`);
+    if (type === 'IDAT') idatChunks.push(data.subarray(offset + 8, offset + 8 + length));
+    offset = end;
+    if (type === 'IEND') break;
+  }
+  if (idatChunks.length === 0) throw new Error(`${filePath}: missing PNG IDAT data`);
+
+  const raw = inflateSync(Buffer.concat(idatChunks));
+  const stride = expectedSize * 3;
+  const expectedRawLength = (stride + 1) * expectedSize;
+  if (raw.length !== expectedRawLength) {
+    throw new Error(`${filePath}: unexpected decoded PNG length ${raw.length}`);
+  }
+
+  const pixels = Buffer.alloc(stride * expectedSize);
+  for (let y = 0; y < expectedSize; y += 1) {
+    const rowOffset = y * (stride + 1);
+    if (raw[rowOffset] !== 0) {
+      throw new Error(`${filePath}: generated launcher PNG must use deterministic filter 0 rows`);
+    }
+    raw.copy(pixels, y * stride, rowOffset + 1, rowOffset + 1 + stride);
+  }
+  return pixels;
+}
+
+async function verifyPng(relativePath, expectedSize, expectedPixelHash) {
   const filePath = await requireFile(relativePath);
   const data = await readFile(filePath);
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -54,13 +87,14 @@ async function verifyPng(relativePath, expectedSize, expectedSha256) {
     throw new Error(`${filePath}: expected ${expectedSize}x${expectedSize}, got ${width}x${height}`);
   }
   const colorType = data[25];
-  if (colorType !== 2 && colorType !== 6) {
-    throw new Error(`${filePath}: launcher PNG must be truecolor RGB/RGBA, got PNG color type ${colorType}`);
+  if (colorType !== 2) {
+    throw new Error(`${filePath}: launcher PNG must be truecolor RGB, got PNG color type ${colorType}`);
   }
-  if (expectedSha256) {
-    const actualSha256 = createHash('sha256').update(data).digest('hex');
-    if (actualSha256 !== expectedSha256) {
-      throw new Error(`${filePath}: screenshot-derived launcher artwork hash changed`);
+  if (expectedPixelHash) {
+    const pixels = decodeGeneratedRgbPng(data, expectedSize, filePath);
+    const actualPixelHash = createHash('sha256').update(pixels).digest('hex');
+    if (actualPixelHash !== expectedPixelHash) {
+      throw new Error(`${filePath}: screenshot-derived launcher artwork pixels changed`);
     }
   }
 }
@@ -109,9 +143,9 @@ if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.pu
 if (svgMaskable?.sizes !== 'any' || svgMaskable?.type !== 'image/svg+xml' || svgMaskable?.purpose !== 'maskable') {
   throw new Error('Villager maskable SVG fallback changed');
 }
-await verifyPng('icons/icon-192.png', 192, expectedIconHashes['icons/icon-192.png']);
-await verifyPng('icons/icon-512.png', 512, expectedIconHashes['icons/icon-512.png']);
-await verifyPng('icons/icon-maskable-512.png', 512, expectedIconHashes['icons/icon-maskable-512.png']);
+await verifyPng('icons/icon-192.png', 192, expectedPixelHashes['icons/icon-192.png']);
+await verifyPng('icons/icon-512.png', 512, expectedPixelHashes['icons/icon-512.png']);
+await verifyPng('icons/icon-maskable-512.png', 512, expectedPixelHashes['icons/icon-maskable-512.png']);
 await requireSameFile('icons/icon-192.png', 'icons/ranger-192.png');
 await requireSameFile('icons/icon-512.png', 'icons/ranger-512.png');
 await requireSameFile('icons/icon-maskable-512.png', 'icons/ranger-maskable-512.png');
