@@ -82,6 +82,7 @@ export class WaterSurfaceSystem {
 
     this.material = new THREE.ShaderMaterial({
       uniforms: {
+        ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
         uTime: { value: 0 },
         uWaterColor: { value: new THREE.Color(0x4faebb) },
         uHighlightColor: { value: new THREE.Color(0x9ddbd3) },
@@ -158,7 +159,7 @@ export class WaterSurfaceSystem {
 
   update(dt, playerPosition) {
     this.elapsed += dt;
-    if (this.material) this.material.uniforms.uTime.value = this.elapsed;
+    this.material.uniforms.uTime.value = this.elapsed;
     this.#updateRipples(dt);
     if (!playerPosition) return;
 
