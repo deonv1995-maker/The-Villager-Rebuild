@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class GrassFieldSystem {
-  constructor({ group, terrain, scatter, maxInstances = 10800 }) {
+  constructor({ group, terrain, scatter, maxInstances = 12800 }) {
     this.group = group;
     this.terrain = terrain;
     this.scatter = scatter;
@@ -45,18 +45,21 @@ export class GrassFieldSystem {
     this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = true;
 
+    const bounds = this.terrain.getScatterBounds?.(20) ?? {
+      halfX: 134,
+      halfZ: 111,
+      centerZ: -4
+    };
+
     let placed = 0;
     let attempts = 0;
     while (placed < this.maxInstances && attempts < this.maxInstances * 8) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 134;
-      const z = (this.random() * 2 - 1) * 111 - 4;
+      const x = (this.random() * 2 - 1) * bounds.halfX;
+      const z = (this.random() * 2 - 1) * bounds.halfZ + bounds.centerZ;
       const density = this.terrain.grassDensityAt(x, z);
       if (density <= 0 || this.random() > density) continue;
       if (!this.scatter.isGrassClear(x, z, 0.05)) continue;
-
-      const pathDistance = Math.abs(x - this.terrain.pathCenterX(z));
-      if (z < 88 && z > -90 && pathDistance < 1.3 && this.random() > 0.2) continue;
 
       const scaleY = 0.54 + this.random() * 0.8;
       const entry = {
