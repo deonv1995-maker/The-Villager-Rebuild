@@ -13,6 +13,7 @@ export class GatherableSystem {
     this.scene.add(this.group);
     this.items = [];
     this.target = null;
+    this.nextSpawnId = 0;
     this.#createIndicator();
     this.#populate();
   }
@@ -57,26 +58,60 @@ export class GatherableSystem {
     return {
       resourceId: definition.id,
       label: definition.label,
-      quantity: definition.pickupQuantity
+      quantity: item.quantity ?? definition.pickupQuantity
     };
+  }
+
+  spawn(resourceId, { x, z, quantity = null, yaw = 0 } = {}) {
+    const definition = RESOURCE_DEFINITIONS[resourceId];
+    if (!definition) throw new Error(`Unknown gatherable resource: ${resourceId}`);
+    if (!Number.isFinite(x) || !Number.isFinite(z)) {
+      throw new Error('Spawned gatherables require finite x and z coordinates');
+    }
+
+    const spawnId = this.nextSpawnId;
+    this.nextSpawnId += 1;
+    const root = this.#createResourceVisual(resourceId, spawnId);
+    root.position.set(x, this.terrain.heightAt(x, z), z);
+    root.rotation.y = yaw;
+    root.name = `gatherable-${resourceId}-spawn-${spawnId}`;
+    this.group.add(root);
+    this.items.push({
+      resourceId,
+      root,
+      active: true,
+      quantity: quantity ?? definition.pickupQuantity
+    });
+    return root;
   }
 
   getTarget() {
     if (!this.target) return null;
     const definition = RESOURCE_DEFINITIONS[this.target.resourceId];
-    return { resourceId: definition.id, label: definition.label };
+    return {
+      type: 'resource',
+      resourceId: definition.id,
+      label: definition.label,
+      icon: 'hand',
+      actionLabel: `Pick up ${definition.label}`
+    };
   }
 
   #populate() {
     WORLD_LAYOUT.dayOneResources.forEach(([resourceId, x, z], index) => {
-      const root = resourceId === 'stick'
-        ? this.#createStick(index)
-        : this.#createStone(index);
+      const root = this.#createResourceVisual(resourceId, index);
       root.position.set(x, this.terrain.heightAt(x, z), z);
       root.name = `gatherable-${resourceId}-${index}`;
       this.group.add(root);
-      this.items.push({ resourceId, root, active: true });
+      this.items.push({ resourceId, root, active: true, quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity });
     });
+  }
+
+  #createResourceVisual(resourceId, index) {
+    if (resourceId === 'stick') return this.#createStick(index);
+    if (resourceId === 'stone') return this.#createStone(index);
+    if (resourceId === 'log') return this.#createLog(index);
+    throw new Error(`No world pickup presentation for resource: ${resourceId}`);
   }
 
   #createStick(index) {
@@ -103,6 +138,28 @@ export class GatherableSystem {
     stone.castShadow = true;
     stone.receiveShadow = true;
     group.add(stone);
+    return group;
+  }
+
+  #createLog(index) {
+    const group = new THREE.Group();
+    const bark = new THREE.MeshStandardMaterial({ color: 0x704829, roughness: 1, flatShading: true });
+    const cut = new THREE.MeshStandardMaterial({ color: 0xb88752, roughness: 1, flatShading: true });
+    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.22, 1.18, 8), bark);
+    log.rotation.z = Math.PI / 2;
+    log.rotation.y = (index % 4) * 0.22;
+    log.position.y = 0.22;
+    log.castShadow = true;
+    log.receiveShadow = true;
+    group.add(log);
+
+    const endA = new THREE.Mesh(new THREE.CircleGeometry(0.185, 8), cut);
+    const endB = endA.clone();
+    endA.rotation.y = Math.PI / 2;
+    endB.rotation.y = -Math.PI / 2;
+    endA.position.set(0.595, 0.22, 0);
+    endB.position.set(-0.595, 0.22, 0);
+    group.add(endA, endB);
     return group;
   }
 
