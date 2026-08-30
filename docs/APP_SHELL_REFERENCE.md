@@ -1,1 +1,1 @@
-Reference implementation: archived repository `deonv1995-maker/The-Villager-`, specifically `manifest.webmanifest`, `icons/icon.svg`, `icons/icon-maskable.svg`, and `sw.js`. The rebuild ports the install-shell behavior without importing old gameplay code.
+Reference principle: use the current web-platform PWA contract directly—manifest + same-scope service worker + valid PNG launcher icons over HTTPS—and let Chrome own WebAPK installation. Archived Villager shell code may be consulted for historical behavior, but it is no longer copied as the install architecture.
