@@ -20,9 +20,9 @@ const expectedPackedLength = paletteBytes + (160 * 160);
 let repairedPacked = packed;
 
 if (packed.length === expectedPackedLength - 2) {
-  const sourceTail = packed.subarray(Math.max(paletteBytes, packed.length - 20));
-  const edgeIndex = sourceTail[0];
-  if (edgeIndex !== 127 || !sourceTail.every((value) => value === edgeIndex)) {
+  const terminalEdge = packed.subarray(packed.length - 18);
+  const edgeIndex = terminalEdge[0];
+  if (edgeIndex !== 127 || !terminalEdge.every((value) => value === edgeIndex)) {
     throw new Error('Truncated Ranger icon source does not end in the expected uniform edge palette index');
   }
 
