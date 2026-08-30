@@ -14,11 +14,16 @@ if (compressed.length < 6) {
   throw new Error('Approved Ranger icon source payload is too short');
 }
 
-// The approved pixel payload is intact, but its zlib Adler-32 trailer was
-// malformed during the icon-only branch handoff. Inflate the raw DEFLATE
-// stream, rebuild only that transport checksum, then execute the canonical
-// generator unchanged. verify-pwa.mjs locks the decoded launcher pixels.
+// Recover the raw DEFLATE stream so CI can distinguish transport-checksum
+// damage from source-geometry damage without weakening the final pixel locks.
 const packed = inflateRawSync(compressed.subarray(2, -4));
+const expectedPackedLength = (128 * 3) + (160 * 160);
+if (packed.length !== expectedPackedLength) {
+  throw new Error(
+    `Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength} ` +
+    `(compressed payload: ${compressed.length} bytes)`
+  );
+}
 
 function adler32(data) {
   const MOD = 65521;
