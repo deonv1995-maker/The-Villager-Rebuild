@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
 
 const SOURCE_SIZE = 160;
 const PALETTE_COLORS = 128;
 const outputDir = process.argv[2] ?? 'public/icons';
+const installIconAliases = [
+  ['icon-192.png', 'ranger-install-192-v4.png'],
+  ['icon-512.png', 'ranger-install-512-v4.png'],
+  ['icon-maskable-512.png', 'ranger-install-maskable-512-v4.png']
+];
 
 const generatorUrl = new URL('./generate-pwa-icons.mjs', import.meta.url);
 const generatorSource = await readFile(generatorUrl, 'utf8');
@@ -40,6 +45,10 @@ const repairedCompressed = deflateSync(repairedPacked, { level: 9 });
 const repairedSource = generatorSource.replace(sourceMatch[1], repairedCompressed.toString('base64'));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(repairedSource).toString('base64')}`;
 await import(moduleUrl);
+
+for (const [sourceName, aliasName] of installIconAliases) {
+  await copyFile(path.join(outputDir, sourceName), path.join(outputDir, aliasName));
+}
 
 function decodeGeneratedRgbPng(data, expectedSize) {
   if (data.readUInt32BE(0) !== 0x89504e47) throw new Error('Invalid generated PNG signature');
