@@ -1,15 +1,13 @@
-const SHELL_VERSION = '0.3.2-install4';
+const SHELL_VERSION = '0.3.2-install5';
 const CACHE_PREFIX = 'villager-rebuild-pwa-';
 const CACHE_NAME = `${CACHE_PREFIX}${SHELL_VERSION}`;
 const SHELL_ASSETS = [
   './',
   './index.html',
-  './manifest.webmanifest',
-  './icons/icon.svg',
-  './icons/icon-maskable.svg',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
+  `./manifest.webmanifest?v=${SHELL_VERSION}`,
+  `./icons/icon-192.png?v=${SHELL_VERSION}`,
+  `./icons/icon-512.png?v=${SHELL_VERSION}`,
+  `./icons/icon-maskable-512.png?v=${SHELL_VERSION}`
 ];
 
 self.addEventListener('install', event => {
@@ -56,8 +54,6 @@ self.addEventListener('fetch', event => {
 
   const shellAsset =
     url.pathname.endsWith('/manifest.webmanifest') ||
-    url.pathname.endsWith('/icons/icon.svg') ||
-    url.pathname.endsWith('/icons/icon-maskable.svg') ||
     url.pathname.endsWith('/icons/icon-192.png') ||
     url.pathname.endsWith('/icons/icon-512.png') ||
     url.pathname.endsWith('/icons/icon-maskable-512.png');
