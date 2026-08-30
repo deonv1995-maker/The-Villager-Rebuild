@@ -84,6 +84,10 @@ const waterTerrain = {
 const water = new WaterSurfaceSystem({ group: waterGroup, terrain: waterTerrain, maxRipples: 4 });
 assert.equal(water.create(), 4, 'water effect must keep a small deterministic ripple pool');
 assert.equal(water.surface.material.isShaderMaterial, true, 'water surface must use the lightweight animated shader');
+for (const uniformName of ['fogColor', 'fogNear', 'fogFar', 'fogDensity']) {
+  assert.ok(water.surface.material.uniforms[uniformName], `fog-enabled water shader must define ${uniformName}`);
+  assert.ok(Object.hasOwn(water.surface.material.uniforms[uniformName], 'value'), `${uniformName} must expose a Three.js uniform value`);
+}
 const wader = new THREE.Vector3(0, 0, 0);
 water.update(0.1, wader);
 wader.x = 1.1;
