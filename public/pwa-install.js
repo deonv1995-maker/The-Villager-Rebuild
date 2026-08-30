@@ -4,7 +4,10 @@
   let status = null;
   let statusTimer = null;
 
+  const isNativeShell = () => new URLSearchParams(window.location.search).get('shell') === 'android';
+
   const isInstalled = () =>
+    isNativeShell() ||
     window.matchMedia('(display-mode: standalone)').matches ||
     window.matchMedia('(display-mode: fullscreen)').matches ||
     window.navigator.standalone === true;
