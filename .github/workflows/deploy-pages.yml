@@ -1,13 +1,13 @@
 name: Deploy game to GitHub Pages
 
 on:
-  workflow_run:
-    workflows: ["pages build and deployment"]
-    types: [completed]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -17,19 +17,59 @@ concurrency:
 
 jobs:
   build:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
+
+      - name: Wait for branch-source Pages deployment
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 600))
+
+          while (( SECONDS < deadline )); do
+            run_state="$(
+              gh api "repos/${REPOSITORY}/actions/runs?per_page=100" \
+                --jq ".workflow_runs[] | select(.name == \"pages build and deployment\" and .head_sha == \"${TARGET_SHA}\") | [.id, .status, (.conclusion // \"\")] | @tsv" \
+                | head -n 1 \
+                || true
+            )"
+
+            if [[ -z "${run_state}" ]]; then
+              echo "Waiting for GitHub's branch-source Pages run for ${TARGET_SHA} to appear..."
+              sleep 5
+              continue
+            fi
+
+            IFS=$'\t' read -r pages_run_id pages_status pages_conclusion <<< "${run_state}"
+            echo "Branch-source Pages run ${pages_run_id}: ${pages_status} ${pages_conclusion}"
+
+            if [[ "${pages_status}" == "completed" ]]; then
+              if [[ "${pages_conclusion}" != "success" ]]; then
+                echo "Branch-source Pages deployment failed with conclusion: ${pages_conclusion}" >&2
+                exit 1
+              fi
+
+              echo "Branch-source Pages deployment is complete; production dist can deploy last."
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Timed out waiting for the branch-source Pages deployment for ${TARGET_SHA}." >&2
+          exit 1
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
