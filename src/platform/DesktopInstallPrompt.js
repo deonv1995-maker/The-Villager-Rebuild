@@ -4,7 +4,7 @@ export function registerVillagerServiceWorker() {
   if (!eligibleOrigin) return;
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(error => {
+    navigator.serviceWorker.register('./sw.js?v=0.3.2-old-shell1', { updateViaCache: 'none' }).catch(error => {
       console.warn('[PWA SERVICE WORKER]', error);
     });
   }, { once: true });
@@ -12,7 +12,7 @@ export function registerVillagerServiceWorker() {
 
 export function installDesktopPrompt() {
   if (!window.matchMedia('(min-width: 900px) and (pointer: fine)').matches) return;
-  if (window.matchMedia('(display-mode: standalone)').matches) return;
+  if (window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches) return;
 
   const button = document.createElement('button');
   button.className = 'desktop-install';
