@@ -35,55 +35,48 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — Foundation 0.3.3 first-tree/log-gathering pass is under device acceptance on 2026-08-30.**
+Status: **in progress — Foundation 0.3.4 first-campfire pass is under device acceptance on 2026-08-30.**
 
-Accepted foundation carried forward from 0.3.2:
+Accepted foundation carried forward:
 
-- the main-island height field, traversable central lowland, irregular highlands, cliffs, shelves, ravines and deliberate drops remain authoritative;
-- five irregular satellite islands and their terrain-owned sandbar/shallow-water connectors remain part of the same `heightAt()` / `isPlayable()` path;
-- environment placement remains footprint-aware and preserves the Day 1 route/clearings;
-- roughly 540 collision-aware trees, wider-variety rocks, interactive grass, reactive ferns, forest-cover shading and distant mountain silhouettes remain the accepted landscape presentation;
-- tree trunks, coastline, satellite bounds, steep terrain and solid prop sides remain shared collision rules;
-- the native Chromium PWA install flow, PNG-only launcher manifest, simple service worker and deterministic branch-source-first / production-dist-last Pages deployment architecture are established and must not be replaced by gameplay work;
-- gameplay, landscape, runtime-asset, production-build and PWA checks remain required before merge.
+- the 0.3.2 terrain, collision, ecology, satellite-island, vegetation, mountain-silhouette and mobile-performance architecture remains authoritative;
+- the native Chromium PWA install flow, PNG-only launcher manifest, simple service worker and deterministic branch-source-first / production-dist-last Pages deployment architecture remain unchanged;
+- the 0.3.3 tree/log loop has passed device verification: the first tree uses the existing forest population, three deliberate axe swings, removable shared collision, one retained stump and three normal Log pickups;
+- gameplay, tree-harvest, landscape, runtime-asset, production-build and PWA checks remain required before merge.
 
 Current playable sequence:
 
-Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> **chop first tree -> gather logs**.
+Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> chop first tree -> gather logs -> **build first campfire**.
 
-Foundation 0.3.3 adds:
+Foundation 0.3.4 adds:
 
-- `log` as a shared resource/inventory definition rather than a tutorial-only counter;
-- a data-driven forest-tree harvest definition containing interaction radius, swing count and log yield;
-- a dedicated tree-harvest system that references the existing deterministic forest tree colliders and instanced render batches instead of spawning a duplicate harvest-tree population;
-- tree targeting only after the Day 1 meat objective is complete;
-- desktop E and the existing mobile contextual interaction button for chopping, with the mobile glyph switching from hand to axe when the target is a tree;
-- three deliberate swings for the first tree rather than one-hit removal;
-- a lightweight Ranger axe presentation that temporarily hides the equipped spear presentation during each chop without consuming or replacing the spear item;
-- removal of only the felled tree's collision handle through `WorldCollisionSystem`, leaving the rest of the forest collision set unchanged;
-- hiding of only the corresponding instanced tree entry while retaining instancing for the rest of the forest;
-- a visible stump at the felled tree position;
-- three world Log pickups spawned through the existing `GatherableSystem`;
-- post-fell tutorial targeting restricted to those dropped logs until all three are collected;
-- a dedicated tree-harvest regression contract beside the existing gameplay and landscape checks.
+- a data-driven `campfire` world-structure definition with a three-Log requirement and placement constraints;
+- a dedicated `CampfireSystem` rather than representing the fire as an inventory item or adding a second crafting economy;
+- the existing mobile craft button becomes contextual: spear during the spear step, campfire during the campfire step; desktop continues to use C;
+- a shared `WorldCollisionSystem.isCircleClear()` placement query so structures can validate existing world obstacles without duplicating collision rules;
+- a Ranger facing-direction accessor so placement systems use the player-controller boundary rather than reading controller internals;
+- nearby placement search around the Ranger using playable terrain, slope and collision clearance, with materials consumed only after a valid placement is found;
+- one grounded campfire presentation using a stone ring, crossed logs, emissive flame geometry and one non-shadow-casting point light;
+- one normal campfire collision handle after construction;
+- an active campfire state intended to become the shared proximity anchor for cooking and first-night sleeping;
+- a dedicated campfire regression contract beside the existing gameplay, harvesting and landscape checks.
 
-Foundation 0.3.3 acceptance gate before adding the campfire:
+Foundation 0.3.4 acceptance gate before adding cooking:
 
-- after Raw Meat is harvested, the objective clearly changes to tree chopping;
-- approaching a valid tree exposes the axe interaction on mobile and E interaction on desktop;
-- the Ranger visibly performs the axe swing without showing the spear in the same hand;
-- the target tree requires three distinct swings and cannot be felled by rapid duplicate input during one swing;
-- only the targeted tree disappears from the instanced forest;
-- the targeted tree trunk stops blocking movement after it is felled while unrelated tree/rock/cliff collision remains unchanged;
-- the stump remains correctly grounded at the original tree position;
-- exactly three visible Log pickups appear around the stump and use the normal hand pickup interaction;
-- inventory reaches Log 3 after all three are gathered and the objective advances to the campfire step;
-- the existing Day 1 gather/craft/hunt/meat sequence still works from a clean page load;
-- the landscape and PWA/install architecture remain visually and behaviorally unchanged;
-- target mobile performance remains acceptable;
-- gameplay, tree-harvest, landscape, runtime-asset, production-build, PWA and Pages deployment checks are green.
+- after all three Logs are gathered, the objective changes clearly to building the campfire;
+- the mobile contextual craft button shows the campfire glyph instead of the spear glyph, while desktop C performs the same build action;
+- the campfire cannot be built before the three Log requirement is met;
+- building consumes exactly three Logs once and does not leave a fake campfire item in inventory;
+- the campfire appears on valid nearby ground rather than at one fixed tutorial coordinate;
+- the build avoids tree/rock/cliff collision and rejects unsuitable steep/out-of-bounds placement without consuming materials;
+- the campfire remains grounded and visually readable, with lightweight visible flame/flicker on target mobile hardware;
+- the campfire registers one shared-world collision handle and does not alter unrelated collision;
+- after construction the objective advances to cooking the gathered meat;
+- the full gather/craft/hunt/meat/tree/log sequence still works from a clean page load;
+- terrain, ecology and PWA/install behavior remain unchanged;
+- gameplay, tree-harvest, campfire, landscape, runtime-asset, production-build, PWA and Pages deployment checks are green.
 
-Next playable milestone after this gate: **build the first campfire.**
+Next playable milestone after this gate: **cook the gathered meat at the campfire.**
 
 Target final-game Day 1 sequence:
 

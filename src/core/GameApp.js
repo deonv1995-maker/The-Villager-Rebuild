@@ -4,6 +4,7 @@ import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
 import { DayOneHuntSystem } from '../world/DayOneHuntSystem.js';
 import { TreeHarvestSystem } from '../world/TreeHarvestSystem.js';
+import { CampfireSystem } from '../world/CampfireSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
@@ -17,18 +18,19 @@ export class GameApp {
     this.clock = new THREE.Clock();
     this.running = false;
     this.playerPosition = new THREE.Vector3();
+    this.playerFacing = new THREE.Vector3();
     this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
   }
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.3 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.4 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.3 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.4 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -54,6 +56,12 @@ export class GameApp {
       collision: this.island.collision,
       gatherables: this.gatherables
     });
+    this.campfire = new CampfireSystem({
+      group: this.island.group,
+      terrain: this.island,
+      collision: this.island.collision,
+      inventory: this.inventory
+    });
     this.toolPresentation = new RangerToolPresentation({ player: this.player });
     this.#bindGameplayInput();
 
@@ -66,7 +74,7 @@ export class GameApp {
           player: this.player,
           canvas: this.canvas,
           onInteract: () => this.#tryInteract(),
-          onCraft: () => this.#tryCraftSpear(),
+          onCraft: () => this.#tryCraftAction(),
           onAttack: () => this.#tryAttackAnimal()
         });
         this.player.getPosition(this.playerPosition);
@@ -81,6 +89,7 @@ export class GameApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.player?.update(dt);
     this.toolPresentation?.update(dt);
+    this.campfire?.update(dt);
 
     if (this.player) {
       this.player.getPosition(this.playerPosition);
@@ -162,6 +171,23 @@ export class GameApp {
     this.#syncProgress();
   }
 
+  #tryCraftAction() {
+    if (!this.inventory || !this.crafting) return;
+    const hasSpear = this.inventory.get('spear') > 0;
+    if (!hasSpear) {
+      this.#tryCraftSpear();
+      return;
+    }
+
+    const requiredLogs = HARVESTABLE_DEFINITIONS.forestTree.dropCount;
+    const readyForCampfire = (
+      this.inventory.get('meat') > 0 &&
+      this.inventory.get('log') >= requiredLogs &&
+      !this.campfire?.isBuilt()
+    );
+    if (readyForCampfire) this.#tryBuildCampfire();
+  }
+
   #tryCraftSpear() {
     if (!this.crafting || !this.inventory || this.inventory.get('spear') > 0) return;
     const crafted = this.crafting.craft('spear');
@@ -169,6 +195,21 @@ export class GameApp {
 
     this.player?.setSpearEquipped(true);
     this.player?.getPosition(this.playerPosition);
+    this.#refreshTargets(0);
+    this.#syncProgress();
+  }
+
+  #tryBuildCampfire() {
+    if (!this.player || !this.campfire?.canBuild()) return;
+    this.player.getPosition(this.playerPosition);
+    this.player.getFacingDirection(this.playerFacing);
+    const built = this.campfire.build(this.playerPosition, this.playerFacing);
+    if (!built) {
+      this.setStatus('DAY 1 · CAMPFIRE NEEDS CLEAR GROUND');
+      this.hud?.setObjective('DAY 1 · Move to flatter open ground · C / campfire');
+      return;
+    }
+
     this.#refreshTargets(0);
     this.#syncProgress();
   }
@@ -204,14 +245,35 @@ export class GameApp {
     const animalDefeated = huntState?.defeated ?? false;
     const animalLabel = huntState?.label ?? 'animal';
     const firstTreeChopped = this.treeHarvest?.hasChoppedTree() ?? false;
+    const campfireBuilt = this.campfire?.isBuilt() ?? false;
+    const canBuildCampfire = (
+      animalDefeated &&
+      meatCount > 0 &&
+      logCount >= requiredLogs &&
+      !campfireBuilt &&
+      Boolean(this.campfire?.canBuild())
+    );
 
     this.hud?.setInventory(this.inventory.snapshot());
-    this.hud?.setCraftAvailable(canCraftSpear);
+    this.hud?.setCraftAction(
+      canCraftSpear
+        ? { available: true, icon: 'spear', label: 'Craft spear' }
+        : canBuildCampfire
+          ? { available: true, icon: 'campfire', label: 'Build campfire' }
+          : { available: false }
+    );
     this.player?.setSpearEquipped(hasSpear && !this.toolPresentation?.isBusy());
 
+    if (campfireBuilt) {
+      this.setStatus('DAY 1 · CAMPFIRE BUILT');
+      this.hud?.setObjective('DAY 1 · Campfire built · cook the meat next');
+      this.hud?.setAttackTarget(null);
+      return;
+    }
+
     if (animalDefeated && meatCount > 0 && logCount >= requiredLogs) {
-      this.setStatus(`DAY 1 · LOGS ${logCount}`);
-      this.hud?.setObjective('DAY 1 · Logs gathered · campfire next');
+      this.setStatus(`DAY 1 · LOGS ${logCount} · BUILD CAMPFIRE`);
+      this.hud?.setObjective('DAY 1 · C / campfire to build');
       this.hud?.setAttackTarget(null);
       return;
     }
@@ -276,7 +338,7 @@ export class GameApp {
         this.#tryInteract();
       } else if (event.code === 'KeyC') {
         event.preventDefault();
-        this.#tryCraftSpear();
+        this.#tryCraftAction();
       } else if (event.code === 'KeyF') {
         event.preventDefault();
         this.#tryAttackAnimal();

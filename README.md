@@ -10,22 +10,21 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.3 — first tree chopping and log gathering**
+**Foundation 0.3.4 — build the first campfire**
 
-This milestone advances the accepted Foundation 0.3.2 landscape/install foundation without replacing its terrain, collision, ecology or PWA architecture:
+The Foundation 0.3.3 tree/log loop has passed device verification and remains authoritative. This milestone advances only the next Day 1 step:
 
-- the Day 1 sequence now advances from harvested meat to the first tree-chopping objective;
-- existing deterministic forest trees remain the authoritative tree population rather than spawning a second harvest-only tree set;
-- a dedicated tree-harvest system references the existing tree collision handles and instanced render batches;
-- the first tutorial tree requires three deliberate swings, driven by a data definition rather than a hard-coded one-hit removal;
-- desktop continues to use the shared E interaction while mobile keeps one contextual interaction button and switches its glyph from the hand to an axe only when a tree is targeted;
-- a lightweight Ranger axe presentation temporarily replaces the equipped spear presentation during each chop without changing spear inventory state;
-- when the tree is felled, only that tree instance is hidden, its trunk collider is removed through the shared collision system and a stump remains at the same terrain position;
-- the felled tree spawns three normal Log pickups through the existing `GatherableSystem`, so logs enter the same inventory/resource path used by sticks, stones and later shared player/NPC resource handling;
-- after the first tree falls, tutorial targeting prioritizes the dropped logs until all three are gathered;
-- tree/log regression checks run beside the existing gameplay, landscape, runtime-asset, production-build and PWA contracts.
+- the first campfire is a world structure, not an inventory item or a second crafting economy;
+- its data definition requires exactly three Logs and owns its placement radius/distance/slope limits;
+- the existing contextual craft button switches from the spear glyph to a campfire glyph when the Day 1 log requirement is complete; desktop continues to use C;
+- building validates playable terrain, slope and shared world-collision clearance before consuming materials;
+- the campfire searches a small set of nearby placements around the Ranger so a valid build is not tied to one hard-coded tutorial coordinate;
+- a successful build consumes the three Logs once, creates a grounded stone/log/fire presentation, and registers one normal world collision handle;
+- the fire uses lightweight emissive geometry plus one non-shadow-casting point light so it can later become the shared cooking/sleep proximity anchor without introducing a separate visual system;
+- the Ranger exposes facing direction through its controller boundary for placement instead of world systems reading controller internals;
+- a dedicated campfire regression contract runs alongside the existing gameplay, tree-harvest, landscape, runtime-asset, production-build and PWA checks.
 
-Foundation 0.3.3 remains under device/gameplay acceptance before the next Day 1 step is added. The next playable milestone is **build the first campfire**.
+Foundation 0.3.4 remains under device/gameplay acceptance before cooking is added. The next playable milestone after this gate is **cook the gathered meat at the campfire**.
 
 ## Installation
 

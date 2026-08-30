@@ -143,6 +143,10 @@ export class RangerController {
     return target.copy(this.root.position);
   }
 
+  getFacingDirection(target = new THREE.Vector3()) {
+    return target.set(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y)).normalize();
+  }
+
   faceWorldPoint(point) {
     if (!point) return;
     const dx = point.x - this.root.position.x;
@@ -279,8 +283,6 @@ export class RangerController {
     wrap.position.y = 1.02;
     spear.add(wrap);
 
-    // KayKit weapon meshes are authored along local +Y from the hand socket.
-    // Keeping the spear on the same axis lets the rig's stab animation carry it naturally.
     spear.rotation.z = -0.04;
     return spear;
   }

@@ -65,7 +65,8 @@ for (const requirement of [
   "this.currentInteractionTarget?.type === 'tree'",
   "resourceId => resourceId === 'log'",
   "this.setStatus('DAY 1 · CHOP A TREE')",
-  "Logs gathered · campfire next"
+  'BUILD CAMPFIRE',
+  'C / campfire to build'
 ]) {
   assert(appSource.includes(requirement), `Day 1 progression is missing tree/log contract: ${requirement}`);
 }
