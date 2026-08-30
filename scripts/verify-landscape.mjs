@@ -12,6 +12,7 @@ for (const island of satellites) {
   assert.equal(terrain.isPlayable(island.x, island.z), true, `${island.id} centre must be traversable`);
   assert.equal(terrain.heightAt(island.x, island.z) > terrain.waterLevel + 0.55, true, `${island.id} must rise above shallow water`);
   assert.equal(terrain.isSandAt(island.x, island.z), false, `${island.id} interior must support vegetation`);
+  assert.equal(island.bar.width >= 11, true, `${island.id} shoal must keep a broad base width`);
 }
 
 const eastern = satellites.find(island => island.id === 'eastern-cay');
@@ -19,10 +20,21 @@ assert.ok(eastern, 'eastern satellite island must exist');
 const barX = (eastern.bar.x1 + eastern.bar.x2) * 0.5;
 const barZ = (eastern.bar.z1 + eastern.bar.z2) * 0.5;
 const barHeight = terrain.heightAt(barX, barZ);
-assert.equal(terrain.isPlayable(barX, barZ), true, 'satellite sandbars must be traversable');
-assert.equal(terrain.isSandAt(barX, barZ), true, 'sandbar surface must stay classified as sand');
-assert.equal(barHeight > terrain.seabedLevel + 0.25, true, 'sandbar must rise materially above the seabed');
-assert.equal(barHeight < terrain.waterLevel + 0.4, true, 'sandbar midpoint must remain shallow-water / low-sand scale');
+assert.equal(terrain.isPlayable(barX, barZ), true, 'satellite shoals must be traversable');
+assert.equal(terrain.isSandAt(barX, barZ), true, 'shoal surface must stay classified as sand');
+assert.equal(barHeight > terrain.seabedLevel + 0.25, true, 'shoal must rise materially above the seabed');
+assert.equal(barHeight < terrain.waterLevel + 0.4, true, 'shoal midpoint must remain shallow-water / low-sand scale');
+
+const dx = eastern.bar.x2 - eastern.bar.x1;
+const dz = eastern.bar.z2 - eastern.bar.z1;
+const length = Math.hypot(dx, dz);
+const nx = -dz / length;
+const nz = dx / length;
+const approachT = 0.8;
+const approachX = eastern.bar.x1 + dx * approachT + nx * eastern.bar.width * 0.72;
+const approachZ = eastern.bar.z1 + dz * approachT + nz * eastern.bar.width * 0.72;
+assert.equal(terrain.isPlayable(approachX, approachZ), true, 'satellite shoal must support an angled approach near the island');
+assert.equal(terrain.isSandAt(approachX, approachZ), true, 'angled satellite approach should still read as a sand/shallow-water shelf');
 
 let fernPeak = 0;
 for (let x = -120; x <= 120; x += 12) {
@@ -56,10 +68,21 @@ assert.equal(ferns.entries.some(entry => Math.abs(entry.bendX) + Math.abs(entry.
 
 const horizonGroup = new THREE.Group();
 const mountains = new DistantMountainSystem({ group: horizonGroup, centerZ: terrain.centerZ });
-assert.equal(mountains.create(), 37, 'distant mountain silhouette count must remain deterministic');
-assert.equal(horizonGroup.children.length, 2, 'distant mountains should remain batched into two render-only rings');
+assert.equal(mountains.create(), 25, 'distant landmass silhouette count must remain deterministic');
+assert.equal(horizonGroup.children.length, 2, 'distant landmasses should remain batched into two render-only rings');
+const matrix = new THREE.Matrix4();
+const position = new THREE.Vector3();
+const quaternion = new THREE.Quaternion();
+const scale = new THREE.Vector3();
 for (const mesh of horizonGroup.children) {
-  assert.equal(mesh.isInstancedMesh, true, 'distant mountains must remain instanced for mobile performance');
+  assert.equal(mesh.isInstancedMesh, true, 'distant landmasses must remain instanced for mobile performance');
+  for (let index = 0; index < mesh.count; index += 1) {
+    mesh.getMatrixAt(index, matrix);
+    matrix.decompose(position, quaternion, scale);
+    const radius = Math.hypot(position.x, position.z - terrain.centerZ);
+    assert.equal(radius >= 315, true, 'distant landmasses must stay beyond the playable island envelope');
+    assert.equal(scale.x / scale.y >= 2.4, true, 'horizon silhouettes must stay broad and land-like rather than sharp peaks');
+  }
 }
 
 console.log('landscape contracts verified');
