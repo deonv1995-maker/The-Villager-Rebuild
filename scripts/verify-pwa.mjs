@@ -120,6 +120,9 @@ if (!index.includes(workerRef)) throw new Error('Built index is not registering 
 if (!index.includes(installScriptRef)) throw new Error('Built index is missing the in-game install controller');
 if (!index.includes(installStyleRef)) throw new Error('Built index is missing the in-game install styles');
 if (!index.includes('id="install-app-button"')) throw new Error('Built index is missing the Install App button');
+if (index.includes('id="install-app-button" type="button" hidden')) {
+  throw new Error('Install App button must remain visible by default even if the controller fails to initialize');
+}
 if (!index.includes('id="install-app-status"')) throw new Error('Built index is missing install status feedback');
 if (!index.includes("scope: './'")) throw new Error('Service worker registration must keep explicit relative scope');
 if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
