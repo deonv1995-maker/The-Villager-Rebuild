@@ -14,58 +14,58 @@ export class DistantMountainSystem {
   }
 
   create() {
-    const geometry = buildMountainGeometry();
+    const geometry = buildLandmassGeometry();
     const farMaterial = new THREE.MeshStandardMaterial({
-      color: 0x526966,
+      color: 0x71837d,
       roughness: 1,
       metalness: 0,
-      flatShading: true,
+      flatShading: false,
       fog: true
     });
     const hazeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x6f827c,
+      color: 0x61776f,
       roughness: 1,
       metalness: 0,
-      flatShading: true,
+      flatShading: false,
       fog: true
-    });
-
-    const far = this.#createRing({
-      geometry,
-      material: farMaterial,
-      count: 22,
-      radiusMin: 282,
-      radiusMax: 320,
-      heightMin: 22,
-      heightMax: 46,
-      widthMin: 14,
-      widthMax: 31,
-      depthMin: 10,
-      depthMax: 23,
-      y: -1.35,
-      angleOffset: 0.08,
-      name: 'distant-mountain-silhouette'
     });
 
     const haze = this.#createRing({
       geometry,
       material: hazeMaterial,
-      count: 15,
-      radiusMin: 245,
-      radiusMax: 278,
+      count: 11,
+      radiusMin: 325,
+      radiusMax: 370,
+      heightMin: 7,
+      heightMax: 14,
+      widthMin: 38,
+      widthMax: 72,
+      depthMin: 22,
+      depthMax: 44,
+      y: -3.5,
+      angleOffset: 0.17,
+      name: 'distant-haze-landmass'
+    });
+
+    const far = this.#createRing({
+      geometry,
+      material: farMaterial,
+      count: 14,
+      radiusMin: 385,
+      radiusMax: 455,
       heightMin: 10,
-      heightMax: 24,
-      widthMin: 12,
-      widthMax: 25,
-      depthMin: 8,
-      depthMax: 18,
-      y: -1.5,
-      angleOffset: 0.19,
-      name: 'distant-haze-ridge'
+      heightMax: 20,
+      widthMin: 52,
+      widthMax: 92,
+      depthMin: 28,
+      depthMax: 56,
+      y: -4.2,
+      angleOffset: 0.04,
+      name: 'distant-landmass-silhouette'
     });
 
     this.group.add(haze, far);
-    this.mountainCount = far.count + haze.count;
+    this.mountainCount = haze.count + far.count;
     return this.mountainCount;
   }
 
@@ -95,7 +95,7 @@ export class DistantMountainSystem {
     const dummy = new THREE.Object3D();
     for (let index = 0; index < count; index += 1) {
       const step = (index / count) * Math.PI * 2;
-      const jitter = (this.random() - 0.5) * (Math.PI * 2 / count) * 0.58;
+      const jitter = (this.random() - 0.5) * (Math.PI * 2 / count) * 0.7;
       const angle = step + jitter + angleOffset;
       const radius = radiusMin + this.random() * (radiusMax - radiusMin);
       const width = widthMin + this.random() * (widthMax - widthMin);
@@ -107,7 +107,7 @@ export class DistantMountainSystem {
         y,
         this.centerZ + Math.sin(angle) * radius
       );
-      dummy.rotation.set(0, -angle + Math.PI / 2 + (this.random() - 0.5) * 0.5, 0);
+      dummy.rotation.set(0, -angle + Math.PI / 2 + (this.random() - 0.5) * 0.46, 0);
       dummy.scale.set(width, height, depth);
       dummy.updateMatrix();
       mesh.setMatrixAt(index, dummy.matrix);
@@ -119,31 +119,40 @@ export class DistantMountainSystem {
   }
 }
 
-function buildMountainGeometry() {
-  const vertices = [
-    -1.0, 0, -0.72,
-    -0.2, 0, -1.0,
-    0.82, 0, -0.66,
-    1.0, 0, 0.36,
-    0.24, 0, 0.94,
-    -0.86, 0, 0.7,
-
-    -0.52, 0.42, -0.38,
-    0.0, 0.48, -0.55,
-    0.48, 0.4, -0.22,
-    0.42, 0.43, 0.4,
-    -0.08, 0.5, 0.5,
-    -0.48, 0.4, 0.25,
-
-    0.08, 1, -0.06
+function buildLandmassGeometry() {
+  const ridge = [
+    [-0.94, 0.22, -0.08],
+    [-0.68, 0.44, 0.03],
+    [-0.38, 0.34, -0.04],
+    [-0.08, 0.58, 0.05],
+    [0.22, 0.46, -0.03],
+    [0.5, 0.64, 0.04],
+    [0.76, 0.4, -0.02],
+    [0.96, 0.2, 0.02]
   ];
-  const indices = [];
+  const vertices = [];
 
-  for (let i = 0; i < 6; i += 1) {
-    const next = (i + 1) % 6;
-    indices.push(i, next, 6 + next, i, 6 + next, 6 + i);
-    indices.push(6 + i, 6 + next, 12);
+  for (const [x] of ridge) vertices.push(x, 0, -0.58);
+  for (const [x, y, z] of ridge) vertices.push(x, y, z);
+  for (const [x] of ridge) vertices.push(x, 0, 0.58);
+
+  const indices = [];
+  const row = ridge.length;
+  for (let i = 0; i < row - 1; i += 1) {
+    const frontA = i;
+    const frontB = i + 1;
+    const ridgeA = row + i;
+    const ridgeB = row + i + 1;
+    const backA = row * 2 + i;
+    const backB = row * 2 + i + 1;
+
+    indices.push(frontA, frontB, ridgeB, frontA, ridgeB, ridgeA);
+    indices.push(ridgeA, ridgeB, backB, ridgeA, backB, backA);
+    indices.push(frontA, backB, frontB, frontA, backA, backB);
   }
+
+  indices.push(0, row, row * 2);
+  indices.push(row - 1, row * 3 - 1, row * 2 - 1);
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
