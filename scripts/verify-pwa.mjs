@@ -6,12 +6,12 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'scene-icon-1';
+const shellRevision = 'ranger-icon-2';
 
 const expectedPixelHashes = {
-  'icons/icon-192.png': '66c292dda6bc8eb84539659f4670ba1f9c09dd628cfce5ec8a6a2f192cf55009',
-  'icons/icon-512.png': '27cae13f77d47a32a3e554d4727416b5835691990e1d7c2e095f8559c53d8ab0',
-  'icons/icon-maskable-512.png': '27cae13f77d47a32a3e554d4727416b5835691990e1d7c2e095f8559c53d8ab0'
+  'icons/icon-192.png': 'afd80ab0229e4d6d97852d05372a0e16aff09388302c01d90ec4641a61e6e4f3',
+  'icons/icon-512.png': '6cf29d1a2adf37eaba570a6a396e8336dc81b019b71a744e8ceebe87df091955',
+  'icons/icon-maskable-512.png': '1f4830e7d3c554813e17ff0b7c560a43d33b6f301e7397d08253d35cdfdac849'
 };
 
 async function requireFile(relativePath, allowEmpty = false) {
@@ -94,7 +94,7 @@ async function verifyPng(relativePath, expectedSize, expectedPixelHash) {
     const pixels = decodeGeneratedRgbPng(data, expectedSize, filePath);
     const actualPixelHash = createHash('sha256').update(pixels).digest('hex');
     if (actualPixelHash !== expectedPixelHash) {
-      throw new Error(`${filePath}: screenshot-derived launcher artwork pixels changed`);
+      throw new Error(`${filePath}: approved Ranger launcher artwork pixels changed`);
     }
   }
 }
@@ -178,10 +178,10 @@ for (const forbidden of ['caches.open(', 'caches.match(', 'cache.addAll(', 'LEGA
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
-  throw new Error('Built index must link the screenshot-derived icon manifest revision');
+  throw new Error('Built index must link the approved Ranger icon manifest revision');
 }
 if (!index.includes(`./icons/icon-192.png?v=${shellRevision}`)) {
-  throw new Error('Built index must expose the screenshot-derived PNG favicon/touch icon');
+  throw new Error('Built index must expose the approved Ranger PNG favicon/touch icon');
 }
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
   throw new Error('Built index must use the simple versioned service-worker registration pattern');
@@ -209,4 +209,4 @@ if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDAT
 await requireMissing('pwa-install.js');
 await requireMissing('pwa-install.css');
 
-console.log(`Villager screenshot-derived scene icon PWA contract verified in ${root}`);
+console.log(`Villager approved in-game Ranger icon PWA contract verified in ${root}`);
