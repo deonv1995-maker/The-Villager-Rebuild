@@ -45,10 +45,8 @@ const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 if (!serviceWorker.includes("CACHE_NAME") || !serviceWorker.includes("addEventListener('fetch'")) {
   throw new Error('Service worker is missing install/runtime cache behavior');
 }
-if (!serviceWorker.includes(`CACHE_PREFIX}${expectedVersion}`) && !serviceWorker.includes(`CACHE_PREFIX}\${expectedVersion}`)) {
-  if (!serviceWorker.includes(`CACHE_PREFIX}\${expectedVersion}`) && !serviceWorker.includes(`${expectedVersion}`)) {
-    throw new Error(`Service worker cache version must match package version ${expectedVersion}`);
-  }
+if (!serviceWorker.includes(expectedVersion)) {
+  throw new Error(`Service worker cache version must match package version ${expectedVersion}`);
 }
 
 const indexPath = await requireFile('index.html');
