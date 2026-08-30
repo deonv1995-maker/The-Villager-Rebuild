@@ -25,14 +25,49 @@ const irregularPlateau = (x, z, cx, cz, yaw, halfX, halfZ, { edge = 0.12, warp =
   return 1 - THREE.MathUtils.smoothstep(normalized, 1 - edge, 1);
 };
 
+const distanceToSegment = (x, z, x1, z1, x2, z2) => {
+  const vx = x2 - x1;
+  const vz = z2 - z1;
+  const lengthSq = vx * vx + vz * vz;
+  if (lengthSq <= 0.0001) return { distance: Math.hypot(x - x1, z - z1), t: 0 };
+  const t = THREE.MathUtils.clamp(((x - x1) * vx + (z - z1) * vz) / lengthSq, 0, 1);
+  const px = x1 + vx * t;
+  const pz = z1 + vz * t;
+  return { distance: Math.hypot(x - px, z - pz), t };
+};
+
+const SATELLITE_ISLANDS = Object.freeze([
+  Object.freeze({
+    id: 'northwest-cay', x: -157, z: -111, halfX: 24, halfZ: 15, yaw: 0.42, warp: 1.8, phase: 1.4, rise: 0.72,
+    bar: Object.freeze({ x1: -124, z1: -91, x2: -145, z2: -104, width: 6.5, phase: 0.4 })
+  }),
+  Object.freeze({
+    id: 'northeast-cay', x: 151, z: -94, halfX: 25, halfZ: 15, yaw: -0.34, warp: 2.1, phase: 3.7, rise: 0.95,
+    bar: Object.freeze({ x1: 117, z1: -72, x2: 139, z2: -87, width: 6.1, phase: 2.2 })
+  }),
+  Object.freeze({
+    id: 'eastern-cay', x: 205, z: 72, halfX: 23, halfZ: 16, yaw: 0.2, warp: 1.9, phase: -1.8, rise: 0.8,
+    bar: Object.freeze({ x1: 171, z1: 58, x2: 193, z2: 68, width: 6.8, phase: 4.8 })
+  }),
+  Object.freeze({
+    id: 'southern-cay', x: 72, z: 145, halfX: 21, halfZ: 15, yaw: -0.18, warp: 1.7, phase: 5.4, rise: 0.62,
+    bar: Object.freeze({ x1: 65, z1: 109, x2: 70, z2: 133, width: 6.4, phase: 1.1 })
+  }),
+  Object.freeze({
+    id: 'southwest-cay', x: -184, z: 119, halfX: 22, halfZ: 15, yaw: -0.42, warp: 1.8, phase: -3.2, rise: 0.78,
+    bar: Object.freeze({ x1: -147, z1: 99, x2: -172, z2: 113, width: 6.6, phase: 3.3 })
+  })
+]);
+
 export class IslandTerrainSystem {
   constructor(group) {
     this.group = group;
     this.seabedLevel = -1.65;
     this.waterLevel = -0.92;
     this.centerZ = -4;
-    this.extentX = 195;
-    this.extentZ = 152;
+    this.extentX = 242;
+    this.extentZ = 178;
+    this.satelliteIslands = SATELLITE_ISLANDS;
   }
 
   getSpawnPoint() { return { ...WORLD_LAYOUT.spawn }; }
@@ -44,6 +79,18 @@ export class IslandTerrainSystem {
       halfZ: Math.max(1, this.extentZ - margin),
       centerZ: this.centerZ
     };
+  }
+
+  getSatelliteIslands() {
+    return this.satelliteIslands.map(island => ({
+      id: island.id,
+      x: island.x,
+      z: island.z,
+      halfX: island.halfX,
+      halfZ: island.halfZ,
+      yaw: island.yaw,
+      bar: { ...island.bar }
+    }));
   }
 
   coastRadiusAt(angle) {
@@ -60,10 +107,27 @@ export class IslandTerrainSystem {
     return Math.hypot(x, shiftedZ) / this.coastRadiusAt(angle);
   }
 
+  surfaceNormalizedRadiusAt(x, z) {
+    const satellite = this.#satelliteInfoAt(x, z);
+    if (satellite) return satellite.normalized;
+    return this.normalizedRadius(x, z);
+  }
+
   isPlayable(x, z, margin = 0) {
     const shiftedZ = z - this.centerZ;
     const angle = Math.atan2(shiftedZ, x);
-    return Math.hypot(x, shiftedZ) <= this.coastRadiusAt(angle) - 2.7 - margin;
+    if (Math.hypot(x, shiftedZ) <= this.coastRadiusAt(angle) - 2.7 - margin) return true;
+
+    for (const island of this.satelliteIslands) {
+      const normalized = this.#satelliteNormalizedRadius(island, x, z);
+      const inset = (2.1 + margin) / Math.min(island.halfX, island.halfZ);
+      if (normalized <= Math.max(0.34, 1 - inset)) return true;
+
+      const bar = island.bar;
+      const segment = distanceToSegment(x, z, bar.x1, bar.z1, bar.x2, bar.z2);
+      if (segment.distance <= Math.max(0.65, bar.width - margin)) return true;
+    }
+    return false;
   }
 
   routeCorridorStrengthAt(z) {
@@ -94,6 +158,38 @@ export class IslandTerrainSystem {
   }
 
   heightAt(x, z) {
+    let height = this.#mainIslandHeightAt(x, z);
+
+    const satellite = this.#satelliteInfoAt(x, z);
+    if (satellite) {
+      const { island, normalized } = satellite;
+      const landBlend = THREE.MathUtils.smoothstep(1 - normalized, 0.025, 0.19);
+      const local = rotatedCoordinates(x, z, island.x, island.z, island.yaw);
+      const broad =
+        Math.sin(local.u * 0.16 + island.phase) * 0.22 +
+        Math.cos(local.v * 0.19 - island.phase * 0.7) * 0.18 +
+        Math.sin((local.u - local.v) * 0.11 + island.phase * 0.4) * 0.12;
+      const core = Math.max(0, 1 - normalized);
+      const satelliteHeight = this.seabedLevel + landBlend * 2.18 + landBlend * (broad + core * island.rise);
+      height = Math.max(height, satelliteHeight);
+    }
+
+    const sandbar = this.#sandbarInfoAt(x, z);
+    if (sandbar) {
+      const { bar, distance, t } = sandbar;
+      const lateral = 1 - THREE.MathUtils.smoothstep(distance, bar.width * 0.46, bar.width);
+      const endpointFade = THREE.MathUtils.smoothstep(t, 0.02, 0.16) * (1 - THREE.MathUtils.smoothstep(t, 0.84, 0.98));
+      const strength = THREE.MathUtils.clamp(Math.max(lateral * 0.78, lateral * endpointFade), 0, 1);
+      const ripple = 0.5 + Math.sin(t * Math.PI * 5 + bar.phase) * 0.28 + Math.cos(t * Math.PI * 3 - bar.phase) * 0.18;
+      const crest = this.waterLevel - 0.2 + THREE.MathUtils.clamp(ripple, 0, 1) * 0.31;
+      const barHeight = THREE.MathUtils.lerp(this.seabedLevel, crest, strength);
+      height = Math.max(height, barHeight);
+    }
+
+    return height;
+  }
+
+  #mainIslandHeightAt(x, z) {
     const normalized = this.normalizedRadius(x, z);
     const landBlend = THREE.MathUtils.smoothstep(1 - normalized, 0.018, 0.16);
     if (landBlend <= 0.001) return this.seabedLevel;
@@ -135,8 +231,6 @@ export class IslandTerrainSystem {
 
     let height = this.seabedLevel + landBlend * 2.58 + landBlend * terrainShape;
 
-    // Keep a narrow, mostly invisible Day 1 traversal corridor without turning
-    // it into the island's visual or geometric organizing axis.
     const routeStrength = this.routeCorridorStrengthAt(z);
     if (routeStrength > 0) {
       const pathX = this.pathCenterX(z);
@@ -162,6 +256,9 @@ export class IslandTerrainSystem {
   }
 
   isSandAt(x, z) {
+    const satellite = this.#satelliteInfoAt(x, z);
+    if (satellite) return satellite.normalized >= 0.7 || this.heightAt(x, z) < -0.08;
+    if (this.#sandbarInfoAt(x, z)) return true;
     return this.normalizedRadius(x, z) >= 0.925 || this.heightAt(x, z) < -0.12;
   }
 
@@ -187,7 +284,7 @@ export class IslandTerrainSystem {
       2
     ) * 0.07;
     const slopeFade = 1 - THREE.MathUtils.smoothstep(slope, 0.28, maxSlope);
-    const shoreFade = 1 - THREE.MathUtils.smoothstep(this.normalizedRadius(x, z), 0.82, 0.925);
+    const shoreFade = 1 - THREE.MathUtils.smoothstep(this.surfaceNormalizedRadiusAt(x, z), 0.78, 0.925);
     return THREE.MathUtils.clamp(regionDensity * moisture * (0.5 + slopeFade * 0.5) * shoreFade, 0, 1);
   }
 
@@ -223,28 +320,31 @@ export class IslandTerrainSystem {
     return THREE.MathUtils.clamp(suitability * patchStrength * pathFade, 0, 1);
   }
 
-  treeDensityAt(x, z) {
-    const suitability = this.vegetationSuitabilityAt(x, z, 0.5);
-    if (suitability <= 0) return 0;
-
+  forestCoverAt(x, z) {
+    if (!this.isPlayable(x, z, 3.2) || this.isSandAt(x, z)) return 0;
     const groveField = 0.5 + (
       Math.sin(x * 0.031 - z * 0.018 + 1.4) +
       Math.cos(z * 0.038 + x * 0.014 - 0.7) +
       Math.sin((x - z) * 0.022 + 2)
     ) / 6;
-    const groveStrength = THREE.MathUtils.smoothstep(groveField, 0.43, 0.64);
+    const groveStrength = THREE.MathUtils.smoothstep(groveField, 0.41, 0.63);
     const region = this.regionAt(x, z).name;
     const regionDensity = {
-      lowlands: 0.74,
-      westernHighland: 0.9,
-      northernRidge: 0.72,
-      easternShelf: 0.78,
+      lowlands: 0.78,
+      westernHighland: 0.94,
+      northernRidge: 0.76,
+      easternShelf: 0.82,
       southernWood: 1,
-      centralRavine: 0.62,
-      westernValley: 0.92
-    }[region] ?? 0.74;
+      centralRavine: 0.68,
+      westernValley: 0.96
+    }[region] ?? 0.78;
+    return THREE.MathUtils.clamp(groveStrength * regionDensity, 0, 1);
+  }
 
-    return THREE.MathUtils.clamp(suitability * regionDensity * groveStrength, 0, 1);
+  treeDensityAt(x, z) {
+    const suitability = this.vegetationSuitabilityAt(x, z, 0.5);
+    if (suitability <= 0) return 0;
+    return THREE.MathUtils.clamp(suitability * this.forestCoverAt(x, z), 0, 1);
   }
 
   understoryDensityAt(x, z) {
@@ -254,6 +354,19 @@ export class IslandTerrainSystem {
     return THREE.MathUtils.clamp(suitability * woodland, 0, 1);
   }
 
+  fernDensityAt(x, z) {
+    const suitability = this.vegetationSuitabilityAt(x, z, 0.5);
+    if (suitability <= 0) return 0;
+    const forest = this.forestCoverAt(x, z);
+    const dampField = 0.5 + (
+      Math.sin(x * 0.052 + z * 0.037 + 2.7) +
+      Math.cos(z * 0.061 - x * 0.024 + 0.5)
+    ) / 4;
+    const dampPatch = THREE.MathUtils.smoothstep(dampField, 0.42, 0.66);
+    const cover = 0.28 + forest * 0.92;
+    return THREE.MathUtils.clamp(suitability * dampPatch * cover, 0, 0.96);
+  }
+
   create() {
     this.#createTerrainMesh();
     this.#createWater();
@@ -261,25 +374,32 @@ export class IslandTerrainSystem {
   }
 
   #createTerrainMesh() {
-    const geometry = new THREE.PlaneGeometry(this.extentX * 2, this.extentZ * 2, 228, 190);
+    const geometry = new THREE.PlaneGeometry(this.extentX * 2, this.extentZ * 2, 292, 220);
     geometry.rotateX(-Math.PI / 2);
     const position = geometry.attributes.position;
     const colors = [];
     const color = new THREE.Color();
+    const forestColor = new THREE.Color(0x3f7045);
 
     for (let i = 0; i < position.count; i += 1) {
       const x = position.getX(i);
       const z = position.getZ(i);
       const y = this.heightAt(x, z);
       const slope = this.slopeAt(x, z, 1.15);
+      const sand = this.isSandAt(x, z);
       position.setY(i, y);
-      if (this.isSandAt(x, z)) color.set(0xdfc993);
+      if (sand) color.set(0xdfc993);
       else if (slope > 0.82) color.set(0x776d5d);
       else if (slope > 0.56) color.set(0x827861);
       else if (y < 0.9) color.set(0x88b861);
       else if (y < 3.1) color.set(0x60994f);
       else if (y < 5.6) color.set(0x5a864a);
       else color.set(0x77775d);
+
+      if (!sand) {
+        const forestShade = this.forestCoverAt(x, z);
+        color.lerp(forestColor, forestShade * 0.18);
+      }
       const variation = Math.sin(x * 0.19) * Math.cos(z * 0.17) * 0.035;
       color.offsetHSL(0, 0, variation);
       colors.push(color.r, color.g, color.b);
@@ -295,8 +415,8 @@ export class IslandTerrainSystem {
 
   #createWater() {
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.extentX * 2 + 80, this.extentZ * 2 + 90),
-      new THREE.MeshStandardMaterial({ color: 0x59bccc, transparent: true, opacity: 0.82, roughness: 0.2, metalness: 0.02 })
+      new THREE.PlaneGeometry(this.extentX * 2 + 360, this.extentZ * 2 + 380),
+      new THREE.MeshStandardMaterial({ color: 0x4faebb, transparent: true, opacity: 0.82, roughness: 0.24, metalness: 0.01 })
     );
     water.geometry.rotateX(-Math.PI / 2);
     water.position.y = this.waterLevel;
@@ -332,5 +452,33 @@ export class IslandTerrainSystem {
       this.group.add(patch);
       index += 1;
     }
+  }
+
+  #satelliteInfoAt(x, z) {
+    let best = null;
+    for (const island of this.satelliteIslands) {
+      const normalized = this.#satelliteNormalizedRadius(island, x, z);
+      if (normalized > 1.04) continue;
+      if (!best || normalized < best.normalized) best = { island, normalized };
+    }
+    return best;
+  }
+
+  #satelliteNormalizedRadius(island, x, z) {
+    const warpedX = x + Math.sin((z + island.phase) * 0.17) * island.warp + Math.sin((x - z) * 0.083) * island.warp * 0.34;
+    const warpedZ = z + Math.cos((x - island.phase) * 0.15) * island.warp + Math.cos((x + z) * 0.071) * island.warp * 0.3;
+    const { u, v } = rotatedCoordinates(warpedX, warpedZ, island.x, island.z, island.yaw);
+    return Math.sqrt((u * u) / (island.halfX * island.halfX) + (v * v) / (island.halfZ * island.halfZ));
+  }
+
+  #sandbarInfoAt(x, z) {
+    let best = null;
+    for (const island of this.satelliteIslands) {
+      const bar = island.bar;
+      const segment = distanceToSegment(x, z, bar.x1, bar.z1, bar.x2, bar.z2);
+      if (segment.distance > bar.width * 1.08) continue;
+      if (!best || segment.distance < best.distance) best = { bar, ...segment };
+    }
+    return best;
   }
 }
