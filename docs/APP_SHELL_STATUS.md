@@ -1,1 +1,1 @@
-Status: app-shell restore candidate based on stable Foundation 0.3.2. Pending CI and on-device install acceptance.
+Status: Chrome-native install flow was proven on Android at PR #16. Ranger icon follow-up exposed a stale-shell/cache regression (Create shortcut + generic G). `0.3.2-install5` forces versioned PNG launcher assets and a new service-worker cache. Pending CI, Pages deployment and on-device install acceptance before gameplay work resumes.
