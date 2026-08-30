@@ -5,7 +5,7 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install5`;
+const shellRevision = `${expectedVersion}-install6`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -79,27 +79,21 @@ if (manifest.prefer_related_applications !== false) {
 }
 
 const icons = manifest.icons ?? [];
-const icon192Src = `icons/icon-192.png?v=${shellRevision}`;
-const icon512Src = `icons/icon-512.png?v=${shellRevision}`;
-const maskable512Src = `icons/icon-maskable-512.png?v=${shellRevision}`;
-const icon192 = icons.find(icon => icon.src === icon192Src);
-const icon512 = icons.find(icon => icon.src === icon512Src);
-const maskable512 = icons.find(icon => icon.src === maskable512Src);
+const icon192 = icons.find(icon => icon.src === 'icons/ranger-192.png');
+const icon512 = icons.find(icon => icon.src === 'icons/ranger-512.png');
+const maskable512 = icons.find(icon => icon.src === 'icons/ranger-maskable-512.png');
 if (icon192?.sizes !== '192x192' || icon192?.type !== 'image/png' || icon192?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires a revisioned 192x192 PNG app icon');
+  throw new Error('Chrome install contract requires a clean 192x192 Ranger PNG app icon');
 }
 if (icon512?.sizes !== '512x512' || icon512?.type !== 'image/png' || icon512?.purpose !== 'any') {
-  throw new Error('Chrome install contract requires a revisioned 512x512 PNG app icon');
+  throw new Error('Chrome install contract requires a clean 512x512 Ranger PNG app icon');
 }
 if (maskable512?.sizes !== '512x512' || maskable512?.type !== 'image/png' || maskable512?.purpose !== 'maskable') {
-  throw new Error('Android shell requires a revisioned 512x512 maskable PNG icon');
+  throw new Error('Android shell requires a clean 512x512 Ranger maskable PNG icon');
 }
-if (icons.some(icon => icon.type === 'image/svg+xml')) {
-  throw new Error('Chrome launcher selection must stay on explicit PNG icons');
-}
-await verifyPng('icons/icon-192.png', 192);
-await verifyPng('icons/icon-512.png', 512);
-await verifyPng('icons/icon-maskable-512.png', 512);
+await verifyPng('icons/ranger-192.png', 192);
+await verifyPng('icons/ranger-512.png', 512);
+await verifyPng('icons/ranger-maskable-512.png', 512);
 await requireFile('.nojekyll', true);
 
 const serviceWorkerPath = await requireFile('sw.js');
@@ -108,12 +102,12 @@ if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
   throw new Error(`Service worker shell revision must match ${shellRevision}`);
 }
 for (const asset of [
-  `./manifest.webmanifest?v=\${SHELL_VERSION}`,
-  `./icons/icon-192.png?v=\${SHELL_VERSION}`,
-  `./icons/icon-512.png?v=\${SHELL_VERSION}`,
-  `./icons/icon-maskable-512.png?v=\${SHELL_VERSION}`
+  './manifest.webmanifest',
+  './icons/ranger-192.png',
+  './icons/ranger-512.png',
+  './icons/ranger-maskable-512.png'
 ]) {
-  if (!serviceWorker.includes(asset)) throw new Error(`Service worker must pre-cache revisioned shell asset ${asset}`);
+  if (!serviceWorker.includes(`'${asset}'`)) throw new Error(`Service worker must pre-cache clean shell asset ${asset}`);
 }
 if (!serviceWorker.includes('cache.addAll(SHELL_ASSETS)')) {
   throw new Error('Service worker must pre-cache the install shell like the archived Villager PWA');
@@ -129,17 +123,17 @@ const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 const manifestRef = `./manifest.webmanifest?v=${shellRevision}`;
 const workerRef = `./sw.js?v=${shellRevision}`;
-const pngIconRef = `./icons/icon-192.png?v=${shellRevision}`;
+const pngIconRef = './icons/ranger-192.png';
 if (!index.includes(manifestRef)) throw new Error('Built index is not linked to the current PWA manifest revision');
 if (!index.includes(workerRef)) throw new Error('Built index is not registering the current service worker revision');
 if (!index.includes("scope: './'")) throw new Error('Service worker registration must use the archived explicit relative scope');
 if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
 if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is missing Android mobile-app metadata');
 if (!index.includes(`<link rel="icon" href="${pngIconRef}" type="image/png" sizes="192x192" />`)) {
-  throw new Error('Built index must expose the revisioned PNG Ranger icon to Chrome');
+  throw new Error('Built index must expose the clean Ranger PNG icon to Chrome');
 }
 if (!index.includes(`<link rel="apple-touch-icon" href="${pngIconRef}" />`)) {
-  throw new Error('Built index must expose the revisioned PNG Ranger touch icon');
+  throw new Error('Built index must expose the clean Ranger touch icon');
 }
 if (index.includes('pwa-shell.js') || index.includes('beforeinstallprompt') || index.includes('preventDefault()')) {
   throw new Error('Android install flow must not suppress or replace Chrome native installation UI');
