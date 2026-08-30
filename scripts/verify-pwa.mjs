@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install3`;
+const shellRevision = `${expectedVersion}-install4`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -37,8 +37,8 @@ async function verifyPng(relativePath, expectedSize) {
 
 const manifestPath = await requireFile('manifest.webmanifest');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-if (manifest.name !== 'The Villager' || manifest.short_name !== 'The Villager') {
-  throw new Error('PWA identity must remain The Villager');
+if (manifest.name !== 'The Villager' || manifest.short_name !== 'Villager') {
+  throw new Error('PWA identity must match the proven archived Villager manifest');
 }
 if (manifest.display !== 'fullscreen') throw new Error('PWA manifest must use fullscreen display mode');
 if (!Array.isArray(manifest.display_override) || !manifest.display_override.includes('standalone')) {
@@ -53,9 +53,11 @@ if (manifest.prefer_related_applications !== false) {
 }
 
 const icons = manifest.icons ?? [];
-const icon192 = icons.find(icon => icon.src === `./icons/icon-192.png?v=${shellRevision}`);
-const icon512 = icons.find(icon => icon.src === `./icons/icon-512.png?v=${shellRevision}`);
-const maskable512 = icons.find(icon => icon.src === `./icons/icon-maskable-512.png?v=${shellRevision}`);
+const icon192 = icons.find(icon => icon.src === 'icons/icon-192.png');
+const icon512 = icons.find(icon => icon.src === 'icons/icon-512.png');
+const maskable512 = icons.find(icon => icon.src === 'icons/icon-maskable-512.png');
+const normalSvg = icons.find(icon => icon.src === 'icons/icon.svg');
+const maskableSvg = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
 if (icon192?.sizes !== '192x192' || icon192?.type !== 'image/png' || icon192?.purpose !== 'any') {
   throw new Error('Chrome install contract requires an explicit 192x192 PNG app icon');
 }
@@ -65,6 +67,12 @@ if (icon512?.sizes !== '512x512' || icon512?.type !== 'image/png' || icon512?.pu
 if (maskable512?.sizes !== '512x512' || maskable512?.type !== 'image/png' || maskable512?.purpose !== 'maskable') {
   throw new Error('Android shell requires a 512x512 maskable PNG icon');
 }
+if (normalSvg?.sizes !== 'any' || normalSvg?.type !== 'image/svg+xml' || normalSvg?.purpose !== 'any') {
+  throw new Error('Archived Villager SVG app icon must remain available');
+}
+if (maskableSvg?.sizes !== 'any' || maskableSvg?.type !== 'image/svg+xml' || maskableSvg?.purpose !== 'maskable') {
+  throw new Error('Archived Villager maskable SVG icon must remain available');
+}
 await verifyPng('icons/icon-192.png', 192);
 await verifyPng('icons/icon-512.png', 512);
 await verifyPng('icons/icon-maskable-512.png', 512);
@@ -72,41 +80,36 @@ await verifySvg('icons/icon.svg');
 await verifySvg('icons/icon-maskable.svg');
 await requireFile('.nojekyll', true);
 
-const pwaShellPath = await requireFile('pwa-shell.js');
-const pwaShell = await readFile(pwaShellPath, 'utf8');
-if (!pwaShell.includes("addEventListener('beforeinstallprompt'") || !pwaShell.includes('event.preventDefault()')) {
-  throw new Error('PWA shell must capture Chrome beforeinstallprompt before gameplay loads');
-}
-if (!pwaShell.includes(`./sw.js?v=${shellRevision}`) || !pwaShell.includes('navigator.serviceWorker.ready')) {
-  throw new Error('PWA shell must register and await the current service worker before gameplay bootstrap');
-}
-
 const serviceWorkerPath = await requireFile('sw.js');
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
-if (!serviceWorker.includes("addEventListener('fetch'") || !serviceWorker.includes("cache: 'no-store'")) {
-  throw new Error('Service worker must keep the exact game/module graph network-fresh');
-}
-if (!serviceWorker.includes(shellRevision)) {
+if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
   throw new Error(`Service worker shell revision must match ${shellRevision}`);
+}
+if (!serviceWorker.includes('cache.addAll(SHELL_ASSETS)')) {
+  throw new Error('Service worker must pre-cache the install shell like the archived Villager PWA');
+}
+if (!serviceWorker.includes("request.mode === 'navigate'")) {
+  throw new Error('Service worker must provide a cached navigation fallback for the install shell');
+}
+if (!serviceWorker.includes("cache: 'no-store'")) {
+  throw new Error('Gameplay/runtime requests must remain network-fresh');
 }
 
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
-const shellRef = `./pwa-shell.js?v=${shellRevision}`;
 const manifestRef = `./manifest.webmanifest?v=${shellRevision}`;
-const iconRef = `./icons/icon-192.png?v=${shellRevision}`;
+const workerRef = `./sw.js?v=${shellRevision}`;
 if (!index.includes(manifestRef)) throw new Error('Built index is not linked to the current PWA manifest revision');
-if (!index.includes(shellRef)) throw new Error('Built index is missing the early PWA bootstrap');
+if (!index.includes(workerRef)) throw new Error('Built index is not registering the current service worker revision');
+if (!index.includes("scope: './'")) throw new Error('Service worker registration must use the archived explicit relative scope');
+if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
 if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is missing Android mobile-app metadata');
-if (!index.includes(iconRef)) throw new Error('Built index must expose the raster Villager icon to Chrome');
-const shellPosition = index.indexOf(shellRef);
-const manifestPosition = index.indexOf(manifestRef);
-const gameModulePosition = index.indexOf('type="module"');
-if (shellPosition < 0 || manifestPosition < 0 || gameModulePosition < 0 || shellPosition > manifestPosition || shellPosition > gameModulePosition) {
-  throw new Error('PWA bootstrap must load before the manifest install evaluation and production gameplay module');
+if (!index.includes(`./icons/icon.svg?v=${shellRevision}`)) throw new Error('Built index must expose the archived Villager icon to Chrome');
+if (index.includes('pwa-shell.js') || index.includes('beforeinstallprompt') || index.includes('preventDefault()')) {
+  throw new Error('Android install flow must not suppress or replace Chrome native installation UI');
 }
 if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
   throw new Error(`Built index version labels must match package version ${expectedVersion}`);
 }
 
-console.log(`PWA install contract verified in ${root} for ${shellRevision}`);
+console.log(`Native Villager PWA install contract verified in ${root} for ${shellRevision}`);
