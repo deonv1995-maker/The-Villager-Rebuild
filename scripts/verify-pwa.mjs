@@ -101,9 +101,9 @@ if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is m
 if (!index.includes(iconRef)) throw new Error('Built index must expose the raster Villager icon to Chrome');
 const shellPosition = index.indexOf(shellRef);
 const manifestPosition = index.indexOf(manifestRef);
-const gamePosition = index.indexOf('./src/main.js');
-if (shellPosition < 0 || manifestPosition < 0 || gamePosition < 0 || shellPosition > manifestPosition || shellPosition > gamePosition) {
-  throw new Error('PWA bootstrap must load before the manifest install evaluation and gameplay module graph');
+const gameModulePosition = index.indexOf('type="module"');
+if (shellPosition < 0 || manifestPosition < 0 || gameModulePosition < 0 || shellPosition > manifestPosition || shellPosition > gameModulePosition) {
+  throw new Error('PWA bootstrap must load before the manifest install evaluation and production gameplay module');
 }
 if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
   throw new Error(`Built index version labels must match package version ${expectedVersion}`);
