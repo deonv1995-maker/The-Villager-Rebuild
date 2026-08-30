@@ -21,11 +21,10 @@ jobs:
         with:
           node-version: '22'
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
 
       - name: Install web dependencies
         run: npm install --no-audit --no-fund
