@@ -1,4 +1,9 @@
+function isNativeShell() {
+  return Boolean(window.Capacitor?.isNativePlatform?.());
+}
+
 export function registerVillagerServiceWorker() {
+  if (isNativeShell()) return;
   if (!('serviceWorker' in navigator)) return;
   const eligibleOrigin = location.protocol === 'https:' || location.hostname === 'localhost';
   if (!eligibleOrigin) return;
@@ -30,6 +35,7 @@ export function registerVillagerServiceWorker() {
 }
 
 export function installAppPrompt() {
+  if (isNativeShell()) return;
   if (window.matchMedia('(display-mode: standalone)').matches) return;
 
   const button = document.createElement('button');
