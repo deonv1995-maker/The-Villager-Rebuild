@@ -6,7 +6,12 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'ranger-icon-3';
+const shellRevision = 'ranger-icon-4';
+const installIcons = {
+  png192: 'icons/ranger-install-192-v4.png',
+  png512: 'icons/ranger-install-512-v4.png',
+  maskable512: 'icons/ranger-install-maskable-512-v4.png'
+};
 
 const expectedPixelHashes = {
   'icons/icon-192.png': 'f7c17130ba31868976dfd9a14c172114746b8cd8bbe0a5ae62e321a0804f05ae',
@@ -123,19 +128,19 @@ if (manifest.orientation !== 'any') throw new Error('Villager manifest orientati
 if (manifest.prefer_related_applications === true) throw new Error('PWA must not prefer a related native application');
 
 const icons = manifest.icons ?? [];
-const png192 = icons.find(icon => icon.src === `icons/icon-192.png?v=${shellRevision}`);
-const png512 = icons.find(icon => icon.src === `icons/icon-512.png?v=${shellRevision}`);
-const pngMaskable = icons.find(icon => icon.src === `icons/icon-maskable-512.png?v=${shellRevision}`);
+const png192 = icons.find(icon => icon.src === installIcons.png192);
+const png512 = icons.find(icon => icon.src === installIcons.png512);
+const pngMaskable = icons.find(icon => icon.src === installIcons.maskable512);
 const svgIcon = icons.find(icon => icon.src === `icons/icon.svg?v=${shellRevision}`);
 const svgMaskable = icons.find(icon => icon.src === `icons/icon-maskable.svg?v=${shellRevision}`);
 if (png192?.sizes !== '192x192' || png192?.type !== 'image/png' || png192?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires a cache-busted explicit 192x192 PNG icon');
+  throw new Error('Current Chromium installability requires the fresh physical 192x192 Ranger PNG resource');
 }
 if (png512?.sizes !== '512x512' || png512?.type !== 'image/png' || png512?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires a cache-busted explicit 512x512 PNG icon');
+  throw new Error('Current Chromium installability requires the fresh physical 512x512 Ranger PNG resource');
 }
 if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || pngMaskable?.purpose !== 'maskable') {
-  throw new Error('Android launcher presentation requires the cache-busted 512x512 maskable PNG icon');
+  throw new Error('Android launcher presentation requires the fresh physical 512x512 maskable Ranger PNG resource');
 }
 if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.purpose !== 'any') {
   throw new Error('Villager standard SVG fallback changed');
@@ -149,6 +154,9 @@ await verifyPng('icons/icon-maskable-512.png', 512, expectedPixelHashes['icons/i
 await requireSameFile('icons/icon-192.png', 'icons/ranger-192.png');
 await requireSameFile('icons/icon-512.png', 'icons/ranger-512.png');
 await requireSameFile('icons/icon-maskable-512.png', 'icons/ranger-maskable-512.png');
+await requireSameFile('icons/icon-192.png', installIcons.png192);
+await requireSameFile('icons/icon-512.png', installIcons.png512);
+await requireSameFile('icons/icon-maskable-512.png', installIcons.maskable512);
 await verifySvg('icons/icon.svg', 'data-icon-art="ranger-v1"');
 await verifySvg('icons/icon-maskable.svg', 'data-icon-art="ranger-v1-maskable"');
 await requireFile('.nojekyll', true);
@@ -180,8 +188,8 @@ const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
   throw new Error('Built index must link the approved Ranger icon manifest revision');
 }
-if (!index.includes(`./icons/icon-192.png?v=${shellRevision}`)) {
-  throw new Error('Built index must expose the approved Ranger PNG favicon/touch icon');
+if (!index.includes(`./${installIcons.png192}`)) {
+  throw new Error('Built index must expose the fresh physical Ranger PNG favicon/touch icon');
 }
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
   throw new Error('Built index must use the simple versioned service-worker registration pattern');
