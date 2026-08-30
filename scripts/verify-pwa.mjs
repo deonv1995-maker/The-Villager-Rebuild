@@ -6,7 +6,7 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'ranger-icon-2';
+const shellRevision = 'ranger-icon-3';
 
 const expectedPixelHashes = {
   'icons/icon-192.png': 'f7c17130ba31868976dfd9a14c172114746b8cd8bbe0a5ae62e321a0804f05ae',
@@ -123,19 +123,19 @@ if (manifest.orientation !== 'any') throw new Error('Villager manifest orientati
 if (manifest.prefer_related_applications === true) throw new Error('PWA must not prefer a related native application');
 
 const icons = manifest.icons ?? [];
-const png192 = icons.find(icon => icon.src === 'icons/icon-192.png');
-const png512 = icons.find(icon => icon.src === 'icons/icon-512.png');
-const pngMaskable = icons.find(icon => icon.src === 'icons/icon-maskable-512.png');
-const svgIcon = icons.find(icon => icon.src === 'icons/icon.svg');
-const svgMaskable = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
+const png192 = icons.find(icon => icon.src === `icons/icon-192.png?v=${shellRevision}`);
+const png512 = icons.find(icon => icon.src === `icons/icon-512.png?v=${shellRevision}`);
+const pngMaskable = icons.find(icon => icon.src === `icons/icon-maskable-512.png?v=${shellRevision}`);
+const svgIcon = icons.find(icon => icon.src === `icons/icon.svg?v=${shellRevision}`);
+const svgMaskable = icons.find(icon => icon.src === `icons/icon-maskable.svg?v=${shellRevision}`);
 if (png192?.sizes !== '192x192' || png192?.type !== 'image/png' || png192?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires an explicit 192x192 PNG icon');
+  throw new Error('Current Chromium installability requires a cache-busted explicit 192x192 PNG icon');
 }
 if (png512?.sizes !== '512x512' || png512?.type !== 'image/png' || png512?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires an explicit 512x512 PNG icon');
+  throw new Error('Current Chromium installability requires a cache-busted explicit 512x512 PNG icon');
 }
 if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || pngMaskable?.purpose !== 'maskable') {
-  throw new Error('Android launcher presentation requires the 512x512 maskable PNG icon');
+  throw new Error('Android launcher presentation requires the cache-busted 512x512 maskable PNG icon');
 }
 if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.purpose !== 'any') {
   throw new Error('Villager standard SVG fallback changed');
