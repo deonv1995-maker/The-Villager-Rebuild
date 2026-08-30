@@ -9,9 +9,9 @@ const expectedVersion = packageJson.version;
 const shellRevision = 'ranger-icon-2';
 
 const expectedPixelHashes = {
-  'icons/icon-192.png': 'afd80ab0229e4d6d97852d05372a0e16aff09388302c01d90ec4641a61e6e4f3',
-  'icons/icon-512.png': '6cf29d1a2adf37eaba570a6a396e8336dc81b019b71a744e8ceebe87df091955',
-  'icons/icon-maskable-512.png': '1f4830e7d3c554813e17ff0b7c560a43d33b6f301e7397d08253d35cdfdac849'
+  'icons/icon-192.png': 'f7c17130ba31868976dfd9a14c172114746b8cd8bbe0a5ae62e321a0804f05ae',
+  'icons/icon-512.png': '875a110f2b4c61d313745c9a300734835ea985c6e76316d9f38016a5884e8365',
+  'icons/icon-maskable-512.png': 'f18ee17d32f4f7742e1c5489c28c36868eea969fbaec87b9e5ec2fc972f10ade'
 };
 
 async function requireFile(relativePath, allowEmpty = false) {
