@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/generate-pwa-icons.mjs dist/icons",
     "preview": "vite preview --host 0.0.0.0",
     "verify:assets": "node scripts/verify-runtime-assets.mjs public",
     "verify:gameplay": "node scripts/verify-gameplay.mjs",
