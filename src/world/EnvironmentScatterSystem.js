@@ -121,9 +121,23 @@ export class EnvironmentScatterSystem {
     });
   }
 
+  #samplePoint(margin = 18) {
+    const bounds = this.terrain.getScatterBounds?.(margin) ?? {
+      halfX: 132,
+      halfZ: 109,
+      centerZ: -4
+    };
+    return {
+      x: (this.random() * 2 - 1) * bounds.halfX,
+      z: (this.random() * 2 - 1) * bounds.halfZ + bounds.centerZ
+    };
+  }
+
   #pathClearance(x, z, width) {
-    if (z > 90 || z < -90) return true;
-    return Math.abs(x - this.terrain.pathCenterX(z)) >= width;
+    const strength = this.terrain.routeCorridorStrengthAt?.(z) ?? (z <= 90 && z >= -90 ? 1 : 0);
+    if (strength <= 0.08) return true;
+    const effectiveWidth = width * (0.72 + strength * 0.28);
+    return Math.abs(x - this.terrain.pathCenterX(z)) >= effectiveWidth;
   }
 
   #placeCliffFaceDressing({ cliff }) {
@@ -235,12 +249,11 @@ export class EnvironmentScatterSystem {
     const placementsByType = [[], []];
     let treesPlaced = 0;
     let attempts = 0;
-    while (treesPlaced < 440 && attempts < 18000) {
+    while (treesPlaced < 540 && attempts < 23000) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 132;
-      const z = (this.random() * 2 - 1) * 109 - 4;
+      const { x, z } = this.#samplePoint(23);
       if (!this.terrain.isPlayable(x, z, 4.6)) continue;
-      if (!this.#pathClearance(x, z, 3.7)) continue;
+      if (!this.#pathClearance(x, z, 2.35)) continue;
 
       const density = this.terrain.treeDensityAt(x, z);
       if (density <= 0 || this.random() > density) continue;
@@ -279,12 +292,11 @@ export class EnvironmentScatterSystem {
     const rockTemplates = [forestRock, cliffRock];
     let rocksPlaced = 0;
     attempts = 0;
-    while (rocksPlaced < 34 && attempts < 3600) {
+    while (rocksPlaced < 42 && attempts < 4600) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 126;
-      const z = (this.random() * 2 - 1) * 104 - 4;
+      const { x, z } = this.#samplePoint(28);
       if (!this.terrain.isPlayable(x, z, 5)) continue;
-      if (!this.#pathClearance(x, z, 3.4)) continue;
+      if (!this.#pathClearance(x, z, 1.8)) continue;
       const slope = this.terrain.slopeAt(x, z);
       if (slope > 0.64) continue;
       const large = this.random() < 0.24;
@@ -351,12 +363,11 @@ export class EnvironmentScatterSystem {
     const dummy = new THREE.Object3D();
     let placed = 0;
     let attempts = 0;
-    while (placed < 185 && attempts < 7200) {
+    while (placed < 230 && attempts < 9000) {
       attempts += 1;
-      const x = (this.random() * 2 - 1) * 129;
-      const z = (this.random() * 2 - 1) * 107 - 4;
+      const { x, z } = this.#samplePoint(24);
       if (!this.terrain.isPlayable(x, z, 4.5)) continue;
-      if (!this.#pathClearance(x, z, 2.7)) continue;
+      if (!this.#pathClearance(x, z, 1.35)) continue;
 
       const density = this.terrain.understoryDensityAt(x, z);
       if (density <= 0 || this.random() > density) continue;
