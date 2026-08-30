@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'original-pwa-1';
+const shellRevision = 'current-chrome-icons-1';
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -27,34 +27,63 @@ async function verifySvg(relativePath) {
   const filePath = await requireFile(relativePath);
   const source = await readFile(filePath, 'utf8');
   if (!source.includes('<svg') || !source.includes('viewBox="0 0 512 512"')) {
-    throw new Error(`${filePath}: invalid original Villager SVG icon`);
+    throw new Error(`${filePath}: invalid Villager SVG icon`);
+  }
+}
+
+async function verifyPng(relativePath, expectedSize) {
+  const filePath = await requireFile(relativePath);
+  const data = await readFile(filePath);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (data.length < 24 || !data.subarray(0, 8).equals(signature)) {
+    throw new Error(`${filePath}: invalid PNG signature`);
+  }
+  const width = data.readUInt32BE(16);
+  const height = data.readUInt32BE(20);
+  if (width !== expectedSize || height !== expectedSize) {
+    throw new Error(`${filePath}: expected ${expectedSize}x${expectedSize}, got ${width}x${height}`);
   }
 }
 
 const manifestPath = await requireFile('manifest.webmanifest');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 if (manifest.id !== './' || manifest.name !== 'The Villager' || manifest.short_name !== 'Villager') {
-  throw new Error('PWA identity must match the original Villager manifest');
+  throw new Error('PWA identity must match The Villager');
 }
 if (manifest.start_url !== './' || manifest.scope !== './') {
-  throw new Error('Original Villager start_url and scope must remain relative');
+  throw new Error('Villager start_url and scope must remain relative to the Pages project root');
 }
-if (manifest.display !== 'fullscreen') throw new Error('Original Villager display mode must remain fullscreen');
+if (manifest.display !== 'fullscreen') throw new Error('Villager display mode must remain fullscreen');
 if (!Array.isArray(manifest.display_override) || manifest.display_override.join(',') !== 'fullscreen,standalone') {
-  throw new Error('Original Villager display_override must remain fullscreen then standalone');
+  throw new Error('Villager display_override must remain fullscreen then standalone');
 }
-if (manifest.orientation !== 'any') throw new Error('Original Villager manifest orientation must remain any');
+if (manifest.orientation !== 'any') throw new Error('Villager manifest orientation must remain any during install recovery');
+if (manifest.prefer_related_applications === true) throw new Error('PWA must not prefer a related native application');
 
 const icons = manifest.icons ?? [];
-if (icons.length !== 2) throw new Error('Original Villager manifest must expose exactly two SVG launcher icons');
-const normalIcon = icons.find(icon => icon.src === 'icons/icon.svg');
-const maskableIcon = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
-if (normalIcon?.sizes !== 'any' || normalIcon?.type !== 'image/svg+xml' || normalIcon?.purpose !== 'any') {
-  throw new Error('Original Villager standard SVG icon declaration changed');
+const png192 = icons.find(icon => icon.src === 'icons/icon-192.png');
+const png512 = icons.find(icon => icon.src === 'icons/icon-512.png');
+const pngMaskable = icons.find(icon => icon.src === 'icons/icon-maskable-512.png');
+const svgIcon = icons.find(icon => icon.src === 'icons/icon.svg');
+const svgMaskable = icons.find(icon => icon.src === 'icons/icon-maskable.svg');
+if (png192?.sizes !== '192x192' || png192?.type !== 'image/png' || png192?.purpose !== 'any') {
+  throw new Error('Current Chromium installability requires an explicit 192x192 PNG icon');
 }
-if (maskableIcon?.sizes !== 'any' || maskableIcon?.type !== 'image/svg+xml' || maskableIcon?.purpose !== 'maskable') {
-  throw new Error('Original Villager maskable SVG icon declaration changed');
+if (png512?.sizes !== '512x512' || png512?.type !== 'image/png' || png512?.purpose !== 'any') {
+  throw new Error('Current Chromium installability requires an explicit 512x512 PNG icon');
 }
+if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || pngMaskable?.purpose !== 'maskable') {
+  throw new Error('Android launcher presentation requires the 512x512 maskable PNG icon');
+}
+if (svgIcon?.sizes !== 'any' || svgIcon?.type !== 'image/svg+xml' || svgIcon?.purpose !== 'any') {
+  throw new Error('Original Villager standard SVG fallback changed');
+}
+if (svgMaskable?.sizes !== 'any' || svgMaskable?.type !== 'image/svg+xml' || svgMaskable?.purpose !== 'maskable') {
+  throw new Error('Original Villager maskable SVG fallback changed');
+}
+await verifyPng('icons/icon-192.png', 192);
+await verifyPng('icons/icon-512.png', 512);
+await verifyPng('icons/icon-maskable-512.png', 512);
 await verifySvg('icons/icon.svg');
 await verifySvg('icons/icon-maskable.svg');
 await requireFile('.nojekyll', true);
@@ -84,14 +113,14 @@ for (const forbidden of ['caches.open(', 'caches.match(', 'cache.addAll(', 'LEGA
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
-  throw new Error('Built index must link the original-style versioned manifest URL');
+  throw new Error('Built index must link the current Chrome install manifest revision');
 }
-if (!index.includes('./icons/icon.svg')) throw new Error('Built index must expose the original Villager SVG icon');
+if (!index.includes('./icons/icon.svg')) throw new Error('Built index must expose the original Villager SVG favicon');
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
-  throw new Error('Built index must use the original simple service-worker registration pattern');
+  throw new Error('Built index must use the simple versioned service-worker registration pattern');
 }
 for (const requirement of ['Cache-Control', 'no-cache, no-store, must-revalidate', 'mobile-web-app-capable']) {
-  if (!index.includes(requirement)) throw new Error(`Built index is missing original PWA shell metadata: ${requirement}`);
+  if (!index.includes(requirement)) throw new Error(`Built index is missing PWA shell metadata: ${requirement}`);
 }
 for (const forbidden of [
   'beforeinstallprompt',
@@ -100,12 +129,11 @@ for (const forbidden of [
   'install-app-status',
   'pwa-install.js',
   'pwa-install.css',
-  'ranger-192.png',
   'updateViaCache',
   'registration.update()'
 ]) {
   if (index.includes(forbidden)) {
-    throw new Error(`Original Chrome-owned install flow must not contain rebuild install logic: ${forbidden}`);
+    throw new Error(`Chrome-owned install flow must not contain competing install logic: ${forbidden}`);
   }
 }
 if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
@@ -114,4 +142,4 @@ if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDAT
 await requireMissing('pwa-install.js');
 await requireMissing('pwa-install.css');
 
-console.log(`Original Villager Chrome PWA contract verified in ${root}`);
+console.log(`Villager current Chrome PWA contract verified in ${root}`);
