@@ -34,14 +34,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: android-actions/setup-android@v3
+
+      - name: Ensure Android SDK 35 is available
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-
-      - name: Ensure Android SDK 35 is available
-        run: |
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
       - name: Build debug APK
         run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
