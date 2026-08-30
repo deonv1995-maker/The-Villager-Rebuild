@@ -95,7 +95,7 @@ export class WaterSurfaceSystem {
     });
     this.surface.material = this.material;
     this.surface.position.y = this.terrain.waterLevel;
-    this.surface.renderOrder = -2;
+    this.surface.renderOrder = 1;
 
     const rippleGeometry = new THREE.RingGeometry(0.55, 0.76, 24);
     rippleGeometry.rotateX(-Math.PI / 2);
