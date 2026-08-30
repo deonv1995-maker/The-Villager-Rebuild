@@ -10,21 +10,21 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.1 — world density, escarpments, hunt-asset and desktop-install test**
+**Foundation 0.3.2 — landscape enclosure and island-scale pass**
 
-This milestone keeps the Day 1 survival loop stable while improving the world presentation before tree chopping is added:
+This milestone preserves the accepted Foundation 0.3.1 main terrain/traversal work while improving the world presentation before tree chopping is added:
 
-- continuous irregular island terrain with authored large shelves, ravines and multi-metre drops;
-- steep terrain is visually exposed as rock while cliff meshes remain dressing rather than the terrain source of truth;
-- denser deterministic forest with roughly 440 collision-aware trees, including larger hero-tree variation;
-- instanced repeated tree and understory rendering to preserve a mobile-conscious draw-call budget;
-- more than ten thousand interactive grass tufts that bend/recover around the Ranger using localized spatial updates;
-- wider size/aspect variation for standable rocks and reduced repeated-platform presentation;
-- species-neutral Day 1 hunt gameplay with the Qiwii Wild Pig as the current production-asset style test;
-- installable Progressive Web App shell so the same verified build can launch from a desktop shortcut/window;
-- automated gameplay, runtime-asset, production-build and selected-asset integrity checks.
+- the Foundation 0.3.1 main island height field, central lowland access, cliffs, drops and collision architecture remain authoritative;
+- five smaller irregular satellite islands extend the coastline composition without turning the world into another radial landmass;
+- terrain-owned sandbars/shallow-water crossings connect the satellite islands through the same `heightAt()` / `isPlayable()` collision path as the main island;
+- procedural fern-like understory uses the same localized Ranger bend/compression/recovery engine as interactive grass;
+- grass and fern reaction share one spatially bounded instanced-vegetation implementation rather than duplicated per-frame logic;
+- forest-cover data now also gives dense groves subtle terrain shading, while cooler fog/light balance makes woodland and clearings read more cohesively;
+- two instanced rings of distant, off-limits mountain silhouettes close empty ocean sightlines and increase perceived world scale without adding fake collision terrain;
+- the camera/water horizon presentation extends far enough to support the distant silhouettes while remaining mobile-conscious;
+- automated landscape contracts now run beside gameplay, runtime-asset, production-build and PWA checks.
 
-Tree chopping/log gathering remains intentionally gated until the 0.3.1 world presentation is visually accepted in playtesting.
+Tree chopping/log gathering remains intentionally gated until the 0.3.2 landscape presentation is visually accepted in the deployed build.
 
 ## Desktop installation
 
