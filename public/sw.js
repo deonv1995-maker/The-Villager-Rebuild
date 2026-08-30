@@ -1,33 +1,14 @@
-const SHELL_VERSION = '0.3.2-install7';
-const CACHE_PREFIX = 'villager-rebuild-pwa-';
-const CACHE_NAME = `${CACHE_PREFIX}${SHELL_VERSION}`;
-const SHELL_ASSETS = [
-  './',
-  './index.html',
-  './manifest.webmanifest',
-  './pwa-install.js',
-  './pwa-install.css',
-  './icons/icon.svg',
-  './icons/icon-maskable.svg',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
-];
+const SHELL_VERSION = '0.3.2-install8';
+const VILLAGER_CACHE_PREFIXES = ['villager-rebuild-pwa-', 'villager-rebuild-'];
 
-self.addEventListener('install', event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(SHELL_ASSETS);
-    await self.skipWaiting();
-  })());
-});
+self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(
       keys
-        .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+        .filter(key => VILLAGER_CACHE_PREFIXES.some(prefix => key.startsWith(prefix)))
         .map(key => caches.delete(key))
     );
     await self.clients.claim();
@@ -41,38 +22,9 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .then(response => {
-          if (response?.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put('./index.html', copy)).catch(() => {});
-          }
-          return response;
-        })
-        .catch(() => caches.match('./index.html').then(cached => cached || Response.error()))
-    );
-    return;
-  }
-
-  const shellAsset =
-    url.pathname.endsWith('/manifest.webmanifest') ||
-    url.pathname.endsWith('/pwa-install.js') ||
-    url.pathname.endsWith('/pwa-install.css') ||
-    url.pathname.endsWith('/icons/icon.svg') ||
-    url.pathname.endsWith('/icons/icon-maskable.svg') ||
-    url.pathname.endsWith('/icons/icon-192.png') ||
-    url.pathname.endsWith('/icons/icon-512.png') ||
-    url.pathname.endsWith('/icons/icon-maskable-512.png');
-
-  if (shellAsset) {
-    event.respondWith(
-      caches.match(request, { ignoreSearch: true }).then(cached => cached || fetch(request))
-    );
-    return;
-  }
-
-  // Gameplay, terrain, Ranger, water and runtime assets stay network-fresh.
+  // Match the archived Villager service-worker behavior: do not replay a
+  // cached app shell, manifest, icon, or game module. Always request the exact
+  // same-origin URL and bypass HTTP cache so a deployed shell change reaches
+  // Android Chrome immediately instead of being trapped behind an old shell.
   event.respondWith(fetch(request, { cache: 'no-store' }));
 });
