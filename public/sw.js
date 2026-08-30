@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'villager-rebuild-';
-const CACHE_NAME = `${CACHE_PREFIX}0.3.2-pwa2`;
+const CACHE_NAME = `${CACHE_PREFIX}0.3.3-pwa1`;
 const SHELL = [
   './',
   './manifest.webmanifest',
