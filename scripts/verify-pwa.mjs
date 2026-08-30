@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install7`;
+const shellRevision = `${expectedVersion}-install8`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -38,7 +38,7 @@ async function verifyPng(relativePath, expectedSize) {
 const manifestPath = await requireFile('manifest.webmanifest');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 if (manifest.name !== 'The Villager' || manifest.short_name !== 'Villager') {
-  throw new Error('PWA identity must match the proven archived Villager manifest');
+  throw new Error('PWA identity must match the proven PR #16 Villager manifest');
 }
 if (manifest.display !== 'fullscreen') throw new Error('PWA manifest must use fullscreen display mode');
 if (!Array.isArray(manifest.display_override) || !manifest.display_override.includes('standalone')) {
@@ -92,21 +92,17 @@ await requireFile('pwa-install.css');
 const serviceWorkerPath = await requireFile('sw.js');
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
-  throw new Error(`Service worker shell revision must match ${shellRevision}`);
+  throw new Error(`Service worker revision must match ${shellRevision}`);
 }
-for (const shellAsset of ['./pwa-install.js', './pwa-install.css']) {
-  if (!serviceWorker.includes(`'${shellAsset}'`)) {
-    throw new Error(`Service worker must include ${shellAsset} in the install shell`);
+for (const requirement of ['self.skipWaiting()', 'caches.keys()', 'caches.delete(', 'self.clients.claim()', "cache: 'no-store'"]) {
+  if (!serviceWorker.includes(requirement)) {
+    throw new Error(`Network-fresh service worker is missing required behavior: ${requirement}`);
   }
 }
-if (!serviceWorker.includes('cache.addAll(SHELL_ASSETS)')) {
-  throw new Error('Service worker must pre-cache the install shell');
-}
-if (!serviceWorker.includes("request.mode === 'navigate'")) {
-  throw new Error('Service worker must provide a cached navigation fallback for the install shell');
-}
-if (!serviceWorker.includes("cache: 'no-store'")) {
-  throw new Error('Gameplay/runtime requests must remain network-fresh');
+for (const forbidden of ['cache.addAll(', 'caches.open(', 'caches.match(']) {
+  if (serviceWorker.includes(forbidden)) {
+    throw new Error(`PWA service worker must not keep a replayable shell cache: ${forbidden}`);
+  }
 }
 
 const indexPath = await requireFile('index.html');
