@@ -49,7 +49,9 @@ export class TestIslandSystem {
     this.water = new WaterSurfaceSystem({
       group: this.group,
       terrain: this.terrain,
-      maxRipples: 12
+      maxRipples: 12,
+      isPlayableAt: (x, z, margin) => this.isPlayable(x, z, margin),
+      groundHeightAt: (x, z) => this.baseHeightAt(x, z)
     });
     this.assetMode = 'terrain-only';
   }
