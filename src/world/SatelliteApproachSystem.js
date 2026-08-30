@@ -117,8 +117,7 @@ export class SatelliteApproachSystem {
       color: 0xdfc993,
       roughness: 1,
       metalness: 0,
-      transparent: true,
-      opacity: 0.98,
+      vertexColors: true,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1
