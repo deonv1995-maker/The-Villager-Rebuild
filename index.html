@@ -12,10 +12,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>The Villager — Foundation 0.3.2</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=0.3.2-install4" />
-  <link rel="icon" href="./icons/icon.svg?v=0.3.2-install4" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=0.3.2-install4" />
+  <link rel="manifest" href="./manifest.webmanifest?v=0.3.2-install7" />
+  <link rel="icon" href="./icons/icon.svg?v=0.3.2-install7" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png?v=0.3.2-install7" />
   <link rel="stylesheet" href="./src/styles.css" />
+  <link rel="stylesheet" href="./pwa-install.css?v=0.3.2-install7" />
+  <script src="./pwa-install.js?v=0.3.2-install7"></script>
   <script type="importmap">
     {
       "imports": {
@@ -30,11 +32,13 @@
     <canvas id="game-canvas" aria-label="The Villager test world"></canvas>
     <div id="boot-status">FOUNDATION 0.3.2 · STARTING</div>
   </div>
+  <button id="install-app-button" type="button" hidden>Install App</button>
+  <div id="install-app-status" role="status" aria-live="polite" hidden></div>
   <script>
     if ('serviceWorker' in navigator) {
       addEventListener('load', () => {
         navigator.serviceWorker
-          .register('./sw.js?v=0.3.2-install4', { scope: './', updateViaCache: 'none' })
+          .register('./sw.js?v=0.3.2-install7', { scope: './', updateViaCache: 'none' })
           .then(registration => registration.update())
           .catch(error => console.warn('[PWA]', error));
       }, { once: true });

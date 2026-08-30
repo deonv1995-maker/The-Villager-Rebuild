@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = `${expectedVersion}-install4`;
+const shellRevision = `${expectedVersion}-install7`;
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -80,13 +80,27 @@ await verifySvg('icons/icon.svg');
 await verifySvg('icons/icon-maskable.svg');
 await requireFile('.nojekyll', true);
 
+const installScriptPath = await requireFile('pwa-install.js');
+const installScript = await readFile(installScriptPath, 'utf8');
+for (const requirement of ['beforeinstallprompt', 'event.preventDefault()', 'prompt.prompt()', 'appinstalled', 'display-mode: standalone']) {
+  if (!installScript.includes(requirement)) {
+    throw new Error(`In-game install controller is missing required behavior: ${requirement}`);
+  }
+}
+await requireFile('pwa-install.css');
+
 const serviceWorkerPath = await requireFile('sw.js');
 const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 if (!serviceWorker.includes(`SHELL_VERSION = '${shellRevision}'`)) {
   throw new Error(`Service worker shell revision must match ${shellRevision}`);
 }
+for (const shellAsset of ['./pwa-install.js', './pwa-install.css']) {
+  if (!serviceWorker.includes(`'${shellAsset}'`)) {
+    throw new Error(`Service worker must include ${shellAsset} in the install shell`);
+  }
+}
 if (!serviceWorker.includes('cache.addAll(SHELL_ASSETS)')) {
-  throw new Error('Service worker must pre-cache the install shell like the archived Villager PWA');
+  throw new Error('Service worker must pre-cache the install shell');
 }
 if (!serviceWorker.includes("request.mode === 'navigate'")) {
   throw new Error('Service worker must provide a cached navigation fallback for the install shell');
@@ -99,17 +113,20 @@ const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 const manifestRef = `./manifest.webmanifest?v=${shellRevision}`;
 const workerRef = `./sw.js?v=${shellRevision}`;
+const installScriptRef = `./pwa-install.js?v=${shellRevision}`;
+const installStyleRef = `./pwa-install.css?v=${shellRevision}`;
 if (!index.includes(manifestRef)) throw new Error('Built index is not linked to the current PWA manifest revision');
 if (!index.includes(workerRef)) throw new Error('Built index is not registering the current service worker revision');
-if (!index.includes("scope: './'")) throw new Error('Service worker registration must use the archived explicit relative scope');
+if (!index.includes(installScriptRef)) throw new Error('Built index is missing the in-game install controller');
+if (!index.includes(installStyleRef)) throw new Error('Built index is missing the in-game install styles');
+if (!index.includes('id="install-app-button"')) throw new Error('Built index is missing the Install App button');
+if (!index.includes('id="install-app-status"')) throw new Error('Built index is missing install status feedback');
+if (!index.includes("scope: './'")) throw new Error('Service worker registration must keep explicit relative scope');
 if (!index.includes('registration.update()')) throw new Error('Service worker registration must request the current shell update');
 if (!index.includes('mobile-web-app-capable')) throw new Error('Built index is missing Android mobile-app metadata');
-if (!index.includes(`./icons/icon.svg?v=${shellRevision}`)) throw new Error('Built index must expose the archived Villager icon to Chrome');
-if (index.includes('pwa-shell.js') || index.includes('beforeinstallprompt') || index.includes('preventDefault()')) {
-  throw new Error('Android install flow must not suppress or replace Chrome native installation UI');
-}
+if (!index.includes(`./icons/icon.svg?v=${shellRevision}`)) throw new Error('Built index must expose the canonical Villager icon to Chrome');
 if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
   throw new Error(`Built index version labels must match package version ${expectedVersion}`);
 }
 
-console.log(`Native Villager PWA install contract verified in ${root} for ${shellRevision}`);
+console.log(`Villager PWA install contract verified in ${root} for ${shellRevision}`);
