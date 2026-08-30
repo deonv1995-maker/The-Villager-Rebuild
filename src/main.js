@@ -1,5 +1,5 @@
 import { GameApp } from './core/GameApp.js';
-import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
+import { installAppPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
 
 const canvas = document.getElementById('game-canvas');
 const status = document.getElementById('boot-status');
@@ -23,5 +23,5 @@ async function boot() {
 }
 
 registerVillagerServiceWorker();
-installDesktopPrompt();
+installAppPrompt();
 boot();
