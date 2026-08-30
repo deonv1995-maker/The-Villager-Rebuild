@@ -44,10 +44,18 @@ void main() {
 `;
 
 export class WaterSurfaceSystem {
-  constructor({ group, terrain, maxRipples = 12 }) {
+  constructor({
+    group,
+    terrain,
+    maxRipples = 12,
+    isPlayableAt = null,
+    groundHeightAt = null
+  }) {
     this.group = group;
     this.terrain = terrain;
     this.maxRipples = maxRipples;
+    this.isPlayableAt = isPlayableAt ?? ((x, z, margin = 0) => terrain.isPlayable(x, z, margin));
+    this.groundHeightAt = groundHeightAt ?? ((x, z) => terrain.heightAt(x, z));
     this.surface = null;
     this.material = null;
     this.ripples = [];
@@ -112,8 +120,8 @@ export class WaterSurfaceSystem {
   }
 
   isShallowWaterAt(x, z) {
-    if (!this.terrain.isPlayable(x, z, 0.15)) return false;
-    const ground = this.terrain.heightAt(x, z);
+    if (!this.isPlayableAt(x, z, 0.15)) return false;
+    const ground = this.groundHeightAt(x, z);
     const depth = this.terrain.waterLevel - ground;
     return depth >= 0.025 && depth <= 1.25;
   }
