@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { IslandTerrainSystem } from '../src/world/IslandTerrainSystem.js';
+import { SatelliteApproachSystem } from '../src/world/SatelliteApproachSystem.js';
+import { WaterSurfaceSystem } from '../src/world/WaterSurfaceSystem.js';
 import { FernFieldSystem } from '../src/world/FernFieldSystem.js';
 import { DistantMountainSystem } from '../src/world/DistantMountainSystem.js';
 
@@ -25,16 +27,18 @@ assert.equal(terrain.isSandAt(barX, barZ), true, 'shoal surface must stay classi
 assert.equal(barHeight > terrain.seabedLevel + 0.25, true, 'shoal must rise materially above the seabed');
 assert.equal(barHeight < terrain.waterLevel + 0.4, true, 'shoal midpoint must remain shallow-water / low-sand scale');
 
-const dx = eastern.bar.x2 - eastern.bar.x1;
-const dz = eastern.bar.z2 - eastern.bar.z1;
-const length = Math.hypot(dx, dz);
-const nx = -dz / length;
-const nz = dx / length;
-const approachT = 0.8;
-const approachX = eastern.bar.x1 + dx * approachT + nx * eastern.bar.width * 0.72;
-const approachZ = eastern.bar.z1 + dz * approachT + nz * eastern.bar.width * 0.72;
-assert.equal(terrain.isPlayable(approachX, approachZ), true, 'satellite shoal must support an angled approach near the island');
-assert.equal(terrain.isSandAt(approachX, approachZ), true, 'angled satellite approach should still read as a sand/shallow-water shelf');
+const approachGroup = new THREE.Group();
+const approaches = new SatelliteApproachSystem({ group: approachGroup, terrain });
+assert.equal(approaches.create(), satellites.length, 'each satellite must receive one broad blended shallow shelf');
+for (const side of [-0.72, 0.72]) {
+  const angled = approaches.getApproachPoint('eastern-cay', 0.82, side);
+  assert.ok(angled, 'eastern approach sample must exist');
+  assert.equal(terrain.isPlayable(angled.x, angled.z), false, 'test point must sit outside the old narrow shoal boundary');
+  assert.equal(approaches.isPlayable(angled.x, angled.z, 0.8), true, 'new satellite shelf must support a strong angled approach');
+  const shelfHeight = approaches.heightAt(angled.x, angled.z);
+  assert.equal(shelfHeight > terrain.seabedLevel + 0.2, true, 'angled shelf must rise above the deep seabed');
+  assert.equal(shelfHeight < terrain.waterLevel + 0.28, true, 'angled shelf must stay shallow-water / low-sand scale');
+}
 
 let fernPeak = 0;
 for (let x = -120; x <= 120; x += 12) {
@@ -65,6 +69,29 @@ player.x = 0.35;
 ferns.update(1 / 60, player);
 assert.equal(ferns.active.size > 0, true, 'nearby ferns must enter the character-reaction set');
 assert.equal(ferns.entries.some(entry => Math.abs(entry.bendX) + Math.abs(entry.bendZ) + entry.compression > 0.001), true, 'reactive ferns must bend/compress when the Ranger moves through them');
+
+const waterGroup = new THREE.Group();
+const placeholderWater = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshBasicMaterial());
+placeholderWater.name = 'foundation-water';
+waterGroup.add(placeholderWater);
+const waterTerrain = {
+  extentX: 20,
+  extentZ: 20,
+  waterLevel: 0,
+  seabedLevel: -1.5,
+  isPlayable: () => true,
+  heightAt: () => -0.28
+};
+const water = new WaterSurfaceSystem({ group: waterGroup, terrain: waterTerrain, maxRipples: 4 });
+assert.equal(water.create(), 4, 'water effect must keep a small deterministic ripple pool');
+assert.equal(water.surface.material.isShaderMaterial, true, 'water surface must use the lightweight animated shader');
+const wader = new THREE.Vector3(0, 0, 0);
+water.update(0.1, wader);
+wader.x = 1.1;
+water.update(0.1, wader);
+assert.equal(water.getActiveRippleCount() > 0, true, 'moving through shallow water must activate a pooled ripple');
+water.update(1.2, wader);
+assert.equal(water.getActiveRippleCount(), 0, 'water ripples must recover back into the pool');
 
 const horizonGroup = new THREE.Group();
 const mountains = new DistantMountainSystem({ group: horizonGroup, centerZ: terrain.centerZ });
