@@ -13,5 +13,10 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     id: 'meat',
     label: 'Raw Meat',
     pickupQuantity: 1
+  }),
+  log: Object.freeze({
+    id: 'log',
+    label: 'Log',
+    pickupQuantity: 1
   })
 });
