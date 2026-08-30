@@ -1,17 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="crispEdges">
-  <rect width="512" height="512" fill="#101d15"/>
-  <rect x="64" y="64" width="384" height="384" rx="64" fill="#2f5c35"/>
-  <rect x="222" y="130" width="68" height="176" fill="#6f4529"/>
-  <rect x="196" y="236" width="120" height="92" fill="#865535"/>
-  <rect x="126" y="96" width="260" height="170" fill="#214b2b"/>
-  <rect x="104" y="142" width="304" height="104" fill="#2f6c37"/>
-  <rect x="150" y="104" width="212" height="82" fill="#4b8b45"/>
-  <rect x="188" y="88" width="132" height="58" fill="#6ca454"/>
-  <rect x="208" y="300" width="96" height="86" fill="#203f2b"/>
-  <rect x="220" y="268" width="72" height="54" fill="#d49a68"/>
-  <rect x="218" y="252" width="76" height="24" fill="#5a3424"/>
-  <rect x="208" y="386" width="36" height="54" fill="#5b3b28"/>
-  <rect x="268" y="386" width="36" height="54" fill="#5b3b28"/>
-  <rect x="306" y="322" width="24" height="96" fill="#7a4b2b" transform="rotate(-35 318 370)"/>
-  <rect x="300" y="300" width="54" height="24" fill="#aeb5a8" transform="rotate(-35 327 312)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" data-icon-art="ranger-v1">
+  <rect width="512" height="512" rx="86" fill="#21a8e8"/>
+  <polygon points="0,322 108,198 176,300 256,170 350,286 430,206 512,304 512,512 0,512" fill="#1f6f46"/>
+  <polygon points="0,354 90,270 158,337 238,242 328,340 414,270 512,342 512,512 0,512" fill="#2e8d50"/>
+  <polygon points="56,118 92,62 126,132 92,112" fill="#f6f0d9"/>
+  <polygon points="402,78 454,42 494,114 452,106" fill="#f6f0d9"/>
+  <polygon points="150,430 182,280 298,270 372,432" fill="#0d66b7"/>
+  <polygon points="184,304 238,244 336,282 298,354" fill="#0b7bd7"/>
+  <polygon points="214,344 304,300 370,356 290,410" fill="#0872c9"/>
+  <polygon points="126,226 150,122 226,68 318,76 376,128 348,220 300,260 202,256" fill="#6d2b12"/>
+  <polygon points="158,160 204,76 274,50 342,76 302,128 234,130" fill="#8d3a15"/>
+  <polygon points="230,92 292,72 370,110 330,164 288,132" fill="#a94b19"/>
+  <polygon points="176,190 224,142 322,148 346,218 306,286 226,288 174,244" fill="#f2a15d"/>
+  <polygon points="208,146 256,116 314,144 282,164 236,164" fill="#c66026"/>
+  <polygon points="188,198 228,176 250,198 224,216" fill="#5c2a18"/>
+  <polygon points="278,184 318,174 334,196 304,212" fill="#5c2a18"/>
+  <ellipse cx="226" cy="208" rx="12" ry="18" fill="#2d251f"/>
+  <ellipse cx="307" cy="203" rx="12" ry="18" fill="#2d251f"/>
+  <circle cx="222" cy="202" r="4" fill="#f7f2dd"/>
+  <circle cx="303" cy="197" r="4" fill="#f7f2dd"/>
+  <polygon points="262,218 276,236 252,240" fill="#cf7240"/>
+  <path d="M238 255 Q270 276 302 252" fill="none" stroke="#7b351e" stroke-width="8" stroke-linecap="round"/>
+  <polygon points="122,292 164,254 206,302 176,384 136,364" fill="#4b2918"/>
+  <polygon points="108,284 132,268 182,356 160,370" fill="#8c4a23"/>
+  <polygon points="128,246 142,238 176,296 162,304" fill="#f0e0a1"/>
+  <polygon points="145,238 159,232 190,286 176,294" fill="#f0e0a1"/>
+  <polygon points="248,312 274,292 360,400 334,420" fill="#7a3f20"/>
+  <polygon points="276,318 294,304 312,328 294,344" fill="#c39a56"/>
+  <polygon points="306,356 324,342 342,366 324,382" fill="#c39a56"/>
 </svg>
