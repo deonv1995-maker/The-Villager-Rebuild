@@ -11,6 +11,10 @@ export class MobileHud {
     this.root.className = 'mobile-hud';
 
     const ui = ASSET_PATHS.ui.mobile;
+    this.interactionIcons = Object.freeze({
+      hand: ui.hand,
+      axe: ui.axe
+    });
     this.root.innerHTML = `
       <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0</div>
       <div class="hud-note" data-role="objective">DAY 1 · Gather a stick + stone</div>
@@ -18,13 +22,14 @@ export class MobileHud {
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
       <button class="hud-button craft" type="button" aria-label="Craft spear" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button attack" type="button" aria-label="Attack boar" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
-      <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.hand}" alt=""></button>
+      <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="interaction-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.interactButton = this.root.querySelector('.interact');
+    this.interactIcon = this.root.querySelector('[data-role="interaction-icon"]');
     this.craftButton = this.root.querySelector('.craft');
     this.attackButton = this.root.querySelector('.attack');
     this.#bindJoystick();
@@ -46,9 +51,11 @@ export class MobileHud {
   setInteractionTarget(target) {
     const available = Boolean(target);
     const actionLabel = target?.actionLabel ?? (target ? `Pick up ${target.label}` : 'Interact');
+    const icon = this.interactionIcons[target?.icon] ?? this.interactionIcons.hand;
     this.interactButton.hidden = !available;
     this.interactButton.disabled = !available;
     this.interactButton.setAttribute('aria-label', actionLabel);
+    this.interactIcon.src = icon;
   }
 
   setCraftAvailable(available) {
