@@ -18,12 +18,13 @@ export class GatherableSystem {
     this.#populate();
   }
 
-  update(playerPosition) {
+  update(playerPosition, filter = null) {
     let nearest = null;
     let nearestDistanceSq = INTERACTION_RADIUS * INTERACTION_RADIUS;
 
     for (const item of this.items) {
       if (!item.active) continue;
+      if (filter && !filter(item.resourceId)) continue;
       const dx = item.root.position.x - playerPosition.x;
       const dz = item.root.position.z - playerPosition.z;
       const distanceSq = dx * dx + dz * dz;
@@ -44,8 +45,8 @@ export class GatherableSystem {
     return this.getTarget();
   }
 
-  gather(playerPosition) {
-    this.update(playerPosition);
+  gather(playerPosition, filter = null) {
+    this.update(playerPosition, filter);
     if (!this.target) return null;
 
     const item = this.target;
