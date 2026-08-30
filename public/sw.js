@@ -1,4 +1,4 @@
-const SHELL_VERSION = '0.3.2-old-shell1';
+const SHELL_VERSION = '0.3.2-install3';
 const CACHE_PREFIX = 'villager-rebuild-';
 
 self.addEventListener('install', () => self.skipWaiting());
