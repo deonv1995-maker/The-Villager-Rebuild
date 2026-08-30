@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { inflateRawSync } from 'node:zlib';
+import { deflateSync, inflateRawSync } from 'node:zlib';
 
 const generatorUrl = new URL('./generate-pwa-icons.mjs', import.meta.url);
 const generatorSource = await readFile(generatorUrl, 'utf8');
@@ -17,28 +17,30 @@ if (compressed.length < 6) {
 const packed = inflateRawSync(compressed.subarray(2, -4));
 const paletteBytes = 128 * 3;
 const expectedPackedLength = paletteBytes + (160 * 160);
-if (packed.length !== expectedPackedLength) {
-  const sourceTail = [...packed.subarray(Math.max(paletteBytes, packed.length - 32))].join(',');
-  throw new Error(
-    `Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength}; ` +
-    `source tail indices: [${sourceTail}]`
-  );
-}
+let repairedPacked = packed;
 
-function adler32(data) {
-  const MOD = 65521;
-  let a = 1;
-  let b = 0;
-  for (const byte of data) {
-    a = (a + byte) % MOD;
-    b = (b + a) % MOD;
+if (packed.length === expectedPackedLength - 2) {
+  const sourceTail = packed.subarray(Math.max(paletteBytes, packed.length - 20));
+  const edgeIndex = sourceTail[0];
+  if (edgeIndex !== 127 || !sourceTail.every((value) => value === edgeIndex)) {
+    throw new Error('Truncated Ranger icon source does not end in the expected uniform edge palette index');
   }
-  return ((b << 16) | a) >>> 0;
+
+  repairedPacked = Buffer.concat([packed, Buffer.from([edgeIndex, edgeIndex])]);
+} else if (packed.length !== expectedPackedLength) {
+  throw new Error(`Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength}`);
 }
 
-const repaired = Buffer.from(compressed);
-repaired.writeUInt32BE(adler32(packed), repaired.length - 4);
-const repairedSource = generatorSource.replace(sourceMatch[1], repaired.toString('base64'));
+if (repairedPacked.length !== expectedPackedLength) {
+  throw new Error('Approved Ranger icon source repair did not restore the declared 160x160 payload');
+}
+
+// The branch handoff truncated the final two uniform edge indices and left a
+// stale zlib trailer. Recompress only the recovered compact source; the
+// canonical generator remains the sole renderer, and verify-pwa.mjs locks
+// all three decoded launcher-image pixel hashes.
+const repairedCompressed = deflateSync(repairedPacked, { level: 9 });
+const repairedSource = generatorSource.replace(sourceMatch[1], repairedCompressed.toString('base64'));
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(repairedSource).toString('base64')}`;
 
 await import(moduleUrl);
