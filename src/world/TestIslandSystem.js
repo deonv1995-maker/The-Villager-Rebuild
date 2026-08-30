@@ -76,6 +76,7 @@ export class TestIslandSystem {
     let environmentLoaded = false;
     try {
       environmentLoaded = await this.scatter.load();
+      this.#removeObsoleteUnderstory();
     } catch (error) {
       console.error('[ENVIRONMENT ASSET FALLBACK]', error);
     }
@@ -83,7 +84,17 @@ export class TestIslandSystem {
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
-    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon mountains`);
+    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon landforms`);
+  }
+
+  #removeObsoleteUnderstory() {
+    const shrubs = this.group.getObjectByName('understory-shrub-batch');
+    if (!shrubs) return;
+
+    this.group.remove(shrubs);
+    shrubs.geometry?.dispose?.();
+    if (Array.isArray(shrubs.material)) shrubs.material.forEach(material => material?.dispose?.());
+    else shrubs.material?.dispose?.();
   }
 
   update(dt, playerPosition) {

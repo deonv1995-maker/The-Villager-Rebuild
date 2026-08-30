@@ -2,6 +2,8 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = process.argv[2] ?? 'dist';
+const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
+const expectedVersion = packageJson.version;
 
 async function requireFile(relativePath) {
   const filePath = path.join(root, relativePath);
@@ -43,9 +45,15 @@ const serviceWorker = await readFile(serviceWorkerPath, 'utf8');
 if (!serviceWorker.includes("CACHE_NAME") || !serviceWorker.includes("addEventListener('fetch'")) {
   throw new Error('Service worker is missing install/runtime cache behavior');
 }
+if (!serviceWorker.includes(expectedVersion)) {
+  throw new Error(`Service worker cache version must match package version ${expectedVersion}`);
+}
 
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes('manifest.webmanifest')) throw new Error('Built index is not linked to the PWA manifest');
+if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDATION ${expectedVersion}`)) {
+  throw new Error(`Built index version labels must match package version ${expectedVersion}`);
+}
 
-console.log(`PWA install contract verified in ${root}`);
+console.log(`PWA install contract verified in ${root} for ${expectedVersion}`);
