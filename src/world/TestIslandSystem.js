@@ -1,7 +1,5 @@
 import * as THREE from 'three';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
-import { SatelliteApproachSystem } from './SatelliteApproachSystem.js';
-import { WaterSurfaceSystem } from './WaterSurfaceSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
@@ -16,10 +14,6 @@ export class TestIslandSystem {
     this.scene.add(this.group);
 
     this.terrain = new IslandTerrainSystem(this.group);
-    this.approaches = new SatelliteApproachSystem({
-      group: this.group,
-      terrain: this.terrain
-    });
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
       baseHeightAt: (x, z) => this.baseHeightAt(x, z),
@@ -46,13 +40,6 @@ export class TestIslandSystem {
       group: this.group,
       centerZ: this.terrain.centerZ
     });
-    this.water = new WaterSurfaceSystem({
-      group: this.group,
-      terrain: this.terrain,
-      maxRipples: 12,
-      isPlayableAt: (x, z, margin) => this.isPlayable(x, z, margin),
-      groundHeightAt: (x, z) => this.baseHeightAt(x, z)
-    });
     this.assetMode = 'terrain-only';
   }
 
@@ -61,16 +48,16 @@ export class TestIslandSystem {
   }
 
   baseHeightAt(x, z) {
-    return Math.max(this.terrain.heightAt(x, z), this.approaches.heightAt(x, z));
+    return this.terrain.heightAt(x, z);
   }
 
   heightAt(x, z) {
-    const base = this.baseHeightAt(x, z);
+    const base = this.terrain.heightAt(x, z);
     return this.collision.supportHeightAt(x, z, base);
   }
 
   isPlayable(x, z, margin = 0) {
-    return this.terrain.isPlayable(x, z, margin) || this.approaches.isPlayable(x, z, margin);
+    return this.terrain.isPlayable(x, z, margin);
   }
 
   regionAt(x, z) {
@@ -78,21 +65,12 @@ export class TestIslandSystem {
   }
 
   slopeAt(x, z) {
-    const d = 0.75;
-    const center = this.baseHeightAt(x, z);
-    return Math.max(
-      Math.abs(this.baseHeightAt(x + d, z) - center),
-      Math.abs(this.baseHeightAt(x - d, z) - center),
-      Math.abs(this.baseHeightAt(x, z + d) - center),
-      Math.abs(this.baseHeightAt(x, z - d) - center)
-    ) / d;
+    return this.terrain.slopeAt(x, z);
   }
 
   async load() {
     this.collision.clear();
     this.terrain.create();
-    const approachCount = this.approaches.create();
-    const ripplePoolSize = this.water.create();
     const mountainCount = this.mountains.create();
 
     let environmentLoaded = false;
@@ -106,7 +84,7 @@ export class TestIslandSystem {
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
-    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${approachCount} broad satellite shelves · ${ripplePoolSize} pooled water ripples · ${mountainCount} horizon landforms`);
+    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
@@ -122,6 +100,5 @@ export class TestIslandSystem {
   update(dt, playerPosition) {
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
-    this.water.update(dt, playerPosition);
   }
 }

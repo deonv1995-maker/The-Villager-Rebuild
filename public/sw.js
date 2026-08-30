@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'villager-rebuild-';
-const CACHE_NAME = `${CACHE_PREFIX}0.3.3-pwa1`;
+const CACHE_NAME = `${CACHE_PREFIX}0.3.2`;
 const SHELL = [
   './',
   './manifest.webmanifest',
@@ -33,6 +33,8 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Network-first keeps an installed tester on the same build as Pages when
+  // online. Cached responses are only the fallback for repeat/offline access.
   event.respondWith(
     fetch(request)
       .then(response => {
