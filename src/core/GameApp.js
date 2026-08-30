@@ -238,13 +238,6 @@ export class GameApp {
       return;
     }
 
-    if (animalDefeated && meatCount > 0) {
-      this.setStatus(`DAY 1 · RAW MEAT ${meatCount}`);
-      this.hud?.setObjective('DAY 1 · Meat gathered · chop a tree next');
-      this.hud?.setAttackTarget(null);
-      return;
-    }
-
     if (animalDefeated) {
       this.setStatus(`DAY 1 · ${animalLabel.toUpperCase()} DOWN`);
       this.hud?.setObjective(
