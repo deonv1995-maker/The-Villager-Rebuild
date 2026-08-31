@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
 import { HarvestHitFeedback } from './HarvestHitFeedback.js';
+import { TreeHitShakeSystem } from './TreeHitShakeSystem.js';
 
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 
@@ -18,6 +19,7 @@ export class TreeHarvestSystem {
     this.treeVariantCount = Math.max(1, this.treeBatches.size);
     this.trees = this.#collectTrees();
     this.hitFeedback = new HarvestHitFeedback({ group });
+    this.treeShake = new TreeHitShakeSystem({ treeRenderRegistry: this.treeRenderRegistry });
     this.#createIndicator();
   }
 
@@ -27,6 +29,7 @@ export class TreeHarvestSystem {
 
   update(playerPosition, enabled = true) {
     this.hitFeedback.update();
+    this.treeShake.update();
     if (!enabled) {
       this.target = null;
       this.indicator.visible = false;
@@ -88,6 +91,7 @@ export class TreeHarvestSystem {
     this.hitFeedback.emit(position, 'wood');
 
     if (remainingHits > 0) {
+      this.treeShake.hit(tree.treeId, playerPosition, tree.obstacle);
       return {
         chopped: false,
         remainingHits,
@@ -149,6 +153,7 @@ export class TreeHarvestSystem {
   }
 
   #hideTreeInstance(tree) {
+    this.treeShake.clear(tree.treeId);
     const hiddenMatrix = new THREE.Matrix4().compose(
       new THREE.Vector3(tree.obstacle.x, -1000, tree.obstacle.z),
       new THREE.Quaternion(),
