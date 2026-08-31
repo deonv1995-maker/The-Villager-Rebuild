@@ -120,6 +120,7 @@ export class WallPanelCustomizationController {
 
     const result = this.system.customize(target.id, variant);
     if (!result) return;
+    this.game.equipmentRuntime?.recordUse('hammer');
     this.#setTarget(this.system.getTarget(this.playerPosition));
     this.game.setStatus?.(`WALL PANEL · ${result.label.toUpperCase()}`);
     this.game.hud?.setObjective(
