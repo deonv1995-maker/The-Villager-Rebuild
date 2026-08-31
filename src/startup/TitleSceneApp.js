@@ -6,6 +6,13 @@ import { TITLE_SCENE } from './TitleSceneConfig.js';
 import { createTitleShipVisual } from './TitleShipVisual.js';
 import { TitleStormSystem } from './TitleStormSystem.js';
 
+const TITLE_ARM_BONES = new Set([
+  'upperarm.l', 'upperarm.r',
+  'lowerarm.l', 'lowerarm.r',
+  'wrist.l', 'wrist.r',
+  'hand.l', 'hand.r'
+]);
+
 export class TitleSceneApp {
   constructor({ canvas, setStatus }) {
     this.canvas = canvas;
@@ -21,6 +28,7 @@ export class TitleSceneApp {
     this.rangerThrown = false;
     this.rangerSplashDone = false;
     this.rangerVelocity = new THREE.Vector3();
+    this.rangerArmRestPose = [];
   }
 
   async start({ onPlay } = {}) {
@@ -148,10 +156,18 @@ export class TitleSceneApp {
     this.ranger = rangerGltf.scene;
     this.ranger.name = 'title-production-ranger';
     this.ranger.traverse(object => {
-      if (!object.isMesh) return;
-      object.castShadow = false;
-      object.receiveShadow = false;
-      if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
+      if (object.isMesh) {
+        object.castShadow = false;
+        object.receiveShadow = false;
+        if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
+      }
+
+      if (TITLE_ARM_BONES.has(object.name?.toLowerCase())) {
+        this.rangerArmRestPose.push({
+          bone: object,
+          quaternion: object.quaternion.clone()
+        });
+      }
     });
     this.ranger.position.set(0, 0, 0);
     this.ranger.rotation.y = Math.PI;
@@ -207,6 +223,7 @@ export class TitleSceneApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.elapsed += dt;
     this.mixer?.update(dt);
+    this.#applyRangerArmRestPose();
 
     let introProgress = 0;
     if (this.state === 'menu') this.#updateMenu();
@@ -219,6 +236,17 @@ export class TitleSceneApp {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.#frame);
   };
+
+  #applyRangerArmRestPose() {
+    if (!this.rangerArmRestPose.length || this.rangerThrown) return;
+    const blend = this.state === 'menu'
+      ? TITLE_SCENE.rangerArmRestBlendMenu
+      : TITLE_SCENE.rangerArmRestBlendStorm;
+
+    for (const { bone, quaternion } of this.rangerArmRestPose) {
+      bone.quaternion.slerp(quaternion, blend);
+    }
+  }
 
   #updateMenu() {
     this.stormDanger = 0;
@@ -254,18 +282,18 @@ export class TitleSceneApp {
     const forward = THREE.MathUtils.smoothstep(t, 0.02, 0.72);
     this.ship.position.z = TITLE_SCENE.menuShipZ - forward * 42;
     this.ship.position.y = -0.35
-      + Math.sin(this.elapsed * (1.2 + danger * 3.8)) * (0.1 + danger * 0.52)
-      + Math.sin(this.elapsed * 6.1) * severe * 0.12;
-    this.ship.rotation.x = Math.sin(this.elapsed * 2.35) * danger * 0.16 + impact * 0.1;
-    this.ship.rotation.z = Math.sin(this.elapsed * 2.9) * danger * 0.22;
-    this.sailMesh.rotation.y = Math.sin(this.elapsed * 4.8) * danger * 0.08;
-    this.sailMesh.rotation.z = Math.sin(this.elapsed * 3.7) * danger * 0.035;
+      + Math.sin(this.elapsed * (1.2 + danger * 3.2)) * (0.1 + danger * TITLE_SCENE.stormShipHeave)
+      + Math.sin(this.elapsed * 5.5) * severe * 0.08;
+    this.ship.rotation.x = Math.sin(this.elapsed * 2.2) * danger * TITLE_SCENE.stormShipPitch + impact * 0.08;
+    this.ship.rotation.z = Math.sin(this.elapsed * 2.65) * danger * TITLE_SCENE.stormShipRoll;
+    this.sailMesh.rotation.y = Math.sin(this.elapsed * 4.3) * danger * 0.07;
+    this.sailMesh.rotation.z = Math.sin(this.elapsed * 3.4) * danger * 0.03;
 
     if (this.rangerRig && !this.rangerThrown) {
-      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.58 + severe * 0.08 + impact * 0.22;
-      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.62 + Math.sin(this.elapsed * 3.4) * severe * 0.04;
-      this.rangerRig.position.y = 1.28 + Math.abs(this.ship.rotation.z) * 0.12;
-      this.rangerRig.position.z = 2.25 + impact * 0.2;
+      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.58 + severe * 0.06 + impact * 0.18;
+      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.62 + Math.sin(this.elapsed * 3.1) * severe * 0.03;
+      this.rangerRig.position.y = 1.28 + Math.abs(this.ship.rotation.z) * 0.1;
+      this.rangerRig.position.z = 2.25 + impact * 0.16;
     }
 
     this.mast.rotation.z = -impact * 1.02;
@@ -281,7 +309,7 @@ export class TitleSceneApp {
       this.ship.position.z + THREE.MathUtils.lerp(10.5, 8.2, cameraAdvance)
     );
 
-    const shakeStrength = severe * 0.05 + impact * 0.17;
+    const shakeStrength = severe * 0.04 + impact * 0.14;
     this.camera.position.x += Math.sin(this.elapsed * 39) * shakeStrength;
     this.camera.position.y += Math.cos(this.elapsed * 34) * shakeStrength * 0.65;
 
