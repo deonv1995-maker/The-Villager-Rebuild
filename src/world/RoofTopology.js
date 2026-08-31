@@ -20,6 +20,18 @@ const basis = yaw => ({
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+const axisHeading = yaw => {
+  let value = yaw % Math.PI;
+  if (value < 0) value += Math.PI;
+  if (Math.abs(value - Math.PI) < 1e-6) value = 0;
+  return value;
+};
+
+const worldPoint = (center, frameBasis, u, v) => ({
+  x: center.x + frameBasis.xX * u + frameBasis.zX * v,
+  z: center.z + frameBasis.xZ * u + frameBasis.zZ * v
+});
+
 export function collectLocalRoofFramePairs(frames, focus, {
   length,
   spacingTolerance,
@@ -27,16 +39,22 @@ export function collectLocalRoofFramePairs(frames, focus, {
   yawStep,
   searchRadius,
   frameLimit,
-  pairLimit
+  pairLimit,
+  occupiedBeamKeys = null
 }) {
   const maxDistanceSq = searchRadius * searchRadius;
   const localFrames = frames
     .map(frame => ({ frame, distanceSq: distanceSq(frame, focus) }))
     .filter(entry => entry.distanceSq <= maxDistanceSq)
-    .sort((left, right) => left.distanceSq - right.distanceSq)
+    .sort((left, right) => left.distanceSq - right.distanceSq || left.frame.id - right.frame.id)
     .slice(0, frameLimit)
     .map(entry => entry.frame);
 
+  const beamKeys = occupiedBeamKeys instanceof Set
+    ? occupiedBeamKeys
+    : occupiedBeamKeys
+      ? new Set(occupiedBeamKeys)
+      : null;
   const pairs = [];
   for (let aIndex = 0; aIndex < localFrames.length; aIndex += 1) {
     const a = localFrames[aIndex];
@@ -49,6 +67,8 @@ export function collectLocalRoofFramePairs(frames, focus, {
       if (Math.abs(a.topY - b.topY) > topTolerance) continue;
 
       const anchorIds = [a.id, b.id].sort((left, right) => left - right);
+      const rawKey = `beam:${anchorIds.join('-')}`;
+      if (beamKeys && !beamKeys.has(rawKey)) continue;
       const pair = {
         a,
         b,
@@ -58,22 +78,98 @@ export function collectLocalRoofFramePairs(frames, focus, {
         baseY: Math.max(a.baseY, b.baseY),
         topY: (a.topY + b.topY) * 0.5,
         anchorIds,
-        rawKey: `beam:${anchorIds.join('-')}`
+        rawKey
       };
       pairs.push({ pair, distanceSq: distanceSq(pair, focus) });
     }
   }
 
   return pairs
-    .sort((left, right) => left.distanceSq - right.distanceSq)
+    .sort((left, right) => left.distanceSq - right.distanceSq || left.pair.rawKey.localeCompare(right.pair.rawKey))
     .slice(0, pairLimit)
     .map(entry => entry.pair);
+}
+
+function connectedPairComponents(pairs) {
+  const byFrame = new Map();
+  pairs.forEach((pair, index) => {
+    for (const id of pair.anchorIds) {
+      const bucket = byFrame.get(id) ?? [];
+      bucket.push(index);
+      byFrame.set(id, bucket);
+    }
+  });
+
+  const visited = new Set();
+  const components = [];
+  for (let seed = 0; seed < pairs.length; seed += 1) {
+    if (visited.has(seed)) continue;
+    const queue = [seed];
+    const component = [];
+    visited.add(seed);
+    while (queue.length) {
+      const index = queue.pop();
+      const pair = pairs[index];
+      component.push(pair);
+      for (const id of pair.anchorIds) {
+        for (const next of byFrame.get(id) ?? []) {
+          if (visited.has(next)) continue;
+          visited.add(next);
+          queue.push(next);
+        }
+      }
+    }
+    components.push(component);
+  }
+  return components;
+}
+
+function closedLoop(component, topTolerance) {
+  if (component.length < 4) return null;
+  const frames = new Map();
+  const adjacency = new Map();
+  const connect = (left, right) => {
+    const bucket = adjacency.get(left) ?? [];
+    if (!bucket.includes(right)) bucket.push(right);
+    adjacency.set(left, bucket);
+  };
+
+  const averageTop = component.reduce((sum, pair) => sum + pair.topY, 0) / component.length;
+  if (component.some(pair => Math.abs(pair.topY - averageTop) > topTolerance)) return null;
+
+  for (const pair of component) {
+    frames.set(pair.a.id, pair.a);
+    frames.set(pair.b.id, pair.b);
+    const [left, right] = pair.anchorIds;
+    connect(left, right);
+    connect(right, left);
+  }
+
+  const ids = [...adjacency.keys()].sort((a, b) => a - b);
+  if (ids.length < 4 || ids.some(id => adjacency.get(id)?.length !== 2)) return null;
+
+  const ordered = [];
+  const start = ids[0];
+  let previous = null;
+  let current = start;
+  for (let guard = 0; guard <= ids.length; guard += 1) {
+    const frame = frames.get(current);
+    if (!frame) return null;
+    ordered.push(frame);
+    const neighbours = [...(adjacency.get(current) ?? [])].sort((a, b) => a - b);
+    const next = neighbours[0] === previous ? neighbours[1] : neighbours[0];
+    previous = current;
+    current = next;
+    if (current === start) break;
+  }
+
+  if (current !== start || ordered.length !== ids.length) return null;
+  return { ordered, averageTop };
 }
 
 export function collectRoofRegions(pairs, {
   yawTolerance,
   topTolerance,
-  maxAlong,
   minWidth,
   maxWidth,
   roofPitch,
@@ -82,54 +178,74 @@ export function collectRoofRegions(pairs, {
   eaveSeatLift
 }) {
   const regions = [];
-  const seen = new Set();
 
-  for (let leftIndex = 0; leftIndex < pairs.length; leftIndex += 1) {
-    const left = pairs[leftIndex];
-    const leftBasis = basis(left.yaw);
+  for (const component of connectedPairComponents(pairs)) {
+    const loop = closedLoop(component, topTolerance);
+    if (!loop) continue;
 
-    for (let rightIndex = leftIndex + 1; rightIndex < pairs.length; rightIndex += 1) {
-      const right = pairs[rightIndex];
-      if (left.anchorIds.some(id => right.anchorIds.includes(id))) continue;
-      if (axisYawDelta(left.yaw, right.yaw) > yawTolerance) continue;
-      if (Math.abs(left.topY - right.topY) > topTolerance) continue;
+    const center = loop.ordered.reduce(
+      (sum, frame) => ({ x: sum.x + frame.x, z: sum.z + frame.z }),
+      { x: 0, z: 0 }
+    );
+    center.x /= loop.ordered.length;
+    center.z /= loop.ordered.length;
 
-      const dx = right.x - left.x;
-      const dz = right.z - left.z;
-      const along = Math.abs(dx * leftBasis.xX + dz * leftBasis.xZ);
-      const across = Math.abs(dx * leftBasis.zX + dz * leftBasis.zZ);
-      if (along > maxAlong) continue;
-      if (across < minWidth || across > maxWidth) continue;
-
-      const anchorIds = [...left.anchorIds, ...right.anchorIds].sort((a, b) => a - b);
-      const key = `roof:${anchorIds.join('-')}`;
-      if (seen.has(key)) continue;
-
-      const directMatch =
-        Math.hypot(left.a.x - right.a.x, left.a.z - right.a.z) +
-        Math.hypot(left.b.x - right.b.x, left.b.z - right.b.z);
-      const crossedMatch =
-        Math.hypot(left.a.x - right.b.x, left.a.z - right.b.z) +
-        Math.hypot(left.b.x - right.a.x, left.b.z - right.a.z);
-      const c = directMatch <= crossedMatch ? right.a : right.b;
-      const d = directMatch <= crossedMatch ? right.b : right.a;
-      const halfRun = across * 0.5;
-      const rise = clamp(halfRun * Math.tan(roofPitch), minRise, maxRise);
-      const eaveY = (left.topY + right.topY) * 0.5 + eaveSeatLift;
-
-      seen.add(key);
-      regions.push({
-        key,
-        anchorIds,
-        a: left.a,
-        b: left.b,
-        c,
-        d,
-        eaveY,
-        ridgeY: eaveY + rise
-      });
+    const axes = [];
+    for (const pair of [...component].sort((left, right) => left.rawKey.localeCompare(right.rawKey))) {
+      if (axes.some(axis => axisYawDelta(axis.yaw, pair.yaw) <= yawTolerance)) continue;
+      axes.push({ yaw: pair.yaw, heading: axisHeading(pair.yaw) });
     }
+    if (!axes.length) continue;
+
+    let best = null;
+    for (const axis of axes) {
+      const frameBasis = basis(axis.yaw);
+      let minU = Infinity;
+      let maxU = -Infinity;
+      let minV = Infinity;
+      let maxV = -Infinity;
+      for (const frame of loop.ordered) {
+        const dx = frame.x - center.x;
+        const dz = frame.z - center.z;
+        const u = dx * frameBasis.xX + dz * frameBasis.xZ;
+        const v = dx * frameBasis.zX + dz * frameBasis.zZ;
+        minU = Math.min(minU, u);
+        maxU = Math.max(maxU, u);
+        minV = Math.min(minV, v);
+        maxV = Math.max(maxV, v);
+      }
+      const spanU = maxU - minU;
+      const spanV = maxV - minV;
+      const candidate = { ...axis, frameBasis, minU, maxU, minV, maxV, spanU, spanV };
+      if (
+        !best ||
+        candidate.spanU > best.spanU + 0.01 ||
+        (Math.abs(candidate.spanU - best.spanU) <= 0.01 && candidate.heading < best.heading)
+      ) {
+        best = candidate;
+      }
+    }
+
+    if (!best || best.spanU < minWidth || best.spanV < minWidth || best.spanV > maxWidth) continue;
+    const halfRun = best.spanV * 0.5;
+    const rise = clamp(halfRun * Math.tan(roofPitch), minRise, maxRise);
+    const eaveY = loop.averageTop + eaveSeatLift;
+    const beamKeys = component.map(pair => pair.rawKey).sort();
+    const anchorIds = [...new Set(component.flatMap(pair => pair.anchorIds))].sort((a, b) => a - b);
+
+    regions.push({
+      key: `roof:${beamKeys.join('|')}`,
+      anchorIds,
+      sourceBeamKeys: beamKeys,
+      a: worldPoint(center, best.frameBasis, best.minU, best.minV),
+      b: worldPoint(center, best.frameBasis, best.maxU, best.minV),
+      c: worldPoint(center, best.frameBasis, best.minU, best.maxV),
+      d: worldPoint(center, best.frameBasis, best.maxU, best.maxV),
+      eaveY,
+      ridgeY: eaveY + rise,
+      ridgeYaw: best.yaw
+    });
   }
 
-  return regions;
+  return regions.sort((left, right) => left.key.localeCompare(right.key));
 }
