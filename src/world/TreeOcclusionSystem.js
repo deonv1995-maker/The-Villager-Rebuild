@@ -2,6 +2,7 @@ import * as THREE from 'three';
 
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 const TREE_BATCH_PATTERN = /^forest-tree-batch-(\d+)-(\d+)$/;
+const TREE_INTERACTION_OPAQUE_RADIUS = 3.1;
 
 const distanceToSegment2D = (x, z, x1, z1, x2, z2) => {
   const vx = x2 - x1;
@@ -49,6 +50,12 @@ export class TreeOcclusionSystem {
 
     const candidates = [];
     for (const tree of activeTrees) {
+      const playerDistance = Math.hypot(
+        tree.obstacle.x - playerPosition.x,
+        tree.obstacle.z - playerPosition.z
+      );
+      if (playerDistance <= TREE_INTERACTION_OPAQUE_RADIUS) continue;
+
       const line = distanceToSegment2D(
         tree.obstacle.x,
         tree.obstacle.z,
