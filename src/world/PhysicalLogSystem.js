@@ -4,6 +4,8 @@ import {
   LOG_BUILD_MODES,
   PHYSICAL_LOG
 } from '../data/PhysicalLogDefinitions.js';
+import { RangerLogCarryPose } from '../player/RangerLogCarryPose.js';
+import { FloorSupportVisual } from './FloorSupportVisual.js';
 import {
   createConstructionLogVisual,
   tintConstructionPreview
@@ -12,6 +14,8 @@ import {
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
+const FLOOR_CENTER_LIFT = 0.275;
+const FLOOR_TOP_LIFT = 0.32;
 
 export class PhysicalLogSystem {
   constructor({ group, player, terrain, collision, gatherables }) {
@@ -23,6 +27,8 @@ export class PhysicalLogSystem {
     this.terrain = terrain;
     this.collision = collision;
     this.gatherables = gatherables;
+    this.carryPose = new RangerLogCarryPose({ player });
+    this.floorSupports = new FloorSupportVisual({ group, terrain });
     this.carriedItem = null;
     this.builtLogs = [];
     this.nextBuiltId = 0;
@@ -44,6 +50,7 @@ export class PhysicalLogSystem {
     this.tempUp = new THREE.Vector3(0, 1, 0);
     this.tempMatrix = new THREE.Matrix4();
     this.tempQuaternion = new THREE.Quaternion();
+    this.tempRoofDirection = new THREE.Vector3();
   }
 
   isCarrying() {
@@ -95,15 +102,20 @@ export class PhysicalLogSystem {
     item.root.name = `carried-log-${item.id}`;
     const roll = item.root.userData?.rollGroup;
     if (roll) roll.rotation.x = 0;
+    this.carryPose.setActive(true);
+    this.carryPose.update();
     this.#destroyPreview();
     return this.getCarryState();
   }
 
   update(playerPosition, facingDirection) {
     if (!this.carriedItem || !playerPosition || !facingDirection) {
+      this.carryPose.setActive(false);
       this.#destroyPreview();
       return this.getBuildState();
     }
+    this.carryPose.setActive(true);
+    this.carryPose.update();
     const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
     this.#showPreview(this.buildMode, placement);
     return this.getBuildState();
@@ -118,6 +130,7 @@ export class PhysicalLogSystem {
     this.player.root.remove(item.root);
     item.root.scale.setScalar(1);
     this.carriedItem = null;
+    this.carryPose.setActive(false);
     this.#destroyPreview();
     this.gatherables.returnPhysical(item, { x: point.x, z: point.z, yaw });
     item.root.position.copy(pose.position);
@@ -138,6 +151,7 @@ export class PhysicalLogSystem {
     this.player.root.remove(item.root);
     item.root.scale.setScalar(1);
     this.carriedItem = null;
+    this.carryPose.setActive(false);
     this.#destroyPreview();
 
     const root = this.#materializePlacement(this.buildMode, placement, item);
@@ -146,6 +160,7 @@ export class PhysicalLogSystem {
       this.player.root.add(item.root);
       item.root.position.set(...PHYSICAL_LOG.carryPosition);
       item.root.rotation.set(...PHYSICAL_LOG.carryEuler);
+      this.carryPose.setActive(true);
       return null;
     }
 
@@ -157,16 +172,21 @@ export class PhysicalLogSystem {
       mode: this.buildMode,
       root,
       collisionHandle,
+      supportRoot: null,
       active: true,
       x: placement.x,
       z: placement.z,
       yaw: placement.yaw,
       baseY: placement.baseY ?? placement.ground,
       centerY: root.position.y,
-      topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root)
+      topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root),
+      roofKey: placement.roofKey ?? null
     };
     this.nextBuiltId += 1;
     this.builtLogs.push(built);
+    if (built.mode === 'floor') {
+      built.supportRoot = this.floorSupports.createForFloor(placement, built.id);
+    }
 
     return {
       mode: built.mode,
@@ -207,6 +227,7 @@ export class PhysicalLogSystem {
 
     built.active = false;
     if (built.collisionHandle) this.collision.removeObstacle(built.collisionHandle);
+    this.floorSupports.remove(built.supportRoot);
     this.group.remove(built.root);
     this.gatherables.spawn('log', {
       x: built.root.position.x,
@@ -228,6 +249,7 @@ export class PhysicalLogSystem {
     if (mode === 'frame') return this.#framePlacement(base);
     if (mode === 'wall') return this.#wallPlacement(base);
     if (mode === 'angle') return this.#anglePlacement(base);
+    if (mode === 'roof') return this.#roofPlacement(base);
     return base;
   }
 
@@ -255,15 +277,18 @@ export class PhysicalLogSystem {
   #floorPlacement(base) {
     const snapped = this.#nearestFloorEdge(base);
     const candidate = snapped ?? base;
-    const ground = this.terrain.heightAt(candidate.x, candidate.z);
-    const valid = this.#groundPlacementValid(candidate.x, candidate.z, 0.62, 0.42);
+    const sample = this.#sampleFloorTerrain(candidate.x, candidate.z, candidate.yaw);
+    const baseY = snapped?.baseY ?? sample.max + PHYSICAL_LOG.floorGroundClearance;
+    const valid = this.#floorPlacementValid(candidate.x, candidate.z, sample, baseY);
     return {
       ...base,
       ...candidate,
-      ground,
-      y: ground + 0.275,
-      topY: ground + 0.32,
-      snapKind: snapped ? 'floor-edge' : null,
+      ground: sample.min,
+      baseY,
+      y: baseY + FLOOR_CENTER_LIFT,
+      topY: baseY + FLOOR_TOP_LIFT,
+      supportDepth: Math.max(0, baseY - sample.min),
+      snapKind: snapped ? 'floor-edge-level' : null,
       valid
     };
   }
@@ -348,6 +373,49 @@ export class PhysicalLogSystem {
     return best ? { ...base, ...best } : { ...base, y: base.ground + PHYSICAL_LOG.halfLength, valid: false };
   }
 
+  #roofPlacement(base) {
+    const pair = this.#nearestFramePair(base, PHYSICAL_LOG.roofSnapRange);
+    if (!pair) return { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+
+    const perpendicularX = Math.sin(pair.yaw);
+    const perpendicularZ = Math.cos(pair.yaw);
+    const sideDot = (base.x - pair.x) * perpendicularX + (base.z - pair.z) * perpendicularZ;
+    const side = sideDot >= 0 ? 1 : -1;
+    const pitch = PHYSICAL_LOG.roofPitch;
+    const horizontalRun = PHYSICAL_LOG.length * Math.cos(pitch);
+    const rise = PHYSICAL_LOG.length * Math.sin(pitch);
+    const x = pair.x + perpendicularX * side * horizontalRun * 0.5;
+    const z = pair.z + perpendicularZ * side * horizontalRun * 0.5;
+    const y = pair.topY + 0.08 + rise * 0.5;
+    const direction = this.tempRoofDirection.set(
+      perpendicularX * side * Math.cos(pitch),
+      Math.sin(pitch),
+      perpendicularZ * side * Math.cos(pitch)
+    ).normalize();
+    const quaternion = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(1, 0, 0),
+      direction
+    );
+    const roofKey = `${pair.anchorIds.join('-')}:${side}`;
+    const occupied = this.#activeBuilt('roof').some(roof => roof.roofKey === roofKey);
+
+    return {
+      ...base,
+      x,
+      z,
+      y,
+      yaw: Math.atan2(-direction.z, direction.x),
+      ground: this.terrain.heightAt(x, z),
+      baseY: pair.topY,
+      topY: pair.topY + 0.08 + rise + PHYSICAL_LOG.radius,
+      quaternion,
+      roofKey,
+      anchorIds: pair.anchorIds,
+      snapKind: 'roof-rafter',
+      valid: !occupied && this.terrain.isPlayable(pair.x, pair.z, 0.3)
+    };
+  }
+
   #nearestFloorEdge(base) {
     let best = null;
     let bestDistance = PHYSICAL_LOG.floorSnapRange;
@@ -366,7 +434,13 @@ export class PhysicalLogSystem {
         const distance = Math.hypot(x - base.x, z - base.z);
         if (distance >= bestDistance) continue;
         bestDistance = distance;
-        best = { x, z, yaw: floor.yaw };
+        best = {
+          x,
+          z,
+          yaw: floor.yaw,
+          baseY: floor.baseY,
+          topY: floor.topY
+        };
       }
     }
     return best;
@@ -414,11 +488,37 @@ export class PhysicalLogSystem {
           z,
           yaw: this.#snapYaw(Math.atan2(-dz, dx)),
           baseY: Math.max(a.baseY, b.baseY),
-          topY: (a.topY + b.topY) * 0.5
+          topY: (a.topY + b.topY) * 0.5,
+          anchorIds: [a.id, b.id].sort((left, right) => left - right)
         };
       }
     }
     return best;
+  }
+
+  #sampleFloorTerrain(x, z, yaw) {
+    const basis = this.#basis(yaw);
+    const halfX = PHYSICAL_LOG.halfLength * 0.92;
+    const halfZ = PHYSICAL_LOG.floorWidth * 0.42;
+    const heights = [this.terrain.heightAt(x, z)];
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        heights.push(this.terrain.heightAt(
+          x + basis.xX * halfX * sx + basis.zX * halfZ * sz,
+          z + basis.xZ * halfX * sx + basis.zZ * halfZ * sz
+        ));
+      }
+    }
+    return { min: Math.min(...heights), max: Math.max(...heights) };
+  }
+
+  #floorPlacementValid(x, z, sample, baseY) {
+    if (!this.terrain.isPlayable(x, z, PHYSICAL_LOG.halfLength + 0.12)) return false;
+    if (sample.max > baseY + 0.1) return false;
+    if (baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
+    return this.collision.isCircleClear(x, z, 0.62, {
+      ignore: obstacle => obstacle.type === 'placed-log' && /-floor$/.test(obstacle.label ?? '')
+    });
   }
 
   #activeBuilt(mode = null) {
@@ -447,7 +547,7 @@ export class PhysicalLogSystem {
     this.previewValid = Boolean(placement.valid);
     this.previewMaterial.color.setHex(this.previewValid ? PREVIEW_VALID : PREVIEW_INVALID);
     this.previewMaterial.opacity = this.previewValid ? 0.44 : 0.34;
-    this.#applyTransform(this.previewRoot, mode, placement, true);
+    this.#applyTransform(this.previewRoot, mode, placement);
     this.previewRoot.visible = true;
   }
 
@@ -460,21 +560,21 @@ export class PhysicalLogSystem {
   }
 
   #materializePlacement(mode, placement, item) {
-    if (mode === 'raw' || mode === 'frame' || mode === 'angle') {
+    if (mode === 'raw' || mode === 'frame' || mode === 'angle' || mode === 'roof') {
       const root = item.root;
       const roll = root.userData?.rollGroup;
       if (roll) roll.rotation.x = 0;
-      this.#applyTransform(root, mode, placement, false);
+      this.#applyTransform(root, mode, placement);
       return root;
     }
 
     const wrapper = new THREE.Group();
     wrapper.add(createConstructionLogVisual(mode));
-    this.#applyTransform(wrapper, mode, placement, false);
+    this.#applyTransform(wrapper, mode, placement);
     return wrapper;
   }
 
-  #applyTransform(root, mode, placement, preview) {
+  #applyTransform(root, mode, placement) {
     root.scale.setScalar(1);
     root.quaternion.identity();
     root.rotation.set(0, 0, 0);
@@ -512,6 +612,12 @@ export class PhysicalLogSystem {
     if (mode === 'angle') {
       root.position.set(placement.x, placement.y, placement.z);
       root.rotation.set(0, placement.yaw - Math.PI / 2, Math.PI / 4);
+      return;
+    }
+
+    if (mode === 'roof') {
+      root.position.set(placement.x, placement.y, placement.z);
+      root.quaternion.copy(placement.quaternion);
     }
   }
 
@@ -564,7 +670,7 @@ export class PhysicalLogSystem {
         yaw: placement.yaw,
         type: 'placed-log',
         label,
-        bottomY: placement.ground,
+        bottomY: placement.y - 0.28,
         topY: placement.topY,
         standable: true,
         supportHalfX: PHYSICAL_LOG.halfLength - 0.12,
@@ -573,6 +679,8 @@ export class PhysicalLogSystem {
         stepHeight: 0.42
       });
     }
+
+    if (mode === 'roof') return null;
 
     return this.collision.addBox({
       x: placement.x,
@@ -596,7 +704,7 @@ export class PhysicalLogSystem {
     if (mode === 'frame') return placement.baseY + PHYSICAL_LOG.length;
     if (mode === 'wall') return root.position.y + 0.76;
     if (mode === 'angle') return placement.baseY + PHYSICAL_LOG.length * Math.SQRT1_2;
-    if (mode === 'floor') return placement.ground + 0.32;
+    if (mode === 'floor' || mode === 'roof') return placement.topY;
     return root.position.y + PHYSICAL_LOG.radius;
   }
 

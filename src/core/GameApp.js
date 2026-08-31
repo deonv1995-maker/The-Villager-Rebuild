@@ -31,12 +31,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.7 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.8 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.7 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.8 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -476,7 +476,7 @@ export class GameApp {
       this.setStatus(`${logBuildState?.label?.toUpperCase() ?? 'LOG'} · ${valid ? 'READY TO PLACE' : 'INVALID PLACEMENT'}`);
       this.hud?.setObjective(
         valid
-          ? 'Choose RAW / FLOOR / FRAME / WALL / ANGLE · green preview · hand action places'
+          ? 'Choose RAW / FLOOR / FRAME / WALL / ANGLE / ROOF · green preview · hand action places'
           : 'Red preview is blocked or unsupported · move or change build mode'
       );
       this.hud?.setAttackTarget(null, toolId);
@@ -497,19 +497,19 @@ export class GameApp {
 
     if (this.currentInteractionTarget?.type === 'tree') {
       this.setStatus('AXE · TREE IN RANGE');
-      this.hud?.setObjective('Axe / E · chop tree into physical logs');
+      this.hud?.setObjective('Axe action · chop tree into physical logs');
       return;
     }
 
     if (this.currentInteractionTarget?.type === 'rock') {
       this.setStatus('PICKAXE · ROCK IN RANGE');
-      this.hud?.setObjective('Pickaxe / E · mine large rock into stones');
+      this.hud?.setObjective('Pickaxe action · mine large rock into stones');
       return;
     }
 
     if (this.currentInteractionTarget?.type === 'placed-log' || this.currentInteractionTarget?.type === 'campfire') {
       this.setStatus('HAMMER · DEMOLITION TARGET');
-      this.hud?.setObjective('Hammer / E · disassemble target');
+      this.hud?.setObjective('Hammer action · disassemble target');
       return;
     }
 
@@ -521,13 +521,13 @@ export class GameApp {
 
     if (this.currentHuntTarget && toolId === 'spear') {
       this.setStatus(`AUTO-LOCK · ${this.currentHuntTarget.label.toUpperCase()}`);
-      this.hud?.setObjective('Spear target locked · F / throw');
+      this.hud?.setObjective('Spear target locked · action / F to throw');
       return;
     }
 
     if (this.currentHuntTarget && toolId === 'sword') {
       this.setStatus(`${this.currentHuntTarget.label.toUpperCase()} · SWORD RANGE`);
-      this.hud?.setObjective('Sword / F · strike');
+      this.hud?.setObjective('Sword action / F · lateral slash');
       return;
     }
 

@@ -1,6 +1,9 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 
+const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+const TOOL_ACTION_TARGET_TYPES = new Set(['tree', 'rock', 'placed-log', 'campfire']);
+
 export class MobileHud {
   constructor({ player, canvas, onInteract, onCampfire, onAttack, onToolSelect, onBuildOption }) {
     this.player = player;
@@ -10,6 +13,8 @@ export class MobileHud {
     this.onAttack = onAttack;
     this.onToolSelect = onToolSelect;
     this.onBuildOption = onBuildOption;
+    this.activeActionToolId = null;
+    this.carryingLog = false;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
@@ -46,12 +51,13 @@ export class MobileHud {
         <button type="button" data-build="frame">FRAME</button>
         <button type="button" data-build="wall">WALL</button>
         <button type="button" data-build="angle">ANGLE</button>
+        <button type="button" data-build="roof">ROOF</button>
         <button type="button" data-build="drop" class="drop-log">DROP</button>
       </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
       <button class="hud-button craft" type="button" aria-label="Preview campfire" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.campfire}" alt=""></button>
-      <button class="hud-button attack" type="button" aria-label="Attack" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="attack-icon" src="${ui.spear}" alt=""></button>
+      <button class="hud-button attack" type="button" aria-label="Tool action" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="attack-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="interaction-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
@@ -86,6 +92,7 @@ export class MobileHud {
   }
 
   setToolbelt(entries) {
+    this.activeActionToolId = null;
     for (const entry of entries) {
       const button = this.toolButtons.get(entry.id);
       if (!button) continue;
@@ -93,6 +100,7 @@ export class MobileHud {
       button.classList.toggle('craftable', entry.craftable);
       button.classList.toggle('equipped', entry.equipped);
       button.classList.toggle('locked', !entry.owned && !entry.craftable);
+      if (entry.equipped && entry.id !== 'hand') this.activeActionToolId = entry.id;
       const ingredients = entry.ingredients
         .map(ingredient => `${ingredient.itemId} ${ingredient.quantity}`)
         .join(', ');
@@ -108,6 +116,8 @@ export class MobileHud {
   }
 
   setLogBuildMode(carrying, state = null) {
+    this.carryingLog = Boolean(carrying);
+    this.root.classList.toggle('log-carrying', this.carryingLog);
     this.buildTray.hidden = !carrying;
     if (!carrying) {
       this.buildTray.classList.remove('invalid');
@@ -125,7 +135,8 @@ export class MobileHud {
   }
 
   setInteractionTarget(target) {
-    const available = Boolean(target);
+    const handledByToolAction = TOOL_ACTION_TARGET_TYPES.has(target?.type);
+    const available = Boolean(target) && !handledByToolAction;
     const actionLabel = target?.actionLabel ?? (target ? `Pick up ${target.label}` : 'Interact');
     const icon = this.interactionIcons[target?.icon] ?? this.interactionIcons.hand;
     this.interactButton.hidden = !available;
@@ -151,16 +162,21 @@ export class MobileHud {
   }
 
   setAttackTarget(target, toolId = 'spear') {
-    const available = Boolean(target && (toolId === 'spear' || toolId === 'sword'));
+    const equippedTool = this.carryingLog ? null : toolId;
+    const available = Boolean(equippedTool && ['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(equippedTool));
+    const needsTarget = equippedTool === 'spear';
+    this.activeActionToolId = available ? equippedTool : null;
     this.attackButton.hidden = !available;
-    this.attackButton.disabled = !available;
-    this.attackIcon.src = this.toolIcons[toolId] ?? this.toolIcons.spear;
-    this.attackButton.setAttribute(
-      'aria-label',
-      available
-        ? `${toolId === 'spear' ? 'Throw spear at' : 'Strike'} ${target.label}`
-        : 'Attack'
-    );
+    this.attackButton.disabled = !available || (needsTarget && !target);
+    this.attackIcon.src = this.toolIcons[equippedTool] ?? this.toolIcons.spear;
+
+    let label = 'Tool action';
+    if (equippedTool === 'spear') label = target ? `Throw spear at ${target.label}` : 'Spear needs a locked target';
+    else if (equippedTool === 'sword') label = target ? `Slash ${target.label}` : 'Sword slash';
+    else if (equippedTool === 'axe') label = target?.type === 'tree' ? `Chop ${target.label}` : 'Axe swing';
+    else if (equippedTool === 'pickaxe') label = target?.type === 'rock' ? `Mine ${target.label}` : 'Pickaxe swing';
+    else if (equippedTool === 'hammer') label = target ? `Disassemble ${target.label}` : 'Hammer swing';
+    this.attackButton.setAttribute('aria-label', label);
   }
 
   #bindJoystick() {
@@ -223,7 +239,8 @@ export class MobileHud {
 
     this.attackButton.addEventListener('pointerdown', event => {
       event.preventDefault();
-      this.onAttack?.();
+      if (WORK_ACTION_TOOLS.has(this.activeActionToolId)) this.onInteract?.();
+      else this.onAttack?.();
     });
 
     for (const [toolId, button] of this.toolButtons) {

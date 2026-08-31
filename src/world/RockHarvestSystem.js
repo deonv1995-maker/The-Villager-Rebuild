@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 
 const INTERACTION_RADIUS = 2.85;
 const HITS_REQUIRED = 3;
@@ -20,10 +21,12 @@ export class RockHarvestSystem {
       active: true
     }));
     this.target = null;
+    this.hitFeedback = new HarvestHitFeedback({ group });
     this.#createIndicator();
   }
 
   update(playerPosition, enabled = true) {
+    this.hitFeedback.update();
     if (!enabled) {
       this.target = null;
       this.indicator.visible = false;
@@ -77,7 +80,13 @@ export class RockHarvestSystem {
     const rock = this.target;
     rock.hits += 1;
     const remainingHits = Math.max(0, HITS_REQUIRED - rock.hits);
-    if (remainingHits > 0) return { broken: false, remainingHits, label: 'Large rock' };
+    const position = new THREE.Vector3(
+      rock.obstacle.x,
+      this.terrain.heightAt(rock.obstacle.x, rock.obstacle.z),
+      rock.obstacle.z
+    );
+    this.hitFeedback.emit(position, 'stone');
+    if (remainingHits > 0) return { broken: false, remainingHits, label: 'Large rock', position };
 
     rock.active = false;
     this.collision.removeObstacle(rock.obstacle);
@@ -96,7 +105,7 @@ export class RockHarvestSystem {
 
     this.target = null;
     this.indicator.visible = false;
-    return { broken: true, remainingHits: 0, label: 'Large rock', stoneYield: STONE_YIELD };
+    return { broken: true, remainingHits: 0, label: 'Large rock', stoneYield: STONE_YIELD, position };
   }
 
   #createIndicator() {
