@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 
+const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+
 export class RangerToolPresentation {
   constructor({ player }) {
     this.player = player;
     this.duration = 0.46;
     this.remaining = 0;
     this.currentToolId = null;
+    this.skeletalActionActive = false;
     this.root = new THREE.Group();
     this.root.name = 'ranger-tool-presentation';
     this.root.visible = false;
@@ -14,7 +17,7 @@ export class RangerToolPresentation {
   }
 
   isBusy() {
-    return this.remaining > 0;
+    return this.remaining > 0 || Boolean(this.player.isToolActing?.());
   }
 
   setEquippedTool(toolId) {
@@ -24,6 +27,7 @@ export class RangerToolPresentation {
     this.root.clear();
     if (toolId) this.root.add(this.#createTool(toolId));
     this.root.visible = Boolean(toolId);
+    this.skeletalActionActive = false;
     this.#applyRestPose();
   }
 
@@ -34,18 +38,44 @@ export class RangerToolPresentation {
   playSwing(toolId = this.currentToolId) {
     if (this.isBusy() || !toolId || toolId === 'spear') return false;
     if (this.currentToolId !== toolId) this.setEquippedTool(toolId);
-    this.remaining = this.duration;
     this.root.visible = true;
+
+    if (this.handMounted && SKELETAL_WORK_TOOLS.has(toolId)) {
+      const action = this.player.playToolAction?.(toolId);
+      if (action?.started) {
+        this.duration = action.duration;
+        this.remaining = action.duration;
+        this.skeletalActionActive = true;
+        this.#applyRestPose();
+        return true;
+      }
+    }
+
+    this.duration = 0.46;
+    this.remaining = this.duration;
+    this.skeletalActionActive = false;
     this.#applySwingPose(0);
     return true;
   }
 
   update(dt) {
-    if (!this.isBusy()) return;
+    if (this.remaining <= 0) return;
     this.remaining = Math.max(0, this.remaining - dt);
-    const progress = 1 - this.remaining / this.duration;
-    this.#applySwingPose(progress);
-    if (this.remaining <= 0) this.#applyRestPose();
+
+    if (!this.skeletalActionActive) {
+      const progress = 1 - this.remaining / this.duration;
+      this.#applySwingPose(progress);
+    } else {
+      // The tool remains rigidly mounted to handslot.r. The authored Ranger
+      // skeleton performs the work motion, so the tool follows the hand instead
+      // of orbiting independently around the wrist.
+      this.#applyRestPose();
+    }
+
+    if (this.remaining <= 0) {
+      this.skeletalActionActive = false;
+      this.#applyRestPose();
+    }
   }
 
   #applyRestPose() {
@@ -64,6 +94,9 @@ export class RangerToolPresentation {
       : 1 - Math.pow(-2 * progress + 2, 2) / 2;
     const swing = -1.05 + eased * 1.9;
 
+    // Sword and placeholder/fallback characters still use the lightweight
+    // presentation swing. Axe/Hammer/Pickaxe on the production Ranger never use
+    // this path because their movement comes from the skeleton action above.
     if (this.handMounted) {
       this.root.position.set(0, 0, 0);
       this.root.rotation.set(swing * 0.48, 0.06, swing * 0.18);
