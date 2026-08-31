@@ -41,9 +41,12 @@ export class MobileHud {
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <div class="log-build-tray" data-role="log-build" hidden>
-        <button type="button" data-build="lay">LAY LOG</button>
-        <button type="button" data-build="post">POST</button>
-        <button type="button" data-build="drop">DROP</button>
+        <button type="button" data-build="raw">RAW</button>
+        <button type="button" data-build="floor">FLOOR</button>
+        <button type="button" data-build="frame">FRAME</button>
+        <button type="button" data-build="wall">WALL</button>
+        <button type="button" data-build="angle">ANGLE</button>
+        <button type="button" data-build="drop" class="drop-log">DROP</button>
       </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
@@ -104,8 +107,21 @@ export class MobileHud {
     }
   }
 
-  setLogBuildMode(carrying) {
+  setLogBuildMode(carrying, state = null) {
     this.buildTray.hidden = !carrying;
+    if (!carrying) {
+      this.buildTray.classList.remove('invalid');
+      return;
+    }
+
+    this.buildTray.classList.toggle('invalid', state?.previewing && !state?.previewValid);
+    for (const button of this.buildTray.querySelectorAll('[data-build]')) {
+      const buildMode = button.dataset.build;
+      const selected = buildMode !== 'drop' && buildMode === state?.mode;
+      button.classList.toggle('selected', selected);
+      if (selected) button.setAttribute('aria-pressed', 'true');
+      else button.removeAttribute('aria-pressed');
+    }
   }
 
   setInteractionTarget(target) {
