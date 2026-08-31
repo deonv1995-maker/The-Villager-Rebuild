@@ -3,6 +3,8 @@ import { ANIMAL_DEFINITIONS } from '../data/AnimalDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 import { DayOneAnimalPresentation } from './DayOneAnimalPresentation.js';
 
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+
 export class DayOneHuntSystem {
   constructor({ scene, terrain, definition = ANIMAL_DEFINITIONS.dayOneHunt }) {
     this.scene = scene;
@@ -15,6 +17,17 @@ export class DayOneHuntSystem {
     this.hitFlash = 0;
     this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
     this.lastPosition = new THREE.Vector3();
+    this.lastPlayerPosition = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
+    this.behavior = 'wander';
+    this.threatCause = null;
+    this.hasThreat = false;
+    this.fleeRemaining = 0;
+    this.wanderPause = 0;
+    this.wanderIndex = 0;
+    this.threatPosition = new THREE.Vector3();
+    this.wanderTarget = new THREE.Vector3();
+    this.tempDirection = new THREE.Vector3();
+    this.tempInward = new THREE.Vector3();
 
     this.presentation = new DayOneAnimalPresentation({ definition });
     this.group = this.presentation.root;
@@ -25,6 +38,7 @@ export class DayOneHuntSystem {
       this.center.z
     );
     this.lastPosition.copy(this.group.position);
+    this.#chooseWanderTarget();
     this.scene.add(this.group);
 
     this.targetRing = this.#createRing(0xe6a94d, 0.86, 1.08);
@@ -49,18 +63,32 @@ export class DayOneHuntSystem {
     this.time += dt;
     let movedDistance = 0;
 
+    if (this.#isFinitePosition(playerPosition)) this.lastPlayerPosition.copy(playerPosition);
+
     if (!this.defeated) {
-      const radius = this.definition.wanderRadius;
-      const x = this.center.x + Math.sin(this.time * this.definition.wanderSpeed) * radius;
-      const z = this.center.z + Math.sin(this.time * this.definition.wanderSpeed * 0.63 + 1.1) * radius * 0.72;
-      const y = this.terrain.heightAt(x, z);
+      const playerDistance = this.#distanceTo(playerPosition);
+      if (playerDistance <= this.definition.awarenessRange) {
+        this.alertFrom(playerPosition, { cause: 'proximity' });
+      } else if (this.behavior === 'flee' && this.#isFinitePosition(playerPosition)) {
+        this.threatPosition.copy(playerPosition);
+      }
 
       this.lastPosition.copy(this.group.position);
-      this.group.position.set(x, y, z);
-      const dx = x - this.lastPosition.x;
-      const dz = z - this.lastPosition.z;
-      movedDistance = Math.hypot(dx, dz);
-      if (movedDistance > 0.001) this.group.rotation.y = Math.atan2(dx, dz);
+      if (this.behavior === 'flee') {
+        this.#updateFlee(dt);
+      } else {
+        this.#updateWander(dt);
+      }
+      movedDistance = Math.hypot(
+        this.group.position.x - this.lastPosition.x,
+        this.group.position.z - this.lastPosition.z
+      );
+      if (movedDistance > 0.001) {
+        this.group.rotation.y = Math.atan2(
+          this.group.position.x - this.lastPosition.x,
+          this.group.position.z - this.lastPosition.z
+        );
+      }
     }
 
     this.presentation.update(dt, movedDistance);
@@ -81,6 +109,17 @@ export class DayOneHuntSystem {
     if (harvestTarget) this.#positionRing(this.harvestRing);
 
     return target;
+  }
+
+  alertFrom(threatPosition, { cause = 'danger', duration = this.definition.fleeDuration } = {}) {
+    if (this.defeated || !this.#isFinitePosition(threatPosition)) return false;
+    this.threatPosition.copy(threatPosition);
+    this.hasThreat = true;
+    this.threatCause = cause;
+    this.behavior = 'flee';
+    this.fleeRemaining = Math.max(this.fleeRemaining, Math.max(0, duration));
+    this.wanderPause = 0;
+    return true;
   }
 
   getAttackTarget(playerPosition, range = this.definition.spearLockRange) {
@@ -106,16 +145,22 @@ export class DayOneHuntSystem {
     return this.group.position;
   }
 
-  applyDamage(damage = 1) {
+  applyDamage(damage = 1, threatPosition = null) {
     if (this.defeated || !Number.isFinite(damage) || damage <= 0) return null;
     this.health = Math.max(0, this.health - damage);
     this.hitFlash = 0.16;
 
     if (this.health === 0) {
       this.defeated = true;
+      this.behavior = 'defeated';
       this.targetRing.visible = false;
       this.presentation.setDefeated(true);
       this.group.position.y = this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.12;
+    } else {
+      const resolvedThreat = this.#isFinitePosition(threatPosition)
+        ? threatPosition
+        : this.lastPlayerPosition;
+      if (this.#isFinitePosition(resolvedThreat)) this.alertFrom(resolvedThreat, { cause: 'hit' });
     }
 
     return {
@@ -132,7 +177,7 @@ export class DayOneHuntSystem {
   meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
     const target = this.getAttackTarget(playerPosition, range);
     if (!target) return null;
-    return this.applyDamage(damage);
+    return this.applyDamage(damage, playerPosition);
   }
 
   attack(playerPosition) {
@@ -180,8 +225,109 @@ export class DayOneHuntSystem {
       maxHealth: this.definition.maxHealth,
       defeated: this.defeated,
       harvested: this.harvested,
+      behavior: this.behavior,
+      threatCause: this.threatCause,
       assetMode: this.presentation.assetMode
     };
+  }
+
+  #updateWander(dt) {
+    if (this.wanderPause > 0) {
+      this.wanderPause = Math.max(0, this.wanderPause - dt);
+      if (this.wanderPause === 0) this.#chooseWanderTarget();
+      return;
+    }
+
+    const dx = this.wanderTarget.x - this.group.position.x;
+    const dz = this.wanderTarget.z - this.group.position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.22) {
+      const pauseSpan = Math.max(0, this.definition.wanderPauseMax - this.definition.wanderPauseMin);
+      const pauseBias = (Math.sin(this.wanderIndex * 1.71) + 1) * 0.5;
+      this.wanderPause = this.definition.wanderPauseMin + pauseSpan * pauseBias;
+      return;
+    }
+
+    const step = Math.min(distance, this.definition.wanderSpeed * Math.max(0, dt));
+    const x = this.group.position.x + (dx / distance) * step;
+    const z = this.group.position.z + (dz / distance) * step;
+    this.group.position.set(x, this.terrain.heightAt(x, z), z);
+  }
+
+  #updateFlee(dt) {
+    this.fleeRemaining = Math.max(0, this.fleeRemaining - Math.max(0, dt));
+    this.tempDirection.set(
+      this.group.position.x - this.threatPosition.x,
+      0,
+      this.group.position.z - this.threatPosition.z
+    );
+
+    if (this.tempDirection.lengthSq() <= 0.0001) {
+      const escapeAngle = this.time * 0.83 + this.wanderIndex * GOLDEN_ANGLE;
+      this.tempDirection.set(Math.sin(escapeAngle), 0, Math.cos(escapeAngle));
+    } else {
+      this.tempDirection.normalize();
+    }
+
+    const maxRoamRadius = Math.max(this.definition.wanderRadius, this.definition.maxRoamRadius);
+    const offsetX = this.group.position.x - this.center.x;
+    const offsetZ = this.group.position.z - this.center.z;
+    const radius = Math.hypot(offsetX, offsetZ);
+    const softLimit = maxRoamRadius * 0.72;
+    if (radius > softLimit) {
+      const boundaryWeight = THREE.MathUtils.clamp(
+        (radius - softLimit) / Math.max(0.001, maxRoamRadius - softLimit),
+        0,
+        1
+      );
+      this.tempInward.set(this.center.x - this.group.position.x, 0, this.center.z - this.group.position.z);
+      if (this.tempInward.lengthSq() > 0.0001) {
+        this.tempDirection.lerp(this.tempInward.normalize(), boundaryWeight * 0.82).normalize();
+      }
+    }
+
+    const step = this.definition.fleeSpeed * Math.max(0, dt);
+    const x = this.group.position.x + this.tempDirection.x * step;
+    const z = this.group.position.z + this.tempDirection.z * step;
+    this.group.position.set(x, this.terrain.heightAt(x, z), z);
+
+    const threatDistance = this.#distanceTo(this.threatPosition);
+    if (this.fleeRemaining <= 0 && threatDistance >= this.definition.safeDistance) {
+      this.behavior = 'wander';
+      this.hasThreat = false;
+      this.threatCause = null;
+      this.wanderPause = this.definition.wanderPauseMin;
+      this.#chooseWanderTarget();
+    }
+  }
+
+  #chooseWanderTarget() {
+    this.wanderIndex += 1;
+    const angle = this.wanderIndex * GOLDEN_ANGLE + 0.45;
+    const radialBias = 0.42 + ((Math.sin(this.wanderIndex * 1.37) + 1) * 0.5) * 0.5;
+    const radius = this.definition.wanderRadius * radialBias;
+    this.wanderTarget.set(
+      this.center.x + Math.cos(angle) * radius,
+      0,
+      this.center.z + Math.sin(angle) * radius
+    );
+  }
+
+  #distanceTo(position) {
+    if (!this.#isFinitePosition(position)) return Number.POSITIVE_INFINITY;
+    return Math.hypot(
+      position.x - this.group.position.x,
+      position.z - this.group.position.z
+    );
+  }
+
+  #isFinitePosition(position) {
+    return Boolean(
+      position
+      && Number.isFinite(position.x)
+      && Number.isFinite(position.y)
+      && Number.isFinite(position.z)
+    );
   }
 
   #createRing(color, innerRadius, outerRadius) {
