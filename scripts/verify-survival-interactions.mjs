@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
 import { ToolbeltSystem } from '../src/gameplay/ToolbeltSystem.js';
+import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
 import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
 import { STRUCTURE_DEFINITIONS } from '../src/data/StructureDefinitions.js';
@@ -23,6 +24,26 @@ assert.equal(RESOURCE_DEFINITIONS.stick.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.stone.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.grass.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.log.storage, 'physical');
+
+const initialResourceCounts = WORLD_LAYOUT.dayOneResources.reduce((counts, [resourceId]) => {
+  counts[resourceId] = (counts[resourceId] ?? 0) + 1;
+  return counts;
+}, {});
+const requiredInventoryResources = {};
+for (const toolId of TOOL_ORDER) {
+  for (const ingredient of CRAFTING_RECIPES[toolId].ingredients) {
+    requiredInventoryResources[ingredient.itemId] = (requiredInventoryResources[ingredient.itemId] ?? 0) + ingredient.quantity;
+  }
+}
+for (const ingredient of STRUCTURE_DEFINITIONS.campfire.ingredients) {
+  requiredInventoryResources[ingredient.itemId] = (requiredInventoryResources[ingredient.itemId] ?? 0) + ingredient.quantity;
+}
+for (const [resourceId, quantity] of Object.entries(requiredInventoryResources)) {
+  assert.ok(
+    (initialResourceCounts[resourceId] ?? 0) >= quantity,
+    `Opening world must contain enough ${resourceId} to craft the five basic tools plus the campfire in any order`
+  );
+}
 
 const inventory = new InventorySystem();
 assert.throws(() => inventory.get('log'), /Unknown item/, 'Physical logs must be impossible to query as inventory stacks');
@@ -50,22 +71,27 @@ const hunt = new DayOneHuntSystem({ scene: huntScene, terrain: flatTerrain });
 const hunter = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
 const lock = hunt.getAttackTarget(hunter, TOOL_DEFINITIONS.spear.lockRange);
 assert.equal(lock?.animalId, 'wild_pig', 'Spear auto-lock must resolve the active hunt target inside range');
+assert.equal(lock?.position, hunt.getProjectileTargetPosition(), 'Locked aim position must remain bound to the live moving animal position');
 assert.equal(hunt.getAttackTarget(new THREE.Vector3(hunter.x + 20, 0, hunter.z), TOOL_DEFINITIONS.spear.lockRange), null, 'Auto-lock must stop outside spear range');
 
 const projectileScene = new THREE.Scene();
 const projectile = new SpearProjectileSystem({ scene: projectileScene, speed: 20, maxLifetime: 1 });
+const movingTarget = new THREE.Vector3(1, 0, 0);
 let projectileDamage = 0;
 assert.equal(projectile.throw({
   origin: new THREE.Vector3(0, 0, 0),
-  target: new THREE.Vector3(1, 0, 0),
+  target: movingTarget,
   onHit: () => {
     projectileDamage += 1;
     return { health: 1, maxHealth: 2, defeated: false, label: 'Wild Pig' };
   }
 }), true, 'Spear throw must create a real projectile');
 assert.equal(projectile.isActive(), true);
-const projectileResult = projectile.update(0.1);
-assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve when the spear reaches its target');
+movingTarget.set(2, 0, 0);
+assert.equal(projectile.update(0.05), null, 'Moving target should remain locked while the spear is still travelling');
+assert.equal(projectile.targetPosition.x, 2, 'Projectile aim point must follow the live locked target instead of preserving the throw-time coordinate');
+const projectileResult = projectile.update(0.2);
+assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve when the spear reaches its moving target');
 assert.equal(projectileDamage, 1);
 assert.equal(projectile.isActive(), false);
 
@@ -136,6 +162,7 @@ for (const requirement of [
 
 assert.ok(projectileSource.includes("this.projectile.name = 'thrown-spear-projectile'"), 'Spear must exist as a moving world projectile while thrown');
 assert.ok(projectileSource.includes('this.projectile.position.add(step)'), 'Thrown spear must advance through world space');
+assert.ok(projectileSource.includes("typeof target === 'function' ? target : () => target"), 'Projectile must preserve a live target provider for auto-lock tracking');
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
 assert.ok(toolSource.includes("toolId === 'hammer'") && toolSource.includes("toolId === 'pickaxe'") && toolSource.includes("toolId === 'sword'"), 'Ranger tool presentation must support all non-spear basic tools');
 
