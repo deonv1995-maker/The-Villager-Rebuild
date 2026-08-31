@@ -51,7 +51,7 @@ export class RangerToolPresentation {
       }
     }
 
-    this.duration = 0.46;
+    this.duration = toolId === 'sword' ? 0.4 : 0.43;
     this.remaining = this.duration;
     this.skeletalActionActive = false;
     this.#applySwingPose(0);
@@ -61,15 +61,15 @@ export class RangerToolPresentation {
   update(dt) {
     if (this.remaining <= 0) return;
     this.remaining = Math.max(0, this.remaining - dt);
+    const progress = 1 - this.remaining / this.duration;
 
     if (!this.skeletalActionActive) {
-      const progress = 1 - this.remaining / this.duration;
       this.#applySwingPose(progress);
     } else {
-      // The tool remains rigidly mounted to handslot.r. The authored Ranger
-      // skeleton performs the work motion, so the tool follows the hand instead
-      // of orbiting independently around the wrist.
-      this.#applyRestPose();
+      // Keep the prop hand-mounted, but add a small grip-relative strike accent.
+      // The authored skeleton still owns the body motion; this only strengthens
+      // the visible tool-head follow-through at impact.
+      this.#applySkeletalAccent(progress);
     }
 
     if (this.remaining <= 0) {
@@ -88,23 +88,46 @@ export class RangerToolPresentation {
     this.root.rotation.set(0.2, 0.08, -0.36);
   }
 
+  #applySkeletalAccent(progress) {
+    if (!this.handMounted) return;
+    const impact = Math.sin(Math.PI * THREE.MathUtils.clamp((progress - 0.18) / 0.7, 0, 1));
+    const strength = this.currentToolId === 'hammer' ? 0.2 : 0.16;
+    this.root.position.set(0, 0, 0);
+    this.root.rotation.set(
+      -impact * strength * 0.35,
+      impact * strength * 0.16,
+      impact * strength
+    );
+  }
+
   #applySwingPose(progress) {
     const eased = progress < 0.5
       ? 2 * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-    const swing = -1.05 + eased * 1.9;
 
-    // Sword and placeholder/fallback characters still use the lightweight
-    // presentation swing. Axe/Hammer/Pickaxe on the production Ranger never use
-    // this path because their movement comes from the skeleton action above.
+    if (this.currentToolId === 'sword') {
+      // The fallback sword action is deliberately lateral rather than the old
+      // generic up/down tool arc: blade winds across the body and cuts sideways.
+      const slash = -1.22 + eased * 2.44;
+      if (this.handMounted) {
+        this.root.position.set(0, 0, 0);
+        this.root.rotation.set(0.08, -0.32 + eased * 0.64, slash);
+        return;
+      }
+      this.root.position.set(0.52, 1.4, 0.12);
+      this.root.rotation.set(0.18, -0.46 + eased * 0.92, slash);
+      return;
+    }
+
+    const swing = -1.34 + eased * 2.48;
     if (this.handMounted) {
       this.root.position.set(0, 0, 0);
-      this.root.rotation.set(swing * 0.48, 0.06, swing * 0.18);
+      this.root.rotation.set(swing * 0.54, 0.08, swing * 0.24);
       return;
     }
 
     this.root.position.set(0.48, 1.36, 0.16);
-    this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.2);
+    this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.24);
   }
 
   #createTool(toolId) {
