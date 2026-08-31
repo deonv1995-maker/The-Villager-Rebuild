@@ -6,7 +6,7 @@ The opening presentation is a dedicated lightweight pre-game Three.js scene. It 
 
 ## Character source of truth
 
-The title scene loads the same production KayKit Ranger used by gameplay through `ASSET_PATHS.ranger.model` and uses `ASSET_PATHS.ranger.movementBasic` for the idle animation. No second Ranger definition or menu-only character asset is introduced. A presentation-only balance rig counter-rotates against ship pitch/roll so the Ranger braces with the vessel instead of appearing disconnected from it. At the wreck point the rig is detached from the ship while preserving its world transform, then follows a short ballistic fall into the water before gameplay handoff.
+The title scene loads the same production KayKit Ranger used by gameplay through `ASSET_PATHS.ranger.model` and uses `ASSET_PATHS.ranger.movementBasic` for the idle animation. No second Ranger definition or menu-only character asset is introduced. A presentation-only balance rig counter-rotates against ship pitch/roll so the Ranger braces with the vessel instead of appearing disconnected from it. Because the full `Idle_A` upper-body pose raises the Ranger's arms too strongly for the calm ship shot, the title renderer captures the production rig's neutral arm rest transforms and blends only the arm chain back toward that neutral pose after animation evaluation. The gameplay Ranger animation system is not changed. At the wreck point the balance rig is detached from the ship while preserving its world transform, then follows a short ballistic fall into the water before gameplay handoff.
 
 ## Island source of truth
 
@@ -16,17 +16,17 @@ The title scene may read terrain height/profile data for presentation, but it mu
 
 ## Ship presentation
 
-`TitleShipVisual` owns presentation-only ship geometry. The hull is generated from tapered cross-sections with a narrow pointed bow, broader stern, tapered deck and visible bowsprit aimed toward the island. This makes bow/stern orientation readable from the established menu camera without creating a gameplay sailing system.
+`TitleShipVisual` owns presentation-only ship geometry. The hull is generated from tapered cross-sections with a narrow pointed bow, broader stern, tapered deck and visible bowsprit aimed toward the island. The hull and deck are intentionally rendered double-sided for the menu camera, and the bow has a dedicated deck cap so water/sky cannot show through the procedural shell. This makes bow/stern orientation readable and the vessel visually solid without creating a gameplay sailing system.
 
 ## Storm and water presentation
 
 `TitleStormSystem` owns title-only ocean/weather effects:
 
 - calm water uses low-amplitude multi-directional waves;
-- storm progression increases wave amplitude, speed and short-frequency chop;
+- storm progression increases wave amplitude, speed and short-frequency chop, but the maximum wave amplitude/speed and ship heave/pitch/roll are centrally capped in `TitleSceneConfig` so the sequence remains readable rather than violent;
 - ocean vertex normals are recalculated so changing waves affect lighting rather than only geometry silhouette;
 - storm clouds, rain and deterministic lightning flashes appear as danger rises;
-- bow foam and spray respond to the moving ship;
+- bow foam and spray respond to the moving ship, with spray density kept below the original aggressive pass;
 - wreck impact and Ranger water entry produce separate foam/splash rings;
 - water, sky, fog and lighting darken together so the storm reads as one coherent state.
 
@@ -47,7 +47,7 @@ All title weather geometry is disposed with the title scene before normal gamepl
 ## Architecture boundaries
 
 - `TitleSceneApp` remains an orchestrator; island, ship and storm rendering are separate presentation modules.
-- `TitleSceneConfig` is the single source of truth for title voyage timing, ocean level and backdrop scaling.
+- `TitleSceneConfig` is the single source of truth for title voyage timing, ocean level, backdrop scaling, storm motion limits and Ranger title-pose blending.
 - The title scene does not instantiate gameplay inventory, harvesting, construction, collision, survival or HUD systems.
 - The title scene does not modify the PWA manifest, service worker, native Chrome installation architecture or Pages deployment ordering.
 - The ship is presentation geometry only and does not establish future sailing mechanics.
