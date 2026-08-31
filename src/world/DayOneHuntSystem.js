@@ -97,21 +97,13 @@ export class DayOneHuntSystem {
       health: this.health,
       maxHealth: this.definition.maxHealth,
       distance,
-      position: {
-        x: this.group.position.x,
-        y: this.group.position.y,
-        z: this.group.position.z
-      }
+      position: this.group.position
     };
   }
 
   getProjectileTargetPosition() {
     if (this.defeated || this.harvested) return null;
-    return {
-      x: this.group.position.x,
-      y: this.group.position.y,
-      z: this.group.position.z
-    };
+    return this.group.position;
   }
 
   applyDamage(damage = 1) {
