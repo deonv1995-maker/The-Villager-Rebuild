@@ -167,6 +167,40 @@ function closedLoop(component, topTolerance) {
   return { ordered, averageTop };
 }
 
+function boundaryPathExists(component, projectedById, startId, endId, axisKey, boundaryValue, tolerance) {
+  const adjacency = new Map();
+  const connect = (left, right) => {
+    const bucket = adjacency.get(left) ?? [];
+    if (!bucket.includes(right)) bucket.push(right);
+    adjacency.set(left, bucket);
+  };
+
+  for (const pair of component) {
+    const left = projectedById.get(pair.a.id);
+    const right = projectedById.get(pair.b.id);
+    if (!left || !right) continue;
+    if (
+      Math.abs(left[axisKey] - boundaryValue) > tolerance ||
+      Math.abs(right[axisKey] - boundaryValue) > tolerance
+    ) continue;
+    connect(pair.a.id, pair.b.id);
+    connect(pair.b.id, pair.a.id);
+  }
+
+  const visited = new Set([startId]);
+  const queue = [startId];
+  while (queue.length) {
+    const current = queue.shift();
+    if (current === endId) return true;
+    for (const next of adjacency.get(current) ?? []) {
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push(next);
+    }
+  }
+  return false;
+}
+
 function frameBoundsRegion(component, {
   yawTolerance,
   topTolerance,
@@ -204,6 +238,7 @@ function frameBoundsRegion(component, {
 
   let best = null;
   const cornerTolerance = Math.max(0.28, (maxAlong ?? 0.4) + 0.08);
+  const boundaryTolerance = Math.max(0.16, (maxAlong ?? 0.4) * 0.55);
   for (const axis of axes) {
     const frameBasis = basis(axis.yaw);
     const projected = frameList.map(frame => {
@@ -215,6 +250,7 @@ function frameBoundsRegion(component, {
         v: dx * frameBasis.zX + dz * frameBasis.zZ
       };
     });
+    const projectedById = new Map(projected.map(entry => [entry.frame.id, entry]));
     const minU = Math.min(...projected.map(entry => entry.u));
     const maxU = Math.max(...projected.map(entry => entry.u));
     const minV = Math.min(...projected.map(entry => entry.v));
@@ -247,6 +283,15 @@ function frameBoundsRegion(component, {
       cornerFrames.push(nearest);
     }
     if (!cornersValid) continue;
+
+    const [a, b, c, d] = cornerFrames;
+    const perimeterClosed = (
+      boundaryPathExists(component, projectedById, a.id, b.id, 'v', minV, boundaryTolerance) &&
+      boundaryPathExists(component, projectedById, c.id, d.id, 'v', maxV, boundaryTolerance) &&
+      boundaryPathExists(component, projectedById, a.id, c.id, 'u', minU, boundaryTolerance) &&
+      boundaryPathExists(component, projectedById, b.id, d.id, 'u', maxU, boundaryTolerance)
+    );
+    if (!perimeterClosed) continue;
 
     const candidate = {
       ...axis,
