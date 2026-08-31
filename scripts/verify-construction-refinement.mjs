@@ -3,10 +3,11 @@ import { readFile } from 'node:fs/promises';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
-assert.ok(PHYSICAL_LOG.floorGroundClearance <= 0.02, 'Ground floors must seat almost directly on the terrain');
-assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance >= 0.08, 'Ground floors need a small terrain embed tolerance for natural uneven ground');
+assert.ok(PHYSICAL_LOG.floorGroundClearance >= 0.06 && PHYSICAL_LOG.floorGroundClearance <= 0.1, 'Ground floors need a shallow archived-style clearance above natural relief');
+assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance < 0.028, 'Valid terrain may not rise through the split-log walking face');
+assert.ok(PHYSICAL_LOG.floorGroundClearance + 0.028 <= 0.12, 'Ground floors must remain a shallow walk-on step from natural terrain');
 assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log floor support must target the curved underside rather than the walking surface');
-assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded opposite-eave spacing');
+assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded eave spacing');
 assert.ok(PHYSICAL_LOG.roofLocalFrameLimit > 0, 'Roof preview needs a bounded local frame candidate limit');
 assert.ok(PHYSICAL_LOG.roofLocalPairLimit > 0, 'Roof preview needs a bounded local frame-pair candidate limit');
 
@@ -130,4 +131,4 @@ assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor suppo
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
 
-console.log('Ground-flush floors, free platform movement, bounded roof topology and construction snapping verified');
+console.log('Walk-on non-clipping floors, free platform movement, bounded roof topology and construction snapping verified');
