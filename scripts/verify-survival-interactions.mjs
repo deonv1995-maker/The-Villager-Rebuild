@@ -3,10 +3,11 @@ import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
+import { ToolDurabilitySystem } from '../src/gameplay/ToolDurabilitySystem.js';
 import { ToolbeltSystem } from '../src/gameplay/ToolbeltSystem.js';
 import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
 import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
-import { TOOL_DEFINITIONS, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
+import { TOOL_DEFINITIONS, TOOL_DURABILITY, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
 import { STRUCTURE_DEFINITIONS } from '../src/data/StructureDefinitions.js';
 import { LOG_BUILD_MODES, PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
@@ -23,6 +24,11 @@ function animationNamesFromGlb(buffer) {
 }
 
 assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Craftable tool order must remain stable');
+assert.deepEqual(
+  TOOL_DURABILITY,
+  { maxPercent: 100, wearMinPercent: 3, wearMaxPercent: 6 },
+  'All tools must share the same 100% durability and random 3–6% wear constants'
+);
 assert.equal(TOOL_DEFINITIONS.spear.role, 'projectile');
 assert.equal(TOOL_DEFINITIONS.axe.role, 'tree-harvest');
 assert.equal(TOOL_DEFINITIONS.hammer.role, 'demolition');
@@ -64,19 +70,33 @@ inventory.add('stick', 6);
 inventory.add('stone', 8);
 inventory.add('grass', 4);
 const crafting = new CraftingSystem({ inventory });
-const toolbelt = new ToolbeltSystem({ inventory, crafting });
+const durability = new ToolDurabilitySystem({ inventory, random: () => 0.5 });
+const toolbelt = new ToolbeltSystem({ inventory, crafting, durability });
 let belt = toolbelt.snapshot();
-assert.equal(belt.length, 6, 'Bottom toolbelt must contain default Hand plus five craftable tools');
+assert.equal(belt.length, 6, 'Bottom toolbelt must contain default Hand plus five selection slots');
 assert.equal(belt[0].id, 'hand');
 assert.equal(belt[0].equipped, true);
+assert.equal(toolbelt.select('spear').equipped, false, 'Selecting an unowned tool must never auto-craft it');
+assert.equal(inventory.get('spear'), 0, 'Selection bar must not mutate inventory');
+assert.ok(crafting.craft('spear'), 'Spear must craft through the dedicated crafting system');
+durability.registerCrafted('spear');
 assert.equal(toolbelt.select('spear').equipped, true);
 assert.equal(toolbelt.getEquippedToolId(), 'spear');
+assert.ok(crafting.craft('axe'), 'Axe must craft explicitly before selection');
+durability.registerCrafted('axe');
 assert.equal(toolbelt.select('axe').equipped, true);
 assert.equal(toolbelt.getEquippedToolId(), 'axe');
+assert.equal(durability.getDurability('axe'), 100);
+const axeWear = durability.use('axe');
+assert.equal(axeWear.wearPercent, 4.5, 'Deterministic midpoint wear must resolve between the shared 3% and 6% constants');
+assert.equal(axeWear.durability, 95.5);
 assert.equal(toolbelt.select('hand').equipped, true);
 assert.equal(toolbelt.getEquippedToolId(), null);
+assert.ok(crafting.craft('pickaxe'), 'Pickaxe must craft explicitly before selection');
+durability.registerCrafted('pickaxe');
 assert.equal(toolbelt.select('pickaxe').equipped, true);
 assert.equal(inventory.get('pickaxe'), 1);
+assert.equal(toolbelt.craftingSnapshot().find(entry => entry.id === 'spear')?.ingredients[0].available, inventory.get('stick'));
 
 const campfireIngredients = Object.fromEntries(STRUCTURE_DEFINITIONS.campfire.ingredients.map(item => [item.itemId, item.quantity]));
 assert.deepEqual(campfireIngredients, { stick: 3, stone: 3 }, 'Campfire must use inventory sticks and stones, never logs');
@@ -97,6 +117,7 @@ let projectileDamage = 0;
 assert.equal(projectile.throw({
   origin: new THREE.Vector3(0, 0, 0),
   target: () => movingTarget,
+  durability: 91.5,
   onHit: () => {
     projectileDamage += 1;
     return { health: 1, maxHealth: 2, defeated: false, label: 'Wild Pig' };
@@ -116,7 +137,16 @@ for (let step = 0; step < 30 && projectile.isActive(); step += 1) {
 }
 assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve only when the arcing spear reaches its target');
 assert.equal(projectileDamage, 1);
-assert.equal(projectile.isActive(), false);
+assert.equal(projectile.isActive(), false, 'Impact must end flight without deleting the spear');
+assert.equal(projectile.getEmbeddedCount(), 1, 'Thrown spear must remain embedded in the world until retrieval');
+movingTarget.set(8, 0, 0);
+projectile.update(0);
+const retrievalTarget = projectile.getRetrievalTarget(new THREE.Vector3(8, 0, 0));
+assert.equal(retrievalTarget?.type, 'thrown-spear', 'Embedded spear must become a nearby retrieval target');
+assert.equal(retrievalTarget?.position.x, 8, 'Embedded spear must continue following its live target while the target exists');
+const retrievedSpear = projectile.retrieve(new THREE.Vector3(8, 0, 0));
+assert.equal(retrievedSpear?.durability, 91.5, 'Retrieved spear must preserve the durability carried into the throw');
+assert.equal(projectile.getEmbeddedCount(), 0, 'Retrieval must remove the spear from the world');
 
 const [generalAnimations, meleeAnimations] = await Promise.all([
   readFile('public/assets/kaykit/animations/Rig_Medium_General.glb'),
@@ -133,8 +163,12 @@ assert.ok(
 
 const [
   appSource,
+  mainSource,
   hudSource,
   contextActionSource,
+  equipmentRuntimeSource,
+  durabilitySource,
+  toolbeltSource,
   logSource,
   rockSource,
   treeSource,
@@ -146,14 +180,20 @@ const [
   floorSupportSource,
   feedbackSource,
   stylesSource,
+  craftingStylesSource,
+  indexSource,
   assetSource,
   hammerSvg,
   pickaxeSvg,
   swordSvg
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
+  readFile('src/main.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/ui/ContextActionPolicy.js', 'utf8'),
+  readFile('src/gameplay/EquipmentRuntimeController.js', 'utf8'),
+  readFile('src/gameplay/ToolDurabilitySystem.js', 'utf8'),
+  readFile('src/gameplay/ToolbeltSystem.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/RockHarvestSystem.js', 'utf8'),
   readFile('src/world/TreeHarvestSystem.js', 'utf8'),
@@ -165,6 +205,8 @@ const [
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
   readFile('src/world/HarvestHitFeedback.js', 'utf8'),
   readFile('src/styles.css', 'utf8'),
+  readFile('src/crafting.css', 'utf8'),
+  readFile('index.html', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('public/assets/ui/mobile/icon-hammer.svg', 'utf8'),
   readFile('public/assets/ui/mobile/icon-pickaxe.svg', 'utf8'),
@@ -192,12 +234,18 @@ for (const requirement of [
 }
 assert.ok(!appSource.includes('playSpearAttack()'), 'Active spear combat must not use the old stabbing/thrust attack path');
 assert.ok(!appSource.includes("inventory.add('log'"), 'GameApp must never store logs in inventory');
+assert.ok(mainSource.includes('new EquipmentRuntimeController({ game })'), 'Equipment runtime must be installed explicitly at gameplay startup');
 
 for (const requirement of [
   'class="toolbelt"',
   "['hand', ...TOOL_ORDER]",
   "hand: ui.hand",
   'setToolbelt(entries)',
+  'class="craft-menu-toggle"',
+  'class="craft-menu"',
+  'setCrafting(entries)',
+  'data-role="tool-count"',
+  'data-role="tool-durability-track"',
   'class="log-build-tray"',
   'data-role="build-toggle"',
   'data-build="raw"',
@@ -221,8 +269,9 @@ for (const requirement of [
   "if (action.source === 'attack')",
   "if (action.source === 'external')"
 ]) {
-  assert.ok(hudSource.includes(requirement), `Mobile HUD is missing unified Action/build contract: ${requirement}`);
+  assert.ok(hudSource.includes(requirement), `Mobile HUD is missing unified Action/build/crafting contract: ${requirement}`);
 }
+assert.ok(!hudSource.includes('tool-craft-mark'), 'Tool selection bar must not expose the old inline auto-craft marker');
 assert.ok(!hudSource.includes('class="hud-button interact"'), 'Legacy pickup/interact round button must not return');
 assert.ok(!hudSource.includes('class="hud-button attack"'), 'Legacy attack/tool round button must not return');
 assert.ok(!hudSource.includes('class="hud-button craft"'), 'Legacy campfire round button must not return');
@@ -230,6 +279,7 @@ assert.ok(contextActionSource.includes("axe: Object.freeze(new Set(['tree']))"),
 assert.ok(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock']))"), 'Unified Action policy must preserve Pickaxe rock routing');
 assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must preserve Hammer demolition routing');
 assert.ok(contextActionSource.includes("const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']))"), 'Unified Action policy must preserve Spear and Sword combat routing');
+assert.ok(contextActionSource.includes("const RETRIEVAL_ACTION_ID = 'spear-retrieve'"), 'Nearby spear retrieval must have priority through the unified Action policy');
 assert.ok(
   stylesSource.includes('.log-build-tray {') &&
   stylesSource.includes('right: max(8px') &&
@@ -244,6 +294,32 @@ assert.ok(
   stylesSource.includes('flex-direction: column'),
   'Inventory must remain a vertical stack on the left side beneath the status banner'
 );
+assert.ok(
+  craftingStylesSource.includes('.craft-menu-toggle {') &&
+  craftingStylesSource.includes('left: 63%;') &&
+  craftingStylesSource.includes('top: max(8px') &&
+  craftingStylesSource.includes('.tool-count-badge {') &&
+  craftingStylesSource.includes('.tool-durability-track {'),
+  'Crafting must live in a dedicated top-right-offset mobile panel with spear count and durability feedback'
+);
+assert.ok(indexSource.includes('./src/crafting.css'), 'Dedicated crafting HUD stylesheet must be loaded by the app shell');
+
+assert.ok(!toolbeltSource.includes('this.crafting.craft(toolId)'), 'Toolbelt selection must never own crafting side effects');
+assert.ok(toolbeltSource.includes('craftingSnapshot()'), 'Toolbelt must expose recipe state without crafting from selection');
+for (const requirement of [
+  "this.#wrapToolUse(this.game.treeHarvest, 'chop', 'axe')",
+  "this.#wrapToolUse(this.game.rockHarvest, 'mine', 'pickaxe')",
+  "this.#wrapToolUse(this.game.physicalLogs, 'demolish', 'hammer')",
+  "this.#wrapToolUse(this.game.hunt, 'meleeAttack', 'sword')",
+  "this.durability.takeForUse('spear')",
+  "this.game.toolbelt.clearIfUnavailable()",
+  "hud.setCrafting(this.game.toolbelt.craftingSnapshot())",
+  "hud.setExternalAction(RETRIEVAL_ACTION_ID"
+]) {
+  assert.ok(equipmentRuntimeSource.includes(requirement), `Equipment runtime is missing contract: ${requirement}`);
+}
+assert.ok(durabilitySource.includes('wearMinPercent') && durabilitySource.includes('wearMaxPercent'), 'Durability system must consume the shared wear constants');
+assert.ok(durabilitySource.includes('previousDurability'), 'Failed spear launches must be able to restore the pre-throw durability state');
 
 for (const requirement of [
   "takePhysical(playerPosition, 'log')",
@@ -290,6 +366,9 @@ for (const requirement of [
 assert.ok(projectileSource.includes("this.projectile.name = 'thrown-spear-projectile'"), 'Spear must exist as a moving world projectile while thrown');
 assert.ok(projectileSource.includes('Math.sin(progress * Math.PI) * this.arcHeight'), 'Thrown spear must follow its ballistic-style arc');
 assert.ok(projectileSource.includes("typeof target === 'function' ? target : () => target"), 'Projectile must preserve a live target provider for auto-lock tracking');
+assert.ok(projectileSource.includes('this.embeddedSpears = []'), 'Projectile system must retain landed spears independently of the active flight');
+assert.ok(projectileSource.includes('getRetrievalTarget(playerPosition'), 'Projectile system must expose nearby spear retrieval targets');
+assert.ok(projectileSource.includes('retrieve(playerPosition'), 'Projectile system must remove a spear only when it is retrieved');
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'), 'Non-spear tools must mount through the Ranger right-hand attachment boundary');
 assert.ok(toolSource.includes("const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])"), 'Axe, Hammer and Pickaxe must share the skeleton-driven work-action path');
@@ -311,4 +390,4 @@ for (const [name, path, svg] of [
 assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
 assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Foundation 0.3.8 survival, carry, bounded building, unified Action, hit-feedback and preserved spear contracts verified');
+console.log('Foundation 0.3.8 selection-only toolbelt, dedicated crafting, durability, retrievable spear and preserved gameplay contracts verified');
