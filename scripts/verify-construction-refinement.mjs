@@ -12,6 +12,8 @@ assert.ok(PHYSICAL_LOG.floorGroundClearance >= 0.06 && PHYSICAL_LOG.floorGroundC
 assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance < 0.028, 'Valid terrain may not rise through the split-log walking face');
 assert.ok(PHYSICAL_LOG.floorGroundClearance + 0.028 <= 0.12, 'Ground floors must remain a shallow walk-on step from natural terrain');
 assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log floor support must target the curved underside rather than the walking surface');
+assert.ok(PHYSICAL_LOG.floorSupportSeamPadding >= 0.04 && PHYSICAL_LOG.floorSupportSeamPadding <= 0.08, 'Floor support seam overlap must stay bounded');
+assert.ok(PHYSICAL_LOG.floorSurfaceOverrideTolerance >= 0.05 && PHYSICAL_LOG.floorSurfaceOverrideTolerance <= 0.1, 'Floor surface ownership tolerance must stay small and construction-local');
 assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded eave spacing');
 assert.ok(PHYSICAL_LOG.roofLocalFrameLimit > 0, 'Roof preview needs a bounded local frame candidate limit');
 assert.ok(PHYSICAL_LOG.roofLocalPairLimit > 0, 'Roof preview needs a bounded local frame-pair candidate limit');
@@ -44,8 +46,8 @@ const collision = new WorldCollisionSystem({
 
 const floorTop = 0.04;
 const floorHalfZ = PHYSICAL_LOG.floorWidth * 0.5;
-const supportHalfX = PHYSICAL_LOG.halfLength + 0.02;
-const supportHalfZ = floorHalfZ + 0.02;
+const supportHalfX = PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding;
+const supportHalfZ = floorHalfZ + PHYSICAL_LOG.floorSupportSeamPadding;
 const addFloor = (x, z) => collision.addBox({
   x,
   z,
@@ -60,6 +62,8 @@ const addFloor = (x, z) => collision.addBox({
   supportHalfX,
   supportHalfZ,
   supportY: floorTop,
+  supportOverridesBase: true,
+  supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
   stepHeight: 0.18
 });
 
@@ -102,6 +106,8 @@ movementCollision.addBox({
   supportHalfX,
   supportHalfZ,
   supportY: floorTop,
+  supportOverridesBase: true,
+  supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
   stepHeight: 0.18
 });
 movementCollision.addBox({
@@ -204,8 +210,9 @@ for (const requirement of [
   'const FLOOR_CENTER_LIFT = 0',
   'const FLOOR_TOP_LIFT = 0.028',
   'PHYSICAL_LOG.floorTerrainEmbedTolerance',
-  'supportHalfX: PHYSICAL_LOG.halfLength + 0.02',
-  'supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + 0.02',
+  'supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding',
+  'supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding',
+  'supportOverridesBase: true',
   'this.structureRevision = 0',
   'this.framePairCacheRevision',
   'this.roofQueryCacheRevision',
@@ -231,6 +238,7 @@ assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor suppo
 assert.ok(collisionSource.includes('headY < obstacle.bottomY'), 'Movement collision must ignore structural beams that are fully above the Ranger capsule');
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
+assert.ok(collisionSource.includes('supportOverridesBase'), 'Construction floors need explicit support ownership over small terrain variations');
 assert.ok(collisionSource.includes('getRevision()'), 'Construction-aware rendering needs a stable collision revision source');
 assert.ok(grassSource.includes('#syncConstructionOcclusion()'), 'Grass must react to dynamic construction changes without rebuilding the ecology field');
 assert.ok(grassSource.includes('constructionFloorCoversVegetation'), 'Grass-floor intersection logic must stay isolated from terrain generation');

@@ -480,7 +480,9 @@ export class PhysicalLogSystem {
         this.#roofAxisCandidate(region, `${region.key}:ridge`, ridgeA, ridgeB, 'roof-ridge')
       ];
       for (const candidate of regionCandidates) {
-        if (!occupied.has(candidate.roofKey)) candidates.push(candidate);
+        if (occupied.has(candidate.roofKey)) continue;
+        if (this.#roofSlotOccupied(candidate, activeRoofs)) continue;
+        candidates.push(candidate);
       }
     }
 
@@ -516,6 +518,20 @@ export class PhysicalLogSystem {
       anchorIds: region.anchorIds,
       snapKind
     };
+  }
+
+  #roofSlotOccupied(candidate, activeRoofs) {
+    const candidateLength = candidate.roofLength ?? PHYSICAL_LOG.length;
+    for (const roof of activeRoofs) {
+      const centerDistance = Math.hypot(roof.x - candidate.x, roof.z - candidate.z);
+      if (centerDistance > 0.18) continue;
+      if (Math.abs(roof.centerY - candidate.y) > 0.18) continue;
+      if (this.#axisYawDelta(roof.yaw ?? 0, candidate.yaw ?? 0) > 0.12) continue;
+      const roofLength = roof.roofLength ?? PHYSICAL_LOG.length;
+      if (Math.abs(roofLength - candidateLength) > 0.22) continue;
+      return true;
+    }
+    return false;
   }
 
   #nearestFloorEdge(base) {
@@ -811,15 +827,18 @@ export class PhysicalLogSystem {
         bottomY: placement.baseY - PHYSICAL_LOG.floorUndersideDepth - 0.02,
         topY: placement.topY,
         standable: true,
-        supportHalfX: PHYSICAL_LOG.halfLength + 0.02,
-        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + 0.02,
+        supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding,
+        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
         supportY: placement.topY,
+        supportOverridesBase: true,
+        supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
         stepHeight: 0.18
       });
     }
 
     if (mode === 'roof') return null;
 
+    const overheadFrameBeam = mode === 'raw' && placement.snapKind === 'frame-pair-top';
     return this.collision.addBox({
       x: placement.x,
       z: placement.z,
@@ -830,10 +849,10 @@ export class PhysicalLogSystem {
       label,
       bottomY: placement.snapKind ? placement.y - PHYSICAL_LOG.radius : placement.ground,
       topY: placement.y + PHYSICAL_LOG.radius * 2,
-      standable: true,
-      supportHalfX: PHYSICAL_LOG.halfLength - 0.14,
-      supportHalfZ: PHYSICAL_LOG.radius * 0.7,
-      supportY: placement.y + PHYSICAL_LOG.radius,
+      standable: !overheadFrameBeam,
+      supportHalfX: overheadFrameBeam ? 0 : PHYSICAL_LOG.halfLength - 0.14,
+      supportHalfZ: overheadFrameBeam ? 0 : PHYSICAL_LOG.radius * 0.7,
+      supportY: overheadFrameBeam ? null : placement.y + PHYSICAL_LOG.radius,
       stepHeight: 0.58
     });
   }
