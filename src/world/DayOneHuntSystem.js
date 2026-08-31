@@ -17,6 +17,7 @@ export class DayOneHuntSystem {
     this.hitFlash = 0;
     this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
     this.lastPosition = new THREE.Vector3();
+    this.lastPlayerPosition = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
     this.behavior = 'wander';
     this.threatCause = null;
     this.hasThreat = false;
@@ -61,6 +62,8 @@ export class DayOneHuntSystem {
   update(dt, playerPosition, armed = false, range = this.definition.spearLockRange) {
     this.time += dt;
     let movedDistance = 0;
+
+    if (this.#isFinitePosition(playerPosition)) this.lastPlayerPosition.copy(playerPosition);
 
     if (!this.defeated) {
       const playerDistance = this.#distanceTo(playerPosition);
@@ -153,8 +156,11 @@ export class DayOneHuntSystem {
       this.targetRing.visible = false;
       this.presentation.setDefeated(true);
       this.group.position.y = this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.12;
-    } else if (this.#isFinitePosition(threatPosition)) {
-      this.alertFrom(threatPosition, { cause: 'hit' });
+    } else {
+      const resolvedThreat = this.#isFinitePosition(threatPosition)
+        ? threatPosition
+        : this.lastPlayerPosition;
+      if (this.#isFinitePosition(resolvedThreat)) this.alertFrom(resolvedThreat, { cause: 'hit' });
     }
 
     return {
