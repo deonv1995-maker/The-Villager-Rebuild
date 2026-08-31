@@ -99,6 +99,8 @@ export class TreeOcclusionSystem {
         slotsByVariant.set(tree.variantIndex, slot + 1);
       }
     }
+
+    this.#refreshFadeBounds();
   }
 
   #collectActiveTrees() {
@@ -185,6 +187,17 @@ export class TreeOcclusionSystem {
         if (!fade) continue;
         fade.count = 0;
         fade.instanceMatrix.needsUpdate = true;
+      }
+    }
+  }
+
+  #refreshFadeBounds() {
+    for (const fadeBatches of this.fadeBatches.values()) {
+      for (const fade of fadeBatches) {
+        if (!fade || fade.count === 0) continue;
+        fade.boundingBox = null;
+        fade.boundingSphere = null;
+        fade.computeBoundingSphere();
       }
     }
   }
