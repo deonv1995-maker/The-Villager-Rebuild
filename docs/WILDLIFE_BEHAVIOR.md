@@ -6,9 +6,9 @@ The day-one Wild Pig uses a small behavior-state boundary owned by `DayOneHuntSy
 
 - `wander` — the pig moves between deterministic local destinations with short pauses. It no longer follows a repeating sine-wave orbit around its spawn center.
 - `flee` — the pig runs away from the current Ranger threat position while keeping a soft leash around its current grazing territory.
-- `defeated` — movement stops and the existing carcass/harvest flow takes over.
+- `defeated` — wildlife movement stops, the pig presentation is removed immediately, and its configured Raw Meat loot is converted into ordinary world gatherables at the death location.
 
-`AnimalDefinitions.js` is the single source of truth for awareness range, safe separation, flee speed/duration, ordinary wander tuning and maximum flee territory.
+`AnimalDefinitions.js` is the single source of truth for awareness range, safe separation, flee speed/duration, ordinary wander tuning, maximum flee territory and loot quantity.
 
 ## Grazing-zone relocation
 
@@ -31,12 +31,21 @@ The Wild Pig must react to actual danger rather than continuing its ambient rout
 
 The flee speed is intentionally faster than Ranger walking speed but slower than Ranger sprint speed. This makes the animal feel threatened and evasive without making the day-one hunt impossible.
 
+## Death and loot
+
+A lethal hit no longer leaves the pig model in a fallen carcass pose. `DayOneHuntSystem` records the death position, removes the animal presentation immediately, and spawns one visible world pickup for each configured loot unit.
+
+For the current Wild Pig definition this produces two separate `Raw Meat` pickups. Each piece is owned by the existing `GatherableSystem`, targets with the normal hand interaction, and adds one `meat` inventory unit when collected. There is no second carcass-harvest pathway competing with normal resource pickup.
+
+`GatherableSystem` registers its world-pickup service on the active Three.js scene. `DayOneHuntSystem` accepts an explicitly supplied gatherable service when available and otherwise resolves the already-created scene service. This preserves the current `GameApp` initialization order while keeping loot rendering and collection inside the established gatherable system.
+
 ## Boundaries
 
-- `DayOneHuntSystem` owns wildlife behavior, health, threat state, grazing-zone relocation, targeting and carcass state.
-- `DayOneAnimalPresentation` remains presentation-only and receives movement distance for its existing movement accent.
+- `DayOneHuntSystem` owns wildlife behavior, health, threat state, grazing-zone relocation, targeting and the decision to release configured loot on death.
+- `GatherableSystem` owns the spawned Raw Meat presentation, targeting and collection behavior after death.
+- `DayOneAnimalPresentation` remains presentation-only and receives movement distance for its existing movement accent while the animal is alive.
 - `SpearProjectileSystem` remains responsible only for the visible projectile arc and hit timing.
 - `GameApp` still decides which equipped tool may attack and routes a successful spear release into the shared wildlife threat boundary.
-- Island terrain, player collision, ecology scatter, world streaming, PWA and deployment architecture are unchanged by this pass.
+- Island terrain, player collision, ecology scatter, world streaming, construction, mobile HUD layout, PWA and deployment architecture are unchanged by this pass.
 
-`npm run verify:animals` protects ordinary wandering, proximity flee, grazing-zone relocation, spear-launch flee, spear-hit flee and the existing two-hit defeat behavior, and it is part of the full `npm run check` suite.
+`npm run verify:animals` protects ordinary wandering, proximity flee, grazing-zone relocation, spear-launch flee, spear-hit flee, the existing two-hit defeat contract, immediate pig removal, Raw Meat world spawning and normal meat pickup behavior. It remains part of the full `npm run check` suite.

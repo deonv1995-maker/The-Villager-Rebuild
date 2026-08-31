@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../src/data/AnimalDefinitions.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
 import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
+import { GatherableSystem } from '../src/world/GatherableSystem.js';
 
 const definition = ANIMAL_DEFINITIONS.dayOneHunt;
 assert.ok(definition.awarenessRange >= 4.5, 'Wild pig must react before the Ranger reaches contact distance');
@@ -100,7 +101,33 @@ assert.ok(spearDistanceAfter > spearDistanceBefore + 1.5, 'Wounded pig must retr
 
 const defeated = spearHitHunt.applyDamage(definition.spearDamage, spearRanger);
 assert.equal(defeated?.defeated, true, 'Second spear hit must preserve the existing two-hit defeat contract');
-assert.equal(spearHitHunt.getState().behavior, 'defeated', 'Defeated animal must stop fleeing and become a carcass');
+assert.equal(spearHitHunt.getState().behavior, 'defeated', 'Defeated animal must stop wildlife behavior');
+assert.equal(spearHitHunt.group.parent, null, 'Defeated pig presentation must be removed instead of falling into a carcass pose');
+assert.equal(spearHitHunt.getHarvestTarget(spearRanger), null, 'Defeated pig must not expose the old carcass harvest interaction');
+
+const lootScene = new THREE.Scene();
+const lootGatherables = new GatherableSystem({ scene: lootScene, terrain: flatTerrain });
+const lootHunt = new DayOneHuntSystem({ scene: lootScene, terrain: flatTerrain });
+const deathPosition = lootHunt.group.position.clone();
+const lootResult = lootHunt.applyDamage(definition.maxHealth, spearRanger);
+const meatDrops = lootGatherables.items.filter(item => item.active && item.resourceId === definition.loot.itemId);
+assert.equal(lootResult?.defeated, true, 'Lethal damage must defeat the pig');
+assert.equal(lootResult?.lootSpawned, definition.loot.quantity, 'Lethal damage must report every spawned meat pickup');
+assert.equal(lootHunt.getState().lootSpawned, definition.loot.quantity, 'Wildlife state must record spawned loot count');
+assert.equal(meatDrops.length, definition.loot.quantity, 'Pig death must create one world Raw Meat pickup per loot unit');
+for (const drop of meatDrops) {
+  assert.ok(drop.root.parent === lootGatherables.group, 'Spawned meat must belong to the existing gatherable world layer');
+  assert.ok(drop.root.position.distanceTo(deathPosition) < 1, 'Spawned meat must land beside the pig death position');
+  assert.equal(drop.quantity, 1, 'Each visible meat pickup must represent one inventory unit');
+}
+
+const firstMeatPosition = meatDrops[0].root.position.clone();
+const meatTarget = lootGatherables.update(firstMeatPosition);
+assert.equal(meatTarget?.type, 'resource', 'Raw Meat must use the normal inventory-resource pickup path');
+assert.equal(meatTarget?.resourceId, 'meat', 'Raw Meat world pickup must resolve as meat');
+const collectedMeat = lootGatherables.gather(firstMeatPosition);
+assert.equal(collectedMeat?.resourceId, 'meat', 'Gathering spawned meat must feed the normal inventory resource ID');
+assert.equal(collectedMeat?.quantity, 1, 'Each spawned meat pickup must add one Raw Meat');
 
 const appSource = await readFile('src/core/GameApp.js', 'utf8');
 assert.ok(
@@ -108,4 +135,4 @@ assert.ok(
   'GameApp must route a successful spear release into the wildlife threat system before impact'
 );
 
-console.log('Animal threat/flee/grazing-zone verification passed.');
+console.log('Animal threat/flee/grazing-zone/death-loot verification passed.');
