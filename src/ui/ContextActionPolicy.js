@@ -8,7 +8,8 @@ const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']));
 const GENERIC_INTERACTION_TARGETS = Object.freeze(new Set([
   'carcass',
   'physical-resource',
-  'resource'
+  'resource',
+  'thrown-spear'
 ]));
 
 const iconForTool = toolId => toolId ?? 'hand';
@@ -39,6 +40,16 @@ export function resolveContextAction({
       icon: 'campfire',
       label: campfireAction.label ?? 'Confirm campfire placement',
       caption: 'PLACE'
+    };
+  }
+
+  if (interactionTarget?.type === 'thrown-spear') {
+    return {
+      source: 'interaction',
+      available: true,
+      icon: 'hand',
+      label: interactionTarget.actionLabel ?? 'Retrieve spear',
+      caption: 'RETRIEVE'
     };
   }
 
