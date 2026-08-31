@@ -37,7 +37,16 @@ export const ASSET_PATHS = Object.freeze({
       sword: asset('ui/mobile/icon-sword.svg'),
       campfire: asset('ui/mobile/icon-campfire.svg'),
       jump: asset('ui/mobile/icon-jump.svg'),
-      spear: asset('ui/mobile/icon-spear.svg')
+      spear: asset('ui/mobile/icon-spear.svg'),
+      build: Object.freeze({
+        raw: asset('ui/mobile/icon-build-raw.svg'),
+        floor: asset('ui/mobile/icon-build-floor.svg'),
+        frame: asset('ui/mobile/icon-build-frame.svg'),
+        wall: asset('ui/mobile/icon-build-wall.svg'),
+        angle: asset('ui/mobile/icon-build-angle.svg'),
+        roof: asset('ui/mobile/icon-build-roof.svg'),
+        drop: asset('ui/mobile/icon-build-drop.svg')
+      })
     })
   })
 });
