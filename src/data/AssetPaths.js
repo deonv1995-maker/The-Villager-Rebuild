@@ -32,6 +32,9 @@ export const ASSET_PATHS = Object.freeze({
       buttonCircle: asset('ui/mobile/button-circle.svg'),
       hand: asset('ui/mobile/icon-hand.svg'),
       axe: asset('ui/mobile/icon-axe.svg'),
+      hammer: asset('ui/mobile/icon-hammer.svg'),
+      pickaxe: asset('ui/mobile/icon-pickaxe.svg'),
+      sword: asset('ui/mobile/icon-sword.svg'),
       campfire: asset('ui/mobile/icon-campfire.svg'),
       jump: asset('ui/mobile/icon-jump.svg'),
       spear: asset('ui/mobile/icon-spear.svg')
