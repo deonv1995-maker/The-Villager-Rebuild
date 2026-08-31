@@ -169,7 +169,9 @@ assert(hudSource.includes('class="hud-button action"'), 'Mobile HUD must expose 
 assert(contextActionSource.includes("axe: Object.freeze(new Set(['tree']))"), 'Unified Action policy must route Axe + tree targets through the existing interaction path');
 assert(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock']))"), 'Unified Action policy must route Pickaxe + rock targets through the existing interaction path');
 assert(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must route Hammer demolition targets through the existing interaction path');
-assert(hudSource.includes('this.actionIcon.src = this.toolIcons[action.icon]'), 'Unified Action button must display the resolved tool/action icon');
+assert(hudSource.includes('this.attackButton = this.actionButton'), 'Legacy attackButton references must remain a compatibility alias for the unified Action button');
+assert(hudSource.includes('this.attackIcon = this.actionIcon'), 'Legacy attackIcon references must remain a compatibility alias for the unified Action icon');
+assert(hudSource.includes('this.attackIcon.src = this.toolIcons[equippedTool]'), 'Unified Action button must display the resolved tool/action icon through the compatibility alias');
 assert(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(4px'), 'Construction controls must remain across the top safe area of the mobile view');
 assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production work tools must drive the Ranger skeleton action rather than animate only the prop');
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
