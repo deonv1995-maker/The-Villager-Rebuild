@@ -86,7 +86,7 @@ export class RoofThatchController {
       label: this.currentTarget.canAfford
         ? `Thatch roof panel with ${THATCH_GRASS_COST} Grass`
         : `Need ${this.currentTarget.missingGrass} Grass for thatch`,
-      caption: this.currentTarget.canAfford ? `${THATCH_GRASS_COST} GRASS` : `NEED ${this.currentTarget.missingGrass}`,
+      caption: this.currentTarget.canAfford ? 'THATCH' : `NEED ${this.currentTarget.missingGrass}`,
       priority: 40,
       onTrigger: () => this.#buildThatch()
     });
@@ -111,7 +111,7 @@ export class RoofThatchController {
 
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus?.(`ROOF PANEL THATCHED · ${THATCH_GRASS_COST} GRASS USED`);
-    this.game.hud?.setObjective('Move to another open roof panel · the Action button will show the next 4 Grass thatch placement');
+    this.game.hud?.setObjective('Move to the next open roof panel · Hand selected · tap THATCH again · 4 Grass per panel');
     this.#setTarget(this.system.getTarget(this.playerPosition));
   }
 }
