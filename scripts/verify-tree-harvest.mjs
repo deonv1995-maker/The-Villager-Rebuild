@@ -50,6 +50,7 @@ const [
   feedbackSource,
   appSource,
   hudSource,
+  contextActionSource,
   toolSource,
   stylesSource
 ] = await Promise.all([
@@ -62,6 +63,7 @@ const [
   readFile('src/world/HarvestHitFeedback.js', 'utf8'),
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
+  readFile('src/ui/ContextActionPolicy.js', 'utf8'),
   readFile('src/player/RangerToolPresentation.js', 'utf8'),
   readFile('src/styles.css', 'utf8')
 ]);
@@ -163,11 +165,16 @@ assert(hudSource.includes('data-role="log-build"'), 'Holding a log must expose t
 for (const mode of [...LOG_BUILD_MODES, 'drop']) {
   assert(hudSource.includes(`data-build="${mode}"`), `Log build tray must expose ${mode}`);
 }
-assert(hudSource.includes("const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])"), 'Mobile HUD must expose a dedicated equipped-tool work action path');
-assert(hudSource.includes("this.attackIcon.src = this.toolIcons[equippedTool]"), 'Dedicated tool action must display the equipped tool icon');
-assert(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(73px'), 'Construction controls must remain across the top of the mobile view');
+assert(hudSource.includes('class="hud-button action"'), 'Mobile HUD must expose one unified equipped-tool/world Action button');
+assert(contextActionSource.includes("axe: Object.freeze(new Set(['tree']))"), 'Unified Action policy must route Axe + tree targets through the existing interaction path');
+assert(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock']))"), 'Unified Action policy must route Pickaxe + rock targets through the existing interaction path');
+assert(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must route Hammer demolition targets through the existing interaction path');
+assert(hudSource.includes('this.attackButton = this.actionButton'), 'Legacy attackButton references must remain a compatibility alias for the unified Action button');
+assert(hudSource.includes('this.attackIcon = this.actionIcon'), 'Legacy attackIcon references must remain a compatibility alias for the unified Action icon');
+assert(hudSource.includes('this.attackIcon.src = this.toolIcons[equippedTool]'), 'Unified Action button must display the resolved tool/action icon through the compatibility alias');
+assert(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(4px'), 'Construction controls must remain across the top safe area of the mobile view');
 assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production work tools must drive the Ranger skeleton action rather than animate only the prop');
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Physical tree harvesting, level floor support, bounded roof construction, carry posture and mobile build contracts verified');
+console.log('Physical tree harvesting, level floor support, bounded roof construction, carry posture and unified mobile action contracts verified');

@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RoofThatchSystem, THATCH_GRASS_COST } from '../world/RoofThatchSystem.js';
 
+const ACTION_ID = 'roof-thatch';
+
 export class RoofThatchController {
   constructor({ game, roofQuery }) {
     if (!game?.physicalLogs || !game?.inventory || !game?.island?.group || !roofQuery) {
@@ -16,9 +18,6 @@ export class RoofThatchController {
     });
     this.playerPosition = new THREE.Vector3();
     this.currentTarget = null;
-    this.hudRoot = null;
-    this.tray = null;
-    this.button = null;
     this.running = false;
   }
 
@@ -31,11 +30,11 @@ export class RoofThatchController {
   stop() {
     this.running = false;
     this.#setTarget(null);
+    this.game.hud?.setExternalAction(ACTION_ID, null);
   }
 
   update() {
     this.system.sync();
-    this.#ensureHudTray();
 
     const carryingLog = this.game.physicalLogs?.isCarrying() ?? false;
     const toolId = this.game.toolbelt?.getEquippedToolId() ?? null;
@@ -58,51 +57,39 @@ export class RoofThatchController {
     requestAnimationFrame(this.#frame);
   };
 
-  #ensureHudTray() {
-    const root = this.game.hud?.root ?? null;
-    if (!root || (this.hudRoot === root && this.tray)) return;
-
-    this.hudRoot = root;
-    this.tray?.remove();
-    const tray = document.createElement('div');
-    tray.className = 'roof-thatch-tray';
-    tray.dataset.role = 'roof-thatch';
-    tray.hidden = true;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.thatchAction = 'build';
-    button.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      this.#buildThatch();
-    });
-    tray.appendChild(button);
-    root.appendChild(tray);
-    this.tray = tray;
-    this.button = button;
-    this.#renderTarget();
-  }
-
   #setTarget(target) {
     const previousId = this.currentTarget?.id ?? null;
     const previousAffordable = this.currentTarget?.canAfford ?? null;
+    const previousMissing = this.currentTarget?.missingGrass ?? null;
     const nextId = target?.id ?? null;
     const nextAffordable = target?.canAfford ?? null;
+    const nextMissing = target?.missingGrass ?? null;
     this.currentTarget = target ?? null;
-    if (previousId !== nextId || previousAffordable !== nextAffordable) this.#renderTarget();
-  }
 
-  #renderTarget() {
-    if (!this.tray || !this.button || !this.hudRoot) return;
-    const available = Boolean(this.currentTarget);
-    this.tray.hidden = !available;
-    this.hudRoot.classList.toggle('roof-thatching', available);
-    if (!available) return;
+    const hud = this.game.hud;
+    if (!hud) return;
+    if (!this.currentTarget) {
+      hud.setExternalAction(ACTION_ID, null);
+      return;
+    }
 
-    this.tray.setAttribute('aria-label', 'Cover roof panel with thatch');
-    this.button.disabled = !this.currentTarget.canAfford;
-    this.button.textContent = this.currentTarget.canAfford
-      ? `THATCH · ${THATCH_GRASS_COST} GRASS`
-      : `NEED ${this.currentTarget.missingGrass} GRASS`;
+    if (
+      previousId === nextId &&
+      previousAffordable === nextAffordable &&
+      previousMissing === nextMissing &&
+      hud.externalActions?.has?.(ACTION_ID)
+    ) return;
+
+    hud.setExternalAction(ACTION_ID, {
+      available: this.currentTarget.canAfford,
+      icon: 'hand',
+      label: this.currentTarget.canAfford
+        ? `Thatch roof panel with ${THATCH_GRASS_COST} Grass`
+        : `Need ${this.currentTarget.missingGrass} Grass for thatch`,
+      caption: this.currentTarget.canAfford ? `${THATCH_GRASS_COST} GRASS` : `NEED ${this.currentTarget.missingGrass}`,
+      priority: 40,
+      onTrigger: () => this.#buildThatch()
+    });
   }
 
   #buildThatch() {
@@ -124,7 +111,7 @@ export class RoofThatchController {
 
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus?.(`ROOF PANEL THATCHED · ${THATCH_GRASS_COST} GRASS USED`);
-    this.game.hud?.setObjective('Hand equipped · move to another open roof panel to add more thatch');
+    this.game.hud?.setObjective('Move to another open roof panel · the Action button will show the next 4 Grass thatch placement');
     this.#setTarget(this.system.getTarget(this.playerPosition));
   }
 }

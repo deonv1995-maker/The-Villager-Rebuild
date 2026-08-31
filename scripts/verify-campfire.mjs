@@ -62,9 +62,10 @@ assert(!emptyCampfire.canBuild(), 'Campfire cannot build without sticks and ston
 assert(emptyCampfire.beginPreview(new THREE.Vector3(), new THREE.Vector3(0, 0, 1)) === null, 'Missing ingredients must prevent even the placement template');
 assert(!emptyWorld.getObjectByName('campfire-placement-preview'), 'Failed preview must not create a ghost structure');
 
-const [appSource, hudSource, assetSource, collisionSource, playerSource, campfireSvg, campfireSource] = await Promise.all([
+const [appSource, hudSource, contextActionSource, assetSource, collisionSource, playerSource, campfireSvg, campfireSource] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
+  readFile('src/ui/ContextActionPolicy.js', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('src/world/WorldCollisionSystem.js', 'utf8'),
   readFile('src/player/RangerController.js', 'utf8'),
@@ -86,8 +87,19 @@ for (const requirement of [
   assert(appSource.includes(requirement), `Survival progression is missing campfire contract: ${requirement}`);
 }
 
-assert(hudSource.includes('setCampfireAction(action)'), 'HUD must keep campfire construction separate from the persistent toolbelt');
-assert(hudSource.includes("classList.toggle('previewing', previewing)"), 'HUD campfire action must expose preview/confirm state');
+for (const requirement of [
+  'class="hud-button action"',
+  'setCampfireAction(action)',
+  'this.currentCampfireAction = action ? { ...action } : null;',
+  "if (action.source === 'campfire')",
+  'this.onCampfire?.()'
+]) {
+  assert(hudSource.includes(requirement), `Unified HUD is missing campfire Action contract: ${requirement}`);
+}
+assert(!hudSource.includes('class="hud-button craft"'), 'Campfire must not restore a separate craft round button');
+assert(contextActionSource.includes('if (campfireAction?.previewing)'), 'Active campfire preview must own the unified Action button');
+assert(contextActionSource.includes('if (campfireAction?.available)'), 'Buildable campfire must be offered through the unified Action button');
+assert(contextActionSource.includes("source: 'campfire'"), 'Campfire Action policy must route back to the existing GameApp handler');
 assert(assetSource.includes("campfire: asset('ui/mobile/icon-campfire.svg')"), 'Campfire icon must remain in the shared asset registry');
 assert(collisionSource.includes('isCircleClear(x, z, radius'), 'Structure placement must use shared collision clearance');
 assert(playerSource.includes('getFacingDirection('), 'World placement must use the Ranger facing boundary rather than reading internals');
@@ -97,4 +109,4 @@ assert(campfireSource.includes('confirmBuild()'), 'Campfire materials must only 
 assert(campfireSource.includes('for (let index = 0; index < 6; index += 1)'), 'Campfire presentation must use small crossed sticks rather than physical building logs');
 assert(campfireSvg.includes('<svg') && campfireSvg.includes('#FFFFFF'), 'Campfire HUD icon must remain a valid white SVG glyph');
 
-console.log('Stick-and-stone campfire preview/confirmation contracts verified');
+console.log('Stick-and-stone campfire preview/confirmation contracts verified through unified Action');

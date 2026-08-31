@@ -134,6 +134,7 @@ assert.ok(
 const [
   appSource,
   hudSource,
+  contextActionSource,
   logSource,
   rockSource,
   treeSource,
@@ -152,6 +153,7 @@ const [
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
+  readFile('src/ui/ContextActionPolicy.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/RockHarvestSystem.js', 'utf8'),
   readFile('src/world/TreeHarvestSystem.js', 'utf8'),
@@ -205,13 +207,29 @@ for (const requirement of [
   'data-build="roof"',
   'data-build="drop"',
   'setLogBuildMode(carrying, state = null)',
+  'class="hud-button action"',
+  'setExternalAction(id, action = null)',
   "const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])",
-  'this.attackButton.hidden = !available',
-  'this.attackIcon.src = this.toolIcons[equippedTool]'
+  'this.attackButton = this.actionButton',
+  'this.attackIcon = this.actionIcon',
+  'this.attackButton.hidden = !available && !action.externalId',
+  'this.attackIcon.src = this.toolIcons[equippedTool]',
+  "if (action.source === 'interaction')",
+  "if (action.source === 'campfire')",
+  "if (action.source === 'attack')",
+  "if (action.source === 'external')"
 ]) {
-  assert.ok(hudSource.includes(requirement), `Mobile HUD is missing tool/build contract: ${requirement}`);
+  assert.ok(hudSource.includes(requirement), `Mobile HUD is missing unified Action/build contract: ${requirement}`);
 }
-assert.ok(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(73px'), 'Build tray must stay across the top of the mobile viewport');
+assert.ok(!hudSource.includes('class="hud-button interact"'), 'Legacy pickup/interact round button must not return');
+assert.ok(!hudSource.includes('class="hud-button attack"'), 'Legacy attack/tool round button must not return');
+assert.ok(!hudSource.includes('class="hud-button craft"'), 'Legacy campfire round button must not return');
+assert.ok(contextActionSource.includes("axe: Object.freeze(new Set(['tree']))"), 'Unified Action policy must preserve Axe tree routing');
+assert.ok(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock']))"), 'Unified Action policy must preserve Pickaxe rock routing');
+assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must preserve Hammer demolition routing');
+assert.ok(contextActionSource.includes("const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']))"), 'Unified Action policy must preserve Spear and Sword combat routing');
+assert.ok(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(4px'), 'Build tray must stay at the top safe area of the mobile viewport');
+assert.ok(stylesSource.includes('.inventory-strip {') && stylesSource.includes('flex-direction: column'), 'Inventory must remain a vertical stack beneath the top HUD area');
 
 for (const requirement of [
   "takePhysical(playerPosition, 'log')",
@@ -279,4 +297,4 @@ for (const [name, path, svg] of [
 assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
 assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Foundation 0.3.8 survival, carry, bounded building, tool-action, hit-feedback and preserved spear contracts verified');
+console.log('Foundation 0.3.8 survival, carry, bounded building, unified Action, hit-feedback and preserved spear contracts verified');
