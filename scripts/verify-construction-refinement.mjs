@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import { GrassFieldSystem } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const nearlyEqual = (left, right, tolerance = 0.000001) => Math.abs(left - right) <= tolerance;
@@ -148,10 +150,48 @@ const revisionAfterAdd = movementCollision.getRevision();
 assert.equal(movementCollision.removeObstacle(temporary), true);
 assert.ok(movementCollision.getRevision() > revisionAfterAdd, 'Dynamic world systems need collision revision changes after construction is removed');
 
-const [logSource, supportSource, collisionSource, definitionsSource] = await Promise.all([
+const grassCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  baseHeightAt: () => 0,
+  isPlayable: () => true
+});
+const grass = new GrassFieldSystem({
+  group: new THREE.Group(),
+  terrain: {
+    getScatterBounds: () => ({ halfX: 0.2, halfZ: 0.2, centerZ: 0 }),
+    grassDensityAt: () => 1,
+    heightAt: () => 0
+  },
+  scatter: { isGrassClear: () => true },
+  collision: grassCollision,
+  maxInstances: 18
+});
+assert.equal(grass.populate(), 18, 'Construction occlusion regression needs a deterministic grass patch');
+grass.update(1 / 60, { x: 2, z: 2 });
+assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Grass must remain visible before a floor is placed');
+const grassFloor = grassCollision.addBox({
+  x: 0,
+  z: 0,
+  halfX: PHYSICAL_LOG.halfLength,
+  halfZ: PHYSICAL_LOG.floorWidth * 0.5,
+  yaw: 0,
+  type: 'placed-log',
+  label: 'built-log-77-floor',
+  bottomY: -0.18,
+  topY: 0.1
+});
+grass.update(1 / 60, { x: 2, z: 2 });
+assert.equal(grass.entries.every(entry => entry.constructionHidden), true, 'Grass intersecting a placed floor footprint must be hidden immediately');
+assert.equal(grassCollision.removeObstacle(grassFloor), true);
+grass.update(1 / 60, { x: 2, z: 2 });
+assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Demolishing a floor must restore the underlying grass instead of deleting ecology data');
+
+const [logSource, supportSource, collisionSource, grassSource, islandSource, definitionsSource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
   readFile('src/world/WorldCollisionSystem.js', 'utf8'),
+  readFile('src/world/GrassFieldSystem.js', 'utf8'),
+  readFile('src/world/TestIslandSystem.js', 'utf8'),
   readFile('src/data/PhysicalLogDefinitions.js', 'utf8')
 ]);
 
@@ -192,5 +232,8 @@ assert.ok(collisionSource.includes('headY < obstacle.bottomY'), 'Movement collis
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
 assert.ok(collisionSource.includes('getRevision()'), 'Construction-aware rendering needs a stable collision revision source');
+assert.ok(grassSource.includes('#syncConstructionOcclusion()'), 'Grass must react to dynamic construction changes without rebuilding the ecology field');
+assert.ok(grassSource.includes('constructionFloorCoversVegetation'), 'Grass-floor intersection logic must stay isolated from terrain generation');
+assert.ok(islandSource.includes('collision: this.collision'), 'The island must provide the shared collision source to the grass field');
 
-console.log('Exact floor seams, open structure entry, mobile frame snapping, free platform movement and bounded roof topology verified');
+console.log('Exact floor seams, open structure entry, grass-floor occlusion, mobile frame snapping and bounded roof topology verified');
