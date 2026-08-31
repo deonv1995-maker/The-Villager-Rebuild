@@ -89,7 +89,7 @@ for (const requirement of [
 assert(hudSource.includes('setCampfireAction(action)'), 'HUD must keep campfire construction separate from the persistent toolbelt');
 assert(hudSource.includes("classList.toggle('previewing', previewing)"), 'HUD campfire action must expose preview/confirm state');
 assert(assetSource.includes("campfire: asset('ui/mobile/icon-campfire.svg')"), 'Campfire icon must remain in the shared asset registry');
-assert(collisionSource.includes('isCircleClear(x, z, radius)'), 'Structure placement must use shared collision clearance');
+assert(collisionSource.includes('isCircleClear(x, z, radius'), 'Structure placement must use shared collision clearance');
 assert(playerSource.includes('getFacingDirection('), 'World placement must use the Ranger facing boundary rather than reading internals');
 assert(campfireSource.includes("this.previewRoot.name = 'campfire-placement-preview'"), 'Campfire must create a dedicated pre-build world template');
 assert(campfireSource.includes('color: 0x58ff7b'), 'Campfire placement template must be visibly green');
