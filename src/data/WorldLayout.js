@@ -21,7 +21,14 @@ export const WORLD_LAYOUT = Object.freeze({
     Object.freeze(['stone', 5.8, 52.7]),
     Object.freeze(['stick', -5.9, 51.4]),
     Object.freeze(['grass', 1.5, 49.8]),
-    Object.freeze(['stone', -2.8, 47.1])
+    Object.freeze(['stone', -2.8, 47.1]),
+    Object.freeze(['stick', 9.8, 46.2]),
+    Object.freeze(['stone', -9.5, 45.3]),
+    Object.freeze(['stick', 6.4, 43.5]),
+    Object.freeze(['stone', 2.0, 41.8]),
+    Object.freeze(['stick', -6.8, 40.2]),
+    Object.freeze(['stone', 8.5, 38.7]),
+    Object.freeze(['stone', -3.4, 37.3])
   ])
 });
 
