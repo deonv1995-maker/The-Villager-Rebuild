@@ -201,7 +201,47 @@ function boundaryPathExists(component, projectedById, startId, endId, axisKey, b
   return false;
 }
 
-function frameBoundsRegion(component, {
+function collectBoundaryStations(projected, minV, maxV, boundaryTolerance, alongTolerance) {
+  const lower = projected
+    .filter(entry => Math.abs(entry.v - minV) <= boundaryTolerance)
+    .sort((left, right) => left.u - right.u || left.frame.id - right.frame.id);
+  const upper = projected
+    .filter(entry => Math.abs(entry.v - maxV) <= boundaryTolerance)
+    .sort((left, right) => left.u - right.u || left.frame.id - right.frame.id);
+  const usedUpper = new Set();
+  const stations = [];
+
+  for (const low of lower) {
+    let bestIndex = -1;
+    let bestDelta = alongTolerance + Number.EPSILON;
+    for (let index = 0; index < upper.length; index += 1) {
+      if (usedUpper.has(index)) continue;
+      const delta = Math.abs(upper[index].u - low.u);
+      if (delta >= bestDelta) continue;
+      bestDelta = delta;
+      bestIndex = index;
+    }
+    if (bestIndex < 0) continue;
+    usedUpper.add(bestIndex);
+    const high = upper[bestIndex];
+    stations.push({
+      u: (low.u + high.u) * 0.5,
+      anchorIds: [low.frame.id, high.frame.id].sort((a, b) => a - b)
+    });
+  }
+
+  stations.sort((left, right) => left.u - right.u || left.anchorIds[0] - right.anchorIds[0]);
+  const mergeTolerance = Math.max(0.08, alongTolerance * 0.35);
+  const merged = [];
+  for (const station of stations) {
+    const previous = merged[merged.length - 1];
+    if (previous && Math.abs(previous.u - station.u) <= mergeTolerance) continue;
+    merged.push(station);
+  }
+  return merged;
+}
+
+function frameBoundsRegions(component, {
   yawTolerance,
   topTolerance,
   maxAlong,
@@ -218,10 +258,10 @@ function frameBoundsRegion(component, {
     frames.set(pair.b.id, pair.b);
   }
   const frameList = [...frames.values()];
-  if (frameList.length < 4) return null;
+  if (frameList.length < 4) return [];
 
   const averageTop = frameList.reduce((sum, frame) => sum + frame.topY, 0) / frameList.length;
-  if (frameList.some(frame => Math.abs(frame.topY - averageTop) > topTolerance)) return null;
+  if (frameList.some(frame => Math.abs(frame.topY - averageTop) > topTolerance)) return [];
 
   const center = frameList.reduce(
     (sum, frame) => ({ x: sum.x + frame.x, z: sum.z + frame.z }),
@@ -296,6 +336,8 @@ function frameBoundsRegion(component, {
     const candidate = {
       ...axis,
       frameBasis,
+      projected,
+      projectedById,
       minU,
       maxU,
       minV,
@@ -313,26 +355,60 @@ function frameBoundsRegion(component, {
     }
   }
 
-  if (!best) return null;
+  if (!best) return [];
+  const stations = collectBoundaryStations(
+    best.projected,
+    best.minV,
+    best.maxV,
+    boundaryTolerance,
+    cornerTolerance
+  );
+  if (stations.length < 2) return [];
+  if (
+    Math.abs(stations[0].u - best.minU) > cornerTolerance ||
+    Math.abs(stations[stations.length - 1].u - best.maxU) > cornerTolerance
+  ) return [];
+  stations[0] = { ...stations[0], u: best.minU };
+  stations[stations.length - 1] = { ...stations[stations.length - 1], u: best.maxU };
+
   const halfRun = best.spanV * 0.5;
   const rise = clamp(halfRun * Math.tan(roofPitch), minRise, maxRise);
   const eaveY = averageTop + eaveSeatLift;
-  const anchorIds = best.cornerFrames.map(frame => frame.id).sort((a, b) => a - b);
-  const beamKeys = component.map(pair => pair.rawKey).sort();
+  const regions = [];
 
-  return {
-    key: `roof:bounds:${anchorIds.join('-')}`,
-    anchorIds,
-    sourceBeamKeys: beamKeys,
-    a: worldPoint(center, best.frameBasis, best.minU, best.minV),
-    b: worldPoint(center, best.frameBasis, best.maxU, best.minV),
-    c: worldPoint(center, best.frameBasis, best.minU, best.maxV),
-    d: worldPoint(center, best.frameBasis, best.maxU, best.maxV),
-    eaveY,
-    ridgeY: eaveY + rise,
-    ridgeYaw: best.yaw,
-    topology: 'frame-bounds'
-  };
+  for (let index = 0; index < stations.length - 1; index += 1) {
+    const start = stations[index];
+    const end = stations[index + 1];
+    if (end.u - start.u < minWidth) continue;
+    const anchorIds = [...new Set([...start.anchorIds, ...end.anchorIds])].sort((a, b) => a - b);
+    if (anchorIds.length < 4) continue;
+    const sourceBeamKeys = component
+      .filter(pair => {
+        const left = best.projectedById.get(pair.a.id);
+        const right = best.projectedById.get(pair.b.id);
+        if (!left || !right) return false;
+        const midpointU = (left.u + right.u) * 0.5;
+        return midpointU >= start.u - boundaryTolerance && midpointU <= end.u + boundaryTolerance;
+      })
+      .map(pair => pair.rawKey)
+      .sort();
+
+    regions.push({
+      key: `roof:bounds:${anchorIds.join('-')}`,
+      anchorIds,
+      sourceBeamKeys,
+      a: worldPoint(center, best.frameBasis, start.u, best.minV),
+      b: worldPoint(center, best.frameBasis, end.u, best.minV),
+      c: worldPoint(center, best.frameBasis, start.u, best.maxV),
+      d: worldPoint(center, best.frameBasis, end.u, best.maxV),
+      eaveY,
+      ridgeY: eaveY + rise,
+      ridgeYaw: best.yaw,
+      topology: 'frame-bounds'
+    });
+  }
+
+  return regions;
 }
 
 export function collectRoofRegions(pairs, {
@@ -351,7 +427,7 @@ export function collectRoofRegions(pairs, {
   for (const component of connectedPairComponents(pairs)) {
     const loop = closedLoop(component, topTolerance);
     if (!loop) {
-      const bounded = frameBoundsRegion(component, {
+      const bounded = frameBoundsRegions(component, {
         yawTolerance,
         topTolerance,
         maxAlong,
@@ -362,7 +438,7 @@ export function collectRoofRegions(pairs, {
         maxRise,
         eaveSeatLift
       });
-      if (bounded) regions.push(bounded);
+      if (bounded.length) regions.push(...bounded);
       continue;
     }
 
