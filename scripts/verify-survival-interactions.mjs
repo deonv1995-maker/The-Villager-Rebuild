@@ -170,6 +170,7 @@ const [
   durabilitySource,
   toolbeltSource,
   logSource,
+  roofRulesSource,
   rockSource,
   treeSource,
   projectileSource,
@@ -195,6 +196,7 @@ const [
   readFile('src/gameplay/ToolDurabilitySystem.js', 'utf8'),
   readFile('src/gameplay/ToolbeltSystem.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
+  readFile('src/world/RoofMemberRules.js', 'utf8'),
   readFile('src/world/RockHarvestSystem.js', 'utf8'),
   readFile('src/world/TreeHarvestSystem.js', 'utf8'),
   readFile('src/world/SpearProjectileSystem.js', 'utf8'),
@@ -339,13 +341,14 @@ for (const requirement of [
   'collectRoofRegions',
   "'roof-rafter'",
   "'roof-ridge'",
-  'roofRegionKey: region.key',
   "type: 'placed-log'",
   'getDemolitionTarget(playerPosition)',
   'demolish(playerPosition)'
 ]) {
   assert.ok(logSource.includes(requirement), `Physical log system is missing contract: ${requirement}`);
 }
+assert.ok(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
+assert.ok(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
 
 assert.ok(carrySource.includes('class RangerLogCarryPose') && carrySource.includes("this.#poseArm('l'") && carrySource.includes("this.#poseArm('r'"), 'Log shoulder carry must use an actual Ranger arm posture');
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"), 'Uneven floors must generate automatic supports/fill without terrain mutation');

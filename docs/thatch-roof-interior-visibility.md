@@ -4,17 +4,23 @@ This construction pass extends the existing physical-Log roof without changing t
 
 ## Roof covering
 
-A completed gable roof is defined by the existing five-member structural roof contract: four rafters plus the ridge. Once those members are present, the gable exposes two coverable roof panels, one for each roof slope.
+A completed gable roof is defined by one shared five-member structural contract: four eave-to-ridge rafters plus one ridge segment for each logical roof bay.
 
-Each thatch panel costs exactly **4 Grass**. The basic two-slope gable therefore costs 8 Grass to cover completely.
+The normal physical construction flow uses **ANGLE** for the rafter positions and **RAW** for the ridge position. A Raw ridge slot becomes available after that bay's four rafter descriptors are satisfied. The older ROOF build mode remains compatible with the same descriptors and can still satisfy either role; it does not define a second roof topology.
+
+Adjacent multi-bay roofs share coincident middle rafters geometrically. For example, a two-bay gable needs six unique angled rafters and two Raw ridge segments rather than eight duplicated rafters. Once both bays are structurally complete they expose four coverable panels.
+
+Each thatch panel costs exactly **4 Grass**. A basic one-bay two-slope gable therefore costs 8 Grass to cover completely.
 
 Thatching is a Hand interaction. With no tool equipped and no physical Log being carried, standing near a completed unthatched roof panel shows a compact mobile control. The control reports the four-Grass cost or the missing Grass amount.
 
-Thatch is construction-owned presentation. If a required structural roof member is demolished, dependent thatch is removed and its four-Grass cost is refunded to inventory. This prevents unsupported floating roof cover and keeps roof framing as the structural source of truth.
+Thatch is construction-owned presentation. If any required angled rafter, Raw ridge segment, or compatible legacy ROOF member is demolished, dependent thatch is removed and its four-Grass cost is refunded to inventory. This prevents unsupported floating roof cover and keeps roof framing as the structural source of truth.
 
 ## Shared roof query
 
 `StructureRoofQuery` is the common read model for completed roof regions. It reuses the existing `RoofTopology` rules and the construction dimensions in `PhysicalLogDefinitions`; thatch and interior visibility do not introduce competing roof topology rules.
+
+`RoofMemberRules` owns the five member descriptors, role compatibility and geometry-based occupancy used by both runtime placement and `StructureRoofQuery`. ANGLE rafters, RAW ridges and legacy ROOF members therefore resolve against the same coordinates and tolerances.
 
 The current five-member gable resolves two stable panel descriptors from roof geometry. Panel identity is geometry-based rather than tied only to local topology keys so ordinary topology-key churn does not silently duplicate roof cover.
 
@@ -34,12 +40,6 @@ The fade is presentation-only. It does not change collision, demolition, wall op
 
 ## Verification
 
-`scripts/verify-thatch-interior-occlusion.mjs` verifies:
+`scripts/verify-thatch-interior-occlusion.mjs` verifies the existing roof cost, panel targeting, structural dependency and camera-side fade behavior.
 
-- four rafters plus one ridge are required before thatch panels become available;
-- a completed basic gable exposes exactly two coverable panels;
-- each panel consumes exactly 4 Grass;
-- targeting advances to the remaining open roof panel after one is covered;
-- unsupported thatch is removed and refunded when roof framing becomes incomplete;
-- camera-side structure fades while the far side remains solid;
-- leaving the structure restores full opacity.
+`scripts/verify-roof-build-sequence.mjs` separately verifies that ANGLE rafters plus RAW ridge segments satisfy the shared completion contract, that multi-bay shared rafters are not duplicated, and that thatch remains locked until the ridge stage is complete.

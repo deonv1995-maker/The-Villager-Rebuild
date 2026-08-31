@@ -44,6 +44,7 @@ const [
   treeSource,
   gatherSource,
   logSource,
+  roofRulesSource,
   logVisualSource,
   floorSupportSource,
   carryPoseSource,
@@ -57,6 +58,7 @@ const [
   readFile('src/world/TreeHarvestSystem.js', 'utf8'),
   readFile('src/world/GatherableSystem.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
+  readFile('src/world/RoofMemberRules.js', 'utf8'),
   readFile('src/world/PhysicalLogVisual.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
   readFile('src/player/RangerLogCarryPose.js', 'utf8'),
@@ -111,13 +113,14 @@ for (const requirement of [
   'collectRoofRegions',
   "'roof-rafter'",
   "'roof-ridge'",
-  'roofRegionKey: region.key',
   "type: 'placed-log'",
   "spawn('log'"
 ]) {
   assert(logSource.includes(requirement), `Physical log building path is missing contract: ${requirement}`);
 }
 assert(logSource.includes("ignore: obstacle => obstacle.type === 'placed-log'"), 'Level floor snapping must ignore only existing floor construction during clearance');
+assert(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
+assert(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
 
 for (const requirement of [
   'PHYSICAL_LOG.length',
