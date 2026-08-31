@@ -3,18 +3,20 @@ import {
   collectLocalRoofFramePairs,
   collectRoofRegions
 } from './RoofTopology.js';
+import {
+  roofMemberCandidates,
+  roofMemberOccupied,
+  roofRegionComplete
+} from './RoofMemberRules.js';
+
+export {
+  roofMemberCandidates,
+  roofMemberOccupied,
+  roofRegionComplete
+} from './RoofMemberRules.js';
 
 const ROOF_SEAT_LIFT = 0.08;
 const QUERY_BUCKET = PHYSICAL_LOG.length;
-const ROOF_CENTER_TOLERANCE = 0.18;
-const ROOF_HEIGHT_TOLERANCE = 0.18;
-const ROOF_AXIS_TOLERANCE = 0.12;
-const ROOF_LENGTH_TOLERANCE = 0.22;
-
-const axisYawDelta = (a, b) => {
-  const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
-  return Math.min(delta, Math.abs(Math.PI - delta));
-};
 
 const quantize = value => Math.round(value * 20) / 20;
 
@@ -30,65 +32,6 @@ const averagePoint = points => ({
   y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
   z: points.reduce((sum, point) => sum + point.z, 0) / points.length
 });
-
-const roofAxisCandidate = (region, roofKey, start, end, snapKind) => {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const dz = end.z - start.z;
-  const roofLength = Math.max(0.1, Math.hypot(dx, dy, dz));
-  return {
-    x: (start.x + end.x) * 0.5,
-    y: (start.y + end.y) * 0.5,
-    z: (start.z + end.z) * 0.5,
-    yaw: Math.atan2(-dz, dx),
-    roofLength,
-    roofKey,
-    roofRegionKey: region.key,
-    snapKind
-  };
-};
-
-export function roofMemberCandidates(region) {
-  const ridgeA = {
-    x: (region.a.x + region.c.x) * 0.5,
-    y: region.ridgeY,
-    z: (region.a.z + region.c.z) * 0.5
-  };
-  const ridgeB = {
-    x: (region.b.x + region.d.x) * 0.5,
-    y: region.ridgeY,
-    z: (region.b.z + region.d.z) * 0.5
-  };
-  const eaveA = { x: region.a.x, y: region.eaveY, z: region.a.z };
-  const eaveB = { x: region.b.x, y: region.eaveY, z: region.b.z };
-  const eaveC = { x: region.c.x, y: region.eaveY, z: region.c.z };
-  const eaveD = { x: region.d.x, y: region.eaveY, z: region.d.z };
-
-  return [
-    roofAxisCandidate(region, `${region.key}:rafter:a`, eaveA, ridgeA, 'roof-rafter'),
-    roofAxisCandidate(region, `${region.key}:rafter:b`, eaveB, ridgeB, 'roof-rafter'),
-    roofAxisCandidate(region, `${region.key}:rafter:c`, eaveC, ridgeA, 'roof-rafter'),
-    roofAxisCandidate(region, `${region.key}:rafter:d`, eaveD, ridgeB, 'roof-rafter'),
-    roofAxisCandidate(region, `${region.key}:ridge`, ridgeA, ridgeB, 'roof-ridge')
-  ];
-}
-
-export function roofMemberOccupied(candidate, activeRoofs) {
-  for (const roof of activeRoofs ?? []) {
-    if (!roof?.active || roof.mode !== 'roof') continue;
-    if (Math.hypot(roof.x - candidate.x, roof.z - candidate.z) > ROOF_CENTER_TOLERANCE) continue;
-    if (Math.abs(roof.centerY - candidate.y) > ROOF_HEIGHT_TOLERANCE) continue;
-    if (axisYawDelta(roof.yaw ?? 0, candidate.yaw ?? 0) > ROOF_AXIS_TOLERANCE) continue;
-    const roofLength = roof.roofLength ?? PHYSICAL_LOG.length;
-    if (Math.abs(roofLength - candidate.roofLength) > ROOF_LENGTH_TOLERANCE) continue;
-    return true;
-  }
-  return false;
-}
-
-export function roofRegionComplete(region, activeRoofs) {
-  return roofMemberCandidates(region).every(candidate => roofMemberOccupied(candidate, activeRoofs));
-}
 
 export function roofPanelDescriptors(region) {
   const ridgeA = {
@@ -191,8 +134,8 @@ export class StructureRoofQuery {
   }
 
   getCompletedRegions(focus) {
-    const activeRoofs = this.physicalLogs.builtLogs.filter(entry => entry.active && entry.mode === 'roof');
-    return this.getRegions(focus).filter(region => roofRegionComplete(region, activeRoofs));
+    const activeMembers = this.physicalLogs.builtLogs.filter(entry => entry.active);
+    return this.getRegions(focus).filter(region => roofRegionComplete(region, activeMembers));
   }
 
   getCompletedPanels(focus) {
