@@ -100,7 +100,8 @@ for (const requirement of [
   "snapKind: snapped ? 'floor-edge-level' : null",
   'baseY: floor.baseY',
   'this.floorSupports.createForFloor',
-  '#roofRegions()',
+  'collectLocalRoofFramePairs',
+  'collectRoofRegions',
   "'roof-rafter'",
   "'roof-ridge'",
   'roofRegionKey: region.key',
@@ -164,4 +165,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Physical tree harvesting, level floor support, roof construction, carry posture and mobile build contracts verified');
+console.log('Physical tree harvesting, level floor support, bounded roof construction, carry posture and mobile build contracts verified');
