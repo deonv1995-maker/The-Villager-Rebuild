@@ -36,6 +36,46 @@ assert.equal(proximityHunt.getState().behavior, 'flee', 'Wild pig must enter fle
 assert.equal(proximityHunt.getState().threatCause, 'proximity');
 assert.ok(proximityDistanceAfter > proximityDistanceBefore + 1, 'Wild pig must move away from a nearby Ranger instead of circling');
 
+const relocationHunt = makeHunt();
+const relocationThreat = new THREE.Vector3(
+  pigCenter.x + definition.awarenessRange - 0.3,
+  0,
+  pigCenter.z
+);
+for (let step = 0; step < 80 && relocationHunt.getState().grazingZoneRevision === 0; step += 1) {
+  relocationHunt.update(0.1, relocationThreat);
+}
+const relocatedState = relocationHunt.getState();
+const relocatedCenter = new THREE.Vector3(
+  relocatedState.grazingCenter.x,
+  relocatedState.grazingCenter.y,
+  relocatedState.grazingCenter.z
+);
+assert.equal(relocatedState.behavior, 'wander', 'Wild pig must eventually settle after it has escaped to safety');
+assert.equal(relocatedState.grazingZoneRevision, 1, 'A completed flee must establish a new grazing zone');
+assert.ok(
+  relocatedCenter.distanceTo(relocationThreat) >= definition.safeDistance,
+  'New grazing zone must be established at a safe location away from the danger'
+);
+assert.ok(
+  relocatedCenter.distanceTo(pigCenter) > definition.wanderRadius,
+  'New grazing zone must move away from the original danger area instead of retaining the spawn center'
+);
+
+const remoteRanger = relocatedCenter.clone().add(new THREE.Vector3(30, 0, 30));
+let closestReturnToOriginal = relocationHunt.group.position.distanceTo(pigCenter);
+for (let step = 0; step < 160; step += 1) {
+  relocationHunt.update(0.1, remoteRanger);
+  closestReturnToOriginal = Math.min(
+    closestReturnToOriginal,
+    relocationHunt.group.position.distanceTo(pigCenter)
+  );
+}
+assert.ok(
+  closestReturnToOriginal > definition.awarenessRange,
+  'After settling, ordinary grazing must stay around the new zone instead of walking back into the original danger area'
+);
+
 const spearRanger = new THREE.Vector3(pigCenter.x + 8, 0, pigCenter.z);
 const spearThrowHunt = makeHunt();
 spearThrowHunt.update(0, spearRanger);
@@ -68,4 +108,4 @@ assert.ok(
   'GameApp must route a successful spear release into the wildlife threat system before impact'
 );
 
-console.log('Animal threat/flee verification passed.');
+console.log('Animal threat/flee/grazing-zone verification passed.');
