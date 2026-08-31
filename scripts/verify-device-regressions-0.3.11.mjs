@@ -180,8 +180,8 @@ for (const contract of [
   'standable: !overheadFrameBeam',
   'supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding',
   'supportOverridesBase: true',
-  '#roofSlotOccupied(candidate, activeRoofs)',
-  'if (this.#roofSlotOccupied(candidate, activeRoofs)) continue'
+  '#roofSlotOccupied(candidate, activeMembers)',
+  'if (this.#roofSlotOccupied(member, activeMembers)) continue'
 ]) {
   assert.ok(physicalLogSource.includes(contract), `Construction regression contract missing: ${contract}`);
 }
