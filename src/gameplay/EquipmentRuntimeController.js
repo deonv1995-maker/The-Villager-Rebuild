@@ -82,6 +82,11 @@ export class EquipmentRuntimeController {
     return restored;
   }
 
+  recordUse(toolId) {
+    if (!TOOL_DEFINITIONS[toolId]) return null;
+    return this.#applyWear(toolId);
+  }
+
   #wrapInventoryMutations() {
     for (const methodName of ['add', 'consume']) {
       const original = this.game.inventory[methodName].bind(this.game.inventory);
