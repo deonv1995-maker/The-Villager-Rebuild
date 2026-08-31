@@ -26,6 +26,9 @@ export const PHYSICAL_LOG = Object.freeze({
   roofMaxRise: 1.85,
   roofRegionMinWidth: 0.72,
   roofRegionMaxWidth: 4.35,
+  roofLocalSearchRadius: 6.5,
+  roofLocalFrameLimit: 48,
+  roofLocalPairLimit: 64,
   carryPosition: Object.freeze([0.02, 1.84, -0.42]),
   carryEuler: Object.freeze([0, -0.12, -0.06])
 });

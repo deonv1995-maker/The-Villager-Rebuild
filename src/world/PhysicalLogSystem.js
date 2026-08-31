@@ -10,6 +10,10 @@ import {
   createConstructionLogVisual,
   tintConstructionPreview
 } from './PhysicalLogVisual.js';
+import {
+  collectLocalRoofFramePairs,
+  collectRoofRegions
+} from './RoofTopology.js';
 
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
@@ -57,10 +61,9 @@ export class PhysicalLogSystem {
     this.structureRevision = 0;
     this.framePairCacheRevision = -1;
     this.framePairCache = [];
-    this.roofRegionCacheRevision = -1;
-    this.roofRegionCache = [];
-    this.roofCandidateCacheRevision = -1;
-    this.roofCandidateCache = [];
+    this.roofQueryCacheRevision = -1;
+    this.roofQueryCacheKey = '';
+    this.roofQueryCache = [];
   }
 
   isCarrying() {
@@ -398,7 +401,7 @@ export class PhysicalLogSystem {
   #roofPlacement(base) {
     let best = null;
     let bestDistance = PHYSICAL_LOG.roofSnapRange;
-    for (const candidate of this.#roofCandidates()) {
+    for (const candidate of this.#roofCandidates(base)) {
       const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
       if (distance >= bestDistance) continue;
       bestDistance = distance;
@@ -415,15 +418,41 @@ export class PhysicalLogSystem {
       : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
   }
 
-  #roofCandidates() {
-    if (this.roofCandidateCacheRevision === this.structureRevision) {
-      return this.roofCandidateCache;
+  #roofCandidates(base) {
+    const queryKey = `${Math.round(base.x / PHYSICAL_LOG.gridStep)}:${Math.round(base.z / PHYSICAL_LOG.gridStep)}`;
+    if (
+      this.roofQueryCacheRevision === this.structureRevision &&
+      this.roofQueryCacheKey === queryKey
+    ) {
+      return this.roofQueryCache;
     }
 
+    const pairs = collectLocalRoofFramePairs(this.#activeBuilt('frame'), base, {
+      length: PHYSICAL_LOG.length,
+      spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
+      topTolerance: 0.3,
+      yawStep: PHYSICAL_LOG.yawStep,
+      searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
+      frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
+      pairLimit: PHYSICAL_LOG.roofLocalPairLimit
+    });
+    const regions = collectRoofRegions(pairs, {
+      yawTolerance: 0.16,
+      topTolerance: 0.34,
+      maxAlong: 0.4,
+      minWidth: PHYSICAL_LOG.roofRegionMinWidth,
+      maxWidth: PHYSICAL_LOG.roofRegionMaxWidth,
+      roofPitch: PHYSICAL_LOG.roofPitch,
+      minRise: PHYSICAL_LOG.roofMinRise,
+      maxRise: PHYSICAL_LOG.roofMaxRise,
+      eaveSeatLift: ROOF_SEAT_LIFT
+    });
+    const activeRoofs = this.#activeBuilt('roof');
     const candidates = [];
-    for (const region of this.#roofRegions()) {
+
+    for (const region of regions) {
       const occupied = new Set(
-        this.#activeBuilt('roof')
+        activeRoofs
           .filter(roof => roof.roofRegionKey === region.key)
           .map(roof => roof.roofKey)
       );
@@ -455,8 +484,9 @@ export class PhysicalLogSystem {
       }
     }
 
-    this.roofCandidateCache = candidates;
-    this.roofCandidateCacheRevision = this.structureRevision;
+    this.roofQueryCache = candidates;
+    this.roofQueryCacheRevision = this.structureRevision;
+    this.roofQueryCacheKey = queryKey;
     return candidates;
   }
 
@@ -486,71 +516,6 @@ export class PhysicalLogSystem {
       anchorIds: region.anchorIds,
       snapKind
     };
-  }
-
-  #roofRegions() {
-    if (this.roofRegionCacheRevision === this.structureRevision) {
-      return this.roofRegionCache;
-    }
-
-    const pairs = this.#framePairs();
-    const regions = [];
-    const seen = new Set();
-
-    for (let leftIndex = 0; leftIndex < pairs.length; leftIndex += 1) {
-      const left = pairs[leftIndex];
-      const leftBasis = this.#basis(left.yaw);
-      for (let rightIndex = leftIndex + 1; rightIndex < pairs.length; rightIndex += 1) {
-        const right = pairs[rightIndex];
-        if (left.anchorIds.some(id => right.anchorIds.includes(id))) continue;
-        if (this.#axisYawDelta(left.yaw, right.yaw) > 0.16) continue;
-        if (Math.abs(left.topY - right.topY) > 0.34) continue;
-
-        const dx = right.x - left.x;
-        const dz = right.z - left.z;
-        const along = Math.abs(dx * leftBasis.xX + dz * leftBasis.xZ);
-        const acrossSigned = dx * leftBasis.zX + dz * leftBasis.zZ;
-        const across = Math.abs(acrossSigned);
-        if (along > 0.4) continue;
-        if (across < PHYSICAL_LOG.roofRegionMinWidth || across > PHYSICAL_LOG.roofRegionMaxWidth) continue;
-
-        const anchorIds = [...left.anchorIds, ...right.anchorIds].sort((a, b) => a - b);
-        const key = `roof:${anchorIds.join('-')}`;
-        if (seen.has(key)) continue;
-
-        const directMatch =
-          Math.hypot(left.a.x - right.a.x, left.a.z - right.a.z) +
-          Math.hypot(left.b.x - right.b.x, left.b.z - right.b.z);
-        const crossedMatch =
-          Math.hypot(left.a.x - right.b.x, left.a.z - right.b.z) +
-          Math.hypot(left.b.x - right.a.x, left.b.z - right.a.z);
-        const c = directMatch <= crossedMatch ? right.a : right.b;
-        const d = directMatch <= crossedMatch ? right.b : right.a;
-        const halfRun = across * 0.5;
-        const rise = THREE.MathUtils.clamp(
-          halfRun * Math.tan(PHYSICAL_LOG.roofPitch),
-          PHYSICAL_LOG.roofMinRise,
-          PHYSICAL_LOG.roofMaxRise
-        );
-        const eaveY = (left.topY + right.topY) * 0.5 + ROOF_SEAT_LIFT;
-
-        seen.add(key);
-        regions.push({
-          key,
-          anchorIds,
-          a: left.a,
-          b: left.b,
-          c,
-          d,
-          eaveY,
-          ridgeY: eaveY + rise
-        });
-      }
-    }
-
-    this.roofRegionCache = regions;
-    this.roofRegionCacheRevision = this.structureRevision;
-    return regions;
   }
 
   #nearestFloorEdge(base) {

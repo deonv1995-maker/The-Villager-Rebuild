@@ -20,7 +20,11 @@ Floor standable support extents meet slightly past the visible panel boundary. S
 
 ## Construction preview performance
 
-Frame-pair, roof-region and roof-candidate topology is cached by a construction revision. The cache is invalidated only when a piece is built or demolished. Carrying a Log therefore no longer recomputes the combinatorial roof topology every rendered frame, removing a mobile freeze/jank path without changing the roof rules themselves.
+The first performance pass cached frame-pair, roof-region and roof-candidate topology by construction revision. That removed repeated roof topology work every rendered frame, but Android playtesting showed that the first ROOF selection could still freeze because it built a global pair-of-pairs graph across the entire structure before the cache existed.
+
+ROOF preview now uses a bounded player-local topology query instead. Only nearby frame posts are considered, local frame candidates and frame-pair candidates have explicit mobile-safe caps, and the result is cached by construction revision plus snapped preview position. This removes the global combinatorial first-selection spike while preserving the same four-post roof-region rules. Distant structures cannot participate in the active roof preview query.
+
+The ordinary RAW/WALL frame-pair cache remains unchanged because those modes were already stable and do not perform the pair-of-pairs roof search.
 
 ## Roof completion
 
@@ -30,7 +34,7 @@ The roof remains presentation-only for collision in this milestone, matching the
 
 ## Harvest feedback follow-up
 
-Axe impacts now add a short damped shake to the existing instanced tree render handles in addition to the wood-chip/ring hit feedback. The shake reuses the shared instanced geometry, restores the original instance matrices after the reaction, and does not alter tree collision, harvest counts, drops, ecology, or world streaming.
+Axe impacts add a short damped shake to the existing instanced tree render handles in addition to the wood-chip/ring hit feedback. The shake reuses the shared instanced geometry, restores the original instance matrices after the reaction, and does not alter tree collision, harvest counts, drops, ecology, or world streaming.
 
 ## Preserved systems
 
