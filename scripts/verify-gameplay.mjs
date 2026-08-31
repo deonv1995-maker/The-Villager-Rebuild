@@ -74,21 +74,27 @@ assert.equal(Number.isFinite(firstHit?.position?.z), true);
 const finalHit = hunt.attack(hunterPosition);
 assert.equal(finalHit?.health, 0);
 assert.equal(finalHit?.defeated, true);
+assert.equal(finalHit?.lootSpawned, 2);
 assert.equal(hunt.getState().defeated, true);
 assert.equal(hunt.attack(hunterPosition), null);
 
 const farPosition = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x + 20, 0, WORLD_LAYOUT.huntAnimal.z + 20);
 assert.equal(hunt.getHarvestTarget(farPosition), null);
-assert.equal(hunt.getHarvestTarget(hunterPosition)?.actionLabel, 'Gather meat');
-const loot = hunt.harvest(hunterPosition);
-assert.equal(loot?.itemId, 'meat');
-assert.equal(loot?.quantity, 2);
-inventory.add(loot.itemId, loot.quantity);
-assert.equal(inventory.get('meat'), 2);
+assert.equal(hunt.getHarvestTarget(hunterPosition), null, 'defeated pig must not expose the old carcass harvest target');
+assert.equal(hunt.harvest(hunterPosition), null, 'defeated pig loot must be collected through world pickups');
 assert.equal(hunt.getState().harvested, true);
-assert.equal(scene.children.includes(hunt.group), false, 'harvested animal presentation must be removed from the scene');
-assert.equal(hunt.getHarvestTarget(hunterPosition), null);
-assert.equal(hunt.harvest(hunterPosition), null);
+assert.equal(scene.children.includes(hunt.group), false, 'defeated animal presentation must be removed from the scene');
+const spawnedMeat = gatherables.items.filter(item => item.active && item.resourceId === 'meat');
+assert.equal(spawnedMeat.length, 2, 'defeated pig must spawn two Raw Meat world pickups');
+for (const meat of spawnedMeat) {
+  const meatPosition = meat.root.position.clone();
+  assert.equal(gatherables.update(meatPosition)?.resourceId, 'meat');
+  const meatPickup = gatherables.gather(meatPosition);
+  assert.equal(meatPickup?.resourceId, 'meat');
+  assert.equal(meatPickup?.quantity, 1);
+  inventory.add(meatPickup.resourceId, meatPickup.quantity);
+}
+assert.equal(inventory.get('meat'), 2);
 
 const collision = new WorldCollisionSystem({
   heightAt: () => 0,
