@@ -516,7 +516,9 @@ export class PhysicalLogSystem {
     if (!this.terrain.isPlayable(x, z, PHYSICAL_LOG.halfLength + 0.12)) return false;
     if (sample.max > baseY + 0.1) return false;
     if (baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
-    return this.collision.isCircleClear(x, z, 0.62);
+    return this.collision.isCircleClear(x, z, 0.62, {
+      ignore: obstacle => obstacle.type === 'placed-log' && /-floor$/.test(obstacle.label ?? '')
+    });
   }
 
   #activeBuilt(mode = null) {
