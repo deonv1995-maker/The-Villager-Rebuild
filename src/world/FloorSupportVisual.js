@@ -81,7 +81,7 @@ export class FloorSupportVisual {
     if (!this.foundationRoot) return;
     this.foundationRoot.parent?.remove(this.foundationRoot);
     this.foundationRoot.traverse(object => {
-      if (object.isMesh) object.geometry?.dispose?.();
+      if (object.userData?.autoFloorFill) object.geometry?.dispose?.();
     });
     this.foundationRoot = null;
   }
@@ -133,6 +133,7 @@ export class FloorSupportVisual {
       fillMaterial
     );
     fill.name = 'automatic-floor-fill';
+    fill.userData.autoFloorFill = true;
     fill.position.set(x, groundY + height * 0.5 - 0.035, z);
     fill.receiveShadow = true;
     fill.castShadow = true;
