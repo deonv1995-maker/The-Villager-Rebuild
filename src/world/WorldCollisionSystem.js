@@ -124,11 +124,12 @@ export class WorldCollisionSystem {
     return true;
   }
 
-  isCircleClear(x, z, radius) {
+  isCircleClear(x, z, radius, { ignore = null } = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) {
       throw new Error('Collision clearance requires finite x, z and a positive radius');
     }
-    return this.obstacles.every(obstacle => !this.#overlapsObstacle(obstacle, x, z, radius));
+    const shouldIgnore = typeof ignore === 'function' ? ignore : () => false;
+    return this.obstacles.every(obstacle => shouldIgnore(obstacle) || !this.#overlapsObstacle(obstacle, x, z, radius));
   }
 
   supportHeightAt(x, z, baseHeight) {
