@@ -14,7 +14,12 @@ assert(log?.id === 'log' && log.label === 'Log' && log.pickupQuantity === 1, 'Lo
 assert(log.storage === 'physical', 'Logs must remain physical world resources');
 assert(!INVENTORY_DEFINITIONS.log, 'Physical logs must never be registered in player inventory definitions');
 assert(PHYSICAL_LOG.length === 2.9 && PHYSICAL_LOG.radius === 0.27, 'Physical log dimensions must match the archived original-game authority');
-assert(PHYSICAL_LOG.gridStep === 0.25 && PHYSICAL_LOG.yawStep === Math.PI / 4, 'Log construction must retain original-reference grid/yaw snapping');
+assert(
+  Number.isInteger(Math.round(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep)) &&
+  Math.abs(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep - Math.round(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep)) < 0.000001 &&
+  PHYSICAL_LOG.yawStep === Math.PI / 4,
+  'Log construction grid must remain proportional to the archived Log length while retaining 45-degree yaw snapping'
+);
 assert(JSON.stringify(LOG_BUILD_MODES) === JSON.stringify(['raw', 'floor', 'frame', 'wall', 'angle', 'roof']), 'Log construction modes must expose RAW/FLOOR/FRAME/WALL/ANGLE/ROOF');
 assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
 assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');

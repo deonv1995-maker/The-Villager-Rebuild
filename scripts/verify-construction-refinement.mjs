@@ -3,6 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
+const nearlyEqual = (left, right, tolerance = 0.000001) => Math.abs(left - right) <= tolerance;
+const snapGrid = value => Math.round(value / PHYSICAL_LOG.gridStep) * PHYSICAL_LOG.gridStep;
+
 assert.ok(PHYSICAL_LOG.floorGroundClearance >= 0.06 && PHYSICAL_LOG.floorGroundClearance <= 0.1, 'Ground floors need a shallow archived-style clearance above natural relief');
 assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance < 0.028, 'Valid terrain may not rise through the split-log walking face');
 assert.ok(PHYSICAL_LOG.floorGroundClearance + 0.028 <= 0.12, 'Ground floors must remain a shallow walk-on step from natural terrain');
@@ -10,6 +13,26 @@ assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log floor support must
 assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded eave spacing');
 assert.ok(PHYSICAL_LOG.roofLocalFrameLimit > 0, 'Roof preview needs a bounded local frame candidate limit');
 assert.ok(PHYSICAL_LOG.roofLocalPairLimit > 0, 'Roof preview needs a bounded local frame-pair candidate limit');
+assert.ok(PHYSICAL_LOG.frameSnapRange >= 2.2, 'Mobile frame construction needs a forgiving structural snap radius');
+assert.ok(PHYSICAL_LOG.frameSnapRange + 0.65 >= 2.85, 'RAW top beams need a strong open-frame-slot attraction radius');
+
+const lengthGridUnits = PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep;
+const widthGridUnits = PHYSICAL_LOG.floorWidth / PHYSICAL_LOG.gridStep;
+assert.ok(nearlyEqual(lengthGridUnits, Math.round(lengthGridUnits)), 'Construction grid must divide the physical Log length exactly');
+assert.ok(nearlyEqual(widthGridUnits, Math.round(widthGridUnits)), 'Construction grid must divide the floor strip width exactly');
+
+const snappedOriginX = snapGrid(0.37);
+const snappedOriginZ = snapGrid(-0.42);
+const snappedLongX = snapGrid(snappedOriginX + PHYSICAL_LOG.length);
+const snappedSideZ = snapGrid(snappedOriginZ + PHYSICAL_LOG.floorWidth);
+assert.ok(
+  nearlyEqual(snappedLongX - snappedOriginX, PHYSICAL_LOG.length),
+  'Snapping a connected floor end must preserve the exact 2.9 m panel length instead of rounding it to 3.0 m'
+);
+assert.ok(
+  nearlyEqual(snappedSideZ - snappedOriginZ, PHYSICAL_LOG.floorWidth),
+  'Snapping a connected floor side must preserve the exact one-third Log strip width'
+);
 
 const collision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -38,11 +61,23 @@ const addFloor = (x, z) => collision.addBox({
   stepHeight: 0.18
 });
 
-addFloor(0, 0);
-addFloor(0, PHYSICAL_LOG.floorWidth);
-addFloor(PHYSICAL_LOG.length, 0);
-assert.equal(collision.supportHeightAt(0, floorHalfZ, 0), floorTop, 'Side-by-side floor support must remain continuous at panel seams');
-assert.equal(collision.supportHeightAt(PHYSICAL_LOG.halfLength, 0, 0), floorTop, 'End-to-end floor support must remain continuous at panel seams');
+addFloor(snappedOriginX, snappedOriginZ);
+addFloor(snappedOriginX, snappedSideZ);
+addFloor(snappedLongX, snappedOriginZ);
+const sideSeamZ = (snappedOriginZ + snappedSideZ) * 0.5;
+const longSeamX = (snappedOriginX + snappedLongX) * 0.5;
+for (const offset of [-0.025, 0, 0.025]) {
+  assert.equal(
+    collision.supportHeightAt(snappedOriginX, sideSeamZ + offset, 0),
+    floorTop,
+    'Side-by-side floor support must remain continuous through the actual snapped panel seam'
+  );
+  assert.equal(
+    collision.supportHeightAt(longSeamX + offset, snappedOriginZ, 0),
+    floorTop,
+    'End-to-end floor support must remain continuous through the actual snapped panel seam'
+  );
+}
 
 let movementCollision;
 movementCollision = new WorldCollisionSystem({
@@ -90,10 +125,11 @@ assert.ok(sideExit.z > floorHalfZ + 0.7, 'Ranger must be able to walk laterally 
 const endExit = walk({ x: 0, y: floorTop, z: 0 }, 0.18, 0, 12);
 assert.ok(endExit.x > PHYSICAL_LOG.halfLength + 0.45, 'Ranger must be able to walk off the long edge of a floor in either movement axis');
 
-const [logSource, supportSource, collisionSource] = await Promise.all([
+const [logSource, supportSource, collisionSource, definitionsSource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
-  readFile('src/world/WorldCollisionSystem.js', 'utf8')
+  readFile('src/world/WorldCollisionSystem.js', 'utf8'),
+  readFile('src/data/PhysicalLogDefinitions.js', 'utf8')
 ]);
 
 for (const requirement of [
@@ -122,6 +158,7 @@ for (const requirement of [
   assert.ok(logSource.includes(requirement), `Construction refinement is missing contract: ${requirement}`);
 }
 
+assert.ok(definitionsSource.includes('const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12'), 'Floor and frame coordinates must share a Log-proportional construction grid');
 assert.ok(!logSource.includes('this.#axisYawDelta(floor.yaw, base.yaw) > 0.18'), 'Floor edge snapping must not depend on the Ranger facing parallel to the existing floor');
 assert.ok(!logSource.includes('roofRegionCacheRevision'), 'ROOF preview must not rebuild a global roof-region graph');
 assert.ok(!logSource.includes('roofCandidateCacheRevision'), 'ROOF preview must use the bounded local query cache');
@@ -131,4 +168,4 @@ assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor suppo
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
 
-console.log('Walk-on non-clipping floors, free platform movement, bounded roof topology and construction snapping verified');
+console.log('Exact floor seams, mobile frame snapping, free platform movement and bounded roof topology verified');

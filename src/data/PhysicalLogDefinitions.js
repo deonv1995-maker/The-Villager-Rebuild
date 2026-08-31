@@ -1,15 +1,19 @@
+const LOG_LENGTH = 2.9;
+const FLOOR_WIDTH = LOG_LENGTH / 3;
+const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12;
+
 export const PHYSICAL_LOG = Object.freeze({
-  length: 2.9,
-  halfLength: 1.45,
+  length: LOG_LENGTH,
+  halfLength: LOG_LENGTH * 0.5,
   radius: 0.27,
   pickupRange: 2.8,
   placeDistance: 1.9,
   dropDistance: 1.62,
-  gridStep: 0.25,
+  gridStep: CONSTRUCTION_GRID_STEP,
   yawStep: Math.PI / 4,
-  floorWidth: 2.9 / 3,
-  floorSplitOffset: (2.9 / 3) * 0.25,
-  frameSnapRange: 1.55,
+  floorWidth: FLOOR_WIDTH,
+  floorSplitOffset: FLOOR_WIDTH * 0.25,
+  frameSnapRange: 2.25,
   floorSnapRange: 1.45,
   wallSnapRange: 1.7,
   angleSnapRange: 1.85,
@@ -31,6 +35,21 @@ export const PHYSICAL_LOG = Object.freeze({
   roofLocalPairLimit: 64,
   carryPosition: Object.freeze([0.02, 1.84, -0.42]),
   carryEuler: Object.freeze([0, -0.12, -0.06])
+});
+
+export const CONSTRUCTION_DIMENSIONS = Object.freeze({
+  wallThickness: 0.28,
+  wallSectionStep: 0.78,
+  wallSectionTopOffset: 0.76,
+  wallCompletionTopTolerance: 0.08,
+  wallTopTuck: 0.04,
+  wallRowRadius: 0.26,
+  doorClearWidth: 1.9,
+  doorClearHeight: 2.45,
+  openingJambOutset: 0.24,
+  windowClearWidth: 1.55,
+  windowSillHeight: 1.08,
+  windowHeadHeight: 2.12
 });
 
 export const LOG_BUILD_MODES = Object.freeze(['raw', 'floor', 'frame', 'wall', 'angle', 'roof']);

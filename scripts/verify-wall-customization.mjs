@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
-import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import {
+  CONSTRUCTION_DIMENSIONS,
+  PHYSICAL_LOG
+} from '../src/data/PhysicalLogDefinitions.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 import {
   WALL_PANEL_VARIANTS,
@@ -9,10 +12,18 @@ import {
   doorSideColliderSpecs,
   resolveWallInwardYaw,
   wallPanelIsComplete,
+  wallPanelTopY,
   windowColliderSpecs
 } from '../src/world/WallPanelCustomizationSystem.js';
 
 assert.deepEqual(WALL_PANEL_VARIANTS, ['solid', 'door', 'window'], 'Hammer wall options must remain panel-scoped and explicit');
+assert.ok(CONSTRUCTION_DIMENSIONS.doorClearWidth >= 1.85, 'Door opening must be comfortably wider than the Ranger capsule');
+assert.ok(CONSTRUCTION_DIMENSIONS.doorClearHeight >= 2.35, 'Door opening must visually clear the Ranger instead of creating a low lintel');
+assert.ok(CONSTRUCTION_DIMENSIONS.windowSillHeight >= 1, 'Window sill must sit above the former low wall cutout');
+assert.ok(
+  CONSTRUCTION_DIMENSIONS.windowHeadHeight > CONSTRUCTION_DIMENSIONS.windowSillHeight + 0.8,
+  'Window opening must retain useful vertical daylight clearance'
+);
 
 const positiveFloor = { x: 0, z: PHYSICAL_LOG.floorWidth * 0.5, topY: 0 };
 const negativeFloor = { x: 0, z: -PHYSICAL_LOG.floorWidth * 0.5, topY: 0 };
@@ -33,11 +44,16 @@ const incompleteEntries = [
 const completeEntries = [...incompleteEntries, { topY: 2.58 }];
 assert.equal(wallPanelIsComplete(incompleteEntries, 2.9), false, 'Hammer customization must stay hidden until the wall bay is full');
 assert.equal(wallPanelIsComplete(completeEntries, 2.9), true, 'A bay with no room for another wall section must count as complete');
+const expectedPanelTop = wallPanelTopY(2.9);
+assert.ok(expectedPanelTop > 2.62 && expectedPanelTop < 2.75, 'Completed wall must close to the underside of the top frame beam');
 
-const doorSpecs = doorSideColliderSpecs({ x: 0, z: 0, yaw: 0, bottomY: 0, topY: 2.58 });
+const doorSpecs = doorSideColliderSpecs({ x: 0, z: 0, yaw: 0, bottomY: 0, topY: expectedPanelTop });
 assert.equal(doorSpecs.length, 2, 'A door must replace the solid collision with two side jamb colliders');
 const doorInnerGap = 2 * (Math.abs(doorSpecs[0].x) - doorSpecs[0].halfX);
-assert.ok(doorInnerGap > 1.4, 'Door collision must leave a Ranger-sized clear opening');
+assert.ok(
+  doorInnerGap >= CONSTRUCTION_DIMENSIONS.doorClearWidth - 0.001,
+  'Door collision must preserve the configured comfortable clear width'
+);
 
 const doorCollision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -48,17 +64,26 @@ const doorCollision = new WorldCollisionSystem({
 for (const spec of doorSpecs) doorCollision.addBox({ ...spec, type: 'placed-log', label: 'test-door-side' });
 assert.equal(doorCollision.isCircleClear(0, 0, 0.42), true, 'Door centre must be physically walkable for the Ranger capsule');
 
-const windowSpecs = windowColliderSpecs({ x: 0, z: 0, yaw: 0, baseY: 0, topY: 2.58 });
+const windowSpecs = windowColliderSpecs({ x: 0, z: 0, yaw: 0, baseY: 0, topY: expectedPanelTop });
 assert.equal(windowSpecs.length, 4, 'Window collision must follow sill, two jamb sides and lintel rather than one monolithic wall box');
 const windowFullSpanSpecs = windowSpecs.filter(spec => Math.abs(spec.halfX - PHYSICAL_LOG.halfLength) < 0.000001);
 const windowSideSpecs = windowSpecs.filter(spec => spec.halfX < PHYSICAL_LOG.halfLength - 0.01);
 assert.equal(windowFullSpanSpecs.length, 2, 'Window collision must retain full-width sill and lintel structure');
 assert.equal(windowSideSpecs.length, 2, 'Window collision must retain both side jamb regions around the opening');
-assert.ok(windowFullSpanSpecs.some(spec => spec.topY <= 0.71), 'Window sill collision must stop below the visible opening');
-assert.ok(windowFullSpanSpecs.some(spec => spec.bottomY >= 1.77), 'Window lintel collision must start above the visible opening');
 assert.ok(
-  windowSideSpecs.every(spec => spec.bottomY >= 0.69 && spec.topY <= 1.79),
-  'Window side collision must be limited to the opening height instead of filling the complete wall'
+  windowFullSpanSpecs.some(spec => Math.abs(spec.topY - CONSTRUCTION_DIMENSIONS.windowSillHeight) < 0.001),
+  'Window sill collision must use the shared raised sill height'
+);
+assert.ok(
+  windowFullSpanSpecs.some(spec => Math.abs(spec.bottomY - CONSTRUCTION_DIMENSIONS.windowHeadHeight) < 0.001),
+  'Window lintel collision must start at the shared window head height'
+);
+assert.ok(
+  windowSideSpecs.every(spec =>
+    Math.abs(spec.bottomY - CONSTRUCTION_DIMENSIONS.windowSillHeight) < 0.001 &&
+    Math.abs(spec.topY - CONSTRUCTION_DIMENSIONS.windowHeadHeight) < 0.001
+  ),
+  'Window side collision must be limited to the configured raised opening height'
 );
 
 const sceneGroup = new THREE.Group();
@@ -114,12 +139,12 @@ const makeWalls = (centerX, idBase) => wallCenters.map((centerY, index) => {
     x: centerX,
     z: 0,
     halfX: PHYSICAL_LOG.halfLength,
-    halfZ: 0.28,
+    halfZ: CONSTRUCTION_DIMENSIONS.wallThickness,
     yaw: Math.PI,
     type: 'placed-log',
     label: root.name,
-    bottomY: centerY - 0.28,
-    topY: centerY + 0.76
+    bottomY: centerY - CONSTRUCTION_DIMENSIONS.wallThickness,
+    topY: centerY + CONSTRUCTION_DIMENSIONS.wallSectionTopOffset
   });
   return {
     id: idBase + index,
@@ -130,7 +155,7 @@ const makeWalls = (centerX, idBase) => wallCenters.map((centerY, index) => {
     yaw: Math.PI,
     baseY: 0,
     centerY,
-    topY: centerY + 0.76,
+    topY: centerY + CONSTRUCTION_DIMENSIONS.wallSectionTopOffset,
     root,
     collisionHandle
   };
@@ -156,9 +181,17 @@ const system = new WallPanelCustomizationSystem({ group: sceneGroup, collision, 
 const bays = system.sync();
 assert.equal(bays.length, 2, 'Each completed frame pair must resolve as its own wall-panel bay');
 assert.ok(bays.every(bay => bay.complete), 'Both three-section first-storey walls must expose customization');
+assert.ok(
+  bays.every(bay => Math.abs(bay.topY - expectedPanelTop) < 0.001),
+  'Completed panel bounds must derive from the frame beam rather than the last wall section'
+);
 for (const wall of [...wallsA, ...wallsB]) {
   assert.equal(wall.yaw, 0, 'Archived floor-footprint voting must orient every section flat-side inward');
   assert.equal(wall.root.userData.wallFlatFaceInward, true, 'Wall visual must record the inward-facing invariant');
+}
+for (const topWall of [wallsA[2], wallsB[2]]) {
+  assert.ok(topWall.root.scale.y > 1, 'Top solid wall section must stretch only enough to close the frame bay');
+  assert.ok(Math.abs(topWall.topY - expectedPanelTop) < 0.001, 'Solid wall collision must reach the frame-fitted panel ceiling');
 }
 
 const targetA = system.getTarget({ x: 0, y: 0, z: 1.1 });
@@ -177,6 +210,14 @@ assert.ok(wallsB.every(wall => wall.collisionHandle), 'Customizing one wall bay 
 assert.equal(obstacles.length, 5, 'Door customization must replace only three targeted row colliders with two door-side colliders');
 assert.equal(system.getTarget({ x: 0, y: 0, z: 1.1 })?.variant, 'door');
 assert.equal(system.getTarget({ x: secondBayX, y: 0, z: 1.1 })?.variant, 'solid');
+const doorRoot = sceneGroup.getObjectByName(`wall-panel-door-${targetA.id}`);
+assert.ok(doorRoot, 'Door customization must create a frame-fitted visual root');
+const doorJamb = doorRoot.getObjectByName('WallOpeningJamb');
+assert.ok(doorJamb, 'Door visual must retain timber jambs');
+assert.ok(
+  Math.abs(doorJamb.position.x) > CONSTRUCTION_DIMENSIONS.doorClearWidth * 0.5,
+  'Door jamb visual must sit outside the configured clear opening instead of narrowing it'
+);
 
 const windowResult = system.customize(targetA.id, 'window');
 assert.equal(windowResult?.variant, 'window');
@@ -191,6 +232,7 @@ assert.ok(wallsA.every(wall => wall.root.visible === true), 'Solid customization
 assert.ok(wallsA.every(wall => wall.collisionHandle), 'Solid customization must restore each targeted original wall-section collider');
 assert.ok(wallsB.every(wall => wall.root.visible === true && wall.collisionHandle), 'Restoring one panel must not disturb another completed wall bay');
 assert.equal(obstacles.length, 6, 'Solid customization must restore the original three colliders without changing the second bay');
+assert.ok(Math.abs(wallsA[2].topY - expectedPanelTop) < 0.001, 'Restored SOLID wall must remain closed to the top frame beam');
 
 collision.removeObstacle(wallsA[2].collisionHandle);
 wallsA[2].collisionHandle = null;
@@ -225,4 +267,4 @@ assert.ok(
 );
 assert.ok(gameSource.includes('this.physicalLogs?.demolish(this.playerPosition)'), 'Hammer must still call PhysicalLogSystem demolition for placed Logs');
 
-console.log('Inward wall faces, panel-specific SOLID/DOOR/WINDOW collision, real door traversal and Hammer demolition verified');
+console.log('Frame-fitted SOLID/DOOR/WINDOW geometry, inward faces, door traversal and Hammer demolition verified');
