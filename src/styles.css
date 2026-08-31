@@ -24,27 +24,54 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   backdrop-filter: blur(6px);
   pointer-events: none;
 }
+body.log-carrying #boot-status {
+  top: max(51px, calc(env(safe-area-inset-top) + 48px));
+  max-width: min(58vw, 360px);
+}
 #boot-status[data-error="true"] { background: rgba(105, 31, 24, .94); border-color: #d07a62; }
 .mobile-hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 .inventory-strip {
   position: absolute;
-  right: max(12px, env(safe-area-inset-right));
+  right: max(10px, env(safe-area-inset-right));
   top: max(12px, env(safe-area-inset-top));
-  padding: 8px 12px;
-  border-radius: 12px;
-  background: rgba(15, 34, 25, .76);
-  border: 1px solid rgba(225, 207, 151, .38);
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 92px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(15, 34, 25, .72);
+  border: 1px solid rgba(225, 207, 151, .34);
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: .03em;
+  letter-spacing: .02em;
   backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.mobile-hud.log-carrying .inventory-strip {
+  top: max(51px, calc(env(safe-area-inset-top) + 48px));
+}
+.inventory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   white-space: nowrap;
+}
+.inventory-row strong {
+  min-width: 18px;
+  text-align: right;
+  color: #f0cf76;
+  font-size: 11px;
 }
 .hud-note {
   position: absolute;
   top: max(50px, calc(env(safe-area-inset-top) + 45px));
   left: 50%;
   transform: translateX(-50%);
+  max-width: min(70vw, 520px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 5px 10px;
   border-radius: 999px;
   background: rgba(15, 34, 25, .52);
@@ -53,9 +80,11 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   opacity: .72;
   white-space: nowrap;
 }
-.mobile-hud.log-carrying .hud-note,
-.mobile-hud.wall-customizing .hud-note,
-.mobile-hud.roof-thatching .hud-note {
+.mobile-hud.log-carrying .hud-note {
+  top: max(52px, calc(env(safe-area-inset-top) + 49px));
+  max-width: 44vw;
+}
+.mobile-hud.wall-customizing .hud-note {
   top: max(116px, calc(env(safe-area-inset-top) + 111px));
 }
 .toolbelt {
@@ -114,16 +143,16 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 .log-build-tray {
   position: absolute;
   left: 50%;
-  top: max(73px, calc(env(safe-area-inset-top) + 68px));
+  top: max(4px, calc(env(safe-area-inset-top) + 2px));
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 5px;
-  width: min(560px, calc(100vw - 24px));
+  gap: 4px;
+  width: min(620px, calc(100vw - 16px));
   min-width: 0;
-  padding: 6px;
-  border-radius: 12px;
-  background: rgba(24, 39, 29, .9);
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(24, 39, 29, .92);
   border: 1px solid rgba(225, 207, 151, .46);
   backdrop-filter: blur(6px);
   pointer-events: auto;
@@ -135,10 +164,10 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 .log-build-tray.invalid { border-color: rgba(216, 93, 87, .7); }
 .log-build-tray button {
   flex: 1 1 48px;
-  min-width: 46px;
-  height: 31px;
+  min-width: 45px;
+  height: 32px;
   border: 1px solid rgba(225, 207, 151, .38);
-  border-radius: 8px;
+  border-radius: 7px;
   background: rgba(69, 72, 50, .9);
   color: #fff0cb;
   font-size: 9px;
@@ -158,8 +187,7 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 }
 .log-build-tray button.drop-log { color: #f6d5c7; }
 .log-build-tray button:active { transform: scale(.95); }
-.wall-customize-tray,
-.roof-thatch-tray {
+.wall-customize-tray {
   position: absolute;
   left: 50%;
   top: max(73px, calc(env(safe-area-inset-top) + 68px));
@@ -167,6 +195,7 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   display: flex;
   align-items: center;
   gap: 5px;
+  width: min(270px, calc(100vw - 24px));
   padding: 6px;
   border-radius: 12px;
   background: rgba(24, 39, 29, .92);
@@ -174,12 +203,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
-.wall-customize-tray { width: min(270px, calc(100vw - 24px)); }
-.roof-thatch-tray { width: min(210px, calc(100vw - 24px)); }
-.wall-customize-tray[hidden],
-.roof-thatch-tray[hidden] { display: none; }
-.wall-customize-tray button,
-.roof-thatch-tray button {
+.wall-customize-tray[hidden] { display: none; }
+.wall-customize-tray button {
   flex: 1 1 0;
   min-width: 68px;
   height: 34px;
@@ -193,18 +218,12 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   pointer-events: auto;
   touch-action: none;
 }
-.wall-customize-tray button.selected,
-.roof-thatch-tray button:not(:disabled) {
+.wall-customize-tray button.selected {
   border-color: #f0cf76;
   background: rgba(79, 91, 57, .98);
   box-shadow: 0 0 0 1px rgba(240, 207, 118, .26) inset;
 }
-.roof-thatch-tray button:disabled {
-  opacity: .58;
-  color: #e1c7a6;
-}
-.wall-customize-tray button:active,
-.roof-thatch-tray button:active { transform: scale(.95); }
+.wall-customize-tray button:active { transform: scale(.95); }
 .joystick {
   position: absolute;
   left: max(18px, calc(env(safe-area-inset-left) + 14px));
@@ -225,9 +244,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   pointer-events: auto;
   touch-action: none;
 }
-.hud-button[hidden] { display: none; }
-.hud-button:disabled { opacity: .46; }
-.hud-button img, .hud-button .button-glyph { pointer-events: none; }
+.hud-button:disabled { opacity: .38; }
+.hud-button img, .hud-button .button-glyph, .hud-button .action-caption { pointer-events: none; }
 .hud-button .button-bg { position:absolute; inset:0; width:100%; height:100%; }
 .hud-button .button-icon { position:absolute; left:27%; top:27%; width:46%; height:46%; filter:brightness(.35) sepia(.25); }
 .hud-button .button-glyph {
@@ -246,29 +264,44 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   width: 76px;
   height: 76px;
 }
-.hud-button.interact {
-  right: max(102px, calc(env(safe-area-inset-right) + 98px));
-  bottom: max(30px, calc(env(safe-area-inset-bottom) + 24px));
-  width: 62px;
-  height: 62px;
-}
-.hud-button.attack {
+.hud-button.action {
   right: max(100px, calc(env(safe-area-inset-right) + 96px));
-  bottom: max(103px, calc(env(safe-area-inset-bottom) + 97px));
-  width: 60px;
-  height: 60px;
+  bottom: max(28px, calc(env(safe-area-inset-bottom) + 22px));
+  width: 70px;
+  height: 70px;
 }
-.hud-button.craft {
-  right: max(166px, calc(env(safe-area-inset-right) + 162px));
-  bottom: max(104px, calc(env(safe-area-inset-bottom) + 98px));
-  width: 58px;
-  height: 58px;
+.hud-button.action .button-icon {
+  left: 25%;
+  top: 22%;
+  width: 50%;
+  height: 50%;
 }
+.action-caption {
+  position: absolute;
+  left: 50%;
+  bottom: -2px;
+  transform: translateX(-50%);
+  min-width: 42px;
+  max-width: 72px;
+  padding: 2px 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(24, 39, 29, .92);
+  color: #fff0cb;
+  font-size: 7px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: .04em;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hud-button.action:disabled .action-caption { opacity: .6; }
 .hud-button.sprint {
-  right: max(30px, calc(env(safe-area-inset-right) + 26px));
-  bottom: max(108px, calc(env(safe-area-inset-bottom) + 102px));
-  width: 55px;
-  height: 55px;
+  right: max(105px, calc(env(safe-area-inset-right) + 101px));
+  bottom: max(106px, calc(env(safe-area-inset-bottom) + 100px));
+  width: 54px;
+  height: 54px;
   opacity: .9;
 }
 .hud-button:active { transform: scale(.94); }
@@ -278,15 +311,19 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 @media (max-width: 700px) and (orientation: portrait) {
   .toolbelt { bottom: max(150px, calc(env(safe-area-inset-bottom) + 146px)); }
   .log-build-tray {
-    top: max(73px, calc(env(safe-area-inset-top) + 68px));
-    width: calc(100vw - 20px);
+    top: max(4px, calc(env(safe-area-inset-top) + 2px));
+    width: calc(100vw - 12px);
+  }
+  .log-build-tray button {
+    min-width: 43px;
+    height: 31px;
+    font-size: 8px;
+  }
+  .mobile-hud.log-carrying .inventory-strip {
+    top: max(49px, calc(env(safe-area-inset-top) + 46px));
   }
   .wall-customize-tray {
     top: max(73px, calc(env(safe-area-inset-top) + 68px));
     width: min(270px, calc(100vw - 20px));
-  }
-  .roof-thatch-tray {
-    top: max(73px, calc(env(safe-area-inset-top) + 68px));
-    width: min(210px, calc(100vw - 20px));
   }
 }
