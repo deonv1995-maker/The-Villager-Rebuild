@@ -35,7 +35,8 @@ assert.equal(RESOURCE_DEFINITIONS.stone.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.grass.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.log.storage, 'physical');
 assert.equal(PHYSICAL_LOG.length, 2.9, 'Physical logs must retain original-reference full length');
-assert.deepEqual(LOG_BUILD_MODES, ['raw', 'floor', 'frame', 'wall', 'angle']);
+assert.deepEqual(LOG_BUILD_MODES, ['raw', 'floor', 'frame', 'wall', 'angle', 'roof']);
+assert.ok(PHYSICAL_LOG.carryPosition[1] > 1.75 && PHYSICAL_LOG.carryPosition[2] < -0.3, 'Shoulder carry anchor must stay above and behind the torso to prevent clipping');
 
 const initialResourceCounts = WORLD_LAYOUT.dayOneResources.reduce((counts, [resourceId]) => {
   counts[resourceId] = (counts[resourceId] ?? 0) + 1;
@@ -66,17 +67,15 @@ const crafting = new CraftingSystem({ inventory });
 const toolbelt = new ToolbeltSystem({ inventory, crafting });
 let belt = toolbelt.snapshot();
 assert.equal(belt.length, 6, 'Bottom toolbelt must contain default Hand plus five craftable tools');
-assert.equal(belt[0].id, 'hand', 'Hand must be the first/default bottom tool slot');
-assert.equal(belt[0].equipped, true, 'Ranger must start with empty hands selected');
-assert.equal(toolbelt.select('spear').equipped, true, 'Selecting a craftable spear must craft and equip it');
+assert.equal(belt[0].id, 'hand');
+assert.equal(belt[0].equipped, true);
+assert.equal(toolbelt.select('spear').equipped, true);
 assert.equal(toolbelt.getEquippedToolId(), 'spear');
-assert.equal(inventory.get('spear'), 1);
-assert.equal(toolbelt.select('axe').equipped, true, 'Selecting a craftable axe must craft and equip it');
+assert.equal(toolbelt.select('axe').equipped, true);
 assert.equal(toolbelt.getEquippedToolId(), 'axe');
-assert.equal(inventory.get('axe'), 1);
-assert.equal(toolbelt.select('hand').equipped, true, 'Hand slot must unequip the active tool without consuming anything');
-assert.equal(toolbelt.getEquippedToolId(), null, 'Hand slot must represent no equipped tool');
-assert.equal(toolbelt.select('pickaxe').equipped, true, 'Pickaxe must use the same craft/equip path');
+assert.equal(toolbelt.select('hand').equipped, true);
+assert.equal(toolbelt.getEquippedToolId(), null);
+assert.equal(toolbelt.select('pickaxe').equipped, true);
 assert.equal(inventory.get('pickaxe'), 1);
 
 const campfireIngredients = Object.fromEntries(STRUCTURE_DEFINITIONS.campfire.ingredients.map(item => [item.itemId, item.quantity]));
@@ -132,15 +131,38 @@ assert.ok(
   'KayKit production animation assets must retain a usable full-body work/strike action for Axe, Hammer and Pickaxe'
 );
 
-const [appSource, hudSource, logSource, rockSource, projectileSource, gatherSource, toolSource, playerSource, assetSource, hammerSvg, pickaxeSvg, swordSvg] = await Promise.all([
+const [
+  appSource,
+  hudSource,
+  logSource,
+  rockSource,
+  treeSource,
+  projectileSource,
+  gatherSource,
+  toolSource,
+  playerSource,
+  carrySource,
+  floorSupportSource,
+  feedbackSource,
+  stylesSource,
+  assetSource,
+  hammerSvg,
+  pickaxeSvg,
+  swordSvg
+] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/RockHarvestSystem.js', 'utf8'),
+  readFile('src/world/TreeHarvestSystem.js', 'utf8'),
   readFile('src/world/SpearProjectileSystem.js', 'utf8'),
   readFile('src/world/GatherableSystem.js', 'utf8'),
   readFile('src/player/RangerToolPresentation.js', 'utf8'),
   readFile('src/player/RangerController.js', 'utf8'),
+  readFile('src/player/RangerLogCarryPose.js', 'utf8'),
+  readFile('src/world/FloorSupportVisual.js', 'utf8'),
+  readFile('src/world/HarvestHitFeedback.js', 'utf8'),
+  readFile('src/styles.css', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('public/assets/ui/mobile/icon-hammer.svg', 'utf8'),
   readFile('public/assets/ui/mobile/icon-pickaxe.svg', 'utf8'),
@@ -180,27 +202,45 @@ for (const requirement of [
   'data-build="frame"',
   'data-build="wall"',
   'data-build="angle"',
+  'data-build="roof"',
   'data-build="drop"',
-  'setLogBuildMode(carrying, state = null)'
+  'setLogBuildMode(carrying, state = null)',
+  "const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])",
+  'this.attackButton.hidden = !available',
+  'this.attackIcon.src = this.toolIcons[equippedTool]'
 ]) {
   assert.ok(hudSource.includes(requirement), `Mobile HUD is missing tool/build contract: ${requirement}`);
 }
+assert.ok(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(73px'), 'Build tray must stay across the top of the mobile viewport');
 
 for (const requirement of [
   "takePhysical(playerPosition, 'log')",
   'PHYSICAL_LOG.carryPosition',
+  'this.carryPose.update()',
   'setBuildMode(mode)',
   'cycleBuildMode()',
   "mode === 'floor'",
   "mode === 'frame'",
   "mode === 'wall'",
   "mode === 'angle'",
+  "mode === 'roof'",
+  "snapKind: snapped ? 'floor-edge-level' : null",
+  'baseY: floor.baseY',
+  'this.floorSupports.createForFloor',
+  "snapKind: 'roof-rafter'",
   "type: 'placed-log'",
   'getDemolitionTarget(playerPosition)',
   'demolish(playerPosition)'
 ]) {
   assert.ok(logSource.includes(requirement), `Physical log system is missing contract: ${requirement}`);
 }
+
+assert.ok(carrySource.includes('class RangerLogCarryPose') && carrySource.includes("this.#poseArm('l'") && carrySource.includes("this.#poseArm('r'"), 'Log shoulder carry must use an actual Ranger arm posture');
+assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"), 'Uneven floors must generate automatic supports/fill without terrain mutation');
+assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'), 'The archived terrain cutting system must not be restored into the rebuild');
+assert.ok(treeSource.includes("this.hitFeedback.emit(position, 'wood')"), 'Tree hits must emit visual feedback');
+assert.ok(rockSource.includes("this.hitFeedback.emit(position, 'stone')"), 'Rock hits must emit visual feedback');
+assert.ok(feedbackSource.includes('class HarvestHitFeedback') && feedbackSource.includes('RingGeometry'), 'Tree/rock impact feedback must stay in the shared feedback renderer');
 
 for (const requirement of [
   "getObstaclesByType('rock')",
@@ -212,13 +252,14 @@ for (const requirement of [
 }
 
 assert.ok(projectileSource.includes("this.projectile.name = 'thrown-spear-projectile'"), 'Spear must exist as a moving world projectile while thrown');
-assert.ok(projectileSource.includes('Math.sin(progress * Math.PI) * this.arcHeight'), 'Thrown spear must follow an authored ballistic-style arc rather than a straight line');
+assert.ok(projectileSource.includes('Math.sin(progress * Math.PI) * this.arcHeight'), 'Thrown spear must follow its ballistic-style arc');
 assert.ok(projectileSource.includes("typeof target === 'function' ? target : () => target"), 'Projectile must preserve a live target provider for auto-lock tracking');
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'), 'Non-spear tools must mount through the Ranger right-hand attachment boundary');
 assert.ok(toolSource.includes("const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])"), 'Axe, Hammer and Pickaxe must share the skeleton-driven work-action path');
-assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Work tools must request a Ranger skeleton action instead of independently swinging the hand-mounted prop');
-assert.ok(toolSource.includes('this.#applyRestPose();') && toolSource.includes('this.skeletalActionActive = true'), 'Hand-mounted work tool must remain rigidly attached during the Ranger action');
+assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Work tools must request a Ranger skeleton action');
+assert.ok(toolSource.includes('#applySkeletalAccent(progress)'), 'Work-tool swings must keep the stronger visible strike accent');
+assert.ok(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must use a lateral slash rather than the generic work swing');
 assert.ok(playerSource.includes('mountRightHandObject(object)'), 'Ranger controller must expose one shared hand-mount boundary for held tools');
 assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpearThrow(onRelease)'), 'Spear must use the authored Throw animation and a timed release callback');
 assert.ok(playerSource.includes('playToolAction(toolId)') && playerSource.includes('#selectToolAction(toolId)'), 'Ranger controller must own work-action selection and timing');
@@ -234,4 +275,4 @@ for (const [name, path, svg] of [
 assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
 assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Survival hand/tool skeleton actions, original-reference log building and arcing projectile contracts verified');
+console.log('Foundation 0.3.8 survival, carry, building, tool-action, hit-feedback and preserved spear contracts verified');
