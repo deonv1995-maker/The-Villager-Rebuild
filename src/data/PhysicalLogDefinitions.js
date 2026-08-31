@@ -22,6 +22,8 @@ export const PHYSICAL_LOG = Object.freeze({
   floorGroundClearance: 0.08,
   floorTerrainEmbedTolerance: 0.025,
   floorUndersideDepth: 0.235,
+  floorSupportSeamPadding: 0.06,
+  floorSurfaceOverrideTolerance: 0.08,
   floorFillThreshold: 0.1,
   floorSupportThreshold: 0.34,
   floorMaxSupportDepth: 2.75,
