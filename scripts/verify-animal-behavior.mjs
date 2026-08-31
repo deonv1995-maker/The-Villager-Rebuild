@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../src/data/AnimalDefinitions.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
@@ -35,8 +36,17 @@ assert.equal(proximityHunt.getState().behavior, 'flee', 'Wild pig must enter fle
 assert.equal(proximityHunt.getState().threatCause, 'proximity');
 assert.ok(proximityDistanceAfter > proximityDistanceBefore + 1, 'Wild pig must move away from a nearby Ranger instead of circling');
 
-const spearHitHunt = makeHunt();
 const spearRanger = new THREE.Vector3(pigCenter.x + 8, 0, pigCenter.z);
+const spearThrowHunt = makeHunt();
+spearThrowHunt.update(0, spearRanger);
+const throwDistanceBefore = spearThrowHunt.group.position.distanceTo(spearRanger);
+assert.equal(spearThrowHunt.alertFrom(spearRanger, { cause: 'spear-throw' }), true, 'A launched spear must register as an animal threat');
+spearThrowHunt.update(0.2, spearRanger);
+assert.equal(spearThrowHunt.getState().behavior, 'flee', 'Wild pig must flee while the spear is still in flight');
+assert.equal(spearThrowHunt.getState().threatCause, 'spear-throw');
+assert.ok(spearThrowHunt.group.position.distanceTo(spearRanger) > throwDistanceBefore, 'Spear launch threat must move the pig away from the Ranger');
+
+const spearHitHunt = makeHunt();
 spearHitHunt.update(0, spearRanger);
 assert.equal(spearHitHunt.getState().behavior, 'wander', 'Ranger outside awareness range should not trigger proximity flee');
 const spearDistanceBefore = spearHitHunt.group.position.distanceTo(spearRanger);
@@ -51,5 +61,11 @@ assert.ok(spearDistanceAfter > spearDistanceBefore + 1.5, 'Wounded pig must retr
 const defeated = spearHitHunt.applyDamage(definition.spearDamage, spearRanger);
 assert.equal(defeated?.defeated, true, 'Second spear hit must preserve the existing two-hit defeat contract');
 assert.equal(spearHitHunt.getState().behavior, 'defeated', 'Defeated animal must stop fleeing and become a carcass');
+
+const appSource = await readFile('src/core/GameApp.js', 'utf8');
+assert.ok(
+  appSource.includes("this.hunt.alertFrom(releaseOrigin, { cause: 'spear-throw' })"),
+  'GameApp must route a successful spear release into the wildlife threat system before impact'
+);
 
 console.log('Animal threat/flee verification passed.');
