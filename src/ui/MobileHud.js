@@ -3,15 +3,6 @@ import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 import { resolveContextAction } from './ContextActionPolicy.js';
 
 const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
-const BUILD_MODE_UI = Object.freeze([
-  Object.freeze({ id: 'raw', label: 'Raw log' }),
-  Object.freeze({ id: 'floor', label: 'Floor' }),
-  Object.freeze({ id: 'frame', label: 'Frame' }),
-  Object.freeze({ id: 'wall', label: 'Wall' }),
-  Object.freeze({ id: 'angle', label: 'Angled log' }),
-  Object.freeze({ id: 'roof', label: 'Roof' }),
-  Object.freeze({ id: 'drop', label: 'Drop log' })
-]);
 const MOVE_SIDE_RATIO = 0.5;
 const MOVE_RADIUS_PX = 76;
 const MOVE_DEADZONE_PX = 7;
@@ -59,11 +50,6 @@ export class MobileHud {
         <span class="tool-craft-mark" aria-hidden="true">+</span>
       </button>
     `).join('');
-    const buildButtons = BUILD_MODE_UI.map(({ id, label }) => `
-      <button class="build-mode-button${id === 'drop' ? ' drop-log' : ''}" type="button" data-build="${id}" aria-label="${label}" title="${label}">
-        <img src="${this.buildIcons[id]}" alt="" aria-hidden="true">
-      </button>
-    `).join('');
 
     this.root.innerHTML = `
       <div class="inventory-strip" data-role="inventory"></div>
@@ -75,7 +61,13 @@ export class MobileHud {
           <span class="build-tray-chevron" data-role="build-toggle-chevron" aria-hidden="true">›</span>
         </button>
         <div class="build-tray-options" data-role="build-options">
-          ${buildButtons}
+          <button class="build-mode-button" type="button" data-build="raw" aria-label="Raw log" title="Raw log"><img src="${this.buildIcons.raw}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="floor" aria-label="Floor" title="Floor"><img src="${this.buildIcons.floor}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="frame" aria-label="Frame" title="Frame"><img src="${this.buildIcons.frame}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="wall" aria-label="Wall" title="Wall"><img src="${this.buildIcons.wall}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="angle" aria-label="Angled log" title="Angled log"><img src="${this.buildIcons.angle}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="roof" aria-label="Roof" title="Roof"><img src="${this.buildIcons.roof}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button drop-log" type="button" data-build="drop" aria-label="Drop log" title="Drop log"><img src="${this.buildIcons.drop}" alt="" aria-hidden="true"></button>
         </div>
       </div>
       <div class="hud-button sprint contextual-sprint" data-role="sprint-target" aria-hidden="true" hidden>
@@ -216,7 +208,8 @@ export class MobileHud {
     this.buildTrayCollapsed = Boolean(collapsed);
     this.buildTray.classList.toggle('collapsed', this.buildTrayCollapsed);
     this.buildTrayToggle.setAttribute('aria-expanded', this.buildTrayCollapsed ? 'false' : 'true');
-    const selectedLabel = BUILD_MODE_UI.find(({ id }) => id === this.currentBuildMode)?.label ?? 'Build';
+    const selectedButton = this.buildTray.querySelector(`[data-build="${this.currentBuildMode}"]`);
+    const selectedLabel = selectedButton?.getAttribute('aria-label') ?? 'Build';
     this.buildTrayToggle.setAttribute(
       'aria-label',
       `${this.buildTrayCollapsed ? 'Expand' : 'Collapse'} build menu, ${selectedLabel} selected`
