@@ -15,9 +15,10 @@ The day-one Wild Pig uses a small behavior-state boundary owned by `DayOneHuntSy
 The Wild Pig must react to actual danger rather than continuing its ambient route:
 
 1. Ranger proximity inside `awarenessRange` immediately enters `flee` and continually updates the Ranger as the threat position.
-2. A surviving weapon hit enters `flee` with `hit` as the threat cause. Projectile damage uses the latest Ranger position observed by the hunt system, so the existing spear projectile callback does not need a second combat pathway.
-3. The pig remains in flee behavior for at least `fleeDuration` and does not relax until it has also created `safeDistance` from the threat.
-4. The existing two-hit spear defeat contract remains unchanged; a defeated pig never returns to flee or wander.
+2. A successfully launched spear immediately enters `flee` with `spear-throw` as the threat cause, so the pig starts escaping during the projectile flight instead of waiting passively for impact.
+3. A surviving weapon hit refreshes the flee response with `hit` as the threat cause. Projectile damage still uses the latest Ranger position observed by the hunt system, so hit resolution stays on the existing combat pathway.
+4. The pig remains in flee behavior for at least `fleeDuration` and does not relax until it has also created `safeDistance` from the threat.
+5. The existing two-hit spear defeat contract remains unchanged; a defeated pig never returns to flee or wander.
 
 The flee speed is intentionally faster than Ranger walking speed but slower than Ranger sprint speed. This makes the animal feel threatened and evasive without making the day-one hunt impossible.
 
@@ -26,7 +27,7 @@ The flee speed is intentionally faster than Ranger walking speed but slower than
 - `DayOneHuntSystem` owns wildlife behavior, health, threat state, targeting and carcass state.
 - `DayOneAnimalPresentation` remains presentation-only and receives movement distance for its existing movement accent.
 - `SpearProjectileSystem` remains responsible only for the visible projectile arc and hit timing.
-- `GameApp` still decides which equipped tool may attack and routes combat results.
+- `GameApp` still decides which equipped tool may attack and routes a successful spear release into the shared wildlife threat boundary.
 - Island terrain, player collision, ecology scatter, world streaming, PWA and deployment architecture are unchanged by this pass.
 
-`npm run verify:animals` protects the proximity flee, spear-hit flee and existing two-hit defeat behavior, and it is part of the full `npm run check` suite.
+`npm run verify:animals` protects ordinary wandering, proximity flee, spear-launch flee, spear-hit flee and the existing two-hit defeat behavior, and it is part of the full `npm run check` suite.
