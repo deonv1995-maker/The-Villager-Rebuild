@@ -5,6 +5,7 @@ export class ReactiveVegetationFieldSystem {
     group,
     terrain,
     scatter,
+    chunks = null,
     geometry,
     material,
     densityAt,
@@ -27,6 +28,7 @@ export class ReactiveVegetationFieldSystem {
     this.group = group;
     this.terrain = terrain;
     this.scatter = scatter;
+    this.chunks = chunks;
     this.geometry = geometry;
     this.material = material;
     this.densityAt = densityAt;
@@ -46,6 +48,7 @@ export class ReactiveVegetationFieldSystem {
     this.baseLean = baseLean;
     this.heightOffset = heightOffset;
     this.mesh = null;
+    this.meshes = [];
     this.entries = [];
     this.grid = new Map();
     this.active = new Set();
@@ -65,12 +68,7 @@ export class ReactiveVegetationFieldSystem {
     this.entries.length = 0;
     this.grid.clear();
     this.active.clear();
-
-    this.mesh = new THREE.InstancedMesh(this.geometry, this.material, this.maxInstances);
-    this.mesh.name = this.meshName;
-    this.mesh.castShadow = false;
-    this.mesh.receiveShadow = true;
-    this.mesh.frustumCulled = true;
+    this.meshes.length = 0;
 
     const bounds = this.terrain.getScatterBounds?.(20) ?? {
       halfX: 134,
@@ -90,7 +88,9 @@ export class ReactiveVegetationFieldSystem {
 
       const scale = this.scaleAt(this.random.bind(this));
       const entry = {
-        index: placed,
+        index: -1,
+        mesh: null,
+        chunkKey: this.chunks?.keyForPosition(x, z) ?? null,
         x,
         y: this.terrain.heightAt(x, z) + this.heightOffset,
         z,
@@ -106,19 +106,16 @@ export class ReactiveVegetationFieldSystem {
       };
       this.entries.push(entry);
       this.#addToGrid(entry);
-      this.#writeMatrix(entry);
       placed += 1;
     }
 
-    this.mesh.count = placed;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.mesh.computeBoundingSphere();
-    this.group.add(this.mesh);
+    if (this.chunks) this.#buildChunkMeshes();
+    else this.#buildSingleMesh();
     return placed;
   }
 
   update(dt, playerPosition) {
-    if (!this.mesh || !playerPosition || !this.entries.length) return;
+    if (!this.meshes.length || !playerPosition || !this.entries.length) return;
     const speed = this.#updateVelocity(dt, playerPosition);
     const candidates = this.#nearby(playerPosition.x, playerPosition.z);
     const current = new Set();
@@ -132,7 +129,6 @@ export class ReactiveVegetationFieldSystem {
       moveZ /= moveLength;
     }
 
-    let changed = false;
     for (const entry of candidates) {
       const dx = entry.x - playerPosition.x;
       const dz = entry.z - playerPosition.z;
@@ -165,7 +161,6 @@ export class ReactiveVegetationFieldSystem {
       entry.bendZ += (targetBendZ - entry.bendZ) * blend;
       entry.compression += (targetCompression - entry.compression) * blend;
       this.#writeMatrix(entry);
-      changed = true;
     }
 
     for (const entry of Array.from(this.active)) {
@@ -175,7 +170,6 @@ export class ReactiveVegetationFieldSystem {
       entry.bendZ += (0 - entry.bendZ) * blend;
       entry.compression += (0 - entry.compression) * blend;
       this.#writeMatrix(entry);
-      changed = true;
       if (Math.abs(entry.bendX) < 0.004 && Math.abs(entry.bendZ) < 0.004 && entry.compression < 0.002) {
         entry.bendX = 0;
         entry.bendZ = 0;
@@ -184,8 +178,54 @@ export class ReactiveVegetationFieldSystem {
         this.active.delete(entry);
       }
     }
+  }
 
-    if (changed) this.mesh.instanceMatrix.needsUpdate = true;
+  #buildSingleMesh() {
+    const mesh = new THREE.InstancedMesh(this.geometry, this.material, Math.max(1, this.entries.length));
+    mesh.name = this.meshName;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    mesh.frustumCulled = true;
+    this.entries.forEach((entry, index) => {
+      entry.index = index;
+      entry.mesh = mesh;
+      this.#writeMatrix(entry, false);
+    });
+    mesh.count = this.entries.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    this.group.add(mesh);
+    this.mesh = mesh;
+    this.meshes.push(mesh);
+  }
+
+  #buildChunkMeshes() {
+    const entriesByChunk = new Map();
+    for (const entry of this.entries) {
+      const list = entriesByChunk.get(entry.chunkKey) ?? [];
+      list.push(entry);
+      entriesByChunk.set(entry.chunkKey, list);
+    }
+
+    for (const [key, entries] of entriesByChunk) {
+      const mesh = new THREE.InstancedMesh(this.geometry, this.material, entries.length);
+      mesh.name = `${this.meshName}-chunk-${key.replace(':', '-')}`;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = true;
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      entries.forEach((entry, index) => {
+        entry.index = index;
+        entry.mesh = mesh;
+        this.#writeMatrix(entry, false);
+      });
+      mesh.count = entries.length;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      this.chunks.addObjectToKey(mesh, key);
+      this.meshes.push(mesh);
+    }
+    this.mesh = this.meshes[0] ?? null;
   }
 
   #key(ix, iz) {
@@ -217,12 +257,14 @@ export class ReactiveVegetationFieldSystem {
     return found;
   }
 
-  #writeMatrix(entry) {
+  #writeMatrix(entry, markDirty = true) {
+    if (!entry.mesh || entry.index < 0) return;
     this.dummy.position.set(entry.x, entry.y, entry.z);
     this.dummy.rotation.set(entry.baseLeanX + entry.bendX, entry.baseYaw, entry.baseLeanZ + entry.bendZ);
     this.dummy.scale.set(entry.scaleX, entry.scaleY * (1 - entry.compression), entry.scaleZ);
     this.dummy.updateMatrix();
-    this.mesh.setMatrixAt(entry.index, this.dummy.matrix);
+    entry.mesh.setMatrixAt(entry.index, this.dummy.matrix);
+    if (markDirty) entry.mesh.instanceMatrix.needsUpdate = true;
   }
 
   #smoothstep01(value) {
@@ -249,11 +291,12 @@ export class ReactiveVegetationFieldSystem {
 }
 
 export class GrassFieldSystem extends ReactiveVegetationFieldSystem {
-  constructor({ group, terrain, scatter, maxInstances = 13800 }) {
+  constructor({ group, terrain, scatter, chunks = null, maxInstances = 18000 }) {
     super({
       group,
       terrain,
       scatter,
+      chunks,
       geometry: buildGrassTuftGeometry(),
       material: new THREE.MeshStandardMaterial({
         color: 0x6fa957,

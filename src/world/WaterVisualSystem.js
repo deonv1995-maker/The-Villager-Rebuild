@@ -2,32 +2,48 @@ import * as THREE from 'three';
 
 const SHELF_COLOR = 0x72d4c6;
 const SHOAL_COLOR = 0x8bdcc7;
+const DEEP_SHALLOW_COLOR = new THREE.Color(0x55bdc4);
+const BEACH_SHALLOW_COLOR = new THREE.Color(0x9fe3c9);
 
 const smoothstep = (value, min, max) => THREE.MathUtils.smoothstep(value, min, max);
 
 export class WaterVisualSystem {
-  constructor({ group, terrain }) {
+  constructor({ group, terrain, chunks = null }) {
     this.group = group;
     this.terrain = terrain;
+    this.chunks = chunks;
     this.time = 0;
     this.waveMaterial = null;
+    this.ripples = [];
+    this.rippleCursor = 0;
+    this.lastPlayerPosition = null;
+    this.rippleTravel = 0;
   }
 
   create() {
     this.#createOceanShimmer();
+    if (this.chunks && typeof this.terrain.shallowWaterStrengthAt === 'function') {
+      this.#createChunkedShallows();
+      this.#createRipplePool();
+      return;
+    }
+
+    // Compatibility path retained for the original landscape contract and
+    // any fallback terrain that does not yet expose chunked shallow-water data.
     this.#createMainIslandShelf();
     this.#createSatelliteShelves();
     this.#createSandbarShelves();
   }
 
-  update(dt) {
+  update(dt, playerPosition = null) {
     this.time += dt;
     if (this.waveMaterial?.uniforms?.uTime) this.waveMaterial.uniforms.uTime.value = this.time;
+    this.#updateRipples(dt, playerPosition);
   }
 
   #createOceanShimmer() {
-    const width = this.terrain.extentX * 2 + 360;
-    const depth = this.terrain.extentZ * 2 + 380;
+    const width = this.terrain.extentX * 2 + 520;
+    const depth = this.terrain.extentZ * 2 + 520;
     const geometry = new THREE.PlaneGeometry(width, depth, 1, 1);
     geometry.rotateX(-Math.PI / 2);
 
@@ -64,9 +80,147 @@ export class WaterVisualSystem {
 
     const shimmer = new THREE.Mesh(geometry, this.waveMaterial);
     shimmer.name = 'stylized-ocean-shimmer';
-    shimmer.position.y = this.terrain.waterLevel + 0.022;
+    shimmer.position.set(0, this.terrain.waterLevel + 0.022, this.terrain.centerZ);
     shimmer.renderOrder = 2;
     this.group.add(shimmer);
+  }
+
+  #createChunkedShallows() {
+    const chunkSize = this.chunks.chunkSize;
+    const segments = 12;
+    const cell = chunkSize / segments;
+    const minIx = Math.floor(-this.terrain.extentX / chunkSize);
+    const maxIx = Math.floor(this.terrain.extentX / chunkSize);
+    const minIz = Math.floor((this.terrain.centerZ - this.terrain.extentZ) / chunkSize);
+    const maxIz = Math.floor((this.terrain.centerZ + this.terrain.extentZ) / chunkSize);
+    const color = new THREE.Color();
+
+    for (let ix = minIx; ix <= maxIx; ix += 1) {
+      for (let iz = minIz; iz <= maxIz; iz += 1) {
+        const centerX = (ix + 0.5) * chunkSize;
+        const centerZ = (iz + 0.5) * chunkSize;
+        const positions = [];
+        const colors = [];
+
+        for (let gx = 0; gx < segments; gx += 1) {
+          for (let gz = 0; gz < segments; gz += 1) {
+            const localX0 = -chunkSize * 0.5 + gx * cell;
+            const localZ0 = -chunkSize * 0.5 + gz * cell;
+            const localX1 = localX0 + cell;
+            const localZ1 = localZ0 + cell;
+            const worldX = centerX + (localX0 + localX1) * 0.5;
+            const worldZ = centerZ + (localZ0 + localZ1) * 0.5;
+            const strength = this.terrain.shallowWaterStrengthAt(worldX, worldZ);
+            if (strength <= 0.075) continue;
+            if (this.terrain.heightAt(worldX, worldZ) > this.terrain.waterLevel + 0.08) continue;
+
+            const y = this.terrain.waterLevel + 0.04;
+            positions.push(
+              localX0, y, localZ0,
+              localX1, y, localZ0,
+              localX1, y, localZ1,
+              localX0, y, localZ0,
+              localX1, y, localZ1,
+              localX0, y, localZ1
+            );
+
+            color.copy(DEEP_SHALLOW_COLOR).lerp(BEACH_SHALLOW_COLOR, strength);
+            for (let vertex = 0; vertex < 6; vertex += 1) colors.push(color.r, color.g, color.b);
+          }
+        }
+
+        if (!positions.length) continue;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        const material = new THREE.MeshStandardMaterial({
+          vertexColors: true,
+          transparent: true,
+          opacity: 0.28,
+          roughness: 0.3,
+          metalness: 0,
+          depthWrite: false,
+          side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.name = `shallow-water-chunk-${ix}-${iz}`;
+        mesh.position.set(centerX, 0, centerZ);
+        mesh.renderOrder = 2;
+        this.chunks.addObjectToKey(mesh, `${ix}:${iz}`);
+      }
+    }
+  }
+
+  #createRipplePool() {
+    const geometry = new THREE.RingGeometry(0.22, 0.34, 24);
+    geometry.rotateX(-Math.PI / 2);
+    for (let index = 0; index < 10; index += 1) {
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xd8fff0,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      });
+      const ripple = new THREE.Mesh(geometry, material);
+      ripple.name = `water-reactive-ripple-${index}`;
+      ripple.visible = false;
+      ripple.renderOrder = 4;
+      ripple.userData.age = 0;
+      ripple.userData.duration = 0.78;
+      this.group.add(ripple);
+      this.ripples.push(ripple);
+    }
+  }
+
+  #updateRipples(dt, playerPosition) {
+    for (const ripple of this.ripples) {
+      if (!ripple.visible) continue;
+      ripple.userData.age += dt;
+      const t = ripple.userData.age / ripple.userData.duration;
+      if (t >= 1) {
+        ripple.visible = false;
+        ripple.material.opacity = 0;
+        continue;
+      }
+      const scale = THREE.MathUtils.lerp(0.55, 2.45, t);
+      ripple.scale.set(scale, scale, scale);
+      ripple.material.opacity = (1 - t) * 0.48;
+    }
+
+    if (!playerPosition || !this.ripples.length || typeof this.terrain.isShallowWaterAt !== 'function') return;
+    if (!this.lastPlayerPosition) {
+      this.lastPlayerPosition = new THREE.Vector2(playerPosition.x, playerPosition.z);
+      return;
+    }
+
+    const dx = playerPosition.x - this.lastPlayerPosition.x;
+    const dz = playerPosition.z - this.lastPlayerPosition.y;
+    const travel = Math.hypot(dx, dz);
+    this.lastPlayerPosition.set(playerPosition.x, playerPosition.z);
+    if (travel <= 0.002) return;
+
+    if (!this.terrain.isShallowWaterAt(playerPosition.x, playerPosition.z)) {
+      this.rippleTravel = 0;
+      return;
+    }
+
+    this.rippleTravel += travel;
+    if (this.rippleTravel < 0.42) return;
+    this.rippleTravel = 0;
+    this.#spawnRipple(playerPosition.x, playerPosition.z);
+  }
+
+  #spawnRipple(x, z) {
+    const ripple = this.ripples[this.rippleCursor % this.ripples.length];
+    this.rippleCursor += 1;
+    ripple.position.set(x, this.terrain.waterLevel + 0.075, z);
+    ripple.scale.setScalar(0.55);
+    ripple.material.opacity = 0.48;
+    ripple.userData.age = 0;
+    ripple.visible = true;
   }
 
   #createMainIslandShelf() {

@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { IslandTerrainSystem } from './IslandTerrainSystem.js';
+import { ExpandedIslandTerrainSystem } from './ExpandedIslandTerrainSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
 import { WorldCollisionSystem } from './WorldCollisionSystem.js';
+import { WorldChunkSystem } from './WorldChunkSystem.js';
 import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
 import { WaterVisualSystem } from './WaterVisualSystem.js';
 
@@ -15,7 +16,13 @@ export class TestIslandSystem {
     this.group.name = 'foundation-island';
     this.scene.add(this.group);
 
-    this.terrain = new IslandTerrainSystem(this.group);
+    this.chunks = new WorldChunkSystem({
+      group: this.group,
+      chunkSize: 72,
+      renderDistance: 210,
+      frustumPadding: 34
+    });
+    this.terrain = new ExpandedIslandTerrainSystem(this.group, { chunks: this.chunks });
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
       baseHeightAt: (x, z) => this.baseHeightAt(x, z),
@@ -31,20 +38,24 @@ export class TestIslandSystem {
     this.grass = new GrassFieldSystem({
       group: this.group,
       terrain: this.terrain,
-      scatter: this.scatter
+      scatter: this.scatter,
+      chunks: this.chunks
     });
     this.ferns = new FernFieldSystem({
       group: this.group,
       terrain: this.terrain,
-      scatter: this.scatter
+      scatter: this.scatter,
+      chunks: this.chunks
     });
     this.mountains = new DistantMountainSystem({
       group: this.group,
-      centerZ: this.terrain.centerZ
+      centerZ: this.terrain.centerZ,
+      radiusScale: 1.9
     });
     this.waterVisuals = new WaterVisualSystem({
       group: this.group,
-      terrain: this.terrain
+      terrain: this.terrain,
+      chunks: this.chunks
     });
     this.treeOcclusion = null;
     this.assetMode = 'terrain-only';
@@ -82,12 +93,19 @@ export class TestIslandSystem {
     const mountainCount = this.mountains.create();
 
     let environmentLoaded = false;
+    let chunkedTreeCount = 0;
     try {
       environmentLoaded = await this.scatter.load();
       this.#removeObsoleteUnderstory();
+      chunkedTreeCount = this.chunks.splitTreeBatches(this.group);
+      this.chunks.adoptNamedObjects(this.group, object => (
+        object.name.startsWith('terrain-face-dressing-') ||
+        object.name.startsWith('forest-rock-')
+      ));
       this.treeOcclusion = new TreeOcclusionSystem({
         group: this.group,
-        collision: this.collision
+        collision: this.collision,
+        treeRenderRegistry: this.chunks
       });
     } catch (error) {
       console.error('[ENVIRONMENT ASSET FALLBACK]', error);
@@ -96,7 +114,8 @@ export class TestIslandSystem {
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
-    console.info(`[WORLD] ${this.assetMode} · ${grassCount} interactive grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon landforms`);
+    const chunkStats = this.chunks.getStats();
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
@@ -110,9 +129,10 @@ export class TestIslandSystem {
   }
 
   update(dt, playerPosition, camera = null) {
+    this.chunks.update(camera, playerPosition);
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
-    this.waterVisuals.update(dt);
+    this.waterVisuals.update(dt, playerPosition);
     this.treeOcclusion?.update(playerPosition, camera);
   }
 }

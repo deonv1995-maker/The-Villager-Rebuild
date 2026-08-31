@@ -4,15 +4,16 @@ import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 
 export class TreeHarvestSystem {
-  constructor({ group, terrain, collision, gatherables }) {
+  constructor({ group, terrain, collision, gatherables, treeRenderRegistry = null }) {
     this.group = group;
     this.terrain = terrain;
     this.collision = collision;
     this.gatherables = gatherables;
+    this.treeRenderRegistry = treeRenderRegistry ?? terrain?.chunks ?? null;
     this.definition = HARVESTABLE_DEFINITIONS.forestTree;
     this.target = null;
     this.choppedCount = 0;
-    this.treeBatches = this.#collectTreeBatches();
+    this.treeBatches = this.treeRenderRegistry ? new Map() : this.#collectTreeBatches();
     this.treeVariantCount = Math.max(1, this.treeBatches.size);
     this.trees = this.#collectTrees();
     this.#createIndicator();
@@ -144,13 +145,21 @@ export class TreeHarvestSystem {
   }
 
   #hideTreeInstance(tree) {
-    const batches = this.treeBatches.get(tree.variantIndex) ?? [];
     const hiddenMatrix = new THREE.Matrix4().compose(
       new THREE.Vector3(tree.obstacle.x, -1000, tree.obstacle.z),
       new THREE.Quaternion(),
       new THREE.Vector3(0.0001, 0.0001, 0.0001)
     );
 
+    if (this.treeRenderRegistry) {
+      for (const handle of this.treeRenderRegistry.getTreeRenderHandles(tree.treeId)) {
+        handle.mesh.setMatrixAt(handle.index, hiddenMatrix);
+        handle.mesh.instanceMatrix.needsUpdate = true;
+      }
+      return;
+    }
+
+    const batches = this.treeBatches.get(tree.variantIndex) ?? [];
     for (const batch of batches) {
       if (tree.instanceIndex < 0 || tree.instanceIndex >= batch.count) continue;
       batch.setMatrixAt(tree.instanceIndex, hiddenMatrix);
@@ -172,7 +181,11 @@ export class TreeHarvestSystem {
     );
     stump.castShadow = true;
     stump.receiveShadow = true;
-    this.group.add(stump);
+    if (this.treeRenderRegistry?.addObjectAt) {
+      this.treeRenderRegistry.addObjectAt(stump, tree.obstacle.x, tree.obstacle.z);
+    } else {
+      this.group.add(stump);
+    }
   }
 
   #spawnDrops(tree) {
