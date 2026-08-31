@@ -1,11 +1,34 @@
 import * as THREE from 'three';
 
+const GRASS_BLADE_BASE_HEIGHT = 0.84;
+
+export function constructionFloorCoversVegetation(entry, floor, padding = 0.12) {
+  if (!entry || !floor || floor.shape !== 'box') return false;
+  if (floor.type !== 'placed-log' || !/-floor$/.test(floor.label ?? '')) return false;
+
+  const bladeTopY = entry.y + entry.scaleY * GRASS_BLADE_BASE_HEIGHT;
+  if (bladeTopY < floor.bottomY - 0.04) return false;
+  if (entry.y > floor.topY + 0.06) return false;
+
+  const dx = entry.x - floor.x;
+  const dz = entry.z - floor.z;
+  const c = Math.cos(floor.yaw ?? 0);
+  const s = Math.sin(floor.yaw ?? 0);
+  const u = dx * c - dz * s;
+  const v = dx * s + dz * c;
+  return (
+    Math.abs(u) <= floor.halfX + padding &&
+    Math.abs(v) <= floor.halfZ + padding
+  );
+}
+
 export class ReactiveVegetationFieldSystem {
   constructor({
     group,
     terrain,
     scatter,
     chunks = null,
+    collision = null,
     geometry,
     material,
     densityAt,
@@ -23,12 +46,14 @@ export class ReactiveVegetationFieldSystem {
     recoverySpeed = 8,
     minimumMoveSpeed = 0.16,
     baseLean = 0.1,
-    heightOffset = 0.01
+    heightOffset = 0.01,
+    constructionPadding = 0.12
   }) {
     this.group = group;
     this.terrain = terrain;
     this.scatter = scatter;
     this.chunks = chunks;
+    this.collision = collision;
     this.geometry = geometry;
     this.material = material;
     this.densityAt = densityAt;
@@ -47,6 +72,7 @@ export class ReactiveVegetationFieldSystem {
     this.minimumMoveSpeed = minimumMoveSpeed;
     this.baseLean = baseLean;
     this.heightOffset = heightOffset;
+    this.constructionPadding = constructionPadding;
     this.mesh = null;
     this.meshes = [];
     this.entries = [];
@@ -56,6 +82,7 @@ export class ReactiveVegetationFieldSystem {
     this.lastPlayerZ = null;
     this.velocityX = 0;
     this.velocityZ = 0;
+    this.lastCollisionRevision = -1;
     this.dummy = new THREE.Object3D();
   }
 
@@ -69,6 +96,7 @@ export class ReactiveVegetationFieldSystem {
     this.grid.clear();
     this.active.clear();
     this.meshes.length = 0;
+    this.lastCollisionRevision = -1;
 
     const bounds = this.terrain.getScatterBounds?.(20) ?? {
       halfX: 134,
@@ -102,7 +130,8 @@ export class ReactiveVegetationFieldSystem {
         scaleZ: scale.z,
         bendX: 0,
         bendZ: 0,
-        compression: 0
+        compression: 0,
+        constructionHidden: false
       };
       this.entries.push(entry);
       this.#addToGrid(entry);
@@ -115,7 +144,10 @@ export class ReactiveVegetationFieldSystem {
   }
 
   update(dt, playerPosition) {
-    if (!this.meshes.length || !playerPosition || !this.entries.length) return;
+    if (!this.meshes.length || !this.entries.length) return;
+    this.#syncConstructionOcclusion();
+    if (!playerPosition) return;
+
     const speed = this.#updateVelocity(dt, playerPosition);
     const candidates = this.#nearby(playerPosition.x, playerPosition.z);
     const current = new Set();
@@ -130,6 +162,7 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of candidates) {
+      if (entry.constructionHidden) continue;
       const dx = entry.x - playerPosition.x;
       const dz = entry.z - playerPosition.z;
       const distance = Math.hypot(dx, dz);
@@ -164,6 +197,10 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of Array.from(this.active)) {
+      if (entry.constructionHidden) {
+        this.active.delete(entry);
+        continue;
+      }
       if (current.has(entry)) continue;
       const blend = 1 - Math.exp(-this.recoverySpeed * dt);
       entry.bendX += (0 - entry.bendX) * blend;
@@ -180,12 +217,37 @@ export class ReactiveVegetationFieldSystem {
     }
   }
 
+  #syncConstructionOcclusion() {
+    if (!this.collision?.getRevision || !this.collision?.getObstaclesByType) return;
+    const revision = this.collision.getRevision();
+    if (revision === this.lastCollisionRevision) return;
+    this.lastCollisionRevision = revision;
+
+    const floors = this.collision
+      .getObstaclesByType('placed-log')
+      .filter(obstacle => obstacle.shape === 'box' && /-floor$/.test(obstacle.label ?? ''));
+
+    for (const entry of this.entries) {
+      const hidden = floors.some(floor =>
+        constructionFloorCoversVegetation(entry, floor, this.constructionPadding)
+      );
+      if (hidden === entry.constructionHidden) continue;
+      entry.constructionHidden = hidden;
+      entry.bendX = 0;
+      entry.bendZ = 0;
+      entry.compression = 0;
+      this.active.delete(entry);
+      this.#writeMatrix(entry);
+    }
+  }
+
   #buildSingleMesh() {
     const mesh = new THREE.InstancedMesh(this.geometry, this.material, Math.max(1, this.entries.length));
     mesh.name = this.meshName;
     mesh.castShadow = false;
     mesh.receiveShadow = true;
     mesh.frustumCulled = true;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.entries.forEach((entry, index) => {
       entry.index = index;
       entry.mesh = mesh;
@@ -261,7 +323,11 @@ export class ReactiveVegetationFieldSystem {
     if (!entry.mesh || entry.index < 0) return;
     this.dummy.position.set(entry.x, entry.y, entry.z);
     this.dummy.rotation.set(entry.baseLeanX + entry.bendX, entry.baseYaw, entry.baseLeanZ + entry.bendZ);
-    this.dummy.scale.set(entry.scaleX, entry.scaleY * (1 - entry.compression), entry.scaleZ);
+    if (entry.constructionHidden) {
+      this.dummy.scale.set(0, 0, 0);
+    } else {
+      this.dummy.scale.set(entry.scaleX, entry.scaleY * (1 - entry.compression), entry.scaleZ);
+    }
     this.dummy.updateMatrix();
     entry.mesh.setMatrixAt(entry.index, this.dummy.matrix);
     if (markDirty) entry.mesh.instanceMatrix.needsUpdate = true;
@@ -291,12 +357,13 @@ export class ReactiveVegetationFieldSystem {
 }
 
 export class GrassFieldSystem extends ReactiveVegetationFieldSystem {
-  constructor({ group, terrain, scatter, chunks = null, maxInstances = 18000 }) {
+  constructor({ group, terrain, scatter, chunks = null, collision = null, maxInstances = 18000 }) {
     super({
       group,
       terrain,
       scatter,
       chunks,
+      collision,
       geometry: buildGrassTuftGeometry(),
       material: new THREE.MeshStandardMaterial({
         color: 0x6fa957,
@@ -322,7 +389,7 @@ function buildGrassTuftGeometry() {
   const indices = [];
   const bladeCount = 6;
   const segments = 3;
-  const baseHeight = 0.84;
+  const baseHeight = GRASS_BLADE_BASE_HEIGHT;
   const baseWidth = 0.088;
 
   for (let blade = 0; blade < bladeCount; blade += 1) {
