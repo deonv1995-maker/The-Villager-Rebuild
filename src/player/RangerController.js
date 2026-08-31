@@ -4,6 +4,17 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 const PLAYER_RADIUS = 0.42;
+const DEFAULT_WALK_SPEED = 3.4;
+const ANALOG_WALK_MIN_SPEED = 1.35;
+const ANALOG_WALK_MAX_SPEED = 4.5;
+const SPRINT_SPEED = 6;
+const RUN_ANIMATION_THRESHOLD = 4;
+const CAMERA_DEFAULT_PITCH = -0.22;
+const CAMERA_FOLLOW_RESPONSE = 3.2;
+const CAMERA_RETURN_RESPONSE = 2.15;
+const CAMERA_PITCH_RESPONSE = 2.4;
+const CAMERA_POSITION_RESPONSE = 6.5;
+const CAMERA_RETURN_DELAY = 0.35;
 const TOOL_ACTION_TARGET_DURATION = Object.freeze({
   axe: 0.66,
   hammer: 0.62,
@@ -24,7 +35,10 @@ export class RangerController {
     this.input = { x: 0, y: 0, sprint: false };
     this.keys = new Set();
     this.yaw = Math.PI;
-    this.pitch = -0.22;
+    this.pitch = CAMERA_DEFAULT_PITCH;
+    this.manualLookActive = false;
+    this.cameraRecovering = false;
+    this.cameraReturnDelay = 0;
     this.jumpVelocity = 0;
     this.grounded = true;
     this.walkPhase = 0;
@@ -237,9 +251,22 @@ export class RangerController {
     return { started: true, duration, actionName };
   }
 
+  beginCameraLook() {
+    this.manualLookActive = true;
+    this.cameraRecovering = false;
+    this.cameraReturnDelay = 0;
+  }
+
   rotateCamera(deltaX, deltaY) {
     this.yaw -= deltaX * 0.005;
     this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, -0.75, 0.25);
+  }
+
+  endCameraLook() {
+    if (!this.manualLookActive) return;
+    this.manualLookActive = false;
+    this.cameraRecovering = true;
+    this.cameraReturnDelay = CAMERA_RETURN_DELAY;
   }
 
   jump() {
@@ -255,10 +282,18 @@ export class RangerController {
     if (!this.model) return;
     const keyboardX = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     const keyboardY = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
-    const inputX = Math.abs(this.input.x) > 0.05 ? this.input.x : keyboardX;
-    const inputY = Math.abs(this.input.y) > 0.05 ? this.input.y : keyboardY;
+    const mobileInputActive = Math.abs(this.input.x) > 0.05 || Math.abs(this.input.y) > 0.05;
+    const inputX = mobileInputActive ? this.input.x : keyboardX;
+    const inputY = mobileInputActive ? this.input.y : keyboardY;
     const length = Math.hypot(inputX, inputY);
+    const analogStrength = mobileInputActive ? THREE.MathUtils.clamp(length, 0, 1) : 1;
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
+    const speed = sprinting
+      ? SPRINT_SPEED
+      : mobileInputActive
+        ? THREE.MathUtils.lerp(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength)
+        : DEFAULT_WALK_SPEED;
+    const runningAnimation = sprinting || (mobileInputActive && speed >= RUN_ANIMATION_THRESHOLD);
     const throwing = this.isSpearThrowing();
     const toolActing = this.isToolActing();
     const previousGround = this.terrain.heightAt(this.root.position.x, this.root.position.z);
@@ -269,7 +304,6 @@ export class RangerController {
       const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
       const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
       const move = forward.multiplyScalar(ny).add(right.multiplyScalar(nx)).normalize();
-      const speed = sprinting ? 6 : 3.4;
       const desired = {
         x: this.root.position.x + move.x * speed * dt,
         z: this.root.position.z + move.z * speed * dt
@@ -289,7 +323,7 @@ export class RangerController {
         this.leftLeg.rotation.x = swing;
         this.rightLeg.rotation.x = -swing;
       } else if (this.grounded && !throwing && !toolActing) {
-        this.#setAnimation(sprinting ? 'Running_A' : 'Walking_A');
+        this.#setAnimation(runningAnimation ? 'Running_A' : 'Walking_A');
       }
     } else if (this.assetMode === 'placeholder') {
       this.leftLeg.rotation.x *= Math.max(0, 1 - dt * 12);
@@ -313,7 +347,7 @@ export class RangerController {
         this.jumpVelocity = 0;
         this.grounded = true;
         if (!throwing && !toolActing) {
-          this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
+          this.#setAnimation(length > 0.08 ? (runningAnimation ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
       }
     } else {
@@ -489,7 +523,32 @@ export class RangerController {
     this.animationState = name;
   }
 
+  #dampAngle(current, target, response, dt) {
+    const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
+    return current + delta * (1 - Math.exp(-response * dt));
+  }
+
   #updateCamera(immediate = false, dt = 1 / 60) {
+    if (!immediate && !this.manualLookActive) {
+      if (this.cameraReturnDelay > 0) {
+        this.cameraReturnDelay = Math.max(0, this.cameraReturnDelay - dt);
+      } else {
+        const desiredYaw = this.root.rotation.y + Math.PI;
+        const yawResponse = this.cameraRecovering ? CAMERA_RETURN_RESPONSE : CAMERA_FOLLOW_RESPONSE;
+        this.yaw = this.#dampAngle(this.yaw, desiredYaw, yawResponse, dt);
+        this.pitch = THREE.MathUtils.lerp(
+          this.pitch,
+          CAMERA_DEFAULT_PITCH,
+          1 - Math.exp(-CAMERA_PITCH_RESPONSE * dt)
+        );
+        if (this.cameraRecovering) {
+          const yawError = Math.abs(Math.atan2(Math.sin(desiredYaw - this.yaw), Math.cos(desiredYaw - this.yaw)));
+          const pitchError = Math.abs(this.pitch - CAMERA_DEFAULT_PITCH);
+          if (yawError < 0.025 && pitchError < 0.015) this.cameraRecovering = false;
+        }
+      }
+    }
+
     const target = this.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
     const distance = 6.5;
     const horizontal = Math.cos(this.pitch) * distance;
@@ -499,7 +558,7 @@ export class RangerController {
       target.z + Math.cos(this.yaw) * horizontal
     );
     if (immediate) this.camera.position.copy(desired);
-    else this.camera.position.lerp(desired, 1 - Math.exp(-8 * dt));
+    else this.camera.position.lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
     this.camera.lookAt(target);
   }
 
