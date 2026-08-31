@@ -1,4 +1,5 @@
 const DEFAULT_PLAYER_RADIUS = 0.42;
+const DEFAULT_PLAYER_HEIGHT = 2.2;
 
 export class WorldCollisionSystem {
   constructor({
@@ -16,10 +17,12 @@ export class WorldCollisionSystem {
     this.dropFallThreshold = dropFallThreshold;
     this.slopeSampleDistance = slopeSampleDistance;
     this.obstacles = [];
+    this.revision = 0;
   }
 
   clear() {
     this.obstacles.length = 0;
+    this.revision += 1;
   }
 
   addCircle(options) {
@@ -72,6 +75,7 @@ export class WorldCollisionSystem {
       stepHeight: Math.max(0, stepHeight)
     };
     this.obstacles.push(obstacle);
+    this.revision += 1;
     return obstacle;
   }
 
@@ -106,11 +110,16 @@ export class WorldCollisionSystem {
       stepHeight: Math.max(0, stepHeight)
     };
     this.obstacles.push(obstacle);
+    this.revision += 1;
     return obstacle;
   }
 
   getObstacleCount() {
     return this.obstacles.length;
+  }
+
+  getRevision() {
+    return this.revision;
   }
 
   getObstaclesByType(type) {
@@ -121,6 +130,7 @@ export class WorldCollisionSystem {
     const index = this.obstacles.indexOf(obstacle);
     if (index < 0) return false;
     this.obstacles.splice(index, 1);
+    this.revision += 1;
     return true;
   }
 
@@ -142,8 +152,13 @@ export class WorldCollisionSystem {
     return height;
   }
 
-  resolveMove(from, desired, { radius = DEFAULT_PLAYER_RADIUS, airborne = false } = {}) {
-    if (this.#canOccupy(from, desired.x, desired.z, radius, airborne)) {
+  resolveMove(from, desired, {
+    radius = DEFAULT_PLAYER_RADIUS,
+    height = DEFAULT_PLAYER_HEIGHT,
+    airborne = false
+  } = {}) {
+    const actorHeight = Number.isFinite(height) && height > 0 ? height : DEFAULT_PLAYER_HEIGHT;
+    if (this.#canOccupy(from, desired.x, desired.z, radius, actorHeight, airborne)) {
       return { x: desired.x, z: desired.z, blocked: false };
     }
 
@@ -152,7 +167,7 @@ export class WorldCollisionSystem {
       [from.x, desired.z]
     ];
     for (const [x, z] of slideCandidates) {
-      if ((x !== from.x || z !== from.z) && this.#canOccupy(from, x, z, radius, airborne)) {
+      if ((x !== from.x || z !== from.z) && this.#canOccupy(from, x, z, radius, actorHeight, airborne)) {
         return { x, z, blocked: true };
       }
     }
@@ -160,7 +175,7 @@ export class WorldCollisionSystem {
     for (const scale of [0.75, 0.5, 0.25]) {
       const x = from.x + (desired.x - from.x) * scale;
       const z = from.z + (desired.z - from.z) * scale;
-      if (this.#canOccupy(from, x, z, radius, airborne)) return { x, z, blocked: true };
+      if (this.#canOccupy(from, x, z, radius, actorHeight, airborne)) return { x, z, blocked: true };
     }
 
     return { x: from.x, z: from.z, blocked: true };
@@ -237,14 +252,16 @@ export class WorldCollisionSystem {
     return uphillRise <= this.maxSlopeGradient * d;
   }
 
-  #canOccupy(from, x, z, radius, airborne) {
+  #canOccupy(from, x, z, radius, actorHeight, airborne) {
     if (!this.isPlayable(x, z, radius + 0.35)) return false;
 
     const fromGround = this.heightAt(from.x, from.z);
     const feetY = Number.isFinite(from.y) ? from.y : fromGround;
+    const headY = feetY + actorHeight;
     for (const obstacle of this.obstacles) {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
       if (feetY > obstacle.topY + 0.12) continue;
+      if (headY < obstacle.bottomY - 0.08) continue;
 
       const standableSurface = obstacle.standable && obstacle.supportY !== null;
       const standingOnTop = standableSurface && feetY >= obstacle.supportY - 0.16;

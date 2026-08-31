@@ -39,7 +39,8 @@ export class TestIslandSystem {
       group: this.group,
       terrain: this.terrain,
       scatter: this.scatter,
-      chunks: this.chunks
+      chunks: this.chunks,
+      collision: this.collision
     });
     this.ferns = new FernFieldSystem({
       group: this.group,
