@@ -1,4 +1,5 @@
 import { GameApp } from './core/GameApp.js';
+import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
 
 const canvas = document.getElementById('game-canvas');
@@ -14,6 +15,9 @@ async function boot() {
     setStatus('FOUNDATION 0.3.2 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus });
     await game.start();
+    const wallPanelCustomization = new WallPanelCustomizationController({ game });
+    wallPanelCustomization.start();
+    game.wallPanelCustomization = wallPanelCustomization;
     window.__villager = game;
     setStatus('DAY 1 · GATHER A STICK + STONE');
   } catch (error) {
