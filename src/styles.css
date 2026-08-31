@@ -54,7 +54,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   white-space: nowrap;
 }
 .mobile-hud.log-carrying .hud-note,
-.mobile-hud.wall-customizing .hud-note {
+.mobile-hud.wall-customizing .hud-note,
+.mobile-hud.roof-thatching .hud-note {
   top: max(116px, calc(env(safe-area-inset-top) + 111px));
 }
 .toolbelt {
@@ -157,7 +158,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 }
 .log-build-tray button.drop-log { color: #f6d5c7; }
 .log-build-tray button:active { transform: scale(.95); }
-.wall-customize-tray {
+.wall-customize-tray,
+.roof-thatch-tray {
   position: absolute;
   left: 50%;
   top: max(73px, calc(env(safe-area-inset-top) + 68px));
@@ -165,7 +167,6 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   display: flex;
   align-items: center;
   gap: 5px;
-  width: min(270px, calc(100vw - 24px));
   padding: 6px;
   border-radius: 12px;
   background: rgba(24, 39, 29, .92);
@@ -173,8 +174,12 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
-.wall-customize-tray[hidden] { display: none; }
-.wall-customize-tray button {
+.wall-customize-tray { width: min(270px, calc(100vw - 24px)); }
+.roof-thatch-tray { width: min(210px, calc(100vw - 24px)); }
+.wall-customize-tray[hidden],
+.roof-thatch-tray[hidden] { display: none; }
+.wall-customize-tray button,
+.roof-thatch-tray button {
   flex: 1 1 0;
   min-width: 68px;
   height: 34px;
@@ -188,12 +193,18 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   pointer-events: auto;
   touch-action: none;
 }
-.wall-customize-tray button.selected {
+.wall-customize-tray button.selected,
+.roof-thatch-tray button:not(:disabled) {
   border-color: #f0cf76;
   background: rgba(79, 91, 57, .98);
   box-shadow: 0 0 0 1px rgba(240, 207, 118, .26) inset;
 }
-.wall-customize-tray button:active { transform: scale(.95); }
+.roof-thatch-tray button:disabled {
+  opacity: .58;
+  color: #e1c7a6;
+}
+.wall-customize-tray button:active,
+.roof-thatch-tray button:active { transform: scale(.95); }
 .joystick {
   position: absolute;
   left: max(18px, calc(env(safe-area-inset-left) + 14px));
@@ -273,5 +284,9 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   .wall-customize-tray {
     top: max(73px, calc(env(safe-area-inset-top) + 68px));
     width: min(270px, calc(100vw - 20px));
+  }
+  .roof-thatch-tray {
+    top: max(73px, calc(env(safe-area-inset-top) + 68px));
+    width: min(210px, calc(100vw - 20px));
   }
 }
