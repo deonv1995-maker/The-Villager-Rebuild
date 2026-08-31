@@ -177,6 +177,19 @@ export class WorldCollisionSystem {
     };
   }
 
+  #distanceSqToObstacle(obstacle, x, z) {
+    if (obstacle.shape === 'box') {
+      const { u, v } = this.#boxLocalCoordinates(obstacle, x, z);
+      const dx = Math.max(Math.abs(u) - obstacle.halfX, 0);
+      const dz = Math.max(Math.abs(v) - obstacle.halfZ, 0);
+      return dx * dx + dz * dz;
+    }
+
+    const centerDistance = Math.hypot(x - obstacle.x, z - obstacle.z);
+    const outside = Math.max(0, centerDistance - obstacle.radius);
+    return outside * outside;
+  }
+
   #overlapsObstacle(obstacle, x, z, radius) {
     if (obstacle.shape === 'box') {
       const { u, v } = this.#boxLocalCoordinates(obstacle, x, z);
@@ -233,16 +246,19 @@ export class WorldCollisionSystem {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
       if (feetY > obstacle.topY + 0.12) continue;
 
-      const standingOnTop = (
-        obstacle.standable &&
-        obstacle.supportY !== null &&
-        feetY >= obstacle.supportY - 0.16
-      );
+      const standableSurface = obstacle.standable && obstacle.supportY !== null;
+      const standingOnTop = standableSurface && feetY >= obstacle.supportY - 0.16;
       if (standingOnTop) continue;
 
+      const escapingStandableEdge = (
+        standableSurface &&
+        this.#distanceSqToObstacle(obstacle, x, z) >
+          this.#distanceSqToObstacle(obstacle, from.x, from.z) + 0.000001
+      );
+      if (escapingStandableEdge) continue;
+
       const fromSupported = (
-        obstacle.standable &&
-        obstacle.supportY !== null &&
+        standableSurface &&
         this.#withinSupport(obstacle, from.x, from.z, radius * 0.12) &&
         Math.abs(feetY - obstacle.supportY) <= 0.3
       );
@@ -251,14 +267,13 @@ export class WorldCollisionSystem {
 
       if (airborne) {
         if (
-          obstacle.standable &&
-          obstacle.supportY !== null &&
+          standableSurface &&
           this.#withinSupport(obstacle, x, z) &&
           feetY >= obstacle.supportY - 0.12
         ) continue;
       }
 
-      if (obstacle.standable && obstacle.supportY !== null) {
+      if (standableSurface) {
         if (this.#withinSupport(obstacle, x, z, radius * 0.25)) {
           const step = obstacle.supportY - fromGround;
           const alreadySupported = Math.abs(feetY - obstacle.supportY) <= 0.28;
