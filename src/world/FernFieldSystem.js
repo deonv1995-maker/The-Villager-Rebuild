@@ -2,12 +2,22 @@ import * as THREE from 'three';
 import { ReactiveVegetationFieldSystem } from './GrassFieldSystem.js';
 
 export class FernFieldSystem extends ReactiveVegetationFieldSystem {
-  constructor({ group, terrain, scatter, chunks = null, maxInstances = 3000 }) {
+  constructor({
+    group,
+    terrain,
+    scatter,
+    chunks = null,
+    collision = null,
+    constructionTerrain = null,
+    maxInstances = 3000
+  }) {
     super({
       group,
       terrain,
       scatter,
       chunks,
+      collision,
+      constructionTerrain,
       geometry: buildFernGeometry(),
       material: new THREE.MeshStandardMaterial({
         color: 0x3f7d47,

@@ -1,6 +1,7 @@
 const LOG_LENGTH = 2.9;
 const FLOOR_WIDTH = LOG_LENGTH / 3;
 const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12;
+const MAX_FLOOR_TERRAIN_ADAPTATION = 2.35;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
@@ -20,7 +21,13 @@ export const PHYSICAL_LOG = Object.freeze({
   roofSnapRange: 3.15,
   frameSpacingTolerance: 0.18,
   floorGroundClearance: 0.08,
-  floorTerrainEmbedTolerance: 0.025,
+  // Compatibility name retained for PhysicalLogSystem placement validation. It now
+  // represents the maximum high-side relief the local terrain layer may retreat.
+  floorTerrainEmbedTolerance: MAX_FLOOR_TERRAIN_ADAPTATION,
+  floorTerrainCorePadding: 0.12,
+  floorTerrainBlendDistance: 1.55,
+  floorTerrainSurfaceClearance: 0.065,
+  floorMaxTerrainCutDepth: MAX_FLOOR_TERRAIN_ADAPTATION,
   floorUndersideDepth: 0.235,
   floorSupportSeamPadding: 0.06,
   floorSurfaceOverrideTolerance: 0.08,

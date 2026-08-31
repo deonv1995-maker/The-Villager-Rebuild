@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ExpandedIslandTerrainSystem } from './ExpandedIslandTerrainSystem.js';
+import { ConstructionTerrainAdaptationSystem } from './ConstructionTerrainAdaptationSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
@@ -23,9 +24,14 @@ export class TestIslandSystem {
       frustumPadding: 34
     });
     this.terrain = new ExpandedIslandTerrainSystem(this.group, { chunks: this.chunks });
+    this.constructionTerrain = new ConstructionTerrainAdaptationSystem({
+      group: this.group,
+      terrain: this.terrain,
+      chunks: this.chunks
+    });
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
-      baseHeightAt: (x, z) => this.baseHeightAt(x, z),
+      baseHeightAt: (x, z) => this.constructionHeightAt(x, z),
       isPlayable: (x, z, margin) => this.isPlayable(x, z, margin),
       maxSlopeDegrees: 58,
       dropFallThreshold: 0.5
@@ -40,13 +46,16 @@ export class TestIslandSystem {
       terrain: this.terrain,
       scatter: this.scatter,
       chunks: this.chunks,
-      collision: this.collision
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
     });
     this.ferns = new FernFieldSystem({
       group: this.group,
       terrain: this.terrain,
       scatter: this.scatter,
-      chunks: this.chunks
+      chunks: this.chunks,
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
     });
     this.mountains = new DistantMountainSystem({
       group: this.group,
@@ -70,9 +79,17 @@ export class TestIslandSystem {
     return this.terrain.heightAt(x, z);
   }
 
+  constructionHeightAt(x, z) {
+    return this.constructionTerrain.heightAt(x, z);
+  }
+
   heightAt(x, z) {
-    const base = this.terrain.heightAt(x, z);
+    const base = this.constructionHeightAt(x, z);
     return this.collision.supportHeightAt(x, z, base);
+  }
+
+  setConstructionFloors(floors) {
+    return this.constructionTerrain.setFloors(floors);
   }
 
   isPlayable(x, z, margin = 0) {
@@ -90,6 +107,7 @@ export class TestIslandSystem {
   async load() {
     this.collision.clear();
     this.terrain.create();
+    this.constructionTerrain.captureTerrainMeshes();
     this.waterVisuals.create();
     const mountainCount = this.mountains.create();
 
