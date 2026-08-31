@@ -9,7 +9,7 @@ export class TreeHarvestSystem {
     this.terrain = terrain;
     this.collision = collision;
     this.gatherables = gatherables;
-    this.treeRenderRegistry = treeRenderRegistry;
+    this.treeRenderRegistry = treeRenderRegistry ?? terrain?.chunks ?? null;
     this.definition = HARVESTABLE_DEFINITIONS.forestTree;
     this.target = null;
     this.choppedCount = 0;
