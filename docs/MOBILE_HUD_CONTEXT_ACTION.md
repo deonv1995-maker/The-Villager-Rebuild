@@ -8,8 +8,22 @@ This pass keeps gameplay handlers authoritative while simplifying the mobile int
 - The construction menu is collapsible. Collapsing it hides only the mode choices; the current-mode toggle remains available so the menu can be reopened without dropping the Log.
 - Inventory is a compact vertical stack on the left, below the status banner, so it no longer competes with the construction menu.
 - Toolbelt remains the equipment/crafting selector.
-- Jump and Sprint remain dedicated movement controls.
+- Jump remains a dedicated movement control.
+- The old fixed joystick and permanent Sprint button are removed from the HUD.
+- The left half of unobstructed gameplay canvas is the hidden movement surface. Touch origin becomes the temporary analog center and thumb distance controls movement speed continuously.
+- A contextual RUN target appears above the active movement thumb. It is intentionally separated from the normal walking radius; sliding the same thumb into that target enables Sprint through the existing Ranger sprint state.
+- The right half of unobstructed gameplay canvas owns manual camera look.
 - All normal world actions share one fixed-position Action button.
+
+## Movement and camera behavior
+
+`MobileHud` owns touch-region routing only. `RangerController` remains the authority for actual locomotion and camera state.
+
+Normal mobile movement scales from slow walking to a fast run-like pace according to analog thumb distance. The contextual RUN target is a separate deliberate gesture for full Sprint, so ordinary forward walking does not require a second finger and does not accidentally sprint.
+
+The camera normally settles behind the Ranger using damped angular follow rather than snapping to every heading change. Manual right-side look temporarily suspends that follow. Releasing the look touch keeps the viewed angle briefly, then smoothly returns yaw and pitch toward the Ranger's forward view. Camera position uses its own damping so heading and translation remain visually soft on mobile.
+
+Keyboard movement keeps its existing desktop behavior, including Shift sprint.
 
 ## Context action ownership
 
@@ -36,4 +50,4 @@ Roof thatching follows this rule. Once a roof bay has all required roof Logs, se
 
 ## Regression coverage
 
-`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, campfire confirmation, roof-thatch registration, removal of the old interact/attack/campfire round buttons, the collapsible right-side construction menu, and the left-side vertical inventory layout.
+`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, campfire confirmation, roof-thatch registration, removal of the legacy interaction buttons, the collapsible right-side construction menu, left-side inventory, removal of the fixed joystick/permanent Sprint button, the 50/50 movement/look split, contextual sprint target spacing, analog speed scaling and damped camera follow/recenter contracts.

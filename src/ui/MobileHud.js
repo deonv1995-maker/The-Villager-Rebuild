@@ -3,6 +3,12 @@ import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 import { resolveContextAction } from './ContextActionPolicy.js';
 
 const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+const MOVE_SIDE_RATIO = 0.5;
+const MOVE_RADIUS_PX = 76;
+const MOVE_DEADZONE_PX = 7;
+const SPRINT_TARGET_OFFSET_PX = 145;
+const SPRINT_TARGET_RADIUS_PX = 34;
+const SPRINT_TARGET_EDGE_PADDING_PX = 42;
 
 export class MobileHud {
   constructor({ player, canvas, onInteract, onCampfire, onAttack, onToolSelect, onBuildOption }) {
@@ -62,8 +68,10 @@ export class MobileHud {
           <button type="button" data-build="drop" class="drop-log">DROP</button>
         </div>
       </div>
-      <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
-      <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
+      <div class="hud-button sprint contextual-sprint" data-role="sprint-target" aria-hidden="true" hidden>
+        <img class="button-bg" src="${ui.buttonCircle}" alt="">
+        <span class="button-glyph">RUN</span>
+      </div>
       <button class="hud-button action" type="button" aria-label="Action" disabled>
         <img class="button-bg" src="${ui.buttonCircle}" alt="">
         <img class="button-icon" data-role="action-icon" src="${ui.hand}" alt="">
@@ -83,11 +91,12 @@ export class MobileHud {
     this.buildTrayToggle = this.root.querySelector('[data-role="build-toggle"]');
     this.buildTrayToggleLabel = this.root.querySelector('[data-role="build-toggle-label"]');
     this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
+    this.sprintTarget = this.root.querySelector('[data-role="sprint-target"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
     this.#setBuildTrayCollapsed(false);
-    this.#bindJoystick();
+    this.#bindMovement();
     this.#bindButtons();
     this.#bindLook();
     this.#renderAction();
@@ -245,48 +254,78 @@ export class MobileHud {
     }
   }
 
-  #bindJoystick() {
-    const pad = this.root.querySelector('[data-role="joystick"]');
-    const nub = pad.querySelector('.joystick-nub');
+  #bindMovement() {
     let pointer = null;
+    let originX = 0;
+    let originY = 0;
+    let sprintCenterX = 0;
+    let sprintCenterY = 0;
+
+    const positionSprintTarget = () => {
+      const movementEdge = window.innerWidth * MOVE_SIDE_RATIO;
+      const minX = SPRINT_TARGET_EDGE_PADDING_PX;
+      const maxX = Math.max(minX, movementEdge - SPRINT_TARGET_EDGE_PADDING_PX);
+      sprintCenterX = Math.min(maxX, Math.max(minX, originX));
+      sprintCenterY = Math.max(SPRINT_TARGET_EDGE_PADDING_PX, originY - SPRINT_TARGET_OFFSET_PX);
+      this.sprintTarget.style.left = `${sprintCenterX - 27}px`;
+      this.sprintTarget.style.top = `${sprintCenterY - 27}px`;
+      this.sprintTarget.style.right = 'auto';
+      this.sprintTarget.style.bottom = 'auto';
+      this.sprintTarget.style.pointerEvents = 'none';
+      this.sprintTarget.hidden = false;
+    };
 
     const update = event => {
-      const rect = pad.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      let dx = event.clientX - cx;
-      let dy = event.clientY - cy;
-      const max = rect.width * 0.31;
-      const length = Math.hypot(dx, dy);
-      if (length > max) {
-        dx = dx / length * max;
-        dy = dy / length * max;
+      const rawDx = event.clientX - originX;
+      const rawDy = event.clientY - originY;
+      const rawLength = Math.hypot(rawDx, rawDy);
+      let moveX = 0;
+      let moveY = 0;
+
+      if (rawLength > MOVE_DEADZONE_PX) {
+        const usableLength = Math.min(rawLength, MOVE_RADIUS_PX);
+        const scale = usableLength / rawLength;
+        moveX = rawDx * scale / MOVE_RADIUS_PX;
+        moveY = -rawDy * scale / MOVE_RADIUS_PX;
       }
-      nub.style.transform = `translate(${dx}px, ${dy}px)`;
-      this.player.setMove(dx / max, -dy / max);
+      this.player.setMove(moveX, moveY);
+
+      const sprintDistance = Math.hypot(event.clientX - sprintCenterX, event.clientY - sprintCenterY);
+      const sprinting = sprintDistance <= SPRINT_TARGET_RADIUS_PX;
+      this.sprintTarget.classList.toggle('equipped', sprinting);
+      this.player.setSprint(sprinting);
     };
 
-    const reset = () => {
+    const release = event => {
+      if (event.pointerId !== pointer) return;
       pointer = null;
-      nub.style.transform = 'translate(0, 0)';
+      this.sprintTarget.hidden = true;
+      this.sprintTarget.classList.remove('equipped');
       this.player.setMove(0, 0);
+      this.player.setSprint(false);
     };
 
-    pad.addEventListener('pointerdown', event => {
+    this.canvas.addEventListener('pointerdown', event => {
+      if (pointer !== null || event.clientX >= window.innerWidth * MOVE_SIDE_RATIO) return;
       pointer = event.pointerId;
-      pad.setPointerCapture(pointer);
-      update(event);
+      originX = event.clientX;
+      originY = event.clientY;
+      this.canvas.setPointerCapture(pointer);
+      positionSprintTarget();
+      this.player.setMove(0, 0);
+      this.player.setSprint(false);
+      event.preventDefault();
     });
-    pad.addEventListener('pointermove', event => {
+
+    this.canvas.addEventListener('pointermove', event => {
       if (event.pointerId === pointer) update(event);
     });
-    pad.addEventListener('pointerup', reset);
-    pad.addEventListener('pointercancel', reset);
+    this.canvas.addEventListener('pointerup', release);
+    this.canvas.addEventListener('pointercancel', release);
   }
 
   #bindButtons() {
     const jump = this.root.querySelector('.jump');
-    const sprint = this.root.querySelector('.sprint');
 
     jump.addEventListener('pointerdown', event => {
       event.preventDefault();
@@ -316,15 +355,6 @@ export class MobileHud {
         this.onBuildOption?.(button.dataset.build);
       });
     }
-
-    const setSprint = value => this.player.setSprint(value);
-    sprint.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      sprint.setPointerCapture(event.pointerId);
-      setSprint(true);
-    });
-    sprint.addEventListener('pointerup', () => setSprint(false));
-    sprint.addEventListener('pointercancel', () => setSprint(false));
   }
 
   #bindLook() {
@@ -333,11 +363,13 @@ export class MobileHud {
     let lastY = 0;
 
     this.canvas.addEventListener('pointerdown', event => {
-      if (event.clientX < window.innerWidth * 0.45) return;
+      if (pointer !== null || event.clientX < window.innerWidth * MOVE_SIDE_RATIO) return;
       pointer = event.pointerId;
       lastX = event.clientX;
       lastY = event.clientY;
+      this.player.beginCameraLook?.();
       this.canvas.setPointerCapture(pointer);
+      event.preventDefault();
     });
 
     this.canvas.addEventListener('pointermove', event => {
@@ -350,7 +382,9 @@ export class MobileHud {
     });
 
     const release = event => {
-      if (event.pointerId === pointer) pointer = null;
+      if (event.pointerId !== pointer) return;
+      pointer = null;
+      this.player.endCameraLook?.();
     };
     this.canvas.addEventListener('pointerup', release);
     this.canvas.addEventListener('pointercancel', release);

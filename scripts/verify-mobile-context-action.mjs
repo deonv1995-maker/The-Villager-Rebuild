@@ -81,6 +81,7 @@ assert.equal(thatch.caption, 'THATCH');
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const thatchControllerSource = fs.readFileSync(new URL('../src/gameplay/RoofThatchController.js', import.meta.url), 'utf8');
+const rangerControllerSource = fs.readFileSync(new URL('../src/player/RangerController.js', import.meta.url), 'utf8');
 
 assert.match(mobileHudSource, /class="hud-button action"/, 'Mobile HUD must expose one primary Action button');
 assert.doesNotMatch(mobileHudSource, /class="hud-button interact"/, 'Legacy interact round button must be removed');
@@ -111,4 +112,26 @@ assert.match(
 );
 assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button needs a dedicated mobile layout');
 
-console.log('Unified mobile Action routing, explicit thatch action, collapsible right build menu and left inventory verified');
+assert.doesNotMatch(mobileHudSource, /data-role="joystick"/, 'The visible fixed walking thumb grip must be removed');
+assert.doesNotMatch(mobileHudSource, /<button class="hud-button sprint"/, 'Sprint must not remain a permanent standalone button');
+assert.match(mobileHudSource, /data-role="sprint-target"[^>]*hidden/, 'Sprint target must be hidden until a movement touch begins');
+assert.match(mobileHudSource, /const MOVE_SIDE_RATIO = 0\.5;/, 'Mobile controls must split the screen evenly between movement and look');
+assert.match(mobileHudSource, /#bindMovement\(\)/, 'Movement must use the hidden touch-surface controller');
+assert.match(mobileHudSource, /event\.clientX >= window\.innerWidth \* MOVE_SIDE_RATIO/, 'Left half of the canvas must own movement touches');
+assert.match(mobileHudSource, /SPRINT_TARGET_OFFSET_PX = 145/, 'Sprint target needs deliberate separation above the movement thumb');
+assert.match(mobileHudSource, /sprintDistance <= SPRINT_TARGET_RADIUS_PX/, 'Sliding the movement thumb into the contextual target must activate sprint');
+assert.match(mobileHudSource, /this\.player\.setSprint\(sprinting\)/, 'Contextual sprint gesture must route through the existing sprint state');
+assert.match(mobileHudSource, /this\.player\.beginCameraLook\?\.\(\)/, 'Right-side look must explicitly suspend automatic camera recentering');
+assert.match(mobileHudSource, /this\.player\.endCameraLook\?\.\(\)/, 'Releasing right-side look must request smooth automatic recentering');
+
+assert.match(rangerControllerSource, /ANALOG_WALK_MIN_SPEED/, 'Ranger movement must expose a low analog walking speed');
+assert.match(rangerControllerSource, /ANALOG_WALK_MAX_SPEED/, 'Ranger movement must expose a high analog walking speed below sprint');
+assert.match(rangerControllerSource, /THREE\.MathUtils\.lerp\(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength\)/, 'Analog thumb distance must continuously control movement speed');
+assert.match(rangerControllerSource, /beginCameraLook\(\)/, 'Ranger controller must expose manual-look ownership');
+assert.match(rangerControllerSource, /endCameraLook\(\)/, 'Ranger controller must expose manual-look release');
+assert.match(rangerControllerSource, /CAMERA_RETURN_DELAY = 0\.35/, 'Camera must pause briefly before returning from a manual look');
+assert.match(rangerControllerSource, /desiredYaw = this\.root\.rotation\.y \+ Math\.PI/, 'Automatic camera heading must follow behind the Ranger');
+assert.match(rangerControllerSource, /#dampAngle\(current, target, response, dt\)/, 'Camera heading changes must use angular damping instead of snapping');
+assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 2\.15/, 'Manual camera return must use a slower premium-feeling response');
+
+console.log('Unified mobile actions, hidden all-speed movement, contextual sprint gesture and smooth follow camera verified');
