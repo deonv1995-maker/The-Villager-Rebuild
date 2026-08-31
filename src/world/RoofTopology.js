@@ -167,9 +167,133 @@ function closedLoop(component, topTolerance) {
   return { ordered, averageTop };
 }
 
+function frameBoundsRegion(component, {
+  yawTolerance,
+  topTolerance,
+  maxAlong,
+  minWidth,
+  maxWidth,
+  roofPitch,
+  minRise,
+  maxRise,
+  eaveSeatLift
+}) {
+  const frames = new Map();
+  for (const pair of component) {
+    frames.set(pair.a.id, pair.a);
+    frames.set(pair.b.id, pair.b);
+  }
+  const frameList = [...frames.values()];
+  if (frameList.length < 4) return null;
+
+  const averageTop = frameList.reduce((sum, frame) => sum + frame.topY, 0) / frameList.length;
+  if (frameList.some(frame => Math.abs(frame.topY - averageTop) > topTolerance)) return null;
+
+  const center = frameList.reduce(
+    (sum, frame) => ({ x: sum.x + frame.x, z: sum.z + frame.z }),
+    { x: 0, z: 0 }
+  );
+  center.x /= frameList.length;
+  center.z /= frameList.length;
+
+  const axes = [];
+  for (const pair of [...component].sort((left, right) => left.rawKey.localeCompare(right.rawKey))) {
+    if (axes.some(axis => axisYawDelta(axis.yaw, pair.yaw) <= yawTolerance)) continue;
+    axes.push({ yaw: pair.yaw, heading: axisHeading(pair.yaw) });
+  }
+
+  let best = null;
+  const cornerTolerance = Math.max(0.28, (maxAlong ?? 0.4) + 0.08);
+  for (const axis of axes) {
+    const frameBasis = basis(axis.yaw);
+    const projected = frameList.map(frame => {
+      const dx = frame.x - center.x;
+      const dz = frame.z - center.z;
+      return {
+        frame,
+        u: dx * frameBasis.xX + dz * frameBasis.xZ,
+        v: dx * frameBasis.zX + dz * frameBasis.zZ
+      };
+    });
+    const minU = Math.min(...projected.map(entry => entry.u));
+    const maxU = Math.max(...projected.map(entry => entry.u));
+    const minV = Math.min(...projected.map(entry => entry.v));
+    const maxV = Math.max(...projected.map(entry => entry.v));
+    const spanU = maxU - minU;
+    const spanV = maxV - minV;
+    if (spanU < minWidth || spanV < minWidth || spanV > maxWidth) continue;
+
+    const targets = [
+      [minU, minV],
+      [maxU, minV],
+      [minU, maxV],
+      [maxU, maxV]
+    ];
+    const cornerFrames = [];
+    let cornersValid = true;
+    for (const [u, v] of targets) {
+      let nearest = null;
+      let nearestDistance = cornerTolerance;
+      for (const entry of projected) {
+        const candidateDistance = Math.hypot(entry.u - u, entry.v - v);
+        if (candidateDistance >= nearestDistance) continue;
+        nearestDistance = candidateDistance;
+        nearest = entry.frame;
+      }
+      if (!nearest || cornerFrames.some(frame => frame.id === nearest.id)) {
+        cornersValid = false;
+        break;
+      }
+      cornerFrames.push(nearest);
+    }
+    if (!cornersValid) continue;
+
+    const candidate = {
+      ...axis,
+      frameBasis,
+      minU,
+      maxU,
+      minV,
+      maxV,
+      spanU,
+      spanV,
+      cornerFrames
+    };
+    if (
+      !best ||
+      candidate.spanU > best.spanU + 0.01 ||
+      (Math.abs(candidate.spanU - best.spanU) <= 0.01 && candidate.heading < best.heading)
+    ) {
+      best = candidate;
+    }
+  }
+
+  if (!best) return null;
+  const halfRun = best.spanV * 0.5;
+  const rise = clamp(halfRun * Math.tan(roofPitch), minRise, maxRise);
+  const eaveY = averageTop + eaveSeatLift;
+  const anchorIds = best.cornerFrames.map(frame => frame.id).sort((a, b) => a - b);
+  const beamKeys = component.map(pair => pair.rawKey).sort();
+
+  return {
+    key: `roof:bounds:${anchorIds.join('-')}`,
+    anchorIds,
+    sourceBeamKeys: beamKeys,
+    a: worldPoint(center, best.frameBasis, best.minU, best.minV),
+    b: worldPoint(center, best.frameBasis, best.maxU, best.minV),
+    c: worldPoint(center, best.frameBasis, best.minU, best.maxV),
+    d: worldPoint(center, best.frameBasis, best.maxU, best.maxV),
+    eaveY,
+    ridgeY: eaveY + rise,
+    ridgeYaw: best.yaw,
+    topology: 'frame-bounds'
+  };
+}
+
 export function collectRoofRegions(pairs, {
   yawTolerance,
   topTolerance,
+  maxAlong = 0.4,
   minWidth,
   maxWidth,
   roofPitch,
@@ -181,7 +305,21 @@ export function collectRoofRegions(pairs, {
 
   for (const component of connectedPairComponents(pairs)) {
     const loop = closedLoop(component, topTolerance);
-    if (!loop) continue;
+    if (!loop) {
+      const bounded = frameBoundsRegion(component, {
+        yawTolerance,
+        topTolerance,
+        maxAlong,
+        minWidth,
+        maxWidth,
+        roofPitch,
+        minRise,
+        maxRise,
+        eaveSeatLift
+      });
+      if (bounded) regions.push(bounded);
+      continue;
+    }
 
     const center = loop.ordered.reduce(
       (sum, frame) => ({ x: sum.x + frame.x, z: sum.z + frame.z }),
@@ -243,7 +381,8 @@ export function collectRoofRegions(pairs, {
       d: worldPoint(center, best.frameBasis, best.maxU, best.maxV),
       eaveY,
       ridgeY: eaveY + rise,
-      ridgeYaw: best.yaw
+      ridgeYaw: best.yaw,
+      topology: 'closed-loop'
     });
   }
 
