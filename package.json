@@ -10,6 +10,7 @@
     "verify:assets": "node scripts/verify-runtime-assets.mjs public",
     "verify:gameplay": "node scripts/verify-gameplay.mjs",
     "verify:construction": "node scripts/verify-construction-refinement.mjs",
+    "verify:walls": "node scripts/verify-wall-customization.mjs",
     "verify:roof": "node scripts/verify-roof-topology.mjs",
     "verify:roof-runtime": "node scripts/verify-roof-preview-runtime.mjs",
     "verify:harvesting": "node scripts/verify-tree-harvest.mjs",
@@ -20,7 +21,7 @@
     "verify:streaming": "node scripts/verify-world-streaming.mjs",
     "verify:dist-assets": "node scripts/verify-runtime-assets.mjs dist",
     "verify:pwa": "node scripts/verify-pwa.mjs dist",
-    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:roof && npm run verify:roof-runtime && npm run verify:harvesting && npm run verify:tree-shake && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
+    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:walls && npm run verify:roof && npm run verify:roof-runtime && npm run verify:harvesting && npm run verify:tree-shake && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
   },
   "dependencies": {
     "three": "0.180.0"
