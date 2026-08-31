@@ -408,7 +408,10 @@ export class GameApp {
           target: () => this.hunt.getProjectileTargetPosition(),
           onHit: () => this.hunt.applyDamage(this.hunt.definition.spearDamage)
         });
-        if (launched) this.player.setSpearEquipped(false);
+        if (launched) {
+          this.hunt.alertFrom(releaseOrigin, { cause: 'spear-throw' });
+          this.player.setSpearEquipped(false);
+        }
         return launched;
       });
       if (!started) return;
