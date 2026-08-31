@@ -22,6 +22,7 @@ export class MobileHud {
     this.carryingLog = false;
     this.buildPreviewValid = false;
     this.buildTrayCollapsed = false;
+    this.currentBuildMode = 'raw';
     this.currentToolId = null;
     this.currentInteractionTarget = null;
     this.currentHuntTarget = null;
@@ -32,6 +33,7 @@ export class MobileHud {
     this.root.className = 'mobile-hud';
 
     const ui = ASSET_PATHS.ui.mobile;
+    this.buildIcons = ui.build;
     this.toolIcons = Object.freeze({
       hand: ui.hand,
       spear: ui.spear,
@@ -54,18 +56,18 @@ export class MobileHud {
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <div class="log-build-tray" data-role="log-build" hidden>
-        <button class="build-tray-toggle" type="button" data-role="build-toggle" aria-expanded="true" aria-label="Collapse build menu">
-          <span class="build-tray-title" data-role="build-toggle-label">BUILD</span>
+        <button class="build-tray-toggle" type="button" data-role="build-toggle" aria-expanded="true" aria-label="Collapse build menu, Raw log selected">
+          <img class="build-tray-current-icon" data-role="build-toggle-icon" src="${this.buildIcons.raw}" alt="" aria-hidden="true">
           <span class="build-tray-chevron" data-role="build-toggle-chevron" aria-hidden="true">›</span>
         </button>
         <div class="build-tray-options" data-role="build-options">
-          <button type="button" data-build="raw">RAW</button>
-          <button type="button" data-build="floor">FLOOR</button>
-          <button type="button" data-build="frame">FRAME</button>
-          <button type="button" data-build="wall">WALL</button>
-          <button type="button" data-build="angle">ANGLE</button>
-          <button type="button" data-build="roof">ROOF</button>
-          <button type="button" data-build="drop" class="drop-log">DROP</button>
+          <button class="build-mode-button" type="button" data-build="raw" aria-label="Raw log" title="Raw log"><img src="${this.buildIcons.raw}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="floor" aria-label="Floor" title="Floor"><img src="${this.buildIcons.floor}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="frame" aria-label="Frame" title="Frame"><img src="${this.buildIcons.frame}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="wall" aria-label="Wall" title="Wall"><img src="${this.buildIcons.wall}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="angle" aria-label="Angled log" title="Angled log"><img src="${this.buildIcons.angle}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="roof" aria-label="Roof" title="Roof"><img src="${this.buildIcons.roof}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button drop-log" type="button" data-build="drop" aria-label="Drop log" title="Drop log"><img src="${this.buildIcons.drop}" alt="" aria-hidden="true"></button>
         </div>
       </div>
       <div class="hud-button sprint contextual-sprint" data-role="sprint-target" aria-hidden="true" hidden>
@@ -89,7 +91,7 @@ export class MobileHud {
     this.attackIcon = this.actionIcon;
     this.buildTray = this.root.querySelector('[data-role="log-build"]');
     this.buildTrayToggle = this.root.querySelector('[data-role="build-toggle"]');
-    this.buildTrayToggleLabel = this.root.querySelector('[data-role="build-toggle-label"]');
+    this.buildTrayToggleIcon = this.root.querySelector('[data-role="build-toggle-icon"]');
     this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
     this.sprintTarget = this.root.querySelector('[data-role="sprint-target"]');
     this.toolButtons = new Map(
@@ -155,7 +157,9 @@ export class MobileHud {
     this.root.classList.toggle('log-carrying', this.carryingLog);
     document.body.classList.toggle('log-carrying', this.carryingLog);
     this.buildTray.hidden = !carrying;
-    this.buildTrayToggleLabel.textContent = state?.mode?.toUpperCase() ?? 'BUILD';
+    this.currentBuildMode = state?.mode ?? this.currentBuildMode ?? 'raw';
+    this.buildTrayToggleIcon.src = this.buildIcons[this.currentBuildMode] ?? this.buildIcons.raw;
+    this.#setBuildTrayCollapsed(this.buildTrayCollapsed);
     if (!carrying) {
       this.buildTray.classList.remove('invalid');
       this.#renderAction();
@@ -204,9 +208,11 @@ export class MobileHud {
     this.buildTrayCollapsed = Boolean(collapsed);
     this.buildTray.classList.toggle('collapsed', this.buildTrayCollapsed);
     this.buildTrayToggle.setAttribute('aria-expanded', this.buildTrayCollapsed ? 'false' : 'true');
+    const selectedButton = this.buildTray.querySelector(`[data-build="${this.currentBuildMode}"]`);
+    const selectedLabel = selectedButton?.getAttribute('aria-label') ?? 'Build';
     this.buildTrayToggle.setAttribute(
       'aria-label',
-      this.buildTrayCollapsed ? 'Expand build menu' : 'Collapse build menu'
+      `${this.buildTrayCollapsed ? 'Expand' : 'Collapse'} build menu, ${selectedLabel} selected`
     );
     this.buildTrayToggleChevron.textContent = this.buildTrayCollapsed ? '‹' : '›';
   }

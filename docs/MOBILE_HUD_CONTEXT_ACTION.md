@@ -4,8 +4,9 @@ This pass keeps gameplay handlers authoritative while simplifying the mobile int
 
 ## Layout invariants
 
-- While carrying a physical Log, construction modes live in a compact vertical menu at the top-right safe area.
-- The construction menu is collapsible. Collapsing it hides only the mode choices; the current-mode toggle remains available so the menu can be reopened without dropping the Log.
+- While carrying a physical Log, construction modes live in a compact two-column icon grid at the top-right safe area.
+- The construction menu is collapsible. Collapsing it hides the grid and leaves one small square toggle showing the currently selected build-mode icon so the menu can be reopened without dropping the Log.
+- Raw, Floor, Frame, Wall, Angle, Roof and Drop each use a dedicated icon asset. The grid is sized so Roof and Drop stay directly visible without an internal scroll area.
 - Inventory is a compact vertical stack on the left, below the status banner, so it no longer competes with the construction menu.
 - Toolbelt remains the equipment/crafting selector.
 - Jump remains a dedicated movement control.
@@ -50,4 +51,4 @@ Roof thatching follows this rule. Once a roof bay has all required roof Logs, se
 
 ## Regression coverage
 
-`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, campfire confirmation, roof-thatch registration, removal of the legacy interaction buttons, the collapsible right-side construction menu, left-side inventory, removal of the fixed joystick/permanent Sprint button, the 50/50 movement/look split, contextual sprint target spacing, analog speed scaling and damped camera follow/recenter contracts.
+`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, campfire confirmation, roof-thatch registration, removal of the legacy interaction buttons, the collapsible two-column icon build grid, direct Roof/Drop visibility, dedicated build icon assets, left-side inventory, removal of the fixed joystick/permanent Sprint button, the 50/50 movement/look split, contextual sprint target spacing, analog speed scaling and damped camera follow/recenter contracts.

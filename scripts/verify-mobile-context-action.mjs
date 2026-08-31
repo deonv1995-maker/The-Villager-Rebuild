@@ -80,6 +80,7 @@ assert.equal(thatch.caption, 'THATCH');
 
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
 const thatchControllerSource = fs.readFileSync(new URL('../src/gameplay/RoofThatchController.js', import.meta.url), 'utf8');
 const rangerControllerSource = fs.readFileSync(new URL('../src/player/RangerController.js', import.meta.url), 'utf8');
 
@@ -89,8 +90,19 @@ assert.doesNotMatch(mobileHudSource, /class="hud-button attack"/, 'Legacy attack
 assert.doesNotMatch(mobileHudSource, /class="hud-button craft"/, 'Legacy campfire round button must be removed');
 assert.match(mobileHudSource, /setExternalAction\(id, action = null\)/, 'External construction actions must use the same Action surface');
 assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
+assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
 assert.match(mobileHudSource, /aria-expanded/, 'Build menu collapse control must expose expansion state');
+for (const mode of ['raw', 'floor', 'frame', 'wall', 'angle', 'roof', 'drop']) {
+  assert.match(mobileHudSource, new RegExp(`data-build="${mode}"`), `Build grid must expose ${mode}`);
+  assert.match(assetPathsSource, new RegExp(`${mode}: asset\\('ui/mobile/icon-build-${mode}\\.svg'\\)`), `${mode} must use a dedicated build icon asset`);
+  assert.ok(
+    fs.existsSync(new URL(`../public/assets/ui/mobile/icon-build-${mode}.svg`, import.meta.url)),
+    `${mode} build icon must exist in public assets`
+  );
+  assert.match(mobileHudSource, new RegExp(`data-build="${mode}"[^>]*[\\s\\S]*?<img src="\\$\\{this\\.buildIcons\\.${mode}\\}"`), `${mode} must render its icon instead of a text label`);
+}
+assert.doesNotMatch(mobileHudSource, /data-build="raw">RAW/, 'Build modes must not fall back to tall text buttons');
 assert.match(thatchControllerSource, /setExternalAction\(ACTION_ID/, 'Roof thatching must route through the unified Action button');
 assert.match(thatchControllerSource, /\? 'THATCH' : `NEED/, 'Affordable roof thatching must identify itself explicitly as THATCH');
 assert.doesNotMatch(thatchControllerSource, /roof-thatch-tray/, 'Roof thatching must not add a separate mobile button tray');
@@ -98,7 +110,17 @@ assert.doesNotMatch(thatchControllerSource, /roof-thatch-tray/, 'Roof thatching 
 assert.match(
   stylesSource,
   /\.log-build-tray\s*\{[\s\S]*?right: max\(8px,[\s\S]*?flex-direction: column/,
-  'Build tray must render as a vertical right-side construction menu'
+  'Build tray must remain anchored to the right-side safe area'
+);
+assert.match(
+  stylesSource,
+  /\.build-tray-options\s*\{[\s\S]*?display: grid;[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
+  'Expanded build choices must render as a compact two-column grid'
+);
+assert.doesNotMatch(
+  stylesSource,
+  /\.build-tray-options\s*\{[^}]*overflow-y:/,
+  'Build grid must not hide roof or drop behind an internal scroll area'
 );
 assert.match(
   stylesSource,
@@ -136,4 +158,4 @@ assert.match(rangerControllerSource, /CAMERA_FOLLOW_RESPONSE = 1\.85/, 'Automati
 assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 1\.2/, 'Manual camera return must remain slower than ordinary follow');
 assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
+console.log('Unified mobile actions, icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
