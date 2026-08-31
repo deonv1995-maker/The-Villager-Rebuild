@@ -12,7 +12,7 @@ import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
 import { SpearProjectileSystem } from '../src/world/SpearProjectileSystem.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
 
-assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Bottom toolbelt order is a stable mobile interaction contract');
+assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Craftable tool order must remain stable');
 assert.equal(TOOL_DEFINITIONS.spear.role, 'projectile');
 assert.equal(TOOL_DEFINITIONS.axe.role, 'tree-harvest');
 assert.equal(TOOL_DEFINITIONS.hammer.role, 'demolition');
@@ -52,13 +52,18 @@ inventory.add('stone', 8);
 inventory.add('grass', 4);
 const crafting = new CraftingSystem({ inventory });
 const toolbelt = new ToolbeltSystem({ inventory, crafting });
-assert.equal(toolbelt.snapshot().length, 5);
+let belt = toolbelt.snapshot();
+assert.equal(belt.length, 6, 'Bottom toolbelt must contain default Hand plus five craftable tools');
+assert.equal(belt[0].id, 'hand', 'Hand must be the first/default bottom tool slot');
+assert.equal(belt[0].equipped, true, 'Ranger must start with empty hands selected');
 assert.equal(toolbelt.select('spear').equipped, true, 'Selecting a craftable spear must craft and equip it');
 assert.equal(toolbelt.getEquippedToolId(), 'spear');
 assert.equal(inventory.get('spear'), 1);
 assert.equal(toolbelt.select('axe').equipped, true, 'Selecting a craftable axe must craft and equip it');
 assert.equal(toolbelt.getEquippedToolId(), 'axe');
 assert.equal(inventory.get('axe'), 1);
+assert.equal(toolbelt.select('hand').equipped, true, 'Hand slot must unequip the active tool without consuming anything');
+assert.equal(toolbelt.getEquippedToolId(), null, 'Hand slot must represent no equipped tool');
 assert.equal(toolbelt.select('pickaxe').equipped, true, 'Pickaxe must use the same craft/equip path');
 assert.equal(inventory.get('pickaxe'), 1);
 
@@ -75,27 +80,42 @@ assert.equal(lock?.position, hunt.getProjectileTargetPosition(), 'Locked aim pos
 assert.equal(hunt.getAttackTarget(new THREE.Vector3(hunter.x + 20, 0, hunter.z), TOOL_DEFINITIONS.spear.lockRange), null, 'Auto-lock must stop outside spear range');
 
 const projectileScene = new THREE.Scene();
-const projectile = new SpearProjectileSystem({ scene: projectileScene, speed: 20, maxLifetime: 1 });
-const movingTarget = new THREE.Vector3(1, 0, 0);
+const projectile = new SpearProjectileSystem({ scene: projectileScene, speed: 14, maxLifetime: 1.3 });
+const movingTarget = new THREE.Vector3(6, 0, 0);
 let projectileDamage = 0;
 assert.equal(projectile.throw({
   origin: new THREE.Vector3(0, 0, 0),
-  target: movingTarget,
+  target: () => movingTarget,
   onHit: () => {
     projectileDamage += 1;
     return { health: 1, maxHealth: 2, defeated: false, label: 'Wild Pig' };
   }
 }), true, 'Spear throw must create a real projectile');
 assert.equal(projectile.isActive(), true);
-movingTarget.set(2, 0, 0);
-assert.equal(projectile.update(0.05), null, 'Moving target should remain locked while the spear is still travelling');
-assert.equal(projectile.targetPosition.x, 2, 'Projectile aim point must follow the live locked target instead of preserving the throw-time coordinate');
-const projectileResult = projectile.update(0.2);
-assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve when the spear reaches its moving target');
+const halfDuration = projectile.duration * 0.5;
+assert.equal(projectile.update(halfDuration), null, 'Spear must still be travelling at the middle of its arc');
+const straightMidY = (1.28 + 0.55) * 0.5;
+assert.ok(projectile.projectile.position.y > straightMidY + 0.8, 'Thrown spear must visibly rise above a straight-line shot');
+movingTarget.set(7, 0, 0);
+projectile.update(0.04);
+assert.equal(projectile.targetPosition.x, 7, 'Projectile arc must continue tracking the live auto-locked target');
+let projectileResult = null;
+for (let step = 0; step < 30 && projectile.isActive(); step += 1) {
+  projectileResult = projectile.update(0.08) ?? projectileResult;
+}
+assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve only when the arcing spear reaches its target');
 assert.equal(projectileDamage, 1);
 assert.equal(projectile.isActive(), false);
 
-const [appSource, hudSource, logSource, rockSource, projectileSource, gatherSource, toolSource, assetSource, hammerSvg, pickaxeSvg, swordSvg] = await Promise.all([
+const generalAnimations = await readFile('public/assets/kaykit/animations/Rig_Medium_General.glb');
+assert.equal(generalAnimations.toString('ascii', 0, 4), 'glTF', 'KayKit general animation asset must remain a valid GLB');
+const jsonLength = generalAnimations.readUInt32LE(12);
+const jsonType = generalAnimations.toString('ascii', 16, 20);
+assert.equal(jsonType, 'JSON', 'KayKit general animation GLB must expose a JSON animation catalog');
+const animationJson = JSON.parse(generalAnimations.subarray(20, 20 + jsonLength).toString('utf8').trim());
+assert.ok(animationJson.animations?.some(animation => animation.name === 'Throw'), 'KayKit authored Throw clip must remain available for spear release');
+
+const [appSource, hudSource, logSource, rockSource, projectileSource, gatherSource, toolSource, playerSource, assetSource, hammerSvg, pickaxeSvg, swordSvg] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
@@ -103,6 +123,7 @@ const [appSource, hudSource, logSource, rockSource, projectileSource, gatherSour
   readFile('src/world/SpearProjectileSystem.js', 'utf8'),
   readFile('src/world/GatherableSystem.js', 'utf8'),
   readFile('src/player/RangerToolPresentation.js', 'utf8'),
+  readFile('src/player/RangerController.js', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('public/assets/ui/mobile/icon-hammer.svg', 'utf8'),
   readFile('public/assets/ui/mobile/icon-pickaxe.svg', 'utf8'),
@@ -119,9 +140,10 @@ for (const requirement of [
   "toolId === 'hammer'",
   "toolId === 'pickaxe'",
   "toolId === 'sword'",
-  'this.spearProjectiles.throw({',
+  'this.player.playSpearThrow(() =>',
+  'target: () => this.hunt.getProjectileTargetPosition()',
   'onHit: () => this.hunt.applyDamage',
-  'this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.spear.lockRange)'
+  'TOOLBELT_INPUT_ORDER'
 ]) {
   assert.ok(appSource.includes(requirement), `GameApp is missing survival interaction contract: ${requirement}`);
 }
@@ -130,7 +152,8 @@ assert.ok(!appSource.includes("inventory.add('log'"), 'GameApp must never store 
 
 for (const requirement of [
   'class="toolbelt"',
-  'data-tool="${toolId}"',
+  "['hand', ...TOOL_ORDER]",
+  "hand: ui.hand",
   'setToolbelt(entries)',
   'class="log-build-tray"',
   'data-build="lay"',
@@ -161,10 +184,13 @@ for (const requirement of [
 }
 
 assert.ok(projectileSource.includes("this.projectile.name = 'thrown-spear-projectile'"), 'Spear must exist as a moving world projectile while thrown');
-assert.ok(projectileSource.includes('this.projectile.position.add(step)'), 'Thrown spear must advance through world space');
+assert.ok(projectileSource.includes('Math.sin(progress * Math.PI) * this.arcHeight'), 'Thrown spear must follow an authored ballistic-style arc rather than a straight line');
 assert.ok(projectileSource.includes("typeof target === 'function' ? target : () => target"), 'Projectile must preserve a live target provider for auto-lock tracking');
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
+assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'), 'Non-spear tools must mount through the Ranger right-hand attachment boundary');
 assert.ok(toolSource.includes("toolId === 'hammer'") && toolSource.includes("toolId === 'pickaxe'") && toolSource.includes("toolId === 'sword'"), 'Ranger tool presentation must support all non-spear basic tools');
+assert.ok(playerSource.includes('mountRightHandObject(object)'), 'Ranger controller must expose one shared hand-mount boundary for held tools');
+assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpearThrow(onRelease)'), 'Spear must use the authored Throw animation and a timed release callback');
 
 for (const [name, path, svg] of [
   ['hammer', "hammer: asset('ui/mobile/icon-hammer.svg')", hammerSvg],
@@ -175,4 +201,4 @@ for (const [name, path, svg] of [
   assert.ok(svg.includes('<svg') && svg.includes('#FFFFFF'), `${name} icon must remain a valid white SVG glyph`);
 }
 
-console.log('Survival inventory, physical-log, toolbelt and projectile contracts verified');
+console.log('Survival hand/tool mounting, physical logs and arcing projectile contracts verified');
