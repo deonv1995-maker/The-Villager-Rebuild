@@ -7,6 +7,8 @@ assert.ok(PHYSICAL_LOG.floorGroundClearance <= 0.02, 'Ground floors must seat al
 assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance >= 0.08, 'Ground floors need a small terrain embed tolerance for natural uneven ground');
 assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log floor support must target the curved underside rather than the walking surface');
 assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded opposite-eave spacing');
+assert.ok(PHYSICAL_LOG.roofLocalFrameLimit > 0, 'Roof preview needs a bounded local frame candidate limit');
+assert.ok(PHYSICAL_LOG.roofLocalPairLimit > 0, 'Roof preview needs a bounded local frame-pair candidate limit');
 
 const collision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -106,10 +108,11 @@ for (const requirement of [
   'supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + 0.02',
   'this.structureRevision = 0',
   'this.framePairCacheRevision',
-  'this.roofRegionCacheRevision',
-  'this.roofCandidateCacheRevision',
+  'this.roofQueryCacheRevision',
+  'this.roofQueryCacheKey',
   '#markStructureChanged()',
-  '#roofRegions()',
+  'collectLocalRoofFramePairs',
+  'collectRoofRegions',
   "'roof-rafter'",
   "'roof-ridge'",
   'roofRegionKey: region.key',
@@ -119,10 +122,12 @@ for (const requirement of [
 }
 
 assert.ok(!logSource.includes('this.#axisYawDelta(floor.yaw, base.yaw) > 0.18'), 'Floor edge snapping must not depend on the Ranger facing parallel to the existing floor');
+assert.ok(!logSource.includes('roofRegionCacheRevision'), 'ROOF preview must not rebuild a global roof-region graph');
+assert.ok(!logSource.includes('roofCandidateCacheRevision'), 'ROOF preview must use the bounded local query cache');
 assert.ok(supportSource.includes('placement.baseY - PHYSICAL_LOG.floorUndersideDepth'), 'Automatic floor supports must terminate at the real split-log underside');
 assert.ok(supportSource.includes('this.terrain.baseHeightAt?.(x, z)'), 'Automatic floor supports must sample immutable base terrain instead of standable construction height');
 assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor support terrain sampling must keep a compatibility fallback');
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
 
-console.log('Ground-flush floors, free platform movement, cached roof topology and construction snapping verified');
+console.log('Ground-flush floors, free platform movement, bounded roof topology and construction snapping verified');
