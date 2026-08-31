@@ -28,7 +28,7 @@ export class DayOneHuntSystem {
     this.scene.add(this.group);
 
     this.targetRing = this.#createRing(0xe6a94d, 0.86, 1.08);
-    this.targetRing.name = 'hunt-attack-target';
+    this.targetRing.name = 'hunt-auto-lock-target';
     this.scene.add(this.targetRing);
 
     this.harvestRing = this.#createRing(0xffe29a, 0.9, 1.12);
@@ -45,7 +45,7 @@ export class DayOneHuntSystem {
     }
   }
 
-  update(dt, playerPosition, armed = false) {
+  update(dt, playerPosition, armed = false, range = this.definition.spearLockRange) {
     this.time += dt;
     let movedDistance = 0;
 
@@ -72,7 +72,7 @@ export class DayOneHuntSystem {
       this.presentation.setHitFlash(0);
     }
 
-    const target = this.#targetFor(playerPosition, armed);
+    const target = armed ? this.getAttackTarget(playerPosition, range) : null;
     this.targetRing.visible = Boolean(target);
     if (target) this.#positionRing(this.targetRing);
 
@@ -83,12 +83,31 @@ export class DayOneHuntSystem {
     return target;
   }
 
-  attack(playerPosition) {
-    if (this.defeated) return null;
-    const target = this.#targetFor(playerPosition, true);
-    if (!target) return null;
+  getAttackTarget(playerPosition, range = this.definition.spearLockRange) {
+    if (this.defeated || !playerPosition || !Number.isFinite(range) || range <= 0) return null;
+    const distance = Math.hypot(
+      playerPosition.x - this.group.position.x,
+      playerPosition.z - this.group.position.z
+    );
+    if (distance > range) return null;
 
-    const damage = this.definition.spearDamage;
+    return {
+      animalId: this.definition.id,
+      label: this.definition.label,
+      health: this.health,
+      maxHealth: this.definition.maxHealth,
+      distance,
+      position: this.group.position
+    };
+  }
+
+  getProjectileTargetPosition() {
+    if (this.defeated || this.harvested) return null;
+    return this.group.position;
+  }
+
+  applyDamage(damage = 1) {
+    if (this.defeated || !Number.isFinite(damage) || damage <= 0) return null;
     this.health = Math.max(0, this.health - damage);
     this.hitFlash = 0.16;
 
@@ -110,6 +129,16 @@ export class DayOneHuntSystem {
     };
   }
 
+  meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
+    const target = this.getAttackTarget(playerPosition, range);
+    if (!target) return null;
+    return this.applyDamage(damage);
+  }
+
+  attack(playerPosition) {
+    return this.meleeAttack(playerPosition, { range: 2.8, damage: this.definition.spearDamage });
+  }
+
   getHarvestTarget(playerPosition) {
     if (!this.defeated || this.harvested || !playerPosition) return null;
     const distance = Math.hypot(
@@ -122,6 +151,7 @@ export class DayOneHuntSystem {
       type: 'carcass',
       animalId: this.definition.id,
       label: this.definition.loot.label,
+      icon: 'hand',
       actionLabel: 'Gather meat'
     };
   }
@@ -151,23 +181,6 @@ export class DayOneHuntSystem {
       defeated: this.defeated,
       harvested: this.harvested,
       assetMode: this.presentation.assetMode
-    };
-  }
-
-  #targetFor(playerPosition, armed) {
-    if (!armed || this.defeated || !playerPosition) return null;
-    const distance = Math.hypot(
-      playerPosition.x - this.group.position.x,
-      playerPosition.z - this.group.position.z
-    );
-    if (distance > this.definition.attackRange) return null;
-
-    return {
-      animalId: this.definition.id,
-      label: this.definition.label,
-      health: this.health,
-      maxHealth: this.definition.maxHealth,
-      position: { x: this.group.position.x, y: this.group.position.y, z: this.group.position.z }
     };
   }
 

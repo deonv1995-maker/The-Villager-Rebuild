@@ -3,7 +3,8 @@ export const STRUCTURE_DEFINITIONS = Object.freeze({
     id: 'campfire',
     label: 'Campfire',
     ingredients: Object.freeze([
-      Object.freeze({ itemId: 'log', quantity: 3 })
+      Object.freeze({ itemId: 'stick', quantity: 3 }),
+      Object.freeze({ itemId: 'stone', quantity: 3 })
     ]),
     placementRadius: 0.72,
     preferredDistance: 2.5,

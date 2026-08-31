@@ -1,31 +1,53 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 
 export class MobileHud {
-  constructor({ player, canvas, onInteract, onCraft, onAttack }) {
+  constructor({ player, canvas, onInteract, onCampfire, onAttack, onToolSelect, onBuildOption }) {
     this.player = player;
     this.canvas = canvas;
     this.onInteract = onInteract;
-    this.onCraft = onCraft;
+    this.onCampfire = onCampfire;
     this.onAttack = onAttack;
+    this.onToolSelect = onToolSelect;
+    this.onBuildOption = onBuildOption;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
     const ui = ASSET_PATHS.ui.mobile;
+    this.toolIcons = Object.freeze({
+      spear: ui.spear,
+      axe: ui.axe,
+      hammer: ui.hammer,
+      pickaxe: ui.pickaxe,
+      sword: ui.sword
+    });
     this.interactionIcons = Object.freeze({
       hand: ui.hand,
-      axe: ui.axe
+      axe: ui.axe,
+      hammer: ui.hammer,
+      pickaxe: ui.pickaxe
     });
-    this.craftIcons = Object.freeze({
-      spear: ui.spear,
-      campfire: ui.campfire
-    });
+
+    const toolButtons = TOOL_ORDER.map(toolId => `
+      <button class="tool-slot" type="button" data-tool="${toolId}" aria-label="${toolId}">
+        <img src="${this.toolIcons[toolId]}" alt="">
+        <span class="tool-craft-mark" aria-hidden="true">+</span>
+      </button>
+    `).join('');
+
     this.root.innerHTML = `
-      <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0</div>
-      <div class="hud-note" data-role="objective">DAY 1 · Gather a stick + stone</div>
+      <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0 · Grass 0</div>
+      <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
+      <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
+      <div class="log-build-tray" data-role="log-build" hidden>
+        <button type="button" data-build="lay">LAY LOG</button>
+        <button type="button" data-build="post">POST</button>
+        <button type="button" data-build="drop">DROP</button>
+      </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
-      <button class="hud-button craft" type="button" aria-label="Craft" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="craft-icon" src="${ui.spear}" alt=""></button>
-      <button class="hud-button attack" type="button" aria-label="Attack boar" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.spear}" alt=""></button>
+      <button class="hud-button craft" type="button" aria-label="Build campfire" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.campfire}" alt=""></button>
+      <button class="hud-button attack" type="button" aria-label="Attack" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="attack-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="interaction-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
@@ -34,23 +56,53 @@ export class MobileHud {
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.interactButton = this.root.querySelector('.interact');
     this.interactIcon = this.root.querySelector('[data-role="interaction-icon"]');
-    this.craftButton = this.root.querySelector('.craft');
-    this.craftIcon = this.root.querySelector('[data-role="craft-icon"]');
+    this.campfireButton = this.root.querySelector('.craft');
     this.attackButton = this.root.querySelector('.attack');
+    this.attackIcon = this.root.querySelector('[data-role="attack-icon"]');
+    this.buildTray = this.root.querySelector('[data-role="log-build"]');
+    this.toolButtons = new Map(
+      Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
+    );
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
   }
 
   setInventory(entries) {
+    const alwaysVisible = new Set(['stick', 'stone', 'grass']);
     this.inventoryElement.textContent = entries
-      .filter(entry => entry.quantity > 0 || entry.id === 'stick' || entry.id === 'stone')
+      .filter(entry => entry.quantity > 0 || alwaysVisible.has(entry.id))
+      .filter(entry => !['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(entry.id))
       .map(entry => `${entry.label} ${entry.quantity}`)
       .join(' · ');
   }
 
   setObjective(message) {
     this.objectiveElement.textContent = message;
+  }
+
+  setToolbelt(entries) {
+    for (const entry of entries) {
+      const button = this.toolButtons.get(entry.id);
+      if (!button) continue;
+      button.classList.toggle('owned', entry.owned);
+      button.classList.toggle('craftable', entry.craftable);
+      button.classList.toggle('equipped', entry.equipped);
+      button.classList.toggle('locked', !entry.owned && !entry.craftable);
+      const ingredients = entry.ingredients
+        .map(ingredient => `${ingredient.itemId} ${ingredient.quantity}`)
+        .join(', ');
+      button.setAttribute(
+        'aria-label',
+        entry.owned
+          ? `${entry.label}${entry.equipped ? ', equipped' : ''}`
+          : `${entry.label}, craft with ${ingredients}`
+      );
+    }
+  }
+
+  setLogBuildMode(carrying) {
+    this.buildTray.hidden = !carrying;
   }
 
   setInteractionTarget(target) {
@@ -63,26 +115,27 @@ export class MobileHud {
     this.interactIcon.src = icon;
   }
 
-  setCraftAction(action) {
+  setCampfireAction(action) {
     const available = Boolean(action?.available);
-    const icon = this.craftIcons[action?.icon] ?? this.craftIcons.spear;
-    this.craftButton.hidden = !available;
-    this.craftButton.disabled = !available;
-    this.craftButton.setAttribute('aria-label', action?.label ?? 'Craft');
-    this.craftIcon.src = icon;
+    this.campfireButton.hidden = !available;
+    this.campfireButton.disabled = !available;
+    this.campfireButton.setAttribute('aria-label', action?.label ?? 'Build campfire');
   }
 
-  setCraftAvailable(available) {
-    this.setCraftAction({ available, icon: 'spear', label: 'Craft spear' });
+  setCraftAction(action) {
+    this.setCampfireAction(action);
   }
 
-  setAttackTarget(target) {
-    const available = Boolean(target);
+  setAttackTarget(target, toolId = 'spear') {
+    const available = Boolean(target && (toolId === 'spear' || toolId === 'sword'));
     this.attackButton.hidden = !available;
     this.attackButton.disabled = !available;
+    this.attackIcon.src = this.toolIcons[toolId] ?? this.toolIcons.spear;
     this.attackButton.setAttribute(
       'aria-label',
-      available ? `Attack ${target.label} with spear` : 'Attack with spear'
+      available
+        ? `${toolId === 'spear' ? 'Throw spear at' : 'Strike'} ${target.label}`
+        : 'Attack'
     );
   }
 
@@ -139,15 +192,29 @@ export class MobileHud {
       this.onInteract?.();
     });
 
-    this.craftButton.addEventListener('pointerdown', event => {
+    this.campfireButton.addEventListener('pointerdown', event => {
       event.preventDefault();
-      this.onCraft?.();
+      this.onCampfire?.();
     });
 
     this.attackButton.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.onAttack?.();
     });
+
+    for (const [toolId, button] of this.toolButtons) {
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        this.onToolSelect?.(toolId);
+      });
+    }
+
+    for (const button of this.buildTray.querySelectorAll('[data-build]')) {
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        this.onBuildOption?.(button.dataset.build);
+      });
+    }
 
     const setSprint = value => this.player.setSprint(value);
     sprint.addEventListener('pointerdown', event => {

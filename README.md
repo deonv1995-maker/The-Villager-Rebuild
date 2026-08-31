@@ -10,30 +10,31 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.4 — build the first campfire**
+**Foundation 0.3.5 — survival inventory, physical logs and basic tools**
 
-The Foundation 0.3.3 tree/log loop has passed device verification and remains authoritative. This milestone advances only the next Day 1 step:
+Foundation 0.3.5 replaces the temporary linear Day-1 interaction shortcuts with the shared survival interaction model that later building, harvesting and combat systems must extend:
 
-- the first campfire is a world structure, not an inventory item or a second crafting economy;
-- its data definition requires exactly three Logs and owns its placement radius/distance/slope limits;
-- the existing contextual craft button switches from the spear glyph to a campfire glyph when the Day 1 log requirement is complete; desktop continues to use C;
-- building validates playable terrain, slope and shared world-collision clearance before consuming materials;
-- the campfire searches a small set of nearby placements around the Ranger so a valid build is not tied to one hard-coded tutorial coordinate;
-- a successful build consumes the three Logs once, creates a grounded stone/log/fire presentation, and registers one normal world collision handle;
-- the fire uses lightweight emissive geometry plus one non-shadow-casting point light so it can later become the shared cooking/sleep proximity anchor without introducing a separate visual system;
-- the Ranger exposes facing direction through its controller boundary for placement instead of world systems reading controller internals;
-- a dedicated campfire regression contract runs alongside the existing gameplay, tree-harvest, landscape, world-streaming, runtime-asset, production-build and PWA checks.
+- Stick, Stone, Grass and food are inventory resources used by the existing crafting economy;
+- Logs are physical world resources and are deliberately excluded from `InventorySystem`;
+- chopped trees drop physical Logs that the Ranger lifts one at a time rather than collecting as an inventory counter;
+- while a Log is carried, the mobile build tray expands with Lay Log, Post and Drop choices; placed Logs use shared world collision and the laid variant is standable;
+- the campfire costs three Sticks plus three Stones and no longer consumes Logs, reserving Logs for physical construction;
+- the persistent bottom toolbelt contains Spear, Axe, Hammer, Pickaxe and Sword. Selecting an unowned but craftable tool crafts it through the shared `CraftingSystem`; selecting an owned tool equips it;
+- the Axe enables tree chopping, the Pickaxe mines registered large Rocks into loose Stone pickups, and the Hammer demolishes supported player-built objects such as placed Logs and the current campfire;
+- the Sword establishes the shared short-range combat-tool role without introducing a second combat system;
+- the Spear is a thrown projectile rather than a stabbing attack. A valid hunt target auto-locks inside spear range and damage is applied only when the moving projectile reaches that target;
+- a dedicated survival-interaction regression contract runs alongside gameplay, physical tree/log harvesting, campfire, landscape, world-streaming, runtime-asset, production-build and PWA checks.
 
-Device feedback during the 0.3.4 acceptance pass also established world-presentation rules that belong to the shared world layer:
+The expanded-world rules from the prior acceptance pass remain authoritative:
 
 - forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same tree; tree placement and trunk collision remain unchanged;
 - the mainland is approximately 2x the previous linear coast scale, while the existing Day-1 beach remains a deep southern inlet so the proven opening route is not moved inland;
 - the larger world keeps one authoritative procedural terrain/collision surface, while terrain meshes, shallow-water overlays, forest batches, grass, ferns and numerous static dressing are owned by shared render chunks so distant/off-screen areas do not remain active render batches;
-- satellite islands are deterministic but procedurally varied in position, size, proportions, rotation, edge warp, elevation and shoal geometry rather than using five similarly shaped compass-point cays;
+- satellite islands are deterministic but procedurally varied in position, size, proportions, rotation, edge warp, elevation and shoal geometry;
 - water remains a lightweight in-house Three.js presentation over the authoritative terrain. Deep water stays inexpensive, while chunked turquoise shallows follow terrain depth substantially inland across low coastal shelves, satellite edges and sandbars;
 - walking through traversable shallow water emits pooled expanding ripples around the Ranger without creating a second water-physics system or unbounded particles.
 
-Foundation 0.3.4 remains under device/gameplay acceptance before cooking is added. The next playable milestone after this gate is **cook the gathered meat at the campfire**.
+Foundation 0.3.5 remains under device/gameplay acceptance. Later cooking, hostile-enemy behaviour and more advanced structures should extend the interaction boundaries established here rather than bypassing them.
 
 ## Installation
 
@@ -58,6 +59,7 @@ On Android Chrome or a Chromium desktop browser, use the browser-owned **Install
 - `docs/NPC_VILLAGER_DESIGN.md` — recruitment, homes, jobs and routines.
 - `docs/WORLD_AND_PROGRESSION.md` — island design and settlement progression.
 - `docs/WORLD_STREAMING.md` — expanded mainland, render chunks, shallow water and tree-instance ownership.
+- `docs/SURVIVAL_INTERACTION_MODEL.md` — inventory resources, physical Logs, toolbelt roles, building and combat boundaries.
 - `docs/TECHNICAL_ARCHITECTURE.md` — intended technical foundation.
 - `docs/DEVELOPMENT_RULES.md` — implementation and stability rules.
 - `docs/ROADMAP.md` — staged development plan.

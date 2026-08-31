@@ -49,18 +49,40 @@ export class GatherableSystem {
     this.update(playerPosition, filter);
     if (!this.target) return null;
 
-    const item = this.target;
-    item.active = false;
-    this.group.remove(item.root);
-    this.target = null;
-    this.indicator.visible = false;
-
-    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    const definition = RESOURCE_DEFINITIONS[this.target.resourceId];
+    if (definition.storage !== 'inventory') return null;
+    const item = this.#takeTarget();
     return {
       resourceId: definition.id,
       label: definition.label,
       quantity: item.quantity ?? definition.pickupQuantity
     };
+  }
+
+  takePhysical(playerPosition, resourceId = null) {
+    this.update(playerPosition, id => {
+      const definition = RESOURCE_DEFINITIONS[id];
+      return definition?.storage === 'physical' && (!resourceId || id === resourceId);
+    });
+    if (!this.target) return null;
+    return this.#takeTarget();
+  }
+
+  returnPhysical(item, { x, z, yaw = 0 } = {}) {
+    if (!item || !this.items.includes(item)) throw new Error('Physical gatherable must belong to this world');
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    if (definition?.storage !== 'physical') throw new Error(`${item.resourceId} is not a physical resource`);
+    if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(yaw)) {
+      throw new Error('Returned physical gatherables require finite x, z and yaw');
+    }
+
+    item.active = true;
+    item.root.scale.setScalar(1);
+    item.root.position.set(x, this.terrain.heightAt(x, z), z);
+    item.root.rotation.set(0, yaw, 0);
+    item.root.name = `gatherable-${item.resourceId}-return-${item.id}`;
+    this.group.add(item.root);
+    return item.root;
   }
 
   spawn(resourceId, { x, z, quantity = null, yaw = 0 } = {}) {
@@ -78,6 +100,7 @@ export class GatherableSystem {
     root.name = `gatherable-${resourceId}-spawn-${spawnId}`;
     this.group.add(root);
     this.items.push({
+      id: `spawn-${spawnId}`,
       resourceId,
       root,
       active: true,
@@ -89,13 +112,24 @@ export class GatherableSystem {
   getTarget() {
     if (!this.target) return null;
     const definition = RESOURCE_DEFINITIONS[this.target.resourceId];
+    const physical = definition.storage === 'physical';
     return {
-      type: 'resource',
+      type: physical ? 'physical-resource' : 'resource',
       resourceId: definition.id,
       label: definition.label,
       icon: 'hand',
-      actionLabel: `Pick up ${definition.label}`
+      physical,
+      actionLabel: physical ? `Lift ${definition.label}` : `Pick up ${definition.label}`
     };
+  }
+
+  #takeTarget() {
+    const item = this.target;
+    item.active = false;
+    this.group.remove(item.root);
+    this.target = null;
+    this.indicator.visible = false;
+    return item;
   }
 
   #populate() {
@@ -104,13 +138,20 @@ export class GatherableSystem {
       root.position.set(x, this.terrain.heightAt(x, z), z);
       root.name = `gatherable-${resourceId}-${index}`;
       this.group.add(root);
-      this.items.push({ resourceId, root, active: true, quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity });
+      this.items.push({
+        id: `initial-${index}`,
+        resourceId,
+        root,
+        active: true,
+        quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity
+      });
     });
   }
 
   #createResourceVisual(resourceId, index) {
     if (resourceId === 'stick') return this.#createStick(index);
     if (resourceId === 'stone') return this.#createStone(index);
+    if (resourceId === 'grass') return this.#createGrass(index);
     if (resourceId === 'log') return this.#createLog(index);
     throw new Error(`No world pickup presentation for resource: ${resourceId}`);
   }
@@ -139,6 +180,24 @@ export class GatherableSystem {
     stone.castShadow = true;
     stone.receiveShadow = true;
     group.add(stone);
+    return group;
+  }
+
+  #createGrass(index) {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0x5f964e,
+      roughness: 1,
+      flatShading: true,
+      side: THREE.DoubleSide
+    });
+    for (let blade = 0; blade < 6; blade += 1) {
+      const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.58 + (blade % 3) * 0.08, 4), material);
+      const angle = blade / 6 * Math.PI * 2 + index * 0.17;
+      mesh.position.set(Math.cos(angle) * 0.13, 0.25, Math.sin(angle) * 0.13);
+      mesh.rotation.z = (blade % 2 ? 1 : -1) * 0.13;
+      group.add(mesh);
+    }
     return group;
   }
 

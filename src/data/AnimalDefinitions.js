@@ -4,7 +4,7 @@ export const ANIMAL_DEFINITIONS = Object.freeze({
     label: 'Wild Pig',
     maxHealth: 2,
     spearDamage: 1,
-    attackRange: 2.8,
+    spearLockRange: 10,
     wanderRadius: 2.7,
     wanderSpeed: 0.52,
     harvestRange: 2.5,

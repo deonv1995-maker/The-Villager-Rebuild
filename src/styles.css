@@ -53,6 +53,88 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   opacity: .72;
   white-space: nowrap;
 }
+.toolbelt {
+  position: absolute;
+  left: 50%;
+  bottom: max(10px, calc(env(safe-area-inset-bottom) + 6px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 14px;
+  background: rgba(15, 34, 25, .72);
+  border: 1px solid rgba(225, 207, 151, .34);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.tool-slot {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(225, 207, 151, .25);
+  border-radius: 10px;
+  background: rgba(35, 48, 39, .72);
+  padding: 8px;
+  pointer-events: auto;
+  touch-action: none;
+}
+.tool-slot img { width: 100%; height: 100%; pointer-events: none; filter: brightness(.82) sepia(.15); }
+.tool-slot.locked { opacity: .42; }
+.tool-slot.craftable { border-color: rgba(238, 194, 93, .72); }
+.tool-slot.owned { opacity: .88; }
+.tool-slot.equipped {
+  opacity: 1;
+  border-color: #f0cf76;
+  background: rgba(79, 91, 57, .92);
+  box-shadow: 0 0 0 2px rgba(240, 207, 118, .22) inset;
+}
+.tool-craft-mark {
+  display: none;
+  position: absolute;
+  right: 2px;
+  bottom: -1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d6ae50;
+  color: #243126;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+.tool-slot.craftable .tool-craft-mark { display: block; }
+.tool-slot:active { transform: scale(.94); }
+.log-build-tray {
+  position: absolute;
+  left: 50%;
+  bottom: max(69px, calc(env(safe-area-inset-bottom) + 65px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 12px;
+  background: rgba(24, 39, 29, .86);
+  border: 1px solid rgba(225, 207, 151, .46);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.log-build-tray[hidden] { display: none; }
+.log-build-tray button {
+  min-width: 58px;
+  height: 32px;
+  border: 1px solid rgba(225, 207, 151, .38);
+  border-radius: 8px;
+  background: rgba(69, 72, 50, .9);
+  color: #fff0cb;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  pointer-events: auto;
+  touch-action: none;
+}
+.log-build-tray button:active { transform: scale(.95); }
 .joystick {
   position: absolute;
   left: max(18px, calc(env(safe-area-inset-left) + 14px));
@@ -116,4 +198,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 .hud-button:active { transform: scale(.94); }
 @media (min-width: 900px) {
   .joystick { opacity: .65; }
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  .toolbelt { bottom: max(150px, calc(env(safe-area-inset-bottom) + 146px)); }
+  .log-build-tray { bottom: max(208px, calc(env(safe-area-inset-bottom) + 204px)); }
 }
