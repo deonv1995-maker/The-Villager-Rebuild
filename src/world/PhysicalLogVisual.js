@@ -82,17 +82,12 @@ export function createSplitHalfLogVisual(name = 'SplitHalfLog') {
 }
 
 export function createConstructionLogVisual(mode) {
+  // Orientation belongs to PhysicalLogSystem's resolved placement transform.
+  // Keeping the source visual neutral prevents previews and committed pieces from
+  // receiving different/doubled rotations.
   if (mode === 'raw') return createPhysicalLogVisual('StructuralRawLog');
-  if (mode === 'frame') {
-    const group = createPhysicalLogVisual('UprightLogFrame');
-    group.rotation.z = Math.PI / 2;
-    return group;
-  }
-  if (mode === 'angle') {
-    const group = createPhysicalLogVisual('AngledLog');
-    group.rotation.z = Math.PI / 4;
-    return group;
-  }
+  if (mode === 'frame') return createPhysicalLogVisual('UprightLogFrame');
+  if (mode === 'angle') return createPhysicalLogVisual('AngledLog');
   if (mode === 'floor') {
     const group = new THREE.Group();
     group.name = 'SplitLogFloor';
