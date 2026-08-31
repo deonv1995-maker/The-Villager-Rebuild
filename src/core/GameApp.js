@@ -4,12 +4,16 @@ import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
 import { DayOneHuntSystem } from '../world/DayOneHuntSystem.js';
 import { TreeHarvestSystem } from '../world/TreeHarvestSystem.js';
+import { RockHarvestSystem } from '../world/RockHarvestSystem.js';
+import { PhysicalLogSystem } from '../world/PhysicalLogSystem.js';
 import { CampfireSystem } from '../world/CampfireSystem.js';
+import { SpearProjectileSystem } from '../world/SpearProjectileSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
 import { CraftingSystem } from '../gameplay/CraftingSystem.js';
-import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
+import { ToolbeltSystem } from '../gameplay/ToolbeltSystem.js';
+import { TOOL_DEFINITIONS, TOOL_ORDER } from '../data/ToolDefinitions.js';
 
 export class GameApp {
   constructor({ canvas, setStatus }) {
@@ -25,12 +29,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.4 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.5 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.4 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.5 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -41,6 +45,7 @@ export class GameApp {
 
     this.inventory = new InventorySystem();
     this.crafting = new CraftingSystem({ inventory: this.inventory });
+    this.toolbelt = new ToolbeltSystem({ inventory: this.inventory, crafting: this.crafting });
     this.gatherables = new GatherableSystem({
       scene: this.sceneSystem.scene,
       terrain: this.island
@@ -54,6 +59,13 @@ export class GameApp {
       group: this.island.group,
       terrain: this.island,
       collision: this.island.collision,
+      gatherables: this.gatherables,
+      treeRenderRegistry: this.island.chunks
+    });
+    this.rockHarvest = new RockHarvestSystem({
+      group: this.island.group,
+      terrain: this.island,
+      collision: this.island.collision,
       gatherables: this.gatherables
     });
     this.campfire = new CampfireSystem({
@@ -62,6 +74,14 @@ export class GameApp {
       collision: this.island.collision,
       inventory: this.inventory
     });
+    this.physicalLogs = new PhysicalLogSystem({
+      group: this.island.group,
+      player: this.player,
+      terrain: this.island,
+      collision: this.island.collision,
+      gatherables: this.gatherables
+    });
+    this.spearProjectiles = new SpearProjectileSystem({ scene: this.sceneSystem.scene });
     this.toolPresentation = new RangerToolPresentation({ player: this.player });
     this.#bindGameplayInput();
 
@@ -74,8 +94,10 @@ export class GameApp {
           player: this.player,
           canvas: this.canvas,
           onInteract: () => this.#tryInteract(),
-          onCraft: () => this.#tryCraftAction(),
-          onAttack: () => this.#tryAttackAnimal()
+          onCampfire: () => this.#tryBuildCampfire(),
+          onAttack: () => this.#tryAttack(),
+          onToolSelect: toolId => this.#trySelectTool(toolId),
+          onBuildOption: mode => this.#tryLogBuildOption(mode)
         });
         this.player.getPosition(this.playerPosition);
         this.#refreshTargets(0);
@@ -91,6 +113,12 @@ export class GameApp {
     this.toolPresentation?.update(dt);
     this.campfire?.update(dt);
 
+    const projectileEvent = this.spearProjectiles?.update(dt);
+    if (projectileEvent) {
+      this.#syncEquippedToolPresentation();
+      if (projectileEvent.hit && projectileEvent.result) this.#handleCombatResult(projectileEvent.result);
+    }
+
     if (this.player) {
       this.player.getPosition(this.playerPosition);
       this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
@@ -102,33 +130,60 @@ export class GameApp {
   };
 
   #refreshTargets(dt = 0) {
-    const huntState = this.hunt?.getState();
-    const animalDefeated = huntState?.defeated ?? false;
-    const meatCount = this.inventory?.get('meat') ?? 0;
-    const firstTreeChopped = this.treeHarvest?.hasChoppedTree() ?? false;
-    const logOnly = firstTreeChopped && meatCount > 0;
-    const resourceTarget = this.gatherables?.update(
-      this.playerPosition,
-      logOnly ? resourceId => resourceId === 'log' : null
-    ) ?? null;
-    const armed = Boolean(this.inventory?.get('spear'));
-    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed) ?? null;
+    const toolId = this.toolbelt?.getEquippedToolId() ?? null;
+    const carryingLog = this.physicalLogs?.isCarrying() ?? false;
+    const projectileActive = this.spearProjectiles?.isActive() ?? false;
+
+    let armed = false;
+    let attackRange = 0;
+    if (!carryingLog && !projectileActive && toolId === 'spear') {
+      armed = true;
+      attackRange = TOOL_DEFINITIONS.spear.lockRange;
+    } else if (!carryingLog && toolId === 'sword') {
+      armed = true;
+      attackRange = TOOL_DEFINITIONS.sword.range;
+    }
+    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
+
+    if (carryingLog) {
+      this.treeHarvest?.update(this.playerPosition, false);
+      this.rockHarvest?.update(this.playerPosition, false);
+      this.gatherables?.update(this.playerPosition, () => false);
+      this.currentInteractionTarget = null;
+      this.hud?.setInteractionTarget(null);
+      this.hud?.setAttackTarget(null, toolId);
+      return;
+    }
+
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
-    const treeUnlocked = animalDefeated && meatCount > 0 && !firstTreeChopped;
-    const treeTarget = this.treeHarvest?.update(this.playerPosition, treeUnlocked) ?? null;
-    this.currentInteractionTarget = carcassTarget ?? treeTarget ?? resourceTarget;
+    const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
+    const rockTarget = this.rockHarvest?.update(this.playerPosition, toolId === 'pickaxe') ?? null;
+    const demolitionTarget = toolId === 'hammer'
+      ? this.physicalLogs?.getDemolitionTarget(this.playerPosition)
+        ?? this.campfire?.getDemolitionTarget(this.playerPosition)
+        ?? null
+      : null;
+    const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
+
+    this.currentInteractionTarget = carcassTarget
+      ?? treeTarget
+      ?? rockTarget
+      ?? demolitionTarget
+      ?? resourceTarget;
 
     this.hud?.setInteractionTarget(this.currentInteractionTarget);
-    this.hud?.setAttackTarget(this.currentHuntTarget);
+    this.hud?.setAttackTarget(this.currentHuntTarget, toolId);
   }
 
   #tryInteract() {
-    if (!this.player || !this.inventory) return;
+    if (!this.player || !this.inventory || this.physicalLogs?.isCarrying()) return;
     this.player.getPosition(this.playerPosition);
+    this.#refreshTargets(0);
+    const target = this.currentInteractionTarget;
+    if (!target) return;
 
-    const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition);
-    if (carcassTarget) {
-      const loot = this.hunt.harvest(this.playerPosition);
+    if (target.type === 'carcass') {
+      const loot = this.hunt?.harvest(this.playerPosition);
       if (!loot) return;
       this.inventory.add(loot.itemId, loot.quantity);
       this.#refreshTargets(0);
@@ -136,197 +191,270 @@ export class GameApp {
       return;
     }
 
-    const huntState = this.hunt?.getState();
-    const treeUnlocked = Boolean(huntState?.defeated && this.inventory.get('meat') > 0 && !this.treeHarvest?.hasChoppedTree());
-    if (treeUnlocked) {
-      const treeTarget = this.treeHarvest?.update(this.playerPosition, true);
-      if (treeTarget) {
-        if (this.toolPresentation?.isBusy()) return;
-        this.player.faceWorldPoint(treeTarget.position);
-        if (this.toolPresentation && !this.toolPresentation.playChop()) return;
-        const hit = this.treeHarvest.chop(this.playerPosition);
-        if (!hit) return;
-        this.#refreshTargets(0);
-
-        if (hit.chopped) {
-          this.#syncProgress();
-          return;
-        }
-
-        this.setStatus(`DAY 1 · TREE · ${hit.remainingHits} SWING${hit.remainingHits === 1 ? '' : 'S'} LEFT`);
-        this.hud?.setObjective(`DAY 1 · Keep chopping · ${hit.remainingHits} swing${hit.remainingHits === 1 ? '' : 's'} left`);
-        return;
+    const toolId = this.toolbelt?.getEquippedToolId();
+    if (target.type === 'tree' && toolId === 'axe') {
+      if (this.toolPresentation?.isBusy()) return;
+      this.player.faceWorldPoint(target.position);
+      if (!this.toolPresentation?.playSwing('axe')) return;
+      const hit = this.treeHarvest?.chop(this.playerPosition);
+      if (!hit) return;
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      if (!hit.chopped) {
+        this.setStatus(`TREE · ${hit.remainingHits} SWING${hit.remainingHits === 1 ? '' : 'S'} LEFT`);
+      } else {
+        this.setStatus(`TREE DOWN · ${hit.dropCount} PHYSICAL LOGS`);
       }
-    }
-
-    const logOnly = Boolean(this.treeHarvest?.hasChoppedTree());
-    const pickup = this.gatherables?.gather(
-      this.playerPosition,
-      logOnly ? resourceId => resourceId === 'log' : null
-    );
-    if (!pickup) return;
-
-    this.inventory.add(pickup.resourceId, pickup.quantity);
-    this.#refreshTargets(0);
-    this.#syncProgress();
-  }
-
-  #tryCraftAction() {
-    if (!this.inventory || !this.crafting) return;
-    const hasSpear = this.inventory.get('spear') > 0;
-    if (!hasSpear) {
-      this.#tryCraftSpear();
       return;
     }
 
-    const requiredLogs = HARVESTABLE_DEFINITIONS.forestTree.dropCount;
-    const readyForCampfire = (
-      this.inventory.get('meat') > 0 &&
-      this.inventory.get('log') >= requiredLogs &&
-      !this.campfire?.isBuilt()
-    );
-    if (readyForCampfire) this.#tryBuildCampfire();
-  }
-
-  #tryCraftSpear() {
-    if (!this.crafting || !this.inventory || this.inventory.get('spear') > 0) return;
-    const crafted = this.crafting.craft('spear');
-    if (!crafted) return;
-
-    this.player?.setSpearEquipped(true);
-    this.player?.getPosition(this.playerPosition);
-    this.#refreshTargets(0);
-    this.#syncProgress();
-  }
-
-  #tryBuildCampfire() {
-    if (!this.player || !this.campfire?.canBuild()) return;
-    this.player.getPosition(this.playerPosition);
-    this.player.getFacingDirection(this.playerFacing);
-    const built = this.campfire.build(this.playerPosition, this.playerFacing);
-    if (!built) {
-      this.setStatus('DAY 1 · CAMPFIRE NEEDS CLEAR GROUND');
-      this.hud?.setObjective('DAY 1 · Move to flatter open ground · C / campfire');
+    if (target.type === 'rock' && toolId === 'pickaxe') {
+      if (this.toolPresentation?.isBusy()) return;
+      this.player.faceWorldPoint(target.position);
+      if (!this.toolPresentation?.playSwing('pickaxe')) return;
+      const hit = this.rockHarvest?.mine(this.playerPosition);
+      if (!hit) return;
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(
+        hit.broken
+          ? `ROCK BROKEN · ${hit.stoneYield} STONES`
+          : `ROCK · ${hit.remainingHits} SWING${hit.remainingHits === 1 ? '' : 'S'} LEFT`
+      );
       return;
     }
 
-    this.#refreshTargets(0);
-    this.#syncProgress();
-  }
+    if (toolId === 'hammer' && (target.type === 'placed-log' || target.type === 'campfire')) {
+      if (this.toolPresentation?.isBusy()) return;
+      if (!this.toolPresentation?.playSwing('hammer')) return;
+      const demolished = target.type === 'placed-log'
+        ? this.physicalLogs?.demolish(this.playerPosition)
+        : this.campfire?.demolish(this.playerPosition);
+      if (!demolished) return;
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(`${demolished.label.toUpperCase()} DISASSEMBLED`);
+      return;
+    }
 
-  #tryAttackAnimal() {
-    if (!this.player || !this.hunt || !this.inventory || this.inventory.get('spear') < 1) return;
-    this.player.getPosition(this.playerPosition);
-    const hit = this.hunt.attack(this.playerPosition);
-    if (!hit) return;
-
-    this.player.faceWorldPoint(hit.position);
-    this.player.playSpearAttack();
-    this.#refreshTargets(0);
-
-    if (hit.defeated) {
+    if (target.type === 'physical-resource' && target.resourceId === 'log') {
+      const carried = this.physicalLogs?.pickup(this.playerPosition);
+      if (!carried) return;
+      this.#syncEquippedToolPresentation();
+      this.#refreshTargets(0);
       this.#syncProgress();
       return;
     }
 
-    this.setStatus(`DAY 1 · ${hit.label.toUpperCase()} WOUNDED · ${hit.health}/${hit.maxHealth}`);
-    this.hud?.setObjective(`DAY 1 · Strike the ${hit.label.toLowerCase()} again`);
+    if (target.type === 'resource') {
+      const pickup = this.gatherables?.gather(this.playerPosition);
+      if (!pickup) return;
+      this.inventory.add(pickup.resourceId, pickup.quantity);
+      this.#refreshTargets(0);
+      this.#syncProgress();
+    }
+  }
+
+  #trySelectTool(toolId) {
+    if (!this.toolbelt || !this.inventory) return;
+    if (this.physicalLogs?.isCarrying()) {
+      this.setStatus('LOG IN HAND · PLACE OR DROP IT FIRST');
+      return;
+    }
+
+    const result = this.toolbelt.select(toolId);
+    if (!result.equipped) {
+      const missing = result.missing
+        .map(item => `${item.itemId.toUpperCase()} ${item.missing}`)
+        .join(' · ');
+      this.setStatus(`${TOOL_DEFINITIONS[toolId].label.toUpperCase()} · NEED ${missing}`);
+      this.hud?.setToolbelt(this.toolbelt.snapshot());
+      return;
+    }
+
+    this.#syncEquippedToolPresentation();
+    this.#refreshTargets(0);
+    this.#syncProgress();
+    if (result.crafted) this.setStatus(`CRAFTED ${TOOL_DEFINITIONS[toolId].label.toUpperCase()} · EQUIPPED`);
+  }
+
+  #tryLogBuildOption(mode) {
+    if (!this.physicalLogs?.isCarrying() || !this.player) return;
+    this.player.getPosition(this.playerPosition);
+    this.player.getFacingDirection(this.playerFacing);
+
+    const result = mode === 'drop'
+      ? this.physicalLogs.drop(this.playerPosition, this.playerFacing)
+      : this.physicalLogs.build(mode, this.playerPosition, this.playerFacing);
+    if (!result) {
+      this.setStatus('LOG · NEED CLEARER, FLATTER GROUND');
+      return;
+    }
+
+    this.#syncEquippedToolPresentation();
+    this.#refreshTargets(0);
+    this.#syncProgress();
+    this.setStatus(
+      mode === 'drop'
+        ? 'LOG DROPPED'
+        : `${result.label.toUpperCase()} PLACED`
+    );
+  }
+
+  #tryBuildCampfire() {
+    if (!this.player || !this.campfire?.canBuild() || this.physicalLogs?.isCarrying()) return;
+    this.player.getPosition(this.playerPosition);
+    this.player.getFacingDirection(this.playerFacing);
+    const built = this.campfire.build(this.playerPosition, this.playerFacing);
+    if (!built) {
+      this.setStatus('CAMPFIRE · NEED CLEAR, FLAT GROUND');
+      this.hud?.setObjective('Move to flatter open ground · C / campfire');
+      return;
+    }
+
+    this.#refreshTargets(0);
+    this.#syncProgress();
+  }
+
+  #tryAttack() {
+    if (!this.player || !this.hunt || !this.toolbelt || this.physicalLogs?.isCarrying()) return;
+    const toolId = this.toolbelt.getEquippedToolId();
+    this.player.getPosition(this.playerPosition);
+
+    if (toolId === 'spear') {
+      if (this.spearProjectiles?.isActive()) return;
+      const target = this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.spear.lockRange);
+      if (!target) return;
+      this.player.faceWorldPoint(target.position);
+      const launched = this.spearProjectiles.throw({
+        origin: this.playerPosition,
+        target: target.position,
+        onHit: () => this.hunt.applyDamage(this.hunt.definition.spearDamage)
+      });
+      if (!launched) return;
+      this.player.setSpearEquipped(false);
+      this.currentHuntTarget = null;
+      this.hud?.setAttackTarget(null, 'spear');
+      return;
+    }
+
+    if (toolId === 'sword') {
+      if (this.toolPresentation?.isBusy()) return;
+      const target = this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.sword.range);
+      if (!target) return;
+      this.player.faceWorldPoint(target.position);
+      if (!this.toolPresentation?.playSwing('sword')) return;
+      const hit = this.hunt.meleeAttack(this.playerPosition, {
+        range: TOOL_DEFINITIONS.sword.range,
+        damage: TOOL_DEFINITIONS.sword.damage
+      });
+      if (hit) this.#handleCombatResult(hit);
+    }
+  }
+
+  #handleCombatResult(hit) {
+    this.#refreshTargets(0);
+    this.#syncProgress();
+    if (hit.defeated) {
+      this.setStatus(`${hit.label.toUpperCase()} DOWN · GATHER MEAT`);
+      return;
+    }
+    this.setStatus(`${hit.label.toUpperCase()} WOUNDED · ${hit.health}/${hit.maxHealth}`);
+  }
+
+  #syncEquippedToolPresentation() {
+    const toolId = this.toolbelt?.getEquippedToolId() ?? null;
+    const carryingLog = this.physicalLogs?.isCarrying() ?? false;
+    const spearInFlight = this.spearProjectiles?.isActive() ?? false;
+    this.player?.setSpearEquipped(!carryingLog && !spearInFlight && toolId === 'spear');
+    this.toolPresentation?.setEquippedTool(carryingLog ? null : toolId);
   }
 
   #syncProgress() {
-    if (!this.inventory || !this.crafting) return;
-
-    const hasSpear = this.inventory.get('spear') > 0;
-    const meatCount = this.inventory.get('meat');
-    const logCount = this.inventory.get('log');
-    const requiredLogs = HARVESTABLE_DEFINITIONS.forestTree.dropCount;
-    const canCraftSpear = !hasSpear && this.crafting.canCraft('spear');
-    const huntState = this.hunt?.getState();
-    const animalDefeated = huntState?.defeated ?? false;
-    const animalLabel = huntState?.label ?? 'animal';
-    const firstTreeChopped = this.treeHarvest?.hasChoppedTree() ?? false;
+    if (!this.inventory || !this.toolbelt) return;
+    const toolId = this.toolbelt.getEquippedToolId();
+    const carryingLog = this.physicalLogs?.isCarrying() ?? false;
     const campfireBuilt = this.campfire?.isBuilt() ?? false;
-    const canBuildCampfire = (
-      animalDefeated &&
-      meatCount > 0 &&
-      logCount >= requiredLogs &&
-      !campfireBuilt &&
-      Boolean(this.campfire?.canBuild())
-    );
+    const canBuildCampfire = !carryingLog && !campfireBuilt && Boolean(this.campfire?.canBuild());
 
     this.hud?.setInventory(this.inventory.snapshot());
-    this.hud?.setCraftAction(
-      canCraftSpear
-        ? { available: true, icon: 'spear', label: 'Craft spear' }
-        : canBuildCampfire
-          ? { available: true, icon: 'campfire', label: 'Build campfire' }
-          : { available: false }
-    );
-    this.player?.setSpearEquipped(hasSpear && !this.toolPresentation?.isBusy());
+    this.hud?.setToolbelt(this.toolbelt.snapshot());
+    this.hud?.setLogBuildMode(carryingLog);
+    this.hud?.setCampfireAction({
+      available: canBuildCampfire,
+      label: 'Build campfire from sticks and stones'
+    });
+    this.#syncEquippedToolPresentation();
+
+    if (carryingLog) {
+      this.setStatus('LOG IN HAND · BUILD');
+      this.hud?.setObjective('Choose LAY LOG, POST or DROP');
+      this.hud?.setAttackTarget(null, toolId);
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'physical-resource') {
+      this.setStatus('PHYSICAL LOG · LIFT TO BUILD');
+      this.hud?.setObjective('Hand / E · lift log · it does not enter inventory');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'tree') {
+      this.setStatus('AXE · TREE IN RANGE');
+      this.hud?.setObjective('Axe / E · chop tree into physical logs');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'rock') {
+      this.setStatus('PICKAXE · ROCK IN RANGE');
+      this.hud?.setObjective('Pickaxe / E · mine large rock into stones');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'placed-log' || this.currentInteractionTarget?.type === 'campfire') {
+      this.setStatus('HAMMER · DEMOLITION TARGET');
+      this.hud?.setObjective('Hammer / E · disassemble target');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'carcass') {
+      this.setStatus('GATHER MEAT');
+      this.hud?.setObjective('Hand / E · gather meat');
+      return;
+    }
+
+    if (this.currentHuntTarget && toolId === 'spear') {
+      this.setStatus(`AUTO-LOCK · ${this.currentHuntTarget.label.toUpperCase()}`);
+      this.hud?.setObjective('Spear target locked · F / throw');
+      return;
+    }
+
+    if (this.currentHuntTarget && toolId === 'sword') {
+      this.setStatus(`${this.currentHuntTarget.label.toUpperCase()} · SWORD RANGE`);
+      this.hud?.setObjective('Sword / F · strike');
+      return;
+    }
+
+    if (canBuildCampfire) {
+      this.setStatus('STICKS + STONES READY · CAMPFIRE');
+      this.hud?.setObjective('C / campfire · logs are reserved for building');
+      return;
+    }
 
     if (campfireBuilt) {
       this.setStatus('DAY 1 · CAMPFIRE BUILT');
-      this.hud?.setObjective('DAY 1 · Campfire built · cook the meat next');
-      this.hud?.setAttackTarget(null);
+      this.hud?.setObjective('Gather, craft tools, hunt, mine and build with physical logs');
       return;
     }
 
-    if (animalDefeated && meatCount > 0 && logCount >= requiredLogs) {
-      this.setStatus(`DAY 1 · LOGS ${logCount} · BUILD CAMPFIRE`);
-      this.hud?.setObjective('DAY 1 · C / campfire to build');
-      this.hud?.setAttackTarget(null);
+    if (this.currentInteractionTarget?.type === 'resource') {
+      this.setStatus(`GATHER ${this.currentInteractionTarget.label.toUpperCase()}`);
+      this.hud?.setObjective('Hand / E · inventory resource');
       return;
     }
 
-    if (animalDefeated && meatCount > 0 && firstTreeChopped) {
-      this.setStatus(`DAY 1 · GATHER LOGS ${logCount}/${requiredLogs}`);
-      this.hud?.setObjective(
-        this.currentInteractionTarget?.resourceId === 'log'
-          ? 'DAY 1 · E / hand to gather logs'
-          : `DAY 1 · Gather the fallen logs · ${logCount}/${requiredLogs}`
-      );
-      this.hud?.setAttackTarget(null);
-      return;
-    }
-
-    if (animalDefeated && meatCount > 0) {
-      this.setStatus('DAY 1 · CHOP A TREE');
-      this.hud?.setObjective(
-        this.currentInteractionTarget?.type === 'tree'
-          ? 'DAY 1 · E / axe to chop'
-          : 'DAY 1 · Find a nearby tree'
-      );
-      this.hud?.setAttackTarget(null);
-      return;
-    }
-
-    if (animalDefeated) {
-      this.setStatus(`DAY 1 · ${animalLabel.toUpperCase()} DOWN`);
-      this.hud?.setObjective(
-        this.currentInteractionTarget?.type === 'carcass'
-          ? 'DAY 1 · Hand / E to gather meat'
-          : 'DAY 1 · Move closer · gather meat'
-      );
-      this.hud?.setAttackTarget(null);
-      return;
-    }
-
-    if (hasSpear) {
-      this.setStatus(`DAY 1 · HUNT THE ${animalLabel.toUpperCase()}`);
-      this.hud?.setObjective(
-        this.currentHuntTarget ? 'DAY 1 · F / spear to attack' : `DAY 1 · Follow the path · hunt ${animalLabel.toLowerCase()}`
-      );
-      return;
-    }
-
-    if (canCraftSpear) {
-      this.setStatus('DAY 1 · CRAFT A SPEAR');
-      this.hud?.setObjective('DAY 1 · C / spear to craft');
-      return;
-    }
-
-    this.setStatus('DAY 1 · GATHER A STICK + STONE');
-    this.hud?.setObjective('DAY 1 · E / hand to gather');
+    this.setStatus('DAY 1 · GATHER + CRAFT');
+    this.hud?.setObjective('Gather sticks, stones and grass · tap bottom tool bar to craft/equip');
   }
 
   #bindGameplayInput() {
@@ -338,10 +466,23 @@ export class GameApp {
         this.#tryInteract();
       } else if (event.code === 'KeyC') {
         event.preventDefault();
-        this.#tryCraftAction();
+        this.#tryBuildCampfire();
       } else if (event.code === 'KeyF') {
         event.preventDefault();
-        this.#tryAttackAnimal();
+        this.#tryAttack();
+      } else if (event.code === 'KeyB') {
+        event.preventDefault();
+        this.#tryLogBuildOption('lay');
+      } else if (event.code === 'KeyV') {
+        event.preventDefault();
+        this.#tryLogBuildOption('post');
+      } else if (event.code === 'KeyG') {
+        event.preventDefault();
+        this.#tryLogBuildOption('drop');
+      } else if (/^Digit[1-5]$/.test(event.code)) {
+        event.preventDefault();
+        const index = Number(event.code.slice(-1)) - 1;
+        this.#trySelectTool(TOOL_ORDER[index]);
       }
     });
   }
