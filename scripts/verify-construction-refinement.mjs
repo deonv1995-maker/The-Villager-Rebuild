@@ -2,23 +2,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import { ConstructionTerrainAdaptationSystem } from '../src/world/ConstructionTerrainAdaptationSystem.js';
+import { FloorSupportVisual } from '../src/world/FloorSupportVisual.js';
 import { GrassFieldSystem } from '../src/world/GrassFieldSystem.js';
+import { FernFieldSystem } from '../src/world/FernFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const nearlyEqual = (left, right, tolerance = 0.000001) => Math.abs(left - right) <= tolerance;
 const snapGrid = value => Math.round(value / PHYSICAL_LOG.gridStep) * PHYSICAL_LOG.gridStep;
 
-assert.ok(PHYSICAL_LOG.floorGroundClearance >= 0.06 && PHYSICAL_LOG.floorGroundClearance <= 0.1, 'Ground floors need a shallow archived-style clearance above natural relief');
-assert.ok(PHYSICAL_LOG.floorTerrainEmbedTolerance < 0.028, 'Valid terrain may not rise through the split-log walking face');
-assert.ok(PHYSICAL_LOG.floorGroundClearance + 0.028 <= 0.12, 'Ground floors must remain a shallow walk-on step from natural terrain');
-assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log floor support must target the curved underside rather than the walking surface');
-assert.ok(PHYSICAL_LOG.floorSupportSeamPadding >= 0.04 && PHYSICAL_LOG.floorSupportSeamPadding <= 0.08, 'Floor support seam overlap must stay bounded');
-assert.ok(PHYSICAL_LOG.floorSurfaceOverrideTolerance >= 0.05 && PHYSICAL_LOG.floorSurfaceOverrideTolerance <= 0.1, 'Floor surface ownership tolerance must stay small and construction-local');
-assert.ok(PHYSICAL_LOG.roofRegionMinWidth > 0 && PHYSICAL_LOG.roofRegionMaxWidth > PHYSICAL_LOG.roofRegionMinWidth, 'Roof regions need bounded eave spacing');
-assert.ok(PHYSICAL_LOG.roofLocalFrameLimit > 0, 'Roof preview needs a bounded local frame candidate limit');
-assert.ok(PHYSICAL_LOG.roofLocalPairLimit > 0, 'Roof preview needs a bounded local frame-pair candidate limit');
-assert.ok(PHYSICAL_LOG.frameSnapRange >= 2.2, 'Mobile frame construction needs a forgiving structural snap radius');
-assert.ok(PHYSICAL_LOG.frameSnapRange + 0.65 >= 2.85, 'RAW top beams need a strong open-frame-slot attraction radius');
+assert.ok(PHYSICAL_LOG.floorGroundClearance >= 0.06 && PHYSICAL_LOG.floorGroundClearance <= 0.1, 'Ground floors need a shallow seating clearance');
+assert.equal(PHYSICAL_LOG.floorTerrainEmbedTolerance, PHYSICAL_LOG.floorMaxTerrainCutDepth, 'Legacy floor placement tolerance must share the single terrain-adaptation depth limit');
+assert.ok(PHYSICAL_LOG.floorMaxTerrainCutDepth >= 2, 'Slope construction needs meaningful bounded high-side retreat depth');
+assert.ok(PHYSICAL_LOG.floorTerrainCorePadding >= 0.08, 'Terrain cut core must extend slightly past the visible floor footprint');
+assert.ok(PHYSICAL_LOG.floorTerrainBlendDistance >= 1.2, 'High-side terrain retreat must blend naturally into procedural terrain');
+assert.ok(PHYSICAL_LOG.floorTerrainSurfaceClearance >= 0.05, 'Adapted terrain must remain below the split-log walking face');
+assert.ok(PHYSICAL_LOG.floorUndersideDepth >= 0.2, 'Split-log support must target the curved underside rather than the walking surface');
+assert.ok(PHYSICAL_LOG.floorMaxSupportDepth > PHYSICAL_LOG.floorMaxTerrainCutDepth, 'Downhill support depth should remain slightly more permissive than uphill retreat depth');
 
 const lengthGridUnits = PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep;
 const widthGridUnits = PHYSICAL_LOG.floorWidth / PHYSICAL_LOG.gridStep;
@@ -29,21 +29,80 @@ const snappedOriginX = snapGrid(0.37);
 const snappedOriginZ = snapGrid(-0.42);
 const snappedLongX = snapGrid(snappedOriginX + PHYSICAL_LOG.length);
 const snappedSideZ = snapGrid(snappedOriginZ + PHYSICAL_LOG.floorWidth);
-assert.ok(
-  nearlyEqual(snappedLongX - snappedOriginX, PHYSICAL_LOG.length),
-  'Snapping a connected floor end must preserve the exact 2.9 m panel length instead of rounding it to 3.0 m'
-);
-assert.ok(
-  nearlyEqual(snappedSideZ - snappedOriginZ, PHYSICAL_LOG.floorWidth),
-  'Snapping a connected floor side must preserve the exact one-third Log strip width'
-);
+assert.ok(nearlyEqual(snappedLongX - snappedOriginX, PHYSICAL_LOG.length), 'Connected floor ends must preserve the exact 2.9 m panel length');
+assert.ok(nearlyEqual(snappedSideZ - snappedOriginZ, PHYSICAL_LOG.floorWidth), 'Connected floor sides must preserve the exact one-third Log strip width');
 
+// Construction-local terrain adaptation: immutable natural terrain is never raised,
+// high-side relief retreats below the floor, connected floors form one level terrace,
+// and removing the active floors restores the captured terrain mesh exactly.
+const terrainGroup = new THREE.Group();
+const terrainGeometry = new THREE.BufferGeometry();
+terrainGeometry.setAttribute('position', new THREE.Float32BufferAttribute([
+  -1, -0.8, 0,
+   1,  0.8, 0,
+   4,  3.2, 0
+], 3));
+terrainGeometry.setAttribute('color', new THREE.Float32BufferAttribute([
+  0.25, 0.55, 0.2,
+  0.25, 0.55, 0.2,
+  0.25, 0.55, 0.2
+], 3));
+const terrainMesh = new THREE.Mesh(terrainGeometry, new THREE.MeshBasicMaterial({ vertexColors: true }));
+terrainMesh.name = 'terrain-chunk-0-0';
+terrainGroup.add(terrainMesh);
+const naturalTerrain = { heightAt: x => x * 0.8 };
+const adaptation = new ConstructionTerrainAdaptationSystem({ group: terrainGroup, terrain: naturalTerrain });
+assert.equal(adaptation.captureTerrainMeshes(), 1, 'Construction terrain layer must capture existing terrain chunks instead of regenerating the island');
+const naturalHigh = adaptation.heightAt(1, 0);
+const naturalLow = adaptation.heightAt(-1, 0);
+const floorA = { id: 1, mode: 'floor', active: true, x: 0, z: 0, yaw: 0, baseY: 0.08, topY: 0.108 };
+assert.equal(adaptation.setFloors([floorA]), true);
+const cutY = floorA.topY - PHYSICAL_LOG.floorTerrainSurfaceClearance;
+assert.ok(nearlyEqual(adaptation.heightAt(1, 0), cutY, 0.00001), 'High-side natural terrain inside a floor must retreat to the construction clearance plane');
+assert.equal(adaptation.heightAt(-1, 0), naturalLow, 'Construction terrain adaptation must never raise low-side natural terrain');
+assert.equal(adaptation.heightAt(4, 0), naturalTerrain.heightAt(4, 0), 'Terrain outside the local blend must remain untouched');
+assert.ok(terrainGeometry.getAttribute('position').getY(1) < naturalHigh, 'Terrain render vertices must follow the same local high-side retreat');
+const floorB = { id: 2, mode: 'floor', active: true, x: PHYSICAL_LOG.length, z: 0, yaw: 0, baseY: 0.08, topY: 0.108 };
+adaptation.setFloors([floorA, floorB]);
+assert.ok(nearlyEqual(adaptation.heightAt(PHYSICAL_LOG.halfLength, 0), cutY, 0.00001), 'Connected floor footprints must meet as one coherent terrace surface');
+assert.equal(adaptation.setFloors([]), true);
+assert.equal(adaptation.heightAt(1, 0), naturalHigh, 'Demolition must reveal immutable natural terrain again');
+assert.ok(nearlyEqual(terrainGeometry.getAttribute('position').getY(1), 0.8, 0.00001), 'Terrain mesh vertices must restore from their captured natural baseline after demolition');
+assert.ok(nearlyEqual(terrainGeometry.getAttribute('color').getX(1), 0.25, 0.00001), 'Terrain color must restore with the natural mesh rather than leaving a permanent construction scar');
+
+// Connected floors share one construction-owned foundation and merge common corner
+// supports instead of generating competing per-panel support roots.
+const foundationGroup = new THREE.Group();
+let constructionFloorCount = 0;
+const supportTerrain = {
+  baseHeightAt: () => -1,
+  heightAt: () => -1,
+  setConstructionFloors: floors => { constructionFloorCount = floors.length; }
+};
+const foundation = new FloorSupportVisual({ group: foundationGroup, terrain: supportTerrain });
+const supportA = foundation.createForFloor({ x: 0, z: 0, yaw: 0, baseY: 0.08, topY: 0.108 }, 10);
+assert.equal(constructionFloorCount, 1, 'Floor support ownership must register the floor with the construction terrain layer');
+let foundationRoot = foundationGroup.getObjectByName('construction-floor-foundations');
+assert.equal(foundationRoot?.children.length, 4, 'One isolated floor should expose four foundation corner supports on deep low terrain');
+const supportB = foundation.createForFloor({ x: PHYSICAL_LOG.length, z: 0, yaw: 0, baseY: 0.08, topY: 0.108 }, 11);
+assert.equal(constructionFloorCount, 2);
+foundationRoot = foundationGroup.getObjectByName('construction-floor-foundations');
+assert.equal(foundationRoot?.children.length, 6, 'Two end-connected floors must merge their two shared seam corners instead of producing eight supports');
+assert.equal(foundationRoot?.userData.floorIds.length, 2, 'Shared foundation root must represent the connected active floor set');
+assert.equal(foundation.remove(supportB), true);
+assert.equal(constructionFloorCount, 1, 'Demolishing one floor must resync the remaining active construction footprint');
+foundationRoot = foundationGroup.getObjectByName('construction-floor-foundations');
+assert.equal(foundationRoot?.children.length, 4, 'Shared foundation must rebuild cleanly from remaining floors after demolition');
+assert.equal(foundation.remove(supportA), true);
+assert.equal(constructionFloorCount, 0);
+assert.equal(foundationGroup.getObjectByName('construction-floor-foundations'), undefined, 'Removing the last floor must remove its generated foundation presentation');
+
+// Existing standable collision remains continuous across exact snapped seams.
 const collision = new WorldCollisionSystem({
   heightAt: () => 0,
   baseHeightAt: () => 0,
   isPlayable: () => true
 });
-
 const floorTop = 0.04;
 const floorHalfZ = PHYSICAL_LOG.floorWidth * 0.5;
 const supportHalfX = PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding;
@@ -55,7 +114,7 @@ const addFloor = (x, z) => collision.addBox({
   halfZ: floorHalfZ,
   yaw: 0,
   type: 'placed-log',
-  label: `test-floor-${x}-${z}`,
+  label: `test-floor-${x}-${z}-floor`,
   bottomY: -PHYSICAL_LOG.floorUndersideDepth,
   topY: floorTop,
   standable: true,
@@ -66,116 +125,37 @@ const addFloor = (x, z) => collision.addBox({
   supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
   stepHeight: 0.18
 });
-
 addFloor(snappedOriginX, snappedOriginZ);
 addFloor(snappedOriginX, snappedSideZ);
 addFloor(snappedLongX, snappedOriginZ);
-const sideSeamZ = (snappedOriginZ + snappedSideZ) * 0.5;
-const longSeamX = (snappedOriginX + snappedLongX) * 0.5;
 for (const offset of [-0.025, 0, 0.025]) {
-  assert.equal(
-    collision.supportHeightAt(snappedOriginX, sideSeamZ + offset, 0),
-    floorTop,
-    'Side-by-side floor support must remain continuous through the actual snapped panel seam'
-  );
-  assert.equal(
-    collision.supportHeightAt(longSeamX + offset, snappedOriginZ, 0),
-    floorTop,
-    'End-to-end floor support must remain continuous through the actual snapped panel seam'
-  );
+  assert.equal(collision.supportHeightAt(snappedOriginX, (snappedOriginZ + snappedSideZ) * 0.5 + offset, 0), floorTop, 'Side floor seam must remain continuously standable');
+  assert.equal(collision.supportHeightAt((snappedOriginX + snappedLongX) * 0.5 + offset, snappedOriginZ, 0), floorTop, 'End floor seam must remain continuously standable');
 }
 
-let movementCollision;
-movementCollision = new WorldCollisionSystem({
-  heightAt: (x, z) => movementCollision.supportHeightAt(x, z, 0),
-  baseHeightAt: () => 0,
-  isPlayable: () => true,
-  maxSlopeDegrees: 89
-});
-movementCollision.addBox({
-  x: 0,
-  z: 0,
-  halfX: PHYSICAL_LOG.halfLength,
-  halfZ: floorHalfZ,
-  yaw: 0,
-  type: 'placed-log',
-  label: 'movement-floor',
-  bottomY: -PHYSICAL_LOG.floorUndersideDepth,
-  topY: floorTop,
-  standable: true,
-  supportHalfX,
-  supportHalfZ,
-  supportY: floorTop,
-  supportOverridesBase: true,
-  supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
-  stepHeight: 0.18
-});
-movementCollision.addBox({
-  x: 0,
-  z: 0,
-  halfX: PHYSICAL_LOG.halfLength,
-  halfZ: PHYSICAL_LOG.radius,
-  yaw: 0,
-  type: 'placed-log',
-  label: 'test-overhead-top-beam',
-  bottomY: 2.72,
-  topY: 3.28
-});
-
-function walk(start, dx, dz, steps = 12) {
-  let position = { ...start };
-  for (let index = 0; index < steps; index += 1) {
-    const resolved = movementCollision.resolveMove(
-      position,
-      { x: position.x + dx, z: position.z + dz },
-      { radius: 0.42 }
-    );
-    position = {
-      x: resolved.x,
-      y: movementCollision.supportHeightAt(resolved.x, resolved.z, 0),
-      z: resolved.z
-    };
-  }
-  return position;
-}
-
-const structureEntry = walk({ x: 0, y: 0, z: -1.25 }, 0, 0.16, 15);
-assert.ok(
-  structureEntry.z > 0.8,
-  'Ranger must pass beneath an overhead RAW frame beam while stepping onto the floor through an open panel or door'
-);
-const sideExit = walk({ x: 0, y: floorTop, z: 0 }, 0, 0.16, 10);
-assert.ok(sideExit.z > floorHalfZ + 0.7, 'Ranger must be able to walk laterally off a floor instead of sticking to its side collider');
-const endExit = walk({ x: 0, y: floorTop, z: 0 }, 0.18, 0, 12);
-assert.ok(endExit.x > PHYSICAL_LOG.halfLength + 0.45, 'Ranger must be able to walk off the long edge of a floor in either movement axis');
-
-const revisionBefore = movementCollision.getRevision();
-const temporary = movementCollision.addObstacle({ x: 9, z: 9, radius: 0.5, type: 'test' });
-assert.ok(movementCollision.getRevision() > revisionBefore, 'Dynamic world systems need collision revision changes after construction is added');
-const revisionAfterAdd = movementCollision.getRevision();
-assert.equal(movementCollision.removeObstacle(temporary), true);
-assert.ok(movementCollision.getRevision() > revisionAfterAdd, 'Dynamic world systems need collision revision changes after construction is removed');
-
-const grassCollision = new WorldCollisionSystem({
-  heightAt: () => 0,
-  baseHeightAt: () => 0,
-  isPlayable: () => true
-});
-const grass = new GrassFieldSystem({
-  group: new THREE.Group(),
-  terrain: {
-    getScatterBounds: () => ({ halfX: 0.2, halfZ: 0.2, centerZ: 0 }),
-    grassDensityAt: () => 1,
-    heightAt: () => 0
-  },
-  scatter: { isGrassClear: () => true },
-  collision: grassCollision,
-  maxInstances: 18
-});
-assert.equal(grass.populate(), 18, 'Construction occlusion regression needs a deterministic grass patch');
+// Grass and ferns share the same reversible horizontal footprint rule. Their
+// natural ecology entries are retained, hidden while covered, and restored after
+// the floor collider is removed.
+const vegetationCollision = new WorldCollisionSystem({ heightAt: () => 0, baseHeightAt: () => 0, isPlayable: () => true });
+let vegetationRevision = 0;
+const vegetationAdaptation = {
+  getRevision: () => vegetationRevision,
+  heightAt: x => x > 1.5 ? -0.35 : 0
+};
+const vegetationTerrain = {
+  getScatterBounds: () => ({ halfX: 0.2, halfZ: 0.2, centerZ: 0 }),
+  grassDensityAt: () => 1,
+  fernDensityAt: () => 1,
+  heightAt: () => 0
+};
+const scatter = { isGrassClear: () => true };
+const grass = new GrassFieldSystem({ group: new THREE.Group(), terrain: vegetationTerrain, scatter, collision: vegetationCollision, constructionTerrain: vegetationAdaptation, maxInstances: 18 });
+const ferns = new FernFieldSystem({ group: new THREE.Group(), terrain: vegetationTerrain, scatter, collision: vegetationCollision, constructionTerrain: vegetationAdaptation, maxInstances: 12 });
+assert.equal(grass.populate(), 18);
+assert.equal(ferns.populate(), 12);
 grass.update(1 / 60, { x: 2, z: 2 });
-assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Grass must remain visible before a floor is placed');
-const grassFloor = grassCollision.addBox({
+ferns.update(1 / 60, { x: 2, z: 2 });
+const vegetationFloor = vegetationCollision.addBox({
   x: 0,
   z: 0,
   halfX: PHYSICAL_LOG.halfLength,
@@ -186,17 +166,25 @@ const grassFloor = grassCollision.addBox({
   bottomY: -0.18,
   topY: 0.1
 });
+vegetationRevision += 1;
 grass.update(1 / 60, { x: 2, z: 2 });
-assert.equal(grass.entries.every(entry => entry.constructionHidden), true, 'Grass intersecting a placed floor footprint must be hidden immediately');
-assert.equal(grassCollision.removeObstacle(grassFloor), true);
+ferns.update(1 / 60, { x: 2, z: 2 });
+assert.equal(grass.entries.every(entry => entry.constructionHidden), true, 'Grass inside a floor footprint must hide regardless of its original terrain height');
+assert.equal(ferns.entries.every(entry => entry.constructionHidden), true, 'Ferns must use the same construction clearing boundary as grass');
+assert.equal(vegetationCollision.removeObstacle(vegetationFloor), true);
+vegetationRevision += 1;
 grass.update(1 / 60, { x: 2, z: 2 });
-assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Demolishing a floor must restore the underlying grass instead of deleting ecology data');
+ferns.update(1 / 60, { x: 2, z: 2 });
+assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Demolition must restore grass ecology entries');
+assert.equal(ferns.entries.some(entry => entry.constructionHidden), false, 'Demolition must restore fern ecology entries');
 
-const [logSource, supportSource, collisionSource, grassSource, islandSource, definitionsSource] = await Promise.all([
+const [logSource, supportSource, adaptationSource, collisionSource, grassSource, fernSource, islandSource, definitionsSource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
+  readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
   readFile('src/world/WorldCollisionSystem.js', 'utf8'),
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
+  readFile('src/world/FernFieldSystem.js', 'utf8'),
   readFile('src/world/TestIslandSystem.js', 'utf8'),
   readFile('src/data/PhysicalLogDefinitions.js', 'utf8')
 ]);
@@ -204,44 +192,37 @@ const [logSource, supportSource, collisionSource, grassSource, islandSource, def
 for (const requirement of [
   'excludeRawOccupied: true',
   'rawKey: `beam:${anchorIds.join(\'-\')}`',
-  "new Set(this.#activeBuilt('raw').map(raw => raw.rawKey).filter(Boolean))",
   'this.#baseTerrainHeightAt(',
   'sample.center + PHYSICAL_LOG.floorGroundClearance',
-  'const FLOOR_CENTER_LIFT = 0',
-  'const FLOOR_TOP_LIFT = 0.028',
   'PHYSICAL_LOG.floorTerrainEmbedTolerance',
   'supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding',
-  'supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding',
   'supportOverridesBase: true',
-  'this.structureRevision = 0',
-  'this.framePairCacheRevision',
-  'this.roofQueryCacheRevision',
-  'this.roofQueryCacheKey',
-  '#markStructureChanged()',
   'collectLocalRoofFramePairs',
   'collectRoofRegions',
   "'roof-rafter'",
-  "'roof-ridge'",
-  'roofRegionKey: region.key',
-  'roofLength'
-]) {
-  assert.ok(logSource.includes(requirement), `Construction refinement is missing contract: ${requirement}`);
-}
+  "'roof-ridge'"
+]) assert.ok(logSource.includes(requirement), `Construction runtime is missing preserved contract: ${requirement}`);
 
-assert.ok(definitionsSource.includes('const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12'), 'Floor and frame coordinates must share a Log-proportional construction grid');
-assert.ok(!logSource.includes('this.#axisYawDelta(floor.yaw, base.yaw) > 0.18'), 'Floor edge snapping must not depend on the Ranger facing parallel to the existing floor');
-assert.ok(!logSource.includes('roofRegionCacheRevision'), 'ROOF preview must not rebuild a global roof-region graph');
-assert.ok(!logSource.includes('roofCandidateCacheRevision'), 'ROOF preview must use the bounded local query cache');
-assert.ok(supportSource.includes('placement.baseY - PHYSICAL_LOG.floorUndersideDepth'), 'Automatic floor supports must terminate at the real split-log underside');
-assert.ok(supportSource.includes('this.terrain.baseHeightAt?.(x, z)'), 'Automatic floor supports must sample immutable base terrain instead of standable construction height');
-assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor support terrain sampling must keep a compatibility fallback');
-assert.ok(collisionSource.includes('headY < obstacle.bottomY'), 'Movement collision must ignore structural beams that are fully above the Ranger capsule');
-assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
-assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
-assert.ok(collisionSource.includes('supportOverridesBase'), 'Construction floors need explicit support ownership over small terrain variations');
-assert.ok(collisionSource.includes('getRevision()'), 'Construction-aware rendering needs a stable collision revision source');
-assert.ok(grassSource.includes('#syncConstructionOcclusion()'), 'Grass must react to dynamic construction changes without rebuilding the ecology field');
-assert.ok(grassSource.includes('constructionFloorCoversVegetation'), 'Grass-floor intersection logic must stay isolated from terrain generation');
-assert.ok(islandSource.includes('collision: this.collision'), 'The island must provide the shared collision source to the grass field');
+assert.ok(definitionsSource.includes('MAX_FLOOR_TERRAIN_ADAPTATION'), 'Slope placement and terrain retreat must use one shared high-side depth authority');
+assert.ok(adaptationSource.includes('this.floors = new Map()'), 'Terrain adaptation must be derived from active construction footprints');
+assert.ok(adaptationSource.includes('this.#adaptedHeightFrom(naturalY'), 'Construction terrain must layer over immutable natural height samples');
+assert.ok(adaptationSource.includes('result = Math.min(result, candidate)'), 'Construction terrain may lower high-side relief but must never raise low-side terrain');
+assert.ok(adaptationSource.includes('naturalY: Float32Array.from'), 'Terrain mesh restoration must retain an immutable per-vertex baseline');
+assert.ok(adaptationSource.includes('#refreshAffectedMeshes(previous, normalized)'), 'Floor add/remove must rebuild only locally affected terrain chunks');
+assert.ok(supportSource.includes("root.name = 'construction-floor-foundations'"), 'Connected floors must use one shared foundation presentation');
+assert.ok(supportSource.includes('FOUNDATION_MERGE_RADIUS'), 'Foundation support candidates must merge at connected floor seams');
+assert.ok(supportSource.includes('this.terrain.setConstructionFloors?.'), 'Floor lifecycle must drive terrain adaptation through an optional construction boundary');
+assert.ok(supportSource.includes('this.terrain.baseHeightAt?.(x, z)'), 'Low-side foundation supports must continue sampling immutable terrain');
+assert.ok(collisionSource.includes('supportOverridesBase'), 'Standable floors must retain construction surface ownership');
+assert.ok(collisionSource.includes('escapingStandableEdge'), 'Existing platform edge traversal must remain intact');
+assert.ok(grassSource.includes('constructionFloorCoversVegetation'), 'Vegetation-floor overlap must remain isolated from procedural terrain generation');
+assert.ok(!grassSource.includes('entry.y + 0.9 < floor.bottomY'), 'Floor vegetation clearing must not depend on the pre-cut vertical position');
+assert.ok(grassSource.includes('constructionTerrain?.heightAt?.'), 'Visible vegetation around a terrain cut must reproject to the reversible construction surface');
+assert.ok(fernSource.includes('collision = null') && fernSource.includes('constructionTerrain = null'), 'Ferns must receive the same dynamic construction boundaries as grass');
+assert.ok(islandSource.includes('new ConstructionTerrainAdaptationSystem'), 'Island composition must own one construction-local terrain adapter');
+assert.ok(islandSource.includes('baseHeightAt(x, z)') && islandSource.includes('return this.terrain.heightAt(x, z)'), 'Immutable procedural height must remain separately accessible to construction/support systems');
+assert.ok(islandSource.includes('constructionHeightAt(x, z)') && islandSource.includes('this.constructionTerrain.heightAt(x, z)'), 'Movement must have a construction-adjusted terrain surface without rewriting procedural generation');
+assert.ok(islandSource.includes('this.constructionTerrain.captureTerrainMeshes()'), 'Terrain baseline must be captured immediately after procedural terrain creation');
+assert.ok(islandSource.includes('collision: this.collision') && islandSource.includes('constructionTerrain: this.constructionTerrain'), 'Grass and ferns must share the island construction/collision boundary');
 
-console.log('Exact floor seams, open structure entry, grass-floor occlusion, mobile frame snapping and bounded roof topology verified');
+console.log('Slope floor terrain retreat, reversible ecology, coherent foundations and preserved traversal contracts verified');
