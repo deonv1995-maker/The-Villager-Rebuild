@@ -23,13 +23,13 @@ export class FloorSupportVisual {
     const basis = this.#basis(placement.yaw);
     const halfX = PHYSICAL_LOG.halfLength * 0.92;
     const halfZ = PHYSICAL_LOG.floorWidth * 0.42;
-    const undersideY = placement.y - 0.235;
+    const undersideY = placement.baseY + 0.02;
 
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         const x = placement.x + basis.xX * halfX * sx + basis.zX * halfZ * sz;
         const z = placement.z + basis.xZ * halfX * sx + basis.zZ * halfZ * sz;
-        const groundY = this.terrain.heightAt(x, z);
+        const groundY = this.#baseHeightAt(x, z);
         const gap = undersideY - groundY;
         if (gap <= PHYSICAL_LOG.floorFillThreshold) continue;
 
@@ -48,6 +48,10 @@ export class FloorSupportVisual {
 
   remove(root) {
     if (root?.parent) root.parent.remove(root);
+  }
+
+  #baseHeightAt(x, z) {
+    return this.terrain.baseHeightAt?.(x, z) ?? this.terrain.heightAt(x, z);
   }
 
   #createFillPier(x, z, groundY, gap) {

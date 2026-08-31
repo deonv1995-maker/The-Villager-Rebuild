@@ -14,8 +14,9 @@ import {
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
-const FLOOR_CENTER_LIFT = 0.275;
-const FLOOR_TOP_LIFT = 0.32;
+const FLOOR_CENTER_LIFT = 0.26;
+const FLOOR_TOP_LIFT = 0.278;
+const ROOF_SEAT_LIFT = 0.08;
 
 export class PhysicalLogSystem {
   constructor({ group, player, terrain, collision, gatherables }) {
@@ -51,6 +52,8 @@ export class PhysicalLogSystem {
     this.tempMatrix = new THREE.Matrix4();
     this.tempQuaternion = new THREE.Quaternion();
     this.tempRoofDirection = new THREE.Vector3();
+    this.tempRoofStart = new THREE.Vector3();
+    this.tempRoofEnd = new THREE.Vector3();
   }
 
   isCarrying() {
@@ -180,7 +183,10 @@ export class PhysicalLogSystem {
       baseY: placement.baseY ?? placement.ground,
       centerY: root.position.y,
       topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root),
-      roofKey: placement.roofKey ?? null
+      rawKey: placement.rawKey ?? null,
+      roofKey: placement.roofKey ?? null,
+      roofRegionKey: placement.roofRegionKey ?? null,
+      roofLength: placement.roofLength ?? null
     };
     this.nextBuiltId += 1;
     this.builtLogs.push(built);
@@ -240,7 +246,7 @@ export class PhysicalLogSystem {
   #resolvePlacement(mode, playerPosition, facingDirection) {
     const base = this.#placementPoint(playerPosition, facingDirection, PHYSICAL_LOG.placeDistance, true);
     base.yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
-    base.ground = this.terrain.heightAt(base.x, base.z);
+    base.ground = this.#baseTerrainHeightAt(base.x, base.z);
     base.snapKind = null;
     base.valid = false;
 
@@ -254,16 +260,20 @@ export class PhysicalLogSystem {
   }
 
   #rawPlacement(base) {
-    const beam = this.#nearestFramePair(base, PHYSICAL_LOG.frameSnapRange + 0.45);
+    const beam = this.#nearestFramePair(base, PHYSICAL_LOG.frameSnapRange + 0.65, {
+      excludeRawOccupied: true
+    });
     if (beam) {
       return {
         ...base,
         x: beam.x,
         z: beam.z,
         yaw: beam.yaw,
-        ground: this.terrain.heightAt(beam.x, beam.z),
+        ground: this.#baseTerrainHeightAt(beam.x, beam.z),
         y: beam.topY,
         topY: beam.topY + PHYSICAL_LOG.radius,
+        rawKey: beam.rawKey,
+        anchorIds: beam.anchorIds,
         snapKind: 'frame-pair-top',
         valid: true
       };
@@ -279,7 +289,10 @@ export class PhysicalLogSystem {
     const candidate = snapped ?? base;
     const sample = this.#sampleFloorTerrain(candidate.x, candidate.z, candidate.yaw);
     const baseY = snapped?.baseY ?? sample.max + PHYSICAL_LOG.floorGroundClearance;
-    const valid = this.#floorPlacementValid(candidate.x, candidate.z, sample, baseY);
+    const occupied = this.#activeBuilt('floor').some(floor =>
+      Math.hypot(floor.x - candidate.x, floor.z - candidate.z) < 0.18
+    );
+    const valid = !occupied && this.#floorPlacementValid(candidate.x, candidate.z, sample, baseY);
     return {
       ...base,
       ...candidate,
@@ -362,7 +375,7 @@ export class PhysicalLogSystem {
         x,
         z,
         yaw: base.yaw,
-        ground: this.terrain.heightAt(x, z),
+        ground: this.#baseTerrainHeightAt(x, z),
         baseY: frame.topY,
         y: frame.topY + projection,
         topY: frame.topY + projection * 2,
@@ -374,53 +387,155 @@ export class PhysicalLogSystem {
   }
 
   #roofPlacement(base) {
-    const pair = this.#nearestFramePair(base, PHYSICAL_LOG.roofSnapRange);
-    if (!pair) return { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+    let best = null;
+    let bestDistance = PHYSICAL_LOG.roofSnapRange;
+    for (const candidate of this.#roofCandidates()) {
+      if (this.#activeBuilt('roof').some(roof => roof.roofKey === candidate.roofKey)) continue;
+      const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = candidate;
+    }
 
-    const perpendicularX = Math.sin(pair.yaw);
-    const perpendicularZ = Math.cos(pair.yaw);
-    const sideDot = (base.x - pair.x) * perpendicularX + (base.z - pair.z) * perpendicularZ;
-    const side = sideDot >= 0 ? 1 : -1;
-    const pitch = PHYSICAL_LOG.roofPitch;
-    const horizontalRun = PHYSICAL_LOG.length * Math.cos(pitch);
-    const rise = PHYSICAL_LOG.length * Math.sin(pitch);
-    const x = pair.x + perpendicularX * side * horizontalRun * 0.5;
-    const z = pair.z + perpendicularZ * side * horizontalRun * 0.5;
-    const y = pair.topY + 0.08 + rise * 0.5;
-    const direction = this.tempRoofDirection.set(
-      perpendicularX * side * Math.cos(pitch),
-      Math.sin(pitch),
-      perpendicularZ * side * Math.cos(pitch)
-    ).normalize();
+    return best
+      ? {
+          ...base,
+          ...best,
+          ground: this.#baseTerrainHeightAt(best.x, best.z),
+          valid: this.terrain.isPlayable(best.x, best.z, 0.3)
+        }
+      : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+  }
+
+  #roofCandidates() {
+    const candidates = [];
+    for (const region of this.#roofRegions()) {
+      const occupied = new Set(
+        this.#activeBuilt('roof')
+          .filter(roof => roof.roofRegionKey === region.key)
+          .map(roof => roof.roofKey)
+      );
+
+      const ridgeA = {
+        x: (region.a.x + region.c.x) * 0.5,
+        y: region.ridgeY,
+        z: (region.a.z + region.c.z) * 0.5
+      };
+      const ridgeB = {
+        x: (region.b.x + region.d.x) * 0.5,
+        y: region.ridgeY,
+        z: (region.b.z + region.d.z) * 0.5
+      };
+      const eaveA = { x: region.a.x, y: region.eaveY, z: region.a.z };
+      const eaveB = { x: region.b.x, y: region.eaveY, z: region.b.z };
+      const eaveC = { x: region.c.x, y: region.eaveY, z: region.c.z };
+      const eaveD = { x: region.d.x, y: region.eaveY, z: region.d.z };
+
+      const regionCandidates = [
+        this.#roofAxisCandidate(region, `${region.key}:rafter:a`, eaveA, ridgeA, 'roof-rafter'),
+        this.#roofAxisCandidate(region, `${region.key}:rafter:b`, eaveB, ridgeB, 'roof-rafter'),
+        this.#roofAxisCandidate(region, `${region.key}:rafter:c`, eaveC, ridgeA, 'roof-rafter'),
+        this.#roofAxisCandidate(region, `${region.key}:rafter:d`, eaveD, ridgeB, 'roof-rafter'),
+        this.#roofAxisCandidate(region, `${region.key}:ridge`, ridgeA, ridgeB, 'roof-ridge')
+      ];
+      for (const candidate of regionCandidates) {
+        if (!occupied.has(candidate.roofKey)) candidates.push(candidate);
+      }
+    }
+    return candidates;
+  }
+
+  #roofAxisCandidate(region, roofKey, start, end, snapKind) {
+    const direction = this.tempRoofDirection
+      .set(end.x - start.x, end.y - start.y, end.z - start.z);
+    const roofLength = Math.max(0.1, direction.length());
+    direction.normalize();
     const quaternion = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(1, 0, 0),
       direction
     );
-    const roofKey = `${pair.anchorIds.join('-')}:${side}`;
-    const occupied = this.#activeBuilt('roof').some(roof => roof.roofKey === roofKey);
-
+    const x = (start.x + end.x) * 0.5;
+    const z = (start.z + end.z) * 0.5;
+    const y = (start.y + end.y) * 0.5;
     return {
-      ...base,
       x,
       z,
       y,
       yaw: Math.atan2(-direction.z, direction.x),
-      ground: this.terrain.heightAt(x, z),
-      baseY: pair.topY,
-      topY: pair.topY + 0.08 + rise + PHYSICAL_LOG.radius,
+      baseY: Math.min(start.y, end.y),
+      topY: Math.max(start.y, end.y) + PHYSICAL_LOG.radius,
       quaternion,
+      roofLength,
       roofKey,
-      anchorIds: pair.anchorIds,
-      snapKind: 'roof-rafter',
-      valid: !occupied && this.terrain.isPlayable(pair.x, pair.z, 0.3)
+      roofRegionKey: region.key,
+      anchorIds: region.anchorIds,
+      snapKind
     };
+  }
+
+  #roofRegions() {
+    const pairs = this.#framePairs();
+    const regions = [];
+    const seen = new Set();
+
+    for (let leftIndex = 0; leftIndex < pairs.length; leftIndex += 1) {
+      const left = pairs[leftIndex];
+      const leftBasis = this.#basis(left.yaw);
+      for (let rightIndex = leftIndex + 1; rightIndex < pairs.length; rightIndex += 1) {
+        const right = pairs[rightIndex];
+        if (left.anchorIds.some(id => right.anchorIds.includes(id))) continue;
+        if (this.#axisYawDelta(left.yaw, right.yaw) > 0.16) continue;
+        if (Math.abs(left.topY - right.topY) > 0.34) continue;
+
+        const dx = right.x - left.x;
+        const dz = right.z - left.z;
+        const along = Math.abs(dx * leftBasis.xX + dz * leftBasis.xZ);
+        const acrossSigned = dx * leftBasis.zX + dz * leftBasis.zZ;
+        const across = Math.abs(acrossSigned);
+        if (along > 0.4) continue;
+        if (across < PHYSICAL_LOG.roofRegionMinWidth || across > PHYSICAL_LOG.roofRegionMaxWidth) continue;
+
+        const anchorIds = [...left.anchorIds, ...right.anchorIds].sort((a, b) => a - b);
+        const key = `roof:${anchorIds.join('-')}`;
+        if (seen.has(key)) continue;
+
+        const directMatch =
+          Math.hypot(left.a.x - right.a.x, left.a.z - right.a.z) +
+          Math.hypot(left.b.x - right.b.x, left.b.z - right.b.z);
+        const crossedMatch =
+          Math.hypot(left.a.x - right.b.x, left.a.z - right.b.z) +
+          Math.hypot(left.b.x - right.a.x, left.b.z - right.a.z);
+        const c = directMatch <= crossedMatch ? right.a : right.b;
+        const d = directMatch <= crossedMatch ? right.b : right.a;
+        const halfRun = across * 0.5;
+        const rise = THREE.MathUtils.clamp(
+          halfRun * Math.tan(PHYSICAL_LOG.roofPitch),
+          PHYSICAL_LOG.roofMinRise,
+          PHYSICAL_LOG.roofMaxRise
+        );
+        const eaveY = (left.topY + right.topY) * 0.5 + ROOF_SEAT_LIFT;
+
+        seen.add(key);
+        regions.push({
+          key,
+          anchorIds,
+          a: left.a,
+          b: left.b,
+          c,
+          d,
+          eaveY,
+          ridgeY: eaveY + rise
+        });
+      }
+    }
+
+    return regions;
   }
 
   #nearestFloorEdge(base) {
     let best = null;
     let bestDistance = PHYSICAL_LOG.floorSnapRange;
     for (const floor of this.#activeBuilt('floor')) {
-      if (this.#axisYawDelta(floor.yaw, base.yaw) > 0.18) continue;
       const basis = this.#basis(floor.yaw);
       const offsets = [
         [basis.xX * PHYSICAL_LOG.length, basis.xZ * PHYSICAL_LOG.length],
@@ -465,10 +580,9 @@ export class PhysicalLogSystem {
     return best;
   }
 
-  #nearestFramePair(base, range) {
+  #framePairs() {
     const frames = this.#activeBuilt('frame');
-    let best = null;
-    let bestDistance = range;
+    const pairs = [];
     for (let aIndex = 0; aIndex < frames.length; aIndex += 1) {
       const a = frames[aIndex];
       for (let bIndex = aIndex + 1; bIndex < frames.length; bIndex += 1) {
@@ -478,20 +592,36 @@ export class PhysicalLogSystem {
         const spacing = Math.hypot(dx, dz);
         if (Math.abs(spacing - PHYSICAL_LOG.length) > PHYSICAL_LOG.frameSpacingTolerance) continue;
         if (Math.abs(a.topY - b.topY) > 0.3) continue;
-        const x = (a.x + b.x) * 0.5;
-        const z = (a.z + b.z) * 0.5;
-        const distance = Math.hypot(x - base.x, z - base.z);
-        if (distance >= bestDistance) continue;
-        bestDistance = distance;
-        best = {
-          x,
-          z,
+        const anchorIds = [a.id, b.id].sort((left, right) => left - right);
+        pairs.push({
+          a,
+          b,
+          x: (a.x + b.x) * 0.5,
+          z: (a.z + b.z) * 0.5,
           yaw: this.#snapYaw(Math.atan2(-dz, dx)),
           baseY: Math.max(a.baseY, b.baseY),
           topY: (a.topY + b.topY) * 0.5,
-          anchorIds: [a.id, b.id].sort((left, right) => left - right)
-        };
+          anchorIds,
+          rawKey: `beam:${anchorIds.join('-')}`
+        });
       }
+    }
+    return pairs;
+  }
+
+  #nearestFramePair(base, range, { excludeRawOccupied = false } = {}) {
+    let best = null;
+    let bestDistance = range;
+    const occupiedRaw = excludeRawOccupied
+      ? new Set(this.#activeBuilt('raw').map(raw => raw.rawKey).filter(Boolean))
+      : null;
+
+    for (const pair of this.#framePairs()) {
+      if (occupiedRaw?.has(pair.rawKey)) continue;
+      const distance = Math.hypot(pair.x - base.x, pair.z - base.z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = pair;
     }
     return best;
   }
@@ -500,10 +630,10 @@ export class PhysicalLogSystem {
     const basis = this.#basis(yaw);
     const halfX = PHYSICAL_LOG.halfLength * 0.92;
     const halfZ = PHYSICAL_LOG.floorWidth * 0.42;
-    const heights = [this.terrain.heightAt(x, z)];
+    const heights = [this.#baseTerrainHeightAt(x, z)];
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        heights.push(this.terrain.heightAt(
+        heights.push(this.#baseTerrainHeightAt(
           x + basis.xX * halfX * sx + basis.zX * halfZ * sz,
           z + basis.xZ * halfX * sx + basis.zZ * halfZ * sz
         ));
@@ -617,6 +747,11 @@ export class PhysicalLogSystem {
 
     if (mode === 'roof') {
       root.position.set(placement.x, placement.y, placement.z);
+      root.scale.x = THREE.MathUtils.clamp(
+        (placement.roofLength ?? PHYSICAL_LOG.length) / PHYSICAL_LOG.length,
+        0.35,
+        1.08
+      );
       root.quaternion.copy(placement.quaternion);
     }
   }
@@ -670,11 +805,11 @@ export class PhysicalLogSystem {
         yaw: placement.yaw,
         type: 'placed-log',
         label,
-        bottomY: placement.y - 0.28,
+        bottomY: placement.baseY - 0.015,
         topY: placement.topY,
         standable: true,
-        supportHalfX: PHYSICAL_LOG.halfLength - 0.12,
-        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 - 0.08,
+        supportHalfX: PHYSICAL_LOG.halfLength + 0.02,
+        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + 0.02,
         supportY: placement.topY,
         stepHeight: 0.42
       });
@@ -761,7 +896,11 @@ export class PhysicalLogSystem {
       x = this.#snapGrid(x);
       z = this.#snapGrid(z);
     }
-    return { x, y: this.terrain.heightAt(x, z), z };
+    return { x, y: this.#baseTerrainHeightAt(x, z), z };
+  }
+
+  #baseTerrainHeightAt(x, z) {
+    return this.terrain.baseHeightAt?.(x, z) ?? this.terrain.heightAt(x, z);
   }
 
   #snapGrid(value) {
