@@ -1,3 +1,9 @@
+export const TOOL_DURABILITY = Object.freeze({
+  maxPercent: 100,
+  wearMinPercent: 3,
+  wearMaxPercent: 6
+});
+
 export const TOOL_DEFINITIONS = Object.freeze({
   spear: Object.freeze({
     id: 'spear',

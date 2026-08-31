@@ -1,0 +1,219 @@
+.craft-menu-toggle {
+  position: absolute;
+  left: 63%;
+  top: max(8px, calc(env(safe-area-inset-top) + 4px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 64px;
+  height: 40px;
+  padding: 6px 9px;
+  border: 1px solid rgba(240, 207, 118, .58);
+  border-radius: 10px;
+  background: rgba(50, 64, 46, .94);
+  color: #f7dfa0;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  pointer-events: auto;
+  touch-action: none;
+  backdrop-filter: blur(6px);
+}
+.craft-menu-toggle img {
+  width: 22px;
+  height: 22px;
+  filter: brightness(.82) sepia(.15);
+  pointer-events: none;
+}
+.craft-menu-toggle span { pointer-events: none; }
+.craft-menu-toggle.open,
+.craft-menu-toggle:active {
+  border-color: #f0cf76;
+  background: rgba(79, 91, 57, .98);
+}
+.craft-menu-toggle:active { transform: translateX(-50%) scale(.95); }
+
+.craft-menu {
+  position: absolute;
+  left: 63%;
+  top: max(54px, calc(env(safe-area-inset-top) + 50px));
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 120px));
+  max-height: min(72vh, 430px);
+  overflow: hidden;
+  border: 1px solid rgba(240, 207, 118, .58);
+  border-radius: 14px;
+  background: rgba(18, 36, 27, .96);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .24);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+.craft-menu[hidden] { display: none; }
+.craft-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px 7px;
+  border-bottom: 1px solid rgba(225, 207, 151, .22);
+}
+.craft-menu-header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.craft-menu-header strong {
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+.craft-menu-header span {
+  color: rgba(255, 240, 203, .72);
+  font-size: 8px;
+  font-weight: 700;
+}
+.craft-menu-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(225, 207, 151, .32);
+  border-radius: 9px;
+  background: rgba(69, 72, 50, .8);
+  color: #fff0cb;
+  font-size: 20px;
+  line-height: 1;
+  pointer-events: auto;
+  touch-action: none;
+}
+.craft-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: min(62vh, 360px);
+  overflow-y: auto;
+  padding: 7px;
+  overscroll-behavior: contain;
+}
+.craft-recipe {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 7px;
+  min-height: 58px;
+  padding: 6px;
+  border: 1px solid rgba(225, 207, 151, .2);
+  border-radius: 10px;
+  background: rgba(45, 57, 43, .78);
+}
+.craft-recipe-icon {
+  width: 34px;
+  height: 34px;
+  padding: 4px;
+  filter: brightness(.88) sepia(.12);
+}
+.craft-recipe-details {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.craft-recipe-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.craft-recipe-title strong {
+  font-size: 10px;
+  letter-spacing: .03em;
+}
+.craft-recipe-title span {
+  color: #f0cf76;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.craft-recipe-costs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.craft-cost {
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: rgba(23, 46, 33, .9);
+  color: rgba(255, 240, 203, .86);
+  font-size: 7px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.craft-cost.missing {
+  background: rgba(90, 45, 40, .88);
+  color: #f3b0a4;
+}
+.craft-recipe-button {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid rgba(240, 207, 118, .5);
+  border-radius: 8px;
+  background: rgba(79, 91, 57, .94);
+  color: #fff0cb;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .05em;
+  pointer-events: auto;
+  touch-action: none;
+}
+.craft-recipe-button:disabled {
+  opacity: .34;
+  border-color: rgba(225, 207, 151, .2);
+}
+.craft-recipe-button:not(:disabled):active { transform: scale(.95); }
+
+.tool-count-badge {
+  position: absolute;
+  right: -3px;
+  top: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 240, 203, .72);
+  border-radius: 999px;
+  background: rgba(23, 46, 33, .98);
+  color: #f0cf76;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+}
+.tool-count-badge[hidden] { display: none; }
+.tool-durability-track {
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 3px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, .44);
+  pointer-events: none;
+}
+.tool-durability-track[hidden] { display: none; }
+.tool-durability-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #f0cf76;
+  transition: width 120ms ease-out;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .craft-menu-toggle { left: 58%; }
+  .craft-menu {
+    left: 50%;
+    width: min(330px, calc(100vw - 24px));
+    max-height: min(62vh, 400px);
+  }
+  .craft-menu-list { max-height: min(52vh, 330px); }
+}
