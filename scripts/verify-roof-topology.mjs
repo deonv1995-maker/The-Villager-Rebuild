@@ -5,6 +5,10 @@ import {
   collectLocalRoofFramePairs,
   collectRoofRegions
 } from '../src/world/RoofTopology.js';
+import {
+  roofMemberCandidates,
+  roofPanelDescriptors
+} from '../src/world/StructureRoofQuery.js';
 
 const makeFrame = (id, x, z, topY = 3) => ({
   id,
@@ -110,12 +114,46 @@ const multiBayPairs = collectLocalRoofFramePairs(
 );
 assert.ok(multiBayPairs.length >= 7, 'A two-bay frame grid must expose its adjoining local frame edges');
 const multiBayRegions = collectRoofRegions(multiBayPairs, regionOptions);
-assert.equal(multiBayRegions.length, 1, 'Internal frame connections must not prevent ROOF snapping over a rectangular multi-bay structure');
-assert.equal(multiBayRegions[0].topology, 'frame-bounds', 'Multi-bay roof recovery must use the bounded frame-footprint fallback');
-assert.deepEqual(multiBayRegions[0].anchorIds, [10, 12, 13, 15], 'Multi-bay roof footprint must be anchored to the four outer frame corners');
+assert.equal(
+  multiBayRegions.length,
+  2,
+  'A two-bay frame must resolve one roof region per frame bay instead of one overlong stretched roof member set'
+);
 assert.ok(
-  Math.hypot(multiBayRegions[0].b.x - multiBayRegions[0].a.x, multiBayRegions[0].b.z - multiBayRegions[0].a.z) > PHYSICAL_LOG.length * 1.9,
-  'Recovered multi-bay roof must span the full outer structure length rather than one internal cell'
+  multiBayRegions.every(region => region.topology === 'frame-bounds'),
+  'Multi-bay roof recovery must keep the bounded frame-footprint path'
+);
+assert.deepEqual(
+  multiBayRegions.map(region => region.anchorIds),
+  [[10, 11, 13, 14], [11, 12, 14, 15]],
+  'Each multi-bay roof region must be anchored to its four vertical frame posts, including the shared middle station'
+);
+for (const region of multiBayRegions) {
+  const span = Math.hypot(region.b.x - region.a.x, region.b.z - region.a.z);
+  assert.ok(
+    Math.abs(span - PHYSICAL_LOG.length) <= PHYSICAL_LOG.frameSpacingTolerance + 0.02,
+    'Each recovered roof bay must remain physical-log length so the middle section never needs a filler raw beam'
+  );
+  const members = roofMemberCandidates(region);
+  assert.equal(members.length, 5, 'Each roof bay keeps four rafters and one ridge member');
+  const ridge = members.find(member => member.snapKind === 'roof-ridge');
+  assert.ok(ridge, 'Each roof bay needs its own ridge member');
+  assert.ok(
+    ridge.roofLength <= PHYSICAL_LOG.length * 1.02,
+    'A multi-bay ridge member must not stretch across multiple physical logs'
+  );
+}
+assert.equal(
+  multiBayRegions.flatMap(roofPanelDescriptors).length,
+  4,
+  'A two-bay completed roof must expose four thatch panels, two slopes per bay'
+);
+
+const reversedMultiBayRegions = collectRoofRegions([...multiBayPairs].reverse(), regionOptions);
+assert.deepEqual(
+  reversedMultiBayRegions.map(region => region.key),
+  multiBayRegions.map(region => region.key),
+  'Per-bay multi-frame roof identities must remain deterministic when frame-pair iteration reverses'
 );
 
 const denseFrames = Array.from({ length: 240 }, (_, index) => {
@@ -150,9 +188,11 @@ for (const requirement of [
   'connectedPairComponents',
   'closedLoop(component, topTolerance)',
   'ids.some(id => adjacency.get(id)?.length !== 2)',
-  'frameBoundsRegion',
+  'collectBoundaryStations',
+  'frameBoundsRegions',
   "topology: 'frame-bounds'",
-  'sourceBeamKeys: beamKeys',
+  'regions.push(...bounded)',
+  'sourceBeamKeys',
   'candidate.spanU > best.spanU + 0.01',
   'candidate.heading < best.heading'
 ]) {
@@ -162,4 +202,4 @@ assert.ok(!physicalLogSource.includes('roofRegionCacheRevision'), 'Roof preview 
 assert.ok(!physicalLogSource.includes('roofCandidateCacheRevision'), 'Roof preview must use the local query cache instead of the former global candidate cache');
 assert.ok(!physicalLogSource.includes('for (const region of this.#roofRegions())'), 'Roof preview must not enumerate global roof regions on selection');
 
-console.log('Closed-perimeter and multi-bay roof geometry, deterministic gable axis and bounded mobile query verified');
+console.log('Closed-perimeter and per-bay multi-frame roof geometry, deterministic gable axis and bounded mobile query verified');
