@@ -105,6 +105,15 @@ export class DayOneHuntSystem {
     };
   }
 
+  getProjectileTargetPosition() {
+    if (this.defeated || this.harvested) return null;
+    return {
+      x: this.group.position.x,
+      y: this.group.position.y,
+      z: this.group.position.z
+    };
+  }
+
   applyDamage(damage = 1) {
     if (this.defeated || !Number.isFinite(damage) || damage <= 0) return null;
     this.health = Math.max(0, this.health - damage);
