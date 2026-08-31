@@ -11,6 +11,7 @@ export class SpearProjectileSystem {
     this.projectile = null;
     this.velocity = new THREE.Vector3();
     this.targetPosition = new THREE.Vector3();
+    this.targetProvider = null;
     this.onHit = null;
     this.remaining = 0;
   }
@@ -21,11 +22,18 @@ export class SpearProjectileSystem {
 
   throw({ origin, target, onHit }) {
     if (this.projectile || !origin || !target) return false;
+    this.targetProvider = typeof target === 'function' ? target : () => target;
+    const targetPoint = this.#resolveTarget();
+    if (!targetPoint) {
+      this.targetProvider = null;
+      return false;
+    }
+
     this.projectile = this.#createSpear();
     this.projectile.name = 'thrown-spear-projectile';
     this.projectile.position.set(origin.x, origin.y + 1.28, origin.z);
-    this.targetPosition.set(target.x, target.y + 0.55, target.z);
-    this.velocity.copy(this.targetPosition).sub(this.projectile.position).normalize().multiplyScalar(this.speed);
+    this.#setTargetPosition(targetPoint);
+    this.#updateVelocity();
     this.#orientToVelocity();
     this.onHit = typeof onHit === 'function' ? onHit : null;
     this.remaining = this.maxLifetime;
@@ -36,6 +44,15 @@ export class SpearProjectileSystem {
   update(dt) {
     if (!this.projectile) return null;
     this.remaining -= dt;
+
+    const targetPoint = this.#resolveTarget();
+    if (!targetPoint) {
+      this.#clear();
+      return { hit: false, result: null };
+    }
+    this.#setTargetPosition(targetPoint);
+    this.#updateVelocity();
+
     const step = this.velocity.clone().multiplyScalar(dt);
     const remainingDistance = this.projectile.position.distanceTo(this.targetPosition);
     if (step.length() >= remainingDistance || remainingDistance < 0.18) {
@@ -54,9 +71,24 @@ export class SpearProjectileSystem {
     return null;
   }
 
+  #resolveTarget() {
+    const target = this.targetProvider?.();
+    if (!target || !Number.isFinite(target.x) || !Number.isFinite(target.y) || !Number.isFinite(target.z)) return null;
+    return target;
+  }
+
+  #setTargetPosition(target) {
+    this.targetPosition.set(target.x, target.y + 0.55, target.z);
+  }
+
+  #updateVelocity() {
+    this.velocity.copy(this.targetPosition).sub(this.projectile.position).normalize().multiplyScalar(this.speed);
+  }
+
   #clear() {
     if (this.projectile) this.scene.remove(this.projectile);
     this.projectile = null;
+    this.targetProvider = null;
     this.onHit = null;
     this.remaining = 0;
   }
