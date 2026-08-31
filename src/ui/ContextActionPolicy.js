@@ -11,8 +11,17 @@ const GENERIC_INTERACTION_TARGETS = Object.freeze(new Set([
   'resource',
   'thrown-spear'
 ]));
+const RETRIEVAL_ACTION_ID = 'spear-retrieve';
 
 const iconForTool = toolId => toolId ?? 'hand';
+const resolveExternalAction = action => ({
+  source: 'external',
+  externalId: action.id,
+  available: Boolean(action.available),
+  icon: action.icon ?? 'hand',
+  label: action.label ?? 'Action',
+  caption: action.caption ?? 'ACTION'
+});
 
 export function resolveContextAction({
   carryingLog = false,
@@ -53,6 +62,12 @@ export function resolveContextAction({
     };
   }
 
+  const sortedExternal = [...externalActions]
+    .filter(action => action?.id)
+    .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
+  const spearRetrieval = sortedExternal.find(action => action.id === RETRIEVAL_ACTION_ID);
+  if (spearRetrieval) return resolveExternalAction(spearRetrieval);
+
   const workTargets = WORK_TARGETS[toolId];
   if (workTargets?.has(interactionTarget?.type)) {
     return {
@@ -86,20 +101,7 @@ export function resolveContextAction({
     };
   }
 
-  const sortedExternal = [...externalActions]
-    .filter(action => action?.id)
-    .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
-  if (sortedExternal.length > 0) {
-    const action = sortedExternal[0];
-    return {
-      source: 'external',
-      externalId: action.id,
-      available: Boolean(action.available),
-      icon: action.icon ?? 'hand',
-      label: action.label ?? 'Action',
-      caption: action.caption ?? 'ACTION'
-    };
-  }
+  if (sortedExternal.length > 0) return resolveExternalAction(sortedExternal[0]);
 
   if (campfireAction?.available) {
     return {
