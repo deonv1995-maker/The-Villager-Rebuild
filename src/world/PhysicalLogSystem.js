@@ -14,8 +14,8 @@ import {
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
-const FLOOR_CENTER_LIFT = 0.26;
-const FLOOR_TOP_LIFT = 0.278;
+const FLOOR_CENTER_LIFT = 0;
+const FLOOR_TOP_LIFT = 0.028;
 const ROOF_SEAT_LIFT = 0.08;
 
 export class PhysicalLogSystem {
@@ -54,6 +54,13 @@ export class PhysicalLogSystem {
     this.tempRoofDirection = new THREE.Vector3();
     this.tempRoofStart = new THREE.Vector3();
     this.tempRoofEnd = new THREE.Vector3();
+    this.structureRevision = 0;
+    this.framePairCacheRevision = -1;
+    this.framePairCache = [];
+    this.roofRegionCacheRevision = -1;
+    this.roofRegionCache = [];
+    this.roofCandidateCacheRevision = -1;
+    this.roofCandidateCache = [];
   }
 
   isCarrying() {
@@ -190,6 +197,7 @@ export class PhysicalLogSystem {
     };
     this.nextBuiltId += 1;
     this.builtLogs.push(built);
+    this.#markStructureChanged();
     if (built.mode === 'floor') {
       built.supportRoot = this.floorSupports.createForFloor(placement, built.id);
     }
@@ -232,6 +240,7 @@ export class PhysicalLogSystem {
     if (!built) return null;
 
     built.active = false;
+    this.#markStructureChanged();
     if (built.collisionHandle) this.collision.removeObstacle(built.collisionHandle);
     this.floorSupports.remove(built.supportRoot);
     this.group.remove(built.root);
@@ -288,7 +297,7 @@ export class PhysicalLogSystem {
     const snapped = this.#nearestFloorEdge(base);
     const candidate = snapped ?? base;
     const sample = this.#sampleFloorTerrain(candidate.x, candidate.z, candidate.yaw);
-    const baseY = snapped?.baseY ?? sample.max + PHYSICAL_LOG.floorGroundClearance;
+    const baseY = snapped?.baseY ?? sample.center + PHYSICAL_LOG.floorGroundClearance;
     const occupied = this.#activeBuilt('floor').some(floor =>
       Math.hypot(floor.x - candidate.x, floor.z - candidate.z) < 0.18
     );
@@ -300,7 +309,7 @@ export class PhysicalLogSystem {
       baseY,
       y: baseY + FLOOR_CENTER_LIFT,
       topY: baseY + FLOOR_TOP_LIFT,
-      supportDepth: Math.max(0, baseY - sample.min),
+      supportDepth: Math.max(0, baseY - PHYSICAL_LOG.floorUndersideDepth - sample.min),
       snapKind: snapped ? 'floor-edge-level' : null,
       valid
     };
@@ -390,7 +399,6 @@ export class PhysicalLogSystem {
     let best = null;
     let bestDistance = PHYSICAL_LOG.roofSnapRange;
     for (const candidate of this.#roofCandidates()) {
-      if (this.#activeBuilt('roof').some(roof => roof.roofKey === candidate.roofKey)) continue;
       const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
       if (distance >= bestDistance) continue;
       bestDistance = distance;
@@ -408,6 +416,10 @@ export class PhysicalLogSystem {
   }
 
   #roofCandidates() {
+    if (this.roofCandidateCacheRevision === this.structureRevision) {
+      return this.roofCandidateCache;
+    }
+
     const candidates = [];
     for (const region of this.#roofRegions()) {
       const occupied = new Set(
@@ -442,6 +454,9 @@ export class PhysicalLogSystem {
         if (!occupied.has(candidate.roofKey)) candidates.push(candidate);
       }
     }
+
+    this.roofCandidateCache = candidates;
+    this.roofCandidateCacheRevision = this.structureRevision;
     return candidates;
   }
 
@@ -474,6 +489,10 @@ export class PhysicalLogSystem {
   }
 
   #roofRegions() {
+    if (this.roofRegionCacheRevision === this.structureRevision) {
+      return this.roofRegionCache;
+    }
+
     const pairs = this.#framePairs();
     const regions = [];
     const seen = new Set();
@@ -529,6 +548,8 @@ export class PhysicalLogSystem {
       }
     }
 
+    this.roofRegionCache = regions;
+    this.roofRegionCacheRevision = this.structureRevision;
     return regions;
   }
 
@@ -581,6 +602,10 @@ export class PhysicalLogSystem {
   }
 
   #framePairs() {
+    if (this.framePairCacheRevision === this.structureRevision) {
+      return this.framePairCache;
+    }
+
     const frames = this.#activeBuilt('frame');
     const pairs = [];
     for (let aIndex = 0; aIndex < frames.length; aIndex += 1) {
@@ -606,6 +631,9 @@ export class PhysicalLogSystem {
         });
       }
     }
+
+    this.framePairCache = pairs;
+    this.framePairCacheRevision = this.structureRevision;
     return pairs;
   }
 
@@ -630,7 +658,8 @@ export class PhysicalLogSystem {
     const basis = this.#basis(yaw);
     const halfX = PHYSICAL_LOG.halfLength * 0.92;
     const halfZ = PHYSICAL_LOG.floorWidth * 0.42;
-    const heights = [this.#baseTerrainHeightAt(x, z)];
+    const center = this.#baseTerrainHeightAt(x, z);
+    const heights = [center];
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
         heights.push(this.#baseTerrainHeightAt(
@@ -639,12 +668,12 @@ export class PhysicalLogSystem {
         ));
       }
     }
-    return { min: Math.min(...heights), max: Math.max(...heights) };
+    return { center, min: Math.min(...heights), max: Math.max(...heights) };
   }
 
   #floorPlacementValid(x, z, sample, baseY) {
     if (!this.terrain.isPlayable(x, z, PHYSICAL_LOG.halfLength + 0.12)) return false;
-    if (sample.max > baseY + 0.1) return false;
+    if (sample.max > baseY + PHYSICAL_LOG.floorTerrainEmbedTolerance) return false;
     if (baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
     return this.collision.isCircleClear(x, z, 0.62, {
       ignore: obstacle => obstacle.type === 'placed-log' && /-floor$/.test(obstacle.label ?? '')
@@ -653,6 +682,10 @@ export class PhysicalLogSystem {
 
   #activeBuilt(mode = null) {
     return this.builtLogs.filter(entry => entry.active && (!mode || entry.mode === mode));
+  }
+
+  #markStructureChanged() {
+    this.structureRevision += 1;
   }
 
   #showPreview(mode, placement) {
@@ -805,13 +838,13 @@ export class PhysicalLogSystem {
         yaw: placement.yaw,
         type: 'placed-log',
         label,
-        bottomY: placement.baseY - 0.015,
+        bottomY: placement.baseY - PHYSICAL_LOG.floorUndersideDepth - 0.02,
         topY: placement.topY,
         standable: true,
         supportHalfX: PHYSICAL_LOG.halfLength + 0.02,
         supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + 0.02,
         supportY: placement.topY,
-        stepHeight: 0.42
+        stepHeight: 0.18
       });
     }
 
