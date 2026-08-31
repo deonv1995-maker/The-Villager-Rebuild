@@ -3,6 +3,7 @@ import { STRUCTURE_DEFINITIONS } from '../data/StructureDefinitions.js';
 
 const ANGLE_OFFSETS = Object.freeze([0, 0.55, -0.55, 1.1, -1.1, Math.PI]);
 const DISTANCE_OFFSETS = Object.freeze([0, 0.8, 1.6]);
+const DEMOLITION_RADIUS = 2.8;
 
 export class CampfireSystem {
   constructor({ group, terrain, collision, inventory, definition = STRUCTURE_DEFINITIONS.campfire }) {
@@ -70,6 +71,33 @@ export class CampfireSystem {
     return this.getState();
   }
 
+  getDemolitionTarget(playerPosition) {
+    if (!this.root || !playerPosition) return null;
+    const distance = Math.hypot(
+      playerPosition.x - this.root.position.x,
+      playerPosition.z - this.root.position.z
+    );
+    if (distance > DEMOLITION_RADIUS) return null;
+    return {
+      type: 'campfire',
+      label: this.definition.label,
+      icon: 'hammer',
+      actionLabel: 'Demolish campfire'
+    };
+  }
+
+  demolish(playerPosition) {
+    const target = this.getDemolitionTarget(playerPosition);
+    if (!target) return null;
+    if (this.collisionHandle) this.collision.removeObstacle(this.collisionHandle);
+    if (this.root) this.group.remove(this.root);
+    this.root = null;
+    this.collisionHandle = null;
+    this.flames = [];
+    this.light = null;
+    return target;
+  }
+
   update(dt) {
     if (!this.root) return;
     this.time += dt;
@@ -106,7 +134,7 @@ export class CampfireSystem {
       roughness: 1,
       flatShading: true
     });
-    const woodMaterial = new THREE.MeshStandardMaterial({ color: 0x68462e, roughness: 1 });
+    const stickMaterial = new THREE.MeshStandardMaterial({ color: 0x70472c, roughness: 1 });
     const emberMaterial = new THREE.MeshStandardMaterial({
       color: 0x4c2117,
       emissive: 0xd94d1f,
@@ -124,14 +152,14 @@ export class CampfireSystem {
       root.add(stone);
     }
 
-    for (let index = 0; index < 3; index += 1) {
-      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.105, 0.13, 1.25, 8), woodMaterial);
-      log.position.y = 0.29 + index * 0.035;
-      log.rotation.z = Math.PI / 2;
-      log.rotation.y = index * Math.PI / 3;
-      log.castShadow = true;
-      log.receiveShadow = true;
-      root.add(log);
+    for (let index = 0; index < 6; index += 1) {
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.12, 6), stickMaterial);
+      stick.position.y = 0.28 + (index % 2) * 0.035;
+      stick.rotation.z = Math.PI / 2;
+      stick.rotation.y = index * Math.PI / 3;
+      stick.castShadow = true;
+      stick.receiveShadow = true;
+      root.add(stick);
     }
 
     const embers = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.38, 0.12, 10), emberMaterial);
