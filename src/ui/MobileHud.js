@@ -1,8 +1,6 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { TOOL_ORDER } from '../data/ToolDefinitions.js';
-
-const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
-const TOOL_ACTION_TARGET_TYPES = new Set(['tree', 'rock', 'placed-log', 'campfire']);
+import { resolveContextAction } from './ContextActionPolicy.js';
 
 export class MobileHud {
   constructor({ player, canvas, onInteract, onCampfire, onAttack, onToolSelect, onBuildOption }) {
@@ -13,8 +11,14 @@ export class MobileHud {
     this.onAttack = onAttack;
     this.onToolSelect = onToolSelect;
     this.onBuildOption = onBuildOption;
-    this.activeActionToolId = null;
     this.carryingLog = false;
+    this.buildPreviewValid = false;
+    this.currentToolId = null;
+    this.currentInteractionTarget = null;
+    this.currentHuntTarget = null;
+    this.currentCampfireAction = null;
+    this.externalActions = new Map();
+    this.activeAction = null;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
@@ -25,13 +29,8 @@ export class MobileHud {
       axe: ui.axe,
       hammer: ui.hammer,
       pickaxe: ui.pickaxe,
-      sword: ui.sword
-    });
-    this.interactionIcons = Object.freeze({
-      hand: ui.hand,
-      axe: ui.axe,
-      hammer: ui.hammer,
-      pickaxe: ui.pickaxe
+      sword: ui.sword,
+      campfire: ui.campfire
     });
 
     const toolButtons = ['hand', ...TOOL_ORDER].map(toolId => `
@@ -42,7 +41,7 @@ export class MobileHud {
     `).join('');
 
     this.root.innerHTML = `
-      <div class="inventory-strip" data-role="inventory">Stick 0 · Stone 0 · Grass 0</div>
+      <div class="inventory-strip" data-role="inventory"></div>
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <div class="log-build-tray" data-role="log-build" hidden>
@@ -56,19 +55,19 @@ export class MobileHud {
       </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
-      <button class="hud-button craft" type="button" aria-label="Preview campfire" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.campfire}" alt=""></button>
-      <button class="hud-button attack" type="button" aria-label="Tool action" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="attack-icon" src="${ui.spear}" alt=""></button>
-      <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="interaction-icon" src="${ui.hand}" alt=""></button>
+      <button class="hud-button action" type="button" aria-label="Action" disabled>
+        <img class="button-bg" src="${ui.buttonCircle}" alt="">
+        <img class="button-icon" data-role="action-icon" src="${ui.hand}" alt="">
+        <span class="action-caption" data-role="action-caption">ACTION</span>
+      </button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
-    this.interactButton = this.root.querySelector('.interact');
-    this.interactIcon = this.root.querySelector('[data-role="interaction-icon"]');
-    this.campfireButton = this.root.querySelector('.craft');
-    this.attackButton = this.root.querySelector('.attack');
-    this.attackIcon = this.root.querySelector('[data-role="attack-icon"]');
+    this.actionButton = this.root.querySelector('.action');
+    this.actionIcon = this.root.querySelector('[data-role="action-icon"]');
+    this.actionCaption = this.root.querySelector('[data-role="action-caption"]');
     this.buildTray = this.root.querySelector('[data-role="log-build"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
@@ -76,15 +75,25 @@ export class MobileHud {
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
+    this.#renderAction();
   }
 
   setInventory(entries) {
     const alwaysVisible = new Set(['stick', 'stone', 'grass']);
-    this.inventoryElement.textContent = entries
+    const visible = entries
       .filter(entry => entry.quantity > 0 || alwaysVisible.has(entry.id))
-      .filter(entry => !['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(entry.id))
-      .map(entry => `${entry.label} ${entry.quantity}`)
-      .join(' · ');
+      .filter(entry => !['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(entry.id));
+
+    this.inventoryElement.replaceChildren(...visible.map(entry => {
+      const row = document.createElement('div');
+      row.className = 'inventory-row';
+      const label = document.createElement('span');
+      label.textContent = entry.label;
+      const quantity = document.createElement('strong');
+      quantity.textContent = String(entry.quantity);
+      row.append(label, quantity);
+      return row;
+    }));
   }
 
   setObjective(message) {
@@ -92,7 +101,7 @@ export class MobileHud {
   }
 
   setToolbelt(entries) {
-    this.activeActionToolId = null;
+    this.currentToolId = null;
     for (const entry of entries) {
       const button = this.toolButtons.get(entry.id);
       if (!button) continue;
@@ -100,7 +109,7 @@ export class MobileHud {
       button.classList.toggle('craftable', entry.craftable);
       button.classList.toggle('equipped', entry.equipped);
       button.classList.toggle('locked', !entry.owned && !entry.craftable);
-      if (entry.equipped && entry.id !== 'hand') this.activeActionToolId = entry.id;
+      if (entry.equipped && entry.id !== 'hand') this.currentToolId = entry.id;
       const ingredients = entry.ingredients
         .map(ingredient => `${ingredient.itemId} ${ingredient.quantity}`)
         .join(', ');
@@ -113,14 +122,18 @@ export class MobileHud {
             : `${entry.label}, craft with ${ingredients}`
       );
     }
+    this.#renderAction();
   }
 
   setLogBuildMode(carrying, state = null) {
     this.carryingLog = Boolean(carrying);
+    this.buildPreviewValid = Boolean(state?.previewValid);
     this.root.classList.toggle('log-carrying', this.carryingLog);
+    document.body.classList.toggle('log-carrying', this.carryingLog);
     this.buildTray.hidden = !carrying;
     if (!carrying) {
       this.buildTray.classList.remove('invalid');
+      this.#renderAction();
       return;
     }
 
@@ -132,51 +145,73 @@ export class MobileHud {
       if (selected) button.setAttribute('aria-pressed', 'true');
       else button.removeAttribute('aria-pressed');
     }
+    this.#renderAction();
   }
 
   setInteractionTarget(target) {
-    const handledByToolAction = TOOL_ACTION_TARGET_TYPES.has(target?.type);
-    const available = Boolean(target) && !handledByToolAction;
-    const actionLabel = target?.actionLabel ?? (target ? `Pick up ${target.label}` : 'Interact');
-    const icon = this.interactionIcons[target?.icon] ?? this.interactionIcons.hand;
-    this.interactButton.hidden = !available;
-    this.interactButton.disabled = !available;
-    this.interactButton.setAttribute('aria-label', actionLabel);
-    this.interactIcon.src = icon;
+    this.currentInteractionTarget = target ?? null;
+    this.#renderAction();
   }
 
   setCampfireAction(action) {
-    const available = Boolean(action?.available);
-    const previewing = Boolean(action?.previewing);
-    this.campfireButton.hidden = !available;
-    this.campfireButton.disabled = !available;
-    this.campfireButton.classList.toggle('previewing', previewing);
-    this.campfireButton.setAttribute(
-      'aria-label',
-      action?.label ?? (previewing ? 'Confirm campfire placement' : 'Preview campfire placement')
-    );
+    this.currentCampfireAction = action ? { ...action } : null;
+    this.#renderAction();
   }
 
   setCraftAction(action) {
     this.setCampfireAction(action);
   }
 
-  setAttackTarget(target, toolId = 'spear') {
-    const equippedTool = this.carryingLog ? null : toolId;
-    const available = Boolean(equippedTool && ['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(equippedTool));
-    const needsTarget = equippedTool === 'spear';
-    this.activeActionToolId = available ? equippedTool : null;
-    this.attackButton.hidden = !available;
-    this.attackButton.disabled = !available || (needsTarget && !target);
-    this.attackIcon.src = this.toolIcons[equippedTool] ?? this.toolIcons.spear;
+  setAttackTarget(target, toolId = null) {
+    this.currentHuntTarget = target ?? null;
+    this.currentToolId = this.carryingLog ? null : toolId;
+    this.#renderAction();
+  }
 
-    let label = 'Tool action';
-    if (equippedTool === 'spear') label = target ? `Throw spear at ${target.label}` : 'Spear needs a locked target';
-    else if (equippedTool === 'sword') label = target ? `Slash ${target.label}` : 'Sword slash';
-    else if (equippedTool === 'axe') label = target?.type === 'tree' ? `Chop ${target.label}` : 'Axe swing';
-    else if (equippedTool === 'pickaxe') label = target?.type === 'rock' ? `Mine ${target.label}` : 'Pickaxe swing';
-    else if (equippedTool === 'hammer') label = target ? `Disassemble ${target.label}` : 'Hammer swing';
-    this.attackButton.setAttribute('aria-label', label);
+  setExternalAction(id, action = null) {
+    if (!id) return;
+    if (!action) this.externalActions.delete(id);
+    else this.externalActions.set(id, { ...action, id });
+    this.#renderAction();
+  }
+
+  #renderAction() {
+    if (!this.actionButton) return;
+    const action = resolveContextAction({
+      carryingLog: this.carryingLog,
+      buildPreviewValid: this.buildPreviewValid,
+      interactionTarget: this.currentInteractionTarget,
+      campfireAction: this.currentCampfireAction,
+      toolId: this.currentToolId,
+      huntTarget: this.currentHuntTarget,
+      externalActions: [...this.externalActions.values()]
+    });
+    this.activeAction = action;
+    this.actionButton.disabled = !action.available;
+    this.actionButton.setAttribute('aria-label', action.label);
+    this.actionIcon.src = this.toolIcons[action.icon] ?? this.toolIcons.hand;
+    this.actionCaption.textContent = action.caption ?? 'ACTION';
+    this.actionButton.dataset.actionSource = action.source ?? 'none';
+  }
+
+  #triggerAction() {
+    const action = this.activeAction;
+    if (!action?.available) return;
+    if (action.source === 'interaction') {
+      this.onInteract?.();
+      return;
+    }
+    if (action.source === 'campfire') {
+      this.onCampfire?.();
+      return;
+    }
+    if (action.source === 'attack') {
+      this.onAttack?.();
+      return;
+    }
+    if (action.source === 'external') {
+      this.externalActions.get(action.externalId)?.onTrigger?.();
+    }
   }
 
   #bindJoystick() {
@@ -227,20 +262,9 @@ export class MobileHud {
       this.player.jump();
     });
 
-    this.interactButton.addEventListener('pointerdown', event => {
+    this.actionButton.addEventListener('pointerdown', event => {
       event.preventDefault();
-      this.onInteract?.();
-    });
-
-    this.campfireButton.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      this.onCampfire?.();
-    });
-
-    this.attackButton.addEventListener('pointerdown', event => {
-      event.preventDefault();
-      if (WORK_ACTION_TOOLS.has(this.activeActionToolId)) this.onInteract?.();
-      else this.onAttack?.();
+      this.#triggerAction();
     });
 
     for (const [toolId, button] of this.toolButtons) {
