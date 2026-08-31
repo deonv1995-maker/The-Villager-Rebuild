@@ -93,7 +93,7 @@ export class GameApp {
 
     if (this.player) {
       this.player.getPosition(this.playerPosition);
-      this.island?.update(dt, this.playerPosition);
+      this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
       if (this.gatherables && this.hunt) this.#refreshTargets(dt);
     }
 
