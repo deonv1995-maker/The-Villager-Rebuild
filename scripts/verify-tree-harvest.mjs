@@ -100,7 +100,10 @@ for (const requirement of [
   "snapKind: snapped ? 'floor-edge-level' : null",
   'baseY: floor.baseY',
   'this.floorSupports.createForFloor',
-  "snapKind: 'roof-rafter'",
+  '#roofRegions()',
+  "'roof-rafter'",
+  "'roof-ridge'",
+  'roofRegionKey: region.key',
   "type: 'placed-log'",
   "spawn('log'"
 ]) {
