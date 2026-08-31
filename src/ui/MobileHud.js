@@ -15,6 +15,7 @@ export class MobileHud {
 
     const ui = ASSET_PATHS.ui.mobile;
     this.toolIcons = Object.freeze({
+      hand: ui.hand,
       spear: ui.spear,
       axe: ui.axe,
       hammer: ui.hammer,
@@ -28,7 +29,7 @@ export class MobileHud {
       pickaxe: ui.pickaxe
     });
 
-    const toolButtons = TOOL_ORDER.map(toolId => `
+    const toolButtons = ['hand', ...TOOL_ORDER].map(toolId => `
       <button class="tool-slot" type="button" data-tool="${toolId}" aria-label="${toolId}">
         <img src="${this.toolIcons[toolId]}" alt="">
         <span class="tool-craft-mark" aria-hidden="true">+</span>
@@ -46,7 +47,7 @@ export class MobileHud {
       </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
-      <button class="hud-button craft" type="button" aria-label="Build campfire" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.campfire}" alt=""></button>
+      <button class="hud-button craft" type="button" aria-label="Preview campfire" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.campfire}" alt=""></button>
       <button class="hud-button attack" type="button" aria-label="Attack" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="attack-icon" src="${ui.spear}" alt=""></button>
       <button class="hud-button interact" type="button" aria-label="Interact" hidden><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" data-role="interaction-icon" src="${ui.hand}" alt=""></button>
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
@@ -94,9 +95,11 @@ export class MobileHud {
         .join(', ');
       button.setAttribute(
         'aria-label',
-        entry.owned
-          ? `${entry.label}${entry.equipped ? ', equipped' : ''}`
-          : `${entry.label}, craft with ${ingredients}`
+        entry.id === 'hand'
+          ? `Hand${entry.equipped ? ', equipped' : ''}`
+          : entry.owned
+            ? `${entry.label}${entry.equipped ? ', equipped' : ''}`
+            : `${entry.label}, craft with ${ingredients}`
       );
     }
   }
@@ -117,9 +120,14 @@ export class MobileHud {
 
   setCampfireAction(action) {
     const available = Boolean(action?.available);
+    const previewing = Boolean(action?.previewing);
     this.campfireButton.hidden = !available;
     this.campfireButton.disabled = !available;
-    this.campfireButton.setAttribute('aria-label', action?.label ?? 'Build campfire');
+    this.campfireButton.classList.toggle('previewing', previewing);
+    this.campfireButton.setAttribute(
+      'aria-label',
+      action?.label ?? (previewing ? 'Confirm campfire placement' : 'Preview campfire placement')
+    );
   }
 
   setCraftAction(action) {
