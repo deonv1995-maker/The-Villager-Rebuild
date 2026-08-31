@@ -93,16 +93,15 @@ assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expos
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
 assert.match(mobileHudSource, /aria-expanded/, 'Build menu collapse control must expose expansion state');
-assert.match(mobileHudSource, /const BUILD_MODE_UI = Object\.freeze\(\[/, 'Build menu modes must come from one compact UI definition');
 for (const mode of ['raw', 'floor', 'frame', 'wall', 'angle', 'roof', 'drop']) {
-  assert.match(mobileHudSource, new RegExp(`id: '${mode}'`), `Build grid must expose ${mode}`);
+  assert.match(mobileHudSource, new RegExp(`data-build="${mode}"`), `Build grid must expose ${mode}`);
   assert.match(assetPathsSource, new RegExp(`${mode}: asset\\('ui/mobile/icon-build-${mode}\\.svg'\\)`), `${mode} must use a dedicated build icon asset`);
   assert.ok(
     fs.existsSync(new URL(`../public/assets/ui/mobile/icon-build-${mode}.svg`, import.meta.url)),
     `${mode} build icon must exist in public assets`
   );
+  assert.match(mobileHudSource, new RegExp(`data-build="${mode}"[^>]*[\\s\\S]*?<img src="\\$\\{this\\.buildIcons\\.${mode}\\}"`), `${mode} must render its icon instead of a text label`);
 }
-assert.match(mobileHudSource, /class="build-mode-button\$\{id === 'drop'/, 'Build mode choices must render as icon buttons');
 assert.doesNotMatch(mobileHudSource, /data-build="raw">RAW/, 'Build modes must not fall back to tall text buttons');
 assert.match(thatchControllerSource, /setExternalAction\(ACTION_ID/, 'Roof thatching must route through the unified Action button');
 assert.match(thatchControllerSource, /\? 'THATCH' : `NEED/, 'Affordable roof thatching must identify itself explicitly as THATCH');
