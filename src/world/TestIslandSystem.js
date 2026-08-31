@@ -5,6 +5,7 @@ import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
 import { WorldCollisionSystem } from './WorldCollisionSystem.js';
+import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
 
 export class TestIslandSystem {
   constructor(scene) {
@@ -40,6 +41,7 @@ export class TestIslandSystem {
       group: this.group,
       centerZ: this.terrain.centerZ
     });
+    this.treeOcclusion = null;
     this.assetMode = 'terrain-only';
   }
 
@@ -77,6 +79,10 @@ export class TestIslandSystem {
     try {
       environmentLoaded = await this.scatter.load();
       this.#removeObsoleteUnderstory();
+      this.treeOcclusion = new TreeOcclusionSystem({
+        group: this.group,
+        collision: this.collision
+      });
     } catch (error) {
       console.error('[ENVIRONMENT ASSET FALLBACK]', error);
     }
@@ -97,8 +103,9 @@ export class TestIslandSystem {
     else shrubs.material?.dispose?.();
   }
 
-  update(dt, playerPosition) {
+  update(dt, playerPosition, camera = null) {
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
+    this.treeOcclusion?.update(playerPosition, camera);
   }
 }
