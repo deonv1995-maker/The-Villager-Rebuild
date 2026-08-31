@@ -16,6 +16,7 @@ export class DayOneHuntSystem {
     this.time = 0;
     this.hitFlash = 0;
     this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
+    this.grazingZoneRevision = 0;
     this.lastPosition = new THREE.Vector3();
     this.lastPlayerPosition = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
     this.behavior = 'wander';
@@ -227,6 +228,12 @@ export class DayOneHuntSystem {
       harvested: this.harvested,
       behavior: this.behavior,
       threatCause: this.threatCause,
+      grazingCenter: {
+        x: this.center.x,
+        y: this.terrain.heightAt(this.center.x, this.center.z),
+        z: this.center.z
+      },
+      grazingZoneRevision: this.grazingZoneRevision,
       assetMode: this.presentation.assetMode
     };
   }
@@ -293,12 +300,18 @@ export class DayOneHuntSystem {
 
     const threatDistance = this.#distanceTo(this.threatPosition);
     if (this.fleeRemaining <= 0 && threatDistance >= this.definition.safeDistance) {
+      this.#establishGrazingZone();
       this.behavior = 'wander';
       this.hasThreat = false;
       this.threatCause = null;
       this.wanderPause = this.definition.wanderPauseMin;
       this.#chooseWanderTarget();
     }
+  }
+
+  #establishGrazingZone() {
+    this.center.set(this.group.position.x, 0, this.group.position.z);
+    this.grazingZoneRevision += 1;
   }
 
   #chooseWanderTarget() {
