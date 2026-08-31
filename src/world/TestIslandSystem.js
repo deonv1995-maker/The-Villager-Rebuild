@@ -50,7 +50,7 @@ export class TestIslandSystem {
     this.mountains = new DistantMountainSystem({
       group: this.group,
       centerZ: this.terrain.centerZ,
-      radiusScale: 1.65
+      radiusScale: 1.9
     });
     this.waterVisuals = new WaterVisualSystem({
       group: this.group,
