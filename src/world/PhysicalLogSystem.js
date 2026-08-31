@@ -6,6 +6,7 @@ import {
 } from '../data/PhysicalLogDefinitions.js';
 import { RangerLogCarryPose } from '../player/RangerLogCarryPose.js';
 import { FloorSupportVisual } from './FloorSupportVisual.js';
+import { frameCornerFitsStructure } from './FramePlacementRules.js';
 import {
   createConstructionLogVisual,
   tintConstructionPreview
@@ -14,6 +15,11 @@ import {
   collectLocalRoofFramePairs,
   collectRoofRegions
 } from './RoofTopology.js';
+import {
+  roofMemberCandidates,
+  roofMemberOccupied,
+  roofRaftersComplete
+} from './RoofMemberRules.js';
 
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
@@ -194,8 +200,10 @@ export class PhysicalLogSystem {
       centerY: root.position.y,
       topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root),
       rawKey: placement.rawKey ?? null,
+      snapKind: placement.snapKind ?? null,
       roofKey: placement.roofKey ?? null,
       roofRegionKey: placement.roofRegionKey ?? null,
+      roofRole: placement.roofRole ?? null,
       roofLength: placement.roofLength ?? null
     };
     this.nextBuiltId += 1;
@@ -272,9 +280,20 @@ export class PhysicalLogSystem {
   }
 
   #rawPlacement(base) {
+    const ridge = this.#nearestRoofCandidate(base, {
+      roofRole: 'ridge',
+      requireRafters: true,
+      range: PHYSICAL_LOG.roofSnapRange
+    });
     const beam = this.#nearestFramePair(base, PHYSICAL_LOG.frameSnapRange + 0.65, {
       excludeRawOccupied: true
     });
+    const ridgeDistance = ridge ? Math.hypot(ridge.x - base.x, ridge.z - base.z) : Infinity;
+    const beamDistance = beam ? Math.hypot(beam.x - base.x, beam.z - base.z) : Infinity;
+
+    if (ridge && ridgeDistance <= beamDistance) {
+      return this.#roofMemberPlacement(base, ridge);
+    }
     if (beam) {
       return {
         ...base,
@@ -290,6 +309,7 @@ export class PhysicalLogSystem {
         valid: true
       };
     }
+    if (ridge) return this.#roofMemberPlacement(base, ridge);
 
     const valid = this.#groundPlacementValid(base.x, base.z, 0.52, 0.5);
     const pose = this.#terrainLogPose(base.x, base.z, base.yaw);
@@ -319,7 +339,8 @@ export class PhysicalLogSystem {
   }
 
   #framePlacement(base) {
-    const corner = this.#nearestFloorCorner(base);
+    const compatibleCorner = this.#nearestFloorCorner(base, { requireStructuralFit: true });
+    const corner = compatibleCorner ?? this.#nearestFloorCorner(base);
     if (!corner) {
       return {
         ...base,
@@ -328,10 +349,6 @@ export class PhysicalLogSystem {
         valid: false
       };
     }
-    const occupied = this.#activeBuilt('frame').some(frame =>
-      Math.hypot(frame.x - corner.x, frame.z - corner.z) < 0.34 &&
-      Math.abs(frame.baseY - corner.baseY) < 0.4
-    );
     return {
       ...base,
       x: corner.x,
@@ -341,7 +358,7 @@ export class PhysicalLogSystem {
       y: corner.baseY + PHYSICAL_LOG.halfLength,
       topY: corner.baseY + PHYSICAL_LOG.length,
       snapKind: 'floor-corner',
-      valid: !occupied
+      valid: Boolean(compatibleCorner)
     };
   }
 
@@ -372,6 +389,12 @@ export class PhysicalLogSystem {
   }
 
   #anglePlacement(base) {
+    const rafter = this.#nearestRoofCandidate(base, {
+      roofRole: 'rafter',
+      range: PHYSICAL_LOG.roofSnapRange
+    });
+    if (rafter) return this.#roofMemberPlacement(base, rafter);
+
     let best = null;
     let bestDistance = PHYSICAL_LOG.angleSnapRange;
     for (const frame of this.#activeBuilt('frame')) {
@@ -399,23 +422,37 @@ export class PhysicalLogSystem {
   }
 
   #roofPlacement(base) {
+    const best = this.#nearestRoofCandidate(base, { range: PHYSICAL_LOG.roofSnapRange });
+    return best
+      ? this.#roofMemberPlacement(base, best)
+      : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+  }
+
+  #roofMemberPlacement(base, candidate) {
+    return {
+      ...base,
+      ...candidate,
+      ground: this.#baseTerrainHeightAt(candidate.x, candidate.z),
+      valid: this.terrain.isPlayable(candidate.x, candidate.z, 0.3)
+    };
+  }
+
+  #nearestRoofCandidate(base, {
+    roofRole = null,
+    requireRafters = false,
+    range = PHYSICAL_LOG.roofSnapRange
+  } = {}) {
     let best = null;
-    let bestDistance = PHYSICAL_LOG.roofSnapRange;
+    let bestDistance = range;
     for (const candidate of this.#roofCandidates(base)) {
+      if (roofRole && candidate.roofRole !== roofRole) continue;
+      if (requireRafters && candidate.roofRole === 'ridge' && !candidate.raftersComplete) continue;
       const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
       if (distance >= bestDistance) continue;
       bestDistance = distance;
       best = candidate;
     }
-
-    return best
-      ? {
-          ...base,
-          ...best,
-          ground: this.#baseTerrainHeightAt(best.x, best.z),
-          valid: this.terrain.isPlayable(best.x, best.z, 0.3)
-        }
-      : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+    return best;
   }
 
   #roofCandidates(base) {
@@ -447,41 +484,15 @@ export class PhysicalLogSystem {
       maxRise: PHYSICAL_LOG.roofMaxRise,
       eaveSeatLift: ROOF_SEAT_LIFT
     });
-    const activeRoofs = this.#activeBuilt('roof');
+    const activeMembers = this.#activeBuilt();
     const candidates = [];
 
     for (const region of regions) {
-      const occupied = new Set(
-        activeRoofs
-          .filter(roof => roof.roofRegionKey === region.key)
-          .map(roof => roof.roofKey)
-      );
-
-      const ridgeA = {
-        x: (region.a.x + region.c.x) * 0.5,
-        y: region.ridgeY,
-        z: (region.a.z + region.c.z) * 0.5
-      };
-      const ridgeB = {
-        x: (region.b.x + region.d.x) * 0.5,
-        y: region.ridgeY,
-        z: (region.b.z + region.d.z) * 0.5
-      };
-      const eaveA = { x: region.a.x, y: region.eaveY, z: region.a.z };
-      const eaveB = { x: region.b.x, y: region.eaveY, z: region.b.z };
-      const eaveC = { x: region.c.x, y: region.eaveY, z: region.c.z };
-      const eaveD = { x: region.d.x, y: region.eaveY, z: region.d.z };
-
-      const regionCandidates = [
-        this.#roofAxisCandidate(region, `${region.key}:rafter:a`, eaveA, ridgeA, 'roof-rafter'),
-        this.#roofAxisCandidate(region, `${region.key}:rafter:b`, eaveB, ridgeB, 'roof-rafter'),
-        this.#roofAxisCandidate(region, `${region.key}:rafter:c`, eaveC, ridgeA, 'roof-rafter'),
-        this.#roofAxisCandidate(region, `${region.key}:rafter:d`, eaveD, ridgeB, 'roof-rafter'),
-        this.#roofAxisCandidate(region, `${region.key}:ridge`, ridgeA, ridgeB, 'roof-ridge')
-      ];
-      for (const candidate of regionCandidates) {
-        if (occupied.has(candidate.roofKey)) continue;
-        if (this.#roofSlotOccupied(candidate, activeRoofs)) continue;
+      const raftersComplete = roofRaftersComplete(region, activeMembers);
+      for (const member of roofMemberCandidates(region)) {
+        if (this.#roofSlotOccupied(member, activeMembers)) continue;
+        const candidate = this.#roofAxisCandidate(region, member);
+        candidate.raftersComplete = raftersComplete;
         candidates.push(candidate);
       }
     }
@@ -492,46 +503,29 @@ export class PhysicalLogSystem {
     return candidates;
   }
 
-  #roofAxisCandidate(region, roofKey, start, end, snapKind) {
+  #roofAxisCandidate(region, member) {
     const direction = this.tempRoofDirection
-      .set(end.x - start.x, end.y - start.y, end.z - start.z);
-    const roofLength = Math.max(0.1, direction.length());
+      .set(
+        member.end.x - member.start.x,
+        member.end.y - member.start.y,
+        member.end.z - member.start.z
+      );
     direction.normalize();
     const quaternion = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(1, 0, 0),
       direction
     );
-    const x = (start.x + end.x) * 0.5;
-    const z = (start.z + end.z) * 0.5;
-    const y = (start.y + end.y) * 0.5;
     return {
-      x,
-      z,
-      y,
-      yaw: Math.atan2(-direction.z, direction.x),
-      baseY: Math.min(start.y, end.y),
-      topY: Math.max(start.y, end.y) + PHYSICAL_LOG.radius,
+      ...member,
+      baseY: Math.min(member.start.y, member.end.y),
+      topY: Math.max(member.start.y, member.end.y) + PHYSICAL_LOG.radius,
       quaternion,
-      roofLength,
-      roofKey,
-      roofRegionKey: region.key,
-      anchorIds: region.anchorIds,
-      snapKind
+      anchorIds: region.anchorIds
     };
   }
 
-  #roofSlotOccupied(candidate, activeRoofs) {
-    const candidateLength = candidate.roofLength ?? PHYSICAL_LOG.length;
-    for (const roof of activeRoofs) {
-      const centerDistance = Math.hypot(roof.x - candidate.x, roof.z - candidate.z);
-      if (centerDistance > 0.18) continue;
-      if (Math.abs(roof.centerY - candidate.y) > 0.18) continue;
-      if (this.#axisYawDelta(roof.yaw ?? 0, candidate.yaw ?? 0) > 0.12) continue;
-      const roofLength = roof.roofLength ?? PHYSICAL_LOG.length;
-      if (Math.abs(roofLength - candidateLength) > 0.22) continue;
-      return true;
-    }
-    return false;
+  #roofSlotOccupied(candidate, activeMembers) {
+    return roofMemberOccupied(candidate, activeMembers);
   }
 
   #nearestFloorEdge(base) {
@@ -563,19 +557,22 @@ export class PhysicalLogSystem {
     return best;
   }
 
-  #nearestFloorCorner(base) {
+  #nearestFloorCorner(base, { requireStructuralFit = false } = {}) {
     let best = null;
     let bestDistance = PHYSICAL_LOG.frameSnapRange;
+    const frames = requireStructuralFit ? this.#activeBuilt('frame') : null;
     for (const floor of this.#activeBuilt('floor')) {
       const basis = this.#basis(floor.yaw);
       for (const sx of [-1, 1]) {
         for (const sz of [-1, 1]) {
           const x = floor.x + basis.xX * PHYSICAL_LOG.halfLength * sx + basis.zX * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
           const z = floor.z + basis.xZ * PHYSICAL_LOG.halfLength * sx + basis.zZ * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
+          const candidate = { x, z, baseY: floor.topY };
+          if (requireStructuralFit && !frameCornerFitsStructure(candidate, frames)) continue;
           const distance = Math.hypot(x - base.x, z - base.z);
           if (distance >= bestDistance) continue;
           bestDistance = distance;
-          best = { x, z, baseY: floor.topY };
+          best = candidate;
         }
       }
     }
@@ -724,6 +721,10 @@ export class PhysicalLogSystem {
     root.rotation.set(0, 0, 0);
 
     if (mode === 'raw') {
+      if (placement.snapKind === 'roof-ridge') {
+        this.#applyFittedRoofTransform(root, placement);
+        return;
+      }
       root.position.set(placement.x, placement.y, placement.z);
       if (placement.snapKind === 'frame-pair-top') {
         root.rotation.y = placement.yaw;
@@ -754,29 +755,38 @@ export class PhysicalLogSystem {
     }
 
     if (mode === 'angle') {
+      if (placement.snapKind === 'roof-rafter') {
+        this.#applyFittedRoofTransform(root, placement);
+        return;
+      }
       root.position.set(placement.x, placement.y, placement.z);
       root.rotation.set(0, placement.yaw - Math.PI / 2, Math.PI / 4);
       return;
     }
 
     if (mode === 'roof') {
-      root.position.set(placement.x, placement.y, placement.z);
-      root.scale.x = THREE.MathUtils.clamp(
-        (placement.roofLength ?? PHYSICAL_LOG.length) / PHYSICAL_LOG.length,
-        0.35,
-        1.08
-      );
-      if (placement.quaternion?.isQuaternion) {
-        root.quaternion.copy(placement.quaternion);
-      } else {
-        root.rotation.y = placement.yaw ?? 0;
-      }
-      return;
+      this.#applyFittedRoofTransform(root, placement);
+    }
+  }
+
+  #applyFittedRoofTransform(root, placement) {
+    root.position.set(placement.x, placement.y, placement.z);
+    root.scale.x = THREE.MathUtils.clamp(
+      (placement.roofLength ?? PHYSICAL_LOG.length) / PHYSICAL_LOG.length,
+      0.35,
+      1.08
+    );
+    if (placement.quaternion?.isQuaternion) {
+      root.quaternion.copy(placement.quaternion);
+    } else {
+      root.rotation.y = placement.yaw ?? 0;
     }
   }
 
   #registerCollision(mode, placement, root) {
     const label = root.name;
+    if (placement.snapKind === 'roof-rafter' || placement.snapKind === 'roof-ridge') return null;
+
     if (mode === 'frame') {
       return this.collision.addObstacle({
         x: placement.x,
@@ -858,6 +868,7 @@ export class PhysicalLogSystem {
   }
 
   #topYForMode(mode, placement, root) {
+    if (placement.snapKind === 'roof-rafter' || placement.snapKind === 'roof-ridge') return placement.topY;
     if (mode === 'frame') return placement.baseY + PHYSICAL_LOG.length;
     if (mode === 'wall') return root.position.y + 0.76;
     if (mode === 'angle') return placement.baseY + PHYSICAL_LOG.length * Math.SQRT1_2;
