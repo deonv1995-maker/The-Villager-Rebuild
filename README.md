@@ -10,22 +10,20 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.5 — survival inventory, physical logs and basic tools**
+**Foundation 0.3.6 — survival interaction presentation refinement**
 
-Foundation 0.3.5 replaces the temporary linear Day-1 interaction shortcuts with the shared survival interaction model that later building, harvesting and combat systems must extend:
+Foundation 0.3.5 established the authoritative resource/tool/building model and passed device verification. Foundation 0.3.6 keeps those rules intact and fixes the presentation issues exposed on Android:
 
-- Stick, Stone, Grass and food are inventory resources used by the existing crafting economy;
-- Logs are physical world resources and are deliberately excluded from `InventorySystem`;
-- chopped trees drop physical Logs that the Ranger lifts one at a time rather than collecting as an inventory counter;
-- while a Log is carried, the mobile build tray expands with Lay Log, Post and Drop choices; placed Logs use shared world collision and the laid variant is standable;
-- the campfire costs three Sticks plus three Stones and no longer consumes Logs, reserving Logs for physical construction;
-- the persistent bottom toolbelt contains Spear, Axe, Hammer, Pickaxe and Sword. Selecting an unowned but craftable tool crafts it through the shared `CraftingSystem`; selecting an owned tool equips it;
-- the Axe enables tree chopping, the Pickaxe mines registered large Rocks into loose Stone pickups, and the Hammer demolishes supported player-built objects such as placed Logs and the current campfire;
-- the Sword establishes the shared short-range combat-tool role without introducing a second combat system;
-- the Spear is a thrown projectile rather than a stabbing attack. A valid hunt target auto-locks inside spear range and damage is applied only when the moving projectile reaches that target;
-- a dedicated survival-interaction regression contract runs alongside gameplay, physical tree/log harvesting, campfire, landscape, world-streaming, runtime-asset, production-build and PWA checks.
+- Stick, Stone, Grass and food remain inventory resources; Logs remain physical world resources that never enter `InventorySystem`;
+- the bottom toolbelt now begins with a permanent **Hand** slot representing the default Ranger state with no tool equipped, followed by Spear, Axe, Hammer, Pickaxe and Sword;
+- Axe, Hammer, Pickaxe and Sword use the Ranger's authored right-hand attachment slot instead of fixed root-relative offsets, so held tools follow the hand rather than floating beside the shoulder;
+- the Spear remains the auto-lock projectile weapon, but the Ranger now uses the authored KayKit `Throw` animation and releases the held spear during that motion instead of visually stabbing or instantly launching it;
+- the thrown Spear follows a visible ballistic-style arc while continuing to track the live locked target, and damage still resolves only when the projectile arrives;
+- campfire construction is now two-stage: first show a translucent green placement template on valid ground, then confirm that template to consume three Sticks plus three Stones and create the real campfire;
+- the campfire template has no collision, consumes no materials and follows the existing Ranger-facing terrain/slope/collision placement rules until confirmed;
+- dedicated survival and campfire regression checks lock the Hand slot, authored Throw clip, shared hand attachment, arcing projectile and preview-before-consumption rules.
 
-The expanded-world rules from the prior acceptance pass remain authoritative:
+The expanded-world rules from the prior acceptance passes remain authoritative:
 
 - forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same tree; tree placement and trunk collision remain unchanged;
 - the mainland is approximately 2x the previous linear coast scale, while the existing Day-1 beach remains a deep southern inlet so the proven opening route is not moved inland;
@@ -34,7 +32,7 @@ The expanded-world rules from the prior acceptance pass remain authoritative:
 - water remains a lightweight in-house Three.js presentation over the authoritative terrain. Deep water stays inexpensive, while chunked turquoise shallows follow terrain depth substantially inland across low coastal shelves, satellite edges and sandbars;
 - walking through traversable shallow water emits pooled expanding ripples around the Ranger without creating a second water-physics system or unbounded particles.
 
-Foundation 0.3.5 remains under device/gameplay acceptance. Later cooking, hostile-enemy behaviour and more advanced structures should extend the interaction boundaries established here rather than bypassing them.
+Foundation 0.3.6 remains under device/gameplay acceptance. Later cooking, hostile-enemy behaviour and more advanced structures should extend the interaction boundaries established here rather than bypassing them.
 
 ## Installation
 

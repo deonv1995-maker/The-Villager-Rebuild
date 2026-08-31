@@ -26,19 +26,22 @@ export class RangerController {
     this.assetMode = 'placeholder';
     this.animationState = null;
     this.actions = new Map();
-    this.attackAnimation = null;
+    this.throwAnimation = null;
     this.spearEquipped = false;
     this.spearVisual = null;
     this.spearMount = null;
     this.spearHandAnchor = null;
     this.spearRestPosition = new THREE.Vector3(0.48, 1.18, 0.1);
-    this.spearThrust = 0;
-    this.spearAttackDuration = 0.44;
+    this.spearRestQuaternion = new THREE.Quaternion();
+    this.spearThrowDuration = 0.72;
+    this.spearThrowRemaining = 0;
+    this.spearThrowReleaseRatio = 0.48;
+    this.spearThrowReleased = false;
+    this.spearReleaseCallback = null;
     this.tempHandWorld = new THREE.Vector3();
     this.tempHandLocal = new THREE.Vector3();
     this.tempHandQuaternion = new THREE.Quaternion();
     this.tempRootQuaternion = new THREE.Quaternion();
-    this.spearRestQuaternion = new THREE.Quaternion();
     this.#bindKeyboard();
   }
 
@@ -96,7 +99,13 @@ export class RangerController {
       throw new Error('Required KayKit locomotion clips were not found');
     }
 
-    this.attackAnimation = this.#selectAttackAnimation();
+    this.throwAnimation = this.#selectThrowAnimation();
+    if (this.throwAnimation) {
+      const clipDuration = this.actions.get(this.throwAnimation)?.getClip()?.duration;
+      if (Number.isFinite(clipDuration)) {
+        this.spearThrowDuration = THREE.MathUtils.clamp(clipDuration, 0.58, 1.15);
+      }
+    }
     this.#setAnimation('Idle_A', true);
   }
 
@@ -155,6 +164,18 @@ export class RangerController {
     this.root.rotation.y = Math.atan2(dx, dz);
   }
 
+  mountRightHandObject(object) {
+    if (!object) return false;
+    if (this.spearHandAnchor) {
+      this.spearHandAnchor.add(object);
+      object.position.set(0, 0, 0);
+      object.quaternion.identity();
+      return true;
+    }
+    this.root.add(object);
+    return false;
+  }
+
   setSpearEquipped(equipped) {
     this.spearEquipped = Boolean(equipped);
     if (this.spearEquipped && !this.spearVisual) {
@@ -165,13 +186,21 @@ export class RangerController {
       this.root.add(this.spearMount);
       this.#updateSpearAnchor();
     }
-    if (this.spearMount) this.spearMount.visible = this.spearEquipped;
+    if (this.spearEquipped && !this.isSpearThrowing()) this.spearThrowReleased = false;
+    if (this.spearMount) this.spearMount.visible = this.spearEquipped && !this.spearThrowReleased;
   }
 
-  playSpearAttack() {
-    if (!this.spearEquipped || !this.spearVisual) return false;
-    this.spearThrust = this.spearAttackDuration;
-    if (this.attackAnimation) this.#setAnimation(this.attackAnimation, true);
+  isSpearThrowing() {
+    return this.spearThrowRemaining > 0;
+  }
+
+  playSpearThrow(onRelease) {
+    if (!this.spearEquipped || !this.spearVisual || this.isSpearThrowing()) return false;
+    this.spearThrowRemaining = this.spearThrowDuration;
+    this.spearThrowReleased = false;
+    this.spearReleaseCallback = typeof onRelease === 'function' ? onRelease : null;
+    if (this.spearMount) this.spearMount.visible = true;
+    if (this.throwAnimation) this.#setAnimation(this.throwAnimation, true);
     return true;
   }
 
@@ -197,7 +226,7 @@ export class RangerController {
     const inputY = Math.abs(this.input.y) > 0.05 ? this.input.y : keyboardY;
     const length = Math.hypot(inputX, inputY);
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
-    const attacking = this.spearThrust > 0;
+    const throwing = this.isSpearThrowing();
     const previousGround = this.terrain.heightAt(this.root.position.x, this.root.position.z);
 
     if (length > 0.08) {
@@ -225,13 +254,13 @@ export class RangerController {
         const swing = Math.sin(this.walkPhase) * 0.55;
         this.leftLeg.rotation.x = swing;
         this.rightLeg.rotation.x = -swing;
-      } else if (this.grounded && !attacking) {
+      } else if (this.grounded && !throwing) {
         this.#setAnimation(sprinting ? 'Running_A' : 'Walking_A');
       }
     } else if (this.assetMode === 'placeholder') {
       this.leftLeg.rotation.x *= Math.max(0, 1 - dt * 12);
       this.rightLeg.rotation.x *= Math.max(0, 1 - dt * 12);
-    } else if (this.grounded && !attacking) {
+    } else if (this.grounded && !throwing) {
       this.#setAnimation('Idle_A');
     }
 
@@ -249,7 +278,7 @@ export class RangerController {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
         this.grounded = true;
-        if (!attacking) {
+        if (!throwing) {
           this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
       }
@@ -258,7 +287,12 @@ export class RangerController {
     }
 
     this.mixer?.update(dt);
-    this.#updateSpearVisual(dt);
+    this.#updateSpearAnchor();
+    if (this.spearMount) {
+      this.spearMount.position.copy(this.spearRestPosition);
+      this.spearMount.quaternion.copy(this.spearRestQuaternion);
+    }
+    this.#updateSpearThrow(dt);
     this.#updateCamera(false, dt);
   }
 
@@ -287,38 +321,34 @@ export class RangerController {
     return spear;
   }
 
-  #updateSpearVisual(dt) {
-    if (!this.spearMount) return;
-    this.#updateSpearAnchor();
+  #updateSpearThrow(dt) {
+    if (!this.isSpearThrowing()) return;
 
-    if (this.spearThrust <= 0) {
-      this.spearMount.position.copy(this.spearRestPosition);
-      this.spearMount.quaternion.copy(this.spearRestQuaternion);
-      if (this.assetMode === 'kaykit' && this.animationState === this.attackAnimation && this.grounded) {
-        this.#setAnimation('Idle_A', true);
+    const previousProgress = 1 - this.spearThrowRemaining / this.spearThrowDuration;
+    this.spearThrowRemaining = Math.max(0, this.spearThrowRemaining - dt);
+    const progress = 1 - this.spearThrowRemaining / this.spearThrowDuration;
+
+    if (!this.spearThrowReleased && previousProgress < this.spearThrowReleaseRatio && progress >= this.spearThrowReleaseRatio) {
+      this.spearThrowReleased = true;
+      if (this.spearMount) this.spearMount.visible = false;
+      const release = this.spearReleaseCallback;
+      this.spearReleaseCallback = null;
+      const launched = release?.();
+      if (launched === false) {
+        this.spearThrowReleased = false;
+        if (this.spearMount) this.spearMount.visible = this.spearEquipped;
       }
-      if (this.model) {
-        this.model.position.z *= Math.max(0, 1 - dt * 18);
-        this.model.rotation.x *= Math.max(0, 1 - dt * 18);
-      }
-      return;
     }
 
-    this.spearThrust = Math.max(0, this.spearThrust - dt);
-    const progress = 1 - this.spearThrust / this.spearAttackDuration;
-    const thrust = Math.sin(progress * Math.PI);
-    this.spearMount.position.copy(this.spearRestPosition);
-    this.spearMount.quaternion.copy(this.spearRestQuaternion);
-    const visualPush = this.attackAnimation ? 0.18 : 0.56;
-    this.spearMount.position.z += thrust * visualPush;
-    if (this.model) {
-      this.model.position.z = thrust * 0.16;
-      this.model.rotation.x = -thrust * 0.055;
+    if (this.spearThrowRemaining <= 0) {
+      this.spearReleaseCallback = null;
+      if (this.assetMode === 'kaykit' && this.animationState === this.throwAnimation && this.grounded) {
+        this.#setAnimation('Idle_A', true);
+      }
     }
   }
 
   #updateSpearAnchor() {
-    if (!this.spearMount) return;
     if (!this.spearHandAnchor) {
       this.spearRestPosition.set(0.48, 1.2, 0.16);
       this.spearRestQuaternion.setFromEuler(new THREE.Euler(Math.PI / 2, 0, -0.08));
@@ -365,11 +395,10 @@ export class RangerController {
     return best;
   }
 
-  #selectAttackAnimation() {
+  #selectThrowAnimation() {
     const names = [...this.actions.keys()];
-    return names.find(name => /^Melee_1H_Attack_Stab$/i.test(name))
-      ?? names.find(name => /thrust|stab|spear/i.test(name))
-      ?? names.find(name => /attack|strike|melee/i.test(name))
+    return names.find(name => /^Throw$/i.test(name))
+      ?? names.find(name => /throw/i.test(name))
       ?? null;
   }
 

@@ -19,15 +19,27 @@ export class ToolbeltSystem {
   }
 
   isEquipped(toolId) {
+    if (toolId === 'hand') return this.equippedToolId === null;
     return this.equippedToolId === toolId;
   }
 
   owns(toolId) {
+    if (toolId === 'hand') return true;
     this.#validateTool(toolId);
     return this.inventory.has(toolId, 1);
   }
 
   select(toolId) {
+    if (toolId === 'hand' || toolId === null) {
+      this.clear();
+      return {
+        equipped: true,
+        crafted: false,
+        toolId: 'hand',
+        missing: []
+      };
+    }
+
     this.#validateTool(toolId);
     let crafted = null;
     if (!this.owns(toolId)) crafted = this.crafting.craft(toolId);
@@ -54,21 +66,33 @@ export class ToolbeltSystem {
   }
 
   snapshot() {
-    return this.order.map(toolId => {
-      const definition = this.definitions[toolId];
-      const recipe = this.crafting.getRecipe(toolId);
-      const owned = this.owns(toolId);
-      return {
-        id: toolId,
-        label: definition.label,
-        icon: definition.icon,
-        role: definition.role,
-        owned,
-        craftable: !owned && this.crafting.canCraft(toolId),
-        equipped: this.equippedToolId === toolId,
-        ingredients: recipe.ingredients.map(ingredient => ({ ...ingredient }))
-      };
-    });
+    return [
+      {
+        id: 'hand',
+        label: 'Hand',
+        icon: 'hand',
+        role: 'default',
+        owned: true,
+        craftable: false,
+        equipped: this.equippedToolId === null,
+        ingredients: []
+      },
+      ...this.order.map(toolId => {
+        const definition = this.definitions[toolId];
+        const recipe = this.crafting.getRecipe(toolId);
+        const owned = this.owns(toolId);
+        return {
+          id: toolId,
+          label: definition.label,
+          icon: definition.icon,
+          role: definition.role,
+          owned,
+          craftable: !owned && this.crafting.canCraft(toolId),
+          equipped: this.equippedToolId === toolId,
+          ingredients: recipe.ingredients.map(ingredient => ({ ...ingredient }))
+        };
+      })
+    ];
   }
 
   #missingIngredients(toolId) {

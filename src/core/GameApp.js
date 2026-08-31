@@ -15,6 +15,8 @@ import { CraftingSystem } from '../gameplay/CraftingSystem.js';
 import { ToolbeltSystem } from '../gameplay/ToolbeltSystem.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../data/ToolDefinitions.js';
 
+const TOOLBELT_INPUT_ORDER = Object.freeze(['hand', ...TOOL_ORDER]);
+
 export class GameApp {
   constructor({ canvas, setStatus }) {
     this.canvas = canvas;
@@ -29,12 +31,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.5 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.6 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.5 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.6 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -121,6 +123,10 @@ export class GameApp {
 
     if (this.player) {
       this.player.getPosition(this.playerPosition);
+      if (this.campfire?.isPreviewing()) {
+        this.player.getFacingDirection(this.playerFacing);
+        this.campfire.updatePreview(this.playerPosition, this.playerFacing);
+      }
       this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
       if (this.gatherables && this.hunt) this.#refreshTargets(dt);
     }
@@ -132,11 +138,11 @@ export class GameApp {
   #refreshTargets(dt = 0) {
     const toolId = this.toolbelt?.getEquippedToolId() ?? null;
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
-    const projectileActive = this.spearProjectiles?.isActive() ?? false;
+    const spearBusy = (this.spearProjectiles?.isActive() ?? false) || (this.player?.isSpearThrowing() ?? false);
 
     let armed = false;
     let attackRange = 0;
-    if (!carryingLog && !projectileActive && toolId === 'spear') {
+    if (!carryingLog && !spearBusy && toolId === 'spear') {
       armed = true;
       attackRange = TOOL_DEFINITIONS.spear.lockRange;
     } else if (!carryingLog && toolId === 'sword') {
@@ -262,6 +268,7 @@ export class GameApp {
       return;
     }
 
+    if (this.campfire?.isPreviewing()) this.campfire.cancelPreview();
     const result = this.toolbelt.select(toolId);
     if (!result.equipped) {
       const missing = result.missing
@@ -275,7 +282,9 @@ export class GameApp {
     this.#syncEquippedToolPresentation();
     this.#refreshTargets(0);
     this.#syncProgress();
-    if (result.crafted) this.setStatus(`CRAFTED ${TOOL_DEFINITIONS[toolId].label.toUpperCase()} · EQUIPPED`);
+    if (result.crafted && TOOL_DEFINITIONS[toolId]) {
+      this.setStatus(`CRAFTED ${TOOL_DEFINITIONS[toolId].label.toUpperCase()} · EQUIPPED`);
+    }
   }
 
   #tryLogBuildOption(mode) {
@@ -302,18 +311,42 @@ export class GameApp {
   }
 
   #tryBuildCampfire() {
-    if (!this.player || !this.campfire?.canBuild() || this.physicalLogs?.isCarrying()) return;
+    if (!this.player || this.physicalLogs?.isCarrying() || this.campfire?.isBuilt()) return;
     this.player.getPosition(this.playerPosition);
     this.player.getFacingDirection(this.playerFacing);
-    const built = this.campfire.build(this.playerPosition, this.playerFacing);
-    if (!built) {
+
+    if (this.campfire?.isPreviewing()) {
+      const validPreview = this.campfire.updatePreview(this.playerPosition, this.playerFacing);
+      if (!validPreview) {
+        this.setStatus('CAMPFIRE TEMPLATE · NEED CLEAR, FLAT GROUND');
+        this.hud?.setObjective('Move until the green campfire template has a valid position');
+        return;
+      }
+      const built = this.campfire.confirmBuild();
+      if (!built) {
+        this.setStatus('CAMPFIRE · PLACEMENT CHANGED · TRY AGAIN');
+        return;
+      }
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      return;
+    }
+
+    if (!this.campfire?.canBuild()) return;
+    const preview = this.campfire.beginPreview(this.playerPosition, this.playerFacing);
+    if (!preview) {
       this.setStatus('CAMPFIRE · NEED CLEAR, FLAT GROUND');
       this.hud?.setObjective('Move to flatter open ground · C / campfire');
       return;
     }
 
-    this.#refreshTargets(0);
-    this.#syncProgress();
+    this.setStatus('CAMPFIRE TEMPLATE · CONFIRM PLACEMENT');
+    this.hud?.setCampfireAction({
+      available: true,
+      previewing: true,
+      label: 'Confirm campfire placement'
+    });
+    this.hud?.setObjective('Green template shows placement · tap campfire again to confirm');
   }
 
   #tryAttack() {
@@ -322,17 +355,21 @@ export class GameApp {
     this.player.getPosition(this.playerPosition);
 
     if (toolId === 'spear') {
-      if (this.spearProjectiles?.isActive()) return;
+      if (this.spearProjectiles?.isActive() || this.player.isSpearThrowing()) return;
       const target = this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.spear.lockRange);
       if (!target) return;
       this.player.faceWorldPoint(target.position);
-      const launched = this.spearProjectiles.throw({
-        origin: this.playerPosition,
-        target: target.position,
-        onHit: () => this.hunt.applyDamage(this.hunt.definition.spearDamage)
+      const started = this.player.playSpearThrow(() => {
+        const releaseOrigin = this.player.getPosition(new THREE.Vector3());
+        const launched = this.spearProjectiles.throw({
+          origin: releaseOrigin,
+          target: () => this.hunt.getProjectileTargetPosition(),
+          onHit: () => this.hunt.applyDamage(this.hunt.definition.spearDamage)
+        });
+        if (launched) this.player.setSpearEquipped(false);
+        return launched;
       });
-      if (!launched) return;
-      this.player.setSpearEquipped(false);
+      if (!started) return;
       this.currentHuntTarget = null;
       this.hud?.setAttackTarget(null, 'spear');
       return;
@@ -366,7 +403,10 @@ export class GameApp {
     const toolId = this.toolbelt?.getEquippedToolId() ?? null;
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
     const spearInFlight = this.spearProjectiles?.isActive() ?? false;
-    this.player?.setSpearEquipped(!carryingLog && !spearInFlight && toolId === 'spear');
+    const spearThrowing = this.player?.isSpearThrowing() ?? false;
+    if (!spearThrowing) {
+      this.player?.setSpearEquipped(!carryingLog && !spearInFlight && toolId === 'spear');
+    }
     this.toolPresentation?.setEquippedTool(carryingLog ? null : toolId);
   }
 
@@ -375,14 +415,16 @@ export class GameApp {
     const toolId = this.toolbelt.getEquippedToolId();
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
     const campfireBuilt = this.campfire?.isBuilt() ?? false;
+    const campfirePreviewing = this.campfire?.isPreviewing() ?? false;
     const canBuildCampfire = !carryingLog && !campfireBuilt && Boolean(this.campfire?.canBuild());
 
     this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setToolbelt(this.toolbelt.snapshot());
     this.hud?.setLogBuildMode(carryingLog);
     this.hud?.setCampfireAction({
-      available: canBuildCampfire,
-      label: 'Build campfire from sticks and stones'
+      available: canBuildCampfire || campfirePreviewing,
+      previewing: campfirePreviewing,
+      label: campfirePreviewing ? 'Confirm campfire placement' : 'Preview campfire placement'
     });
     this.#syncEquippedToolPresentation();
 
@@ -390,6 +432,12 @@ export class GameApp {
       this.setStatus('LOG IN HAND · BUILD');
       this.hud?.setObjective('Choose LAY LOG, POST or DROP');
       this.hud?.setAttackTarget(null, toolId);
+      return;
+    }
+
+    if (campfirePreviewing) {
+      this.setStatus('CAMPFIRE TEMPLATE · CONFIRM PLACEMENT');
+      this.hud?.setObjective('Green template shows placement · C / campfire again to confirm');
       return;
     }
 
@@ -437,7 +485,7 @@ export class GameApp {
 
     if (canBuildCampfire) {
       this.setStatus('STICKS + STONES READY · CAMPFIRE');
-      this.hud?.setObjective('C / campfire · logs are reserved for building');
+      this.hud?.setObjective('C / campfire · preview placement first');
       return;
     }
 
@@ -479,10 +527,10 @@ export class GameApp {
       } else if (event.code === 'KeyG') {
         event.preventDefault();
         this.#tryLogBuildOption('drop');
-      } else if (/^Digit[1-5]$/.test(event.code)) {
+      } else if (/^Digit[1-6]$/.test(event.code)) {
         event.preventDefault();
         const index = Number(event.code.slice(-1)) - 1;
-        this.#trySelectTool(TOOL_ORDER[index]);
+        this.#trySelectTool(TOOLBELT_INPUT_ORDER[index]);
       }
     });
   }

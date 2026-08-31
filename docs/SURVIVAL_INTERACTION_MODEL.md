@@ -1,6 +1,6 @@
 # Survival interaction model
 
-Foundation 0.3.5 establishes one shared boundary for gathering, crafting, tools, physical building materials and combat.
+Foundation 0.3.6 keeps the shared gathering/crafting/building/combat boundaries from 0.3.5 and tightens their presentation rules after Android device verification.
 
 ## Resource storage
 
@@ -24,34 +24,45 @@ Placed logs can later be targeted with the Hammer and disassembled back into a p
 
 ## Inventory crafting and toolbelt
 
-The bottom toolbelt is the single basic-tool selection surface. Selecting an unowned tool attempts to craft it through the existing `CraftingSystem`; selecting an owned tool equips it.
+The bottom toolbelt is the single basic-tool selection surface. Its first slot is always **Hand**, representing the default Ranger state with no tool equipped. The five craftable tool slots follow it: Spear, Axe, Hammer, Pickaxe and Sword.
+
+Selecting Hand clears the equipped tool without consuming or discarding owned tools. Selecting an unowned tool attempts to craft it through the existing `CraftingSystem`; selecting an owned tool equips it.
 
 Current roles are:
 
-- **Spear** — projectile hunting weapon. It auto-locks a valid target inside spear range and damage resolves only when the thrown spear reaches that target.
+- **Spear** — projectile hunting weapon. It auto-locks a valid target inside spear range. The Ranger uses the authored KayKit `Throw` animation, releases the held spear part-way through that animation, and the projectile follows a visible ballistic-style arc toward the live locked target. Damage resolves only when that projectile arrives.
 - **Axe** — enables tree harvesting.
 - **Hammer** — enables demolition of supported player-built structures such as placed logs and the current campfire.
 - **Pickaxe** — mines large world rocks into loose Stone pickups.
-- **Sword** — short-range fighting/defence weapon. Foundation 0.3.5 establishes the melee tool role; later hostile-enemy behaviour can use the same boundary rather than creating a second combat system.
+- **Sword** — short-range fighting/defence weapon. Foundation establishes the melee tool role; later hostile-enemy behaviour can use the same boundary rather than creating a second combat system.
+
+All non-spear handheld tool visuals mount through the Ranger's shared authored right-hand attachment slot. They must follow the hand/bone animation instead of using fixed offsets from the Ranger root, which previously caused Axe/Hammer/Pickaxe/Sword visuals to float beside the shoulder.
 
 Tool recipes consume only inventory resources. Tool ownership is stored in the same inventory/crafting data model, while equipped-tool state belongs to `ToolbeltSystem`.
 
 ## Campfire
 
-The campfire is an inventory-resource structure and now costs three Sticks plus three Stones. It does not consume Logs. Logs are reserved for physical construction.
+The campfire costs three Sticks plus three Stones. It does not consume Logs. Logs are reserved for physical construction.
 
-The campfire still uses the existing world placement checks: playable terrain, slope, shared collision clearance and Ranger-facing placement.
+Campfire construction is a two-step placement flow:
+
+1. the first Campfire action searches the existing playable/slope/collision rules and displays a translucent green world template at the current valid placement;
+2. the second Campfire action confirms that same template and only then consumes the three Sticks and three Stones, creates the real fire and registers collision.
+
+The green template follows the Ranger-facing placement calculation while preview mode is active. It has no gameplay collision and consumes no materials. Selecting another tool cancels an unconfirmed preview.
 
 ## System boundaries
 
 - `InventorySystem` never stores physical Logs.
 - `GatherableSystem` owns loose world resources and refuses to inventory a resource declared `storage: 'physical'`.
 - `PhysicalLogSystem` owns carrying, dropping and primitive log placement.
-- `ToolbeltSystem` owns craft/select/equip state for the five basic tools.
+- `ToolbeltSystem` owns Hand/default state plus craft/select/equip state for the five basic tools.
+- `RangerController` owns the authored right-hand attachment boundary and spear throw animation/release timing.
+- `RangerToolPresentation` mounts Axe, Hammer, Pickaxe and Sword through that hand boundary.
 - `TreeHarvestSystem` only operates when the Axe is selected by the app interaction layer.
 - `RockHarvestSystem` only operates when the Pickaxe is selected.
-- `CampfireSystem` owns campfire placement and its demolition handle.
-- `SpearProjectileSystem` owns the moving thrown-spear presentation and hit timing.
+- `CampfireSystem` owns preview, confirmation, final placement and its demolition handle.
+- `SpearProjectileSystem` owns the moving arcing spear presentation and hit timing.
 - `DayOneHuntSystem` exposes target acquisition and damage; it does not decide which player tool is equipped.
 
-The PWA shell, deterministic Pages deployment ordering, expanded mainland, render chunks, terrain, water, tree occlusion and world-generation architecture are outside this interaction pass and remain unchanged.
+The PWA shell, deterministic Pages deployment ordering, expanded mainland, render chunks, terrain, water, tree occlusion and world-generation architecture are outside this refinement pass and remain unchanged.

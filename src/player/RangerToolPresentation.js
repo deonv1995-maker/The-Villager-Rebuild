@@ -9,7 +9,8 @@ export class RangerToolPresentation {
     this.root = new THREE.Group();
     this.root.name = 'ranger-tool-presentation';
     this.root.visible = false;
-    this.player.root.add(this.root);
+    this.handMounted = this.player.mountRightHandObject?.(this.root) ?? false;
+    if (!this.handMounted && !this.root.parent) this.player.root.add(this.root);
   }
 
   isBusy() {
@@ -48,6 +49,11 @@ export class RangerToolPresentation {
   }
 
   #applyRestPose() {
+    if (this.handMounted) {
+      this.root.position.set(0, 0, 0);
+      this.root.rotation.set(0, 0, 0);
+      return;
+    }
     this.root.position.set(0.48, 1.32, 0.18);
     this.root.rotation.set(0.2, 0.08, -0.36);
   }
@@ -57,6 +63,13 @@ export class RangerToolPresentation {
       ? 2 * progress * progress
       : 1 - Math.pow(-2 * progress + 2, 2) / 2;
     const swing = -1.05 + eased * 1.9;
+
+    if (this.handMounted) {
+      this.root.position.set(0, 0, 0);
+      this.root.rotation.set(swing * 0.48, 0.06, swing * 0.18);
+      return;
+    }
+
     this.root.position.set(0.48, 1.36, 0.16);
     this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.2);
   }
@@ -129,16 +142,16 @@ export class RangerToolPresentation {
     const group = new THREE.Group();
     const { wood, stone, wrap } = this.#materials();
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.42, 7), wood);
-    grip.position.y = -0.22;
+    grip.position.y = 0;
     group.add(grip);
     const guard = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.1), wrap);
-    guard.position.y = 0.02;
+    guard.position.y = 0.24;
     group.add(guard);
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.05, 0.055), stone);
-    blade.position.y = 0.56;
+    blade.position.y = 0.78;
     group.add(blade);
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.24, 4), stone);
-    tip.position.y = 1.2;
+    tip.position.y = 1.42;
     group.add(tip);
     return group;
   }
