@@ -119,7 +119,7 @@ assert.equal(fadeBatch.count, 1, 'only occluding trees should enter the transpar
 assert.equal(fadeBatch.material.transparent, true, 'occluding tree presentation must be transparent');
 assert.equal(fadeBatch.material.opacity <= 0.25, true, 'foreground tree must become transparent enough to keep the Ranger visible');
 
-camera.position.set(9, 4, 8);
+camera.position.set(20, 4, 8);
 treeOcclusion.update(ranger, camera);
 const restoredMatrix = new THREE.Matrix4();
 const restoredPosition = new THREE.Vector3();
