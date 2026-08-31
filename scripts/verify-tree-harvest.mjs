@@ -74,7 +74,7 @@ for (const requirement of [
   "mode === 'frame'",
   "mode === 'wall'",
   "mode === 'angle'",
-  "this.previewRoot.name = 'log-construction-preview'",
+  "wrapper.name = 'log-construction-preview'",
   'PREVIEW_VALID',
   'PREVIEW_INVALID',
   '#nearestFloorCorner(base)',
