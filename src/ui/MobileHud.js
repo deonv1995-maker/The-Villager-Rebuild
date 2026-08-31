@@ -15,6 +15,7 @@ export class MobileHud {
     this.onBuildOption = onBuildOption;
     this.carryingLog = false;
     this.buildPreviewValid = false;
+    this.buildTrayCollapsed = false;
     this.currentToolId = null;
     this.currentInteractionTarget = null;
     this.currentHuntTarget = null;
@@ -47,13 +48,19 @@ export class MobileHud {
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <div class="log-build-tray" data-role="log-build" hidden>
-        <button type="button" data-build="raw">RAW</button>
-        <button type="button" data-build="floor">FLOOR</button>
-        <button type="button" data-build="frame">FRAME</button>
-        <button type="button" data-build="wall">WALL</button>
-        <button type="button" data-build="angle">ANGLE</button>
-        <button type="button" data-build="roof">ROOF</button>
-        <button type="button" data-build="drop" class="drop-log">DROP</button>
+        <button class="build-tray-toggle" type="button" data-role="build-toggle" aria-expanded="true" aria-label="Collapse build menu">
+          <span class="build-tray-title" data-role="build-toggle-label">BUILD</span>
+          <span class="build-tray-chevron" data-role="build-toggle-chevron" aria-hidden="true">›</span>
+        </button>
+        <div class="build-tray-options" data-role="build-options">
+          <button type="button" data-build="raw">RAW</button>
+          <button type="button" data-build="floor">FLOOR</button>
+          <button type="button" data-build="frame">FRAME</button>
+          <button type="button" data-build="wall">WALL</button>
+          <button type="button" data-build="angle">ANGLE</button>
+          <button type="button" data-build="roof">ROOF</button>
+          <button type="button" data-build="drop" class="drop-log">DROP</button>
+        </div>
       </div>
       <div class="joystick" data-role="joystick"><img class="joystick-pad" src="${ui.joystickPad}" alt=""><img class="joystick-nub" src="${ui.joystickNub}" alt=""></div>
       <button class="hud-button sprint" type="button" aria-label="Sprint"><img class="button-bg" src="${ui.buttonCircle}" alt=""><span class="button-glyph">RUN</span></button>
@@ -73,9 +80,13 @@ export class MobileHud {
     this.attackButton = this.actionButton;
     this.attackIcon = this.actionIcon;
     this.buildTray = this.root.querySelector('[data-role="log-build"]');
+    this.buildTrayToggle = this.root.querySelector('[data-role="build-toggle"]');
+    this.buildTrayToggleLabel = this.root.querySelector('[data-role="build-toggle-label"]');
+    this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
+    this.#setBuildTrayCollapsed(false);
     this.#bindJoystick();
     this.#bindButtons();
     this.#bindLook();
@@ -135,6 +146,7 @@ export class MobileHud {
     this.root.classList.toggle('log-carrying', this.carryingLog);
     document.body.classList.toggle('log-carrying', this.carryingLog);
     this.buildTray.hidden = !carrying;
+    this.buildTrayToggleLabel.textContent = state?.mode?.toUpperCase() ?? 'BUILD';
     if (!carrying) {
       this.buildTray.classList.remove('invalid');
       this.#renderAction();
@@ -177,6 +189,17 @@ export class MobileHud {
     if (!action) this.externalActions.delete(id);
     else this.externalActions.set(id, { ...action, id });
     this.#renderAction();
+  }
+
+  #setBuildTrayCollapsed(collapsed) {
+    this.buildTrayCollapsed = Boolean(collapsed);
+    this.buildTray.classList.toggle('collapsed', this.buildTrayCollapsed);
+    this.buildTrayToggle.setAttribute('aria-expanded', this.buildTrayCollapsed ? 'false' : 'true');
+    this.buildTrayToggle.setAttribute(
+      'aria-label',
+      this.buildTrayCollapsed ? 'Expand build menu' : 'Collapse build menu'
+    );
+    this.buildTrayToggleChevron.textContent = this.buildTrayCollapsed ? '‹' : '›';
   }
 
   #renderAction() {
@@ -273,6 +296,11 @@ export class MobileHud {
     this.actionButton.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.#triggerAction();
+    });
+
+    this.buildTrayToggle.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      this.#setBuildTrayCollapsed(!this.buildTrayCollapsed);
     });
 
     for (const [toolId, button] of this.toolButtons) {

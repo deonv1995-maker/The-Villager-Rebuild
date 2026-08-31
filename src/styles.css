@@ -25,15 +25,16 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   pointer-events: none;
 }
 body.log-carrying #boot-status {
-  top: max(51px, calc(env(safe-area-inset-top) + 48px));
+  top: max(12px, env(safe-area-inset-top));
   max-width: min(58vw, 360px);
 }
 #boot-status[data-error="true"] { background: rgba(105, 31, 24, .94); border-color: #d07a62; }
 .mobile-hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 .inventory-strip {
   position: absolute;
-  right: max(10px, env(safe-area-inset-right));
-  top: max(12px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  right: auto;
+  top: max(58px, calc(env(safe-area-inset-top) + 54px));
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -49,7 +50,7 @@ body.log-carrying #boot-status {
   pointer-events: none;
 }
 .mobile-hud.log-carrying .inventory-strip {
-  top: max(51px, calc(env(safe-area-inset-top) + 48px));
+  top: max(58px, calc(env(safe-area-inset-top) + 54px));
 }
 .inventory-row {
   display: flex;
@@ -142,13 +143,13 @@ body.log-carrying #boot-status {
 .tool-slot:active { transform: scale(.94); }
 .log-build-tray {
   position: absolute;
-  left: 50%;
-  top: max(4px, calc(env(safe-area-inset-top) + 2px));
-  transform: translateX(-50%);
+  right: max(8px, calc(env(safe-area-inset-right) + 4px));
+  top: max(8px, calc(env(safe-area-inset-top) + 4px));
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 4px;
-  width: min(620px, calc(100vw - 16px));
+  width: 94px;
   min-width: 0;
   padding: 4px;
   border-radius: 10px;
@@ -156,16 +157,27 @@ body.log-carrying #boot-status {
   border: 1px solid rgba(225, 207, 151, .46);
   backdrop-filter: blur(6px);
   pointer-events: auto;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.log-build-tray::-webkit-scrollbar { display: none; }
 .log-build-tray[hidden] { display: none; }
 .log-build-tray.invalid { border-color: rgba(216, 93, 87, .7); }
+.log-build-tray.collapsed { width: 76px; }
+.build-tray-options {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  max-height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.build-tray-options::-webkit-scrollbar { display: none; }
+.log-build-tray.collapsed .build-tray-options { display: none; }
 .log-build-tray button {
-  flex: 1 1 48px;
-  min-width: 45px;
-  height: 32px;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
   border: 1px solid rgba(225, 207, 151, .38);
   border-radius: 7px;
   background: rgba(69, 72, 50, .9);
@@ -175,6 +187,27 @@ body.log-carrying #boot-status {
   letter-spacing: .04em;
   pointer-events: auto;
   touch-action: none;
+}
+.log-build-tray .build-tray-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  height: 32px;
+  padding: 0 8px;
+  border-color: rgba(240, 207, 118, .58);
+  background: rgba(50, 64, 46, .96);
+  color: #f7dfa0;
+}
+.build-tray-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.build-tray-chevron {
+  flex: 0 0 auto;
+  font-size: 18px;
+  line-height: 1;
 }
 .log-build-tray button.selected {
   border-color: #72dc86;
@@ -311,16 +344,19 @@ body.log-carrying #boot-status {
 @media (max-width: 700px) and (orientation: portrait) {
   .toolbelt { bottom: max(150px, calc(env(safe-area-inset-bottom) + 146px)); }
   .log-build-tray {
-    top: max(4px, calc(env(safe-area-inset-top) + 2px));
-    width: calc(100vw - 12px);
+    right: max(6px, calc(env(safe-area-inset-right) + 3px));
+    top: max(6px, calc(env(safe-area-inset-top) + 3px));
+    width: 88px;
   }
+  .log-build-tray.collapsed { width: 72px; }
   .log-build-tray button {
-    min-width: 43px;
-    height: 31px;
+    height: 29px;
     font-size: 8px;
   }
+  .log-build-tray .build-tray-toggle { height: 31px; }
+  .inventory-strip,
   .mobile-hud.log-carrying .inventory-strip {
-    top: max(49px, calc(env(safe-area-inset-top) + 46px));
+    top: max(58px, calc(env(safe-area-inset-top) + 54px));
   }
   .wall-customize-tray {
     top: max(73px, calc(env(safe-area-inset-top) + 68px));

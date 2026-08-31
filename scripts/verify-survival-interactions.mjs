@@ -199,6 +199,7 @@ for (const requirement of [
   "hand: ui.hand",
   'setToolbelt(entries)',
   'class="log-build-tray"',
+  'data-role="build-toggle"',
   'data-build="raw"',
   'data-build="floor"',
   'data-build="frame"',
@@ -207,6 +208,7 @@ for (const requirement of [
   'data-build="roof"',
   'data-build="drop"',
   'setLogBuildMode(carrying, state = null)',
+  '#setBuildTrayCollapsed(collapsed)',
   'class="hud-button action"',
   'setExternalAction(id, action = null)',
   "const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])",
@@ -228,8 +230,20 @@ assert.ok(contextActionSource.includes("axe: Object.freeze(new Set(['tree']))"),
 assert.ok(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock']))"), 'Unified Action policy must preserve Pickaxe rock routing');
 assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must preserve Hammer demolition routing');
 assert.ok(contextActionSource.includes("const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']))"), 'Unified Action policy must preserve Spear and Sword combat routing');
-assert.ok(stylesSource.includes('.log-build-tray {') && stylesSource.includes('top: max(4px'), 'Build tray must stay at the top safe area of the mobile viewport');
-assert.ok(stylesSource.includes('.inventory-strip {') && stylesSource.includes('flex-direction: column'), 'Inventory must remain a vertical stack beneath the top HUD area');
+assert.ok(
+  stylesSource.includes('.log-build-tray {') &&
+  stylesSource.includes('right: max(8px') &&
+  stylesSource.includes('flex-direction: column') &&
+  stylesSource.includes('.log-build-tray.collapsed .build-tray-options'),
+  'Build tray must stay collapsible at the top-right safe area of the mobile viewport'
+);
+assert.ok(
+  stylesSource.includes('.inventory-strip {') &&
+  stylesSource.includes('left: max(10px') &&
+  stylesSource.includes('right: auto;') &&
+  stylesSource.includes('flex-direction: column'),
+  'Inventory must remain a vertical stack on the left side beneath the status banner'
+);
 
 for (const requirement of [
   "takePhysical(playerPosition, 'log')",
