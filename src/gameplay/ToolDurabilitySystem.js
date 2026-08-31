@@ -79,17 +79,18 @@ export class ToolDurabilitySystem {
     const units = this.units.get(toolId);
     if (units.length === 0) return null;
 
-    const currentDurability = units.shift();
+    const previousDurability = units.shift();
     const consumed = this.inventory.consume([{ itemId: toolId, quantity: 1 }]);
     if (!consumed) {
-      units.unshift(currentDurability);
+      units.unshift(previousDurability);
       return null;
     }
 
     const wearPercent = this.#rollWear();
-    const durability = roundTenth(Math.max(0, currentDurability - wearPercent));
+    const durability = roundTenth(Math.max(0, previousDurability - wearPercent));
     return {
       toolId,
+      previousDurability,
       wearPercent,
       durability,
       broken: durability <= 0,
