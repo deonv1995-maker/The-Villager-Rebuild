@@ -43,6 +43,8 @@ export class WorldCollisionSystem {
     supportHalfX = 0,
     supportHalfZ = 0,
     supportY = null,
+    supportOverridesBase = false,
+    supportOverrideTolerance = 0,
     stepHeight = 0.58
   }) {
     if (
@@ -72,6 +74,8 @@ export class WorldCollisionSystem {
       supportHalfX: Math.max(0, supportHalfX),
       supportHalfZ: Math.max(0, supportHalfZ),
       supportY: Number.isFinite(supportY) ? supportY : null,
+      supportOverridesBase: Boolean(supportOverridesBase),
+      supportOverrideTolerance: Math.max(0, supportOverrideTolerance),
       stepHeight: Math.max(0, stepHeight)
     };
     this.obstacles.push(obstacle);
@@ -90,6 +94,8 @@ export class WorldCollisionSystem {
     standable = false,
     supportRadius = 0,
     supportY = null,
+    supportOverridesBase = false,
+    supportOverrideTolerance = 0,
     stepHeight = 0.58
   }) {
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) {
@@ -107,6 +113,8 @@ export class WorldCollisionSystem {
       standable: Boolean(standable),
       supportRadius: Math.max(0, supportRadius),
       supportY: Number.isFinite(supportY) ? supportY : null,
+      supportOverridesBase: Boolean(supportOverridesBase),
+      supportOverrideTolerance: Math.max(0, supportOverrideTolerance),
       stepHeight: Math.max(0, stepHeight)
     };
     this.obstacles.push(obstacle);
@@ -143,13 +151,24 @@ export class WorldCollisionSystem {
   }
 
   supportHeightAt(x, z, baseHeight) {
-    let height = baseHeight;
+    let highestSupport = -Infinity;
+    let overridesBase = false;
+
     for (const obstacle of this.obstacles) {
       if (!obstacle.standable || obstacle.supportY === null) continue;
       if (!this.#withinSupport(obstacle, x, z)) continue;
-      if (obstacle.supportY > height) height = obstacle.supportY;
+      highestSupport = Math.max(highestSupport, obstacle.supportY);
+      if (
+        obstacle.supportOverridesBase &&
+        obstacle.supportY >= baseHeight - obstacle.supportOverrideTolerance
+      ) {
+        overridesBase = true;
+      }
     }
-    return height;
+
+    if (!Number.isFinite(highestSupport)) return baseHeight;
+    if (overridesBase) return highestSupport;
+    return Math.max(baseHeight, highestSupport);
   }
 
   resolveMove(from, desired, {
