@@ -4,6 +4,11 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 const PLAYER_RADIUS = 0.42;
+const TOOL_ACTION_TARGET_DURATION = Object.freeze({
+  axe: 0.66,
+  hammer: 0.62,
+  pickaxe: 0.78
+});
 
 export class RangerController {
   constructor({ scene, camera, terrain, collision = null }) {
@@ -27,6 +32,9 @@ export class RangerController {
     this.animationState = null;
     this.actions = new Map();
     this.throwAnimation = null;
+    this.toolActionNames = new Map();
+    this.toolActionRemaining = 0;
+    this.toolActionToolId = null;
     this.spearEquipped = false;
     this.spearVisual = null;
     this.spearMount = null;
@@ -105,6 +113,11 @@ export class RangerController {
       if (Number.isFinite(clipDuration)) {
         this.spearThrowDuration = THREE.MathUtils.clamp(clipDuration, 0.58, 1.15);
       }
+    }
+
+    for (const toolId of ['axe', 'hammer', 'pickaxe']) {
+      const actionName = this.#selectToolAction(toolId);
+      if (actionName) this.toolActionNames.set(toolId, actionName);
     }
     this.#setAnimation('Idle_A', true);
   }
@@ -194,14 +207,34 @@ export class RangerController {
     return this.spearThrowRemaining > 0;
   }
 
+  isToolActing() {
+    return this.toolActionRemaining > 0;
+  }
+
   playSpearThrow(onRelease) {
-    if (!this.spearEquipped || !this.spearVisual || this.isSpearThrowing()) return false;
+    if (!this.spearEquipped || !this.spearVisual || this.isSpearThrowing() || this.isToolActing()) return false;
     this.spearThrowRemaining = this.spearThrowDuration;
     this.spearThrowReleased = false;
     this.spearReleaseCallback = typeof onRelease === 'function' ? onRelease : null;
     if (this.spearMount) this.spearMount.visible = true;
     if (this.throwAnimation) this.#setAnimation(this.throwAnimation, true);
     return true;
+  }
+
+  playToolAction(toolId) {
+    if (this.assetMode !== 'kaykit' || this.isSpearThrowing() || this.isToolActing()) return false;
+    const actionName = this.toolActionNames.get(toolId);
+    const action = actionName ? this.actions.get(actionName) : null;
+    const clipDuration = action?.getClip()?.duration;
+    if (!action || !Number.isFinite(clipDuration) || clipDuration <= 0) return false;
+
+    const targetDuration = TOOL_ACTION_TARGET_DURATION[toolId] ?? 0.68;
+    const timeScale = THREE.MathUtils.clamp(clipDuration / targetDuration, 0.72, 1.9);
+    const duration = clipDuration / timeScale;
+    this.toolActionRemaining = duration;
+    this.toolActionToolId = toolId;
+    this.#playOneShot(actionName, timeScale);
+    return { started: true, duration, actionName };
   }
 
   rotateCamera(deltaX, deltaY) {
@@ -227,6 +260,7 @@ export class RangerController {
     const length = Math.hypot(inputX, inputY);
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
     const throwing = this.isSpearThrowing();
+    const toolActing = this.isToolActing();
     const previousGround = this.terrain.heightAt(this.root.position.x, this.root.position.z);
 
     if (length > 0.08) {
@@ -254,13 +288,13 @@ export class RangerController {
         const swing = Math.sin(this.walkPhase) * 0.55;
         this.leftLeg.rotation.x = swing;
         this.rightLeg.rotation.x = -swing;
-      } else if (this.grounded && !throwing) {
+      } else if (this.grounded && !throwing && !toolActing) {
         this.#setAnimation(sprinting ? 'Running_A' : 'Walking_A');
       }
     } else if (this.assetMode === 'placeholder') {
       this.leftLeg.rotation.x *= Math.max(0, 1 - dt * 12);
       this.rightLeg.rotation.x *= Math.max(0, 1 - dt * 12);
-    } else if (this.grounded && !throwing) {
+    } else if (this.grounded && !throwing && !toolActing) {
       this.#setAnimation('Idle_A');
     }
 
@@ -278,7 +312,7 @@ export class RangerController {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
         this.grounded = true;
-        if (!throwing) {
+        if (!throwing && !toolActing) {
           this.#setAnimation(length > 0.08 ? (sprinting ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
       }
@@ -287,6 +321,7 @@ export class RangerController {
     }
 
     this.mixer?.update(dt);
+    this.#updateToolAction(dt);
     this.#updateSpearAnchor();
     if (this.spearMount) {
       this.spearMount.position.copy(this.spearRestPosition);
@@ -319,6 +354,19 @@ export class RangerController {
 
     spear.rotation.z = -0.04;
     return spear;
+  }
+
+  #updateToolAction(dt) {
+    if (!this.isToolActing()) return;
+    this.toolActionRemaining = Math.max(0, this.toolActionRemaining - dt);
+    if (this.toolActionRemaining > 0) return;
+
+    const completedTool = this.toolActionToolId;
+    const actionName = completedTool ? this.toolActionNames.get(completedTool) : null;
+    this.toolActionToolId = null;
+    if (this.assetMode === 'kaykit' && this.grounded && this.animationState === actionName) {
+      this.#setAnimation('Idle_A', true);
+    }
   }
 
   #updateSpearThrow(dt) {
@@ -402,12 +450,42 @@ export class RangerController {
       ?? null;
   }
 
+  #selectToolAction(toolId) {
+    const names = [...this.actions.keys()];
+    const normalize = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const preferences = toolId === 'axe'
+      ? ['2hmeleeattackchop', 'meleeattackchop', 'attackchop', 'chop', 'interact', 'heavy']
+      : toolId === 'pickaxe'
+        ? ['2hmeleeattackchop', '2hmeleeattack', 'attackchop', 'interact', 'heavy', 'attack']
+        : ['1hmeleeattackchop', '1hmeleeattack', 'attackchop', 'interact', 'heavy', 'attack'];
+
+    for (const preferred of preferences) {
+      const exact = names.find(name => normalize(name) === preferred);
+      if (exact) return exact;
+    }
+    for (const preferred of preferences) {
+      const partial = names.find(name => normalize(name).includes(preferred));
+      if (partial) return partial;
+    }
+    return null;
+  }
+
+  #playOneShot(name, timeScale = 1) {
+    const next = this.actions.get(name);
+    if (!next) return false;
+    const previous = this.animationState ? this.actions.get(this.animationState) : null;
+    if (previous && previous !== next) previous.fadeOut(0.05);
+    next.reset().setEffectiveTimeScale(timeScale).fadeIn(0.05).play();
+    this.animationState = name;
+    return true;
+  }
+
   #setAnimation(name, immediate = false) {
     const next = this.actions.get(name);
     if (!next || this.animationState === name) return;
     const previous = this.animationState ? this.actions.get(this.animationState) : null;
     if (previous && previous !== next) previous.fadeOut(immediate ? 0.05 : 0.16);
-    next.reset().fadeIn(immediate ? 0.05 : 0.16).play();
+    next.reset().setEffectiveTimeScale(1).fadeIn(immediate ? 0.05 : 0.16).play();
     this.animationState = name;
   }
 

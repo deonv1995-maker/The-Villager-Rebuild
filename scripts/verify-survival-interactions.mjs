@@ -8,9 +8,19 @@ import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
 import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
 import { STRUCTURE_DEFINITIONS } from '../src/data/StructureDefinitions.js';
+import { LOG_BUILD_MODES, PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
 import { SpearProjectileSystem } from '../src/world/SpearProjectileSystem.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
+
+function animationNamesFromGlb(buffer) {
+  assert.equal(buffer.toString('ascii', 0, 4), 'glTF', 'KayKit animation asset must remain a valid GLB');
+  const jsonLength = buffer.readUInt32LE(12);
+  const jsonType = buffer.toString('ascii', 16, 20);
+  assert.equal(jsonType, 'JSON', 'KayKit animation GLB must expose a JSON animation catalog');
+  const json = JSON.parse(buffer.subarray(20, 20 + jsonLength).toString('utf8').trim());
+  return (json.animations ?? []).map(animation => animation.name).filter(Boolean);
+}
 
 assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Craftable tool order must remain stable');
 assert.equal(TOOL_DEFINITIONS.spear.role, 'projectile');
@@ -24,6 +34,8 @@ assert.equal(RESOURCE_DEFINITIONS.stick.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.stone.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.grass.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.log.storage, 'physical');
+assert.equal(PHYSICAL_LOG.length, 2.9, 'Physical logs must retain original-reference full length');
+assert.deepEqual(LOG_BUILD_MODES, ['raw', 'floor', 'frame', 'wall', 'angle']);
 
 const initialResourceCounts = WORLD_LAYOUT.dayOneResources.reduce((counts, [resourceId]) => {
   counts[resourceId] = (counts[resourceId] ?? 0) + 1;
@@ -107,13 +119,18 @@ assert.equal(projectileResult?.hit, true, 'Projectile damage must resolve only w
 assert.equal(projectileDamage, 1);
 assert.equal(projectile.isActive(), false);
 
-const generalAnimations = await readFile('public/assets/kaykit/animations/Rig_Medium_General.glb');
-assert.equal(generalAnimations.toString('ascii', 0, 4), 'glTF', 'KayKit general animation asset must remain a valid GLB');
-const jsonLength = generalAnimations.readUInt32LE(12);
-const jsonType = generalAnimations.toString('ascii', 16, 20);
-assert.equal(jsonType, 'JSON', 'KayKit general animation GLB must expose a JSON animation catalog');
-const animationJson = JSON.parse(generalAnimations.subarray(20, 20 + jsonLength).toString('utf8').trim());
-assert.ok(animationJson.animations?.some(animation => animation.name === 'Throw'), 'KayKit authored Throw clip must remain available for spear release');
+const [generalAnimations, meleeAnimations] = await Promise.all([
+  readFile('public/assets/kaykit/animations/Rig_Medium_General.glb'),
+  readFile('public/assets/kaykit/animations/Rig_Medium_CombatMelee.glb')
+]);
+const generalNames = animationNamesFromGlb(generalAnimations);
+const meleeNames = animationNamesFromGlb(meleeAnimations);
+assert.ok(generalNames.some(name => name === 'Throw'), 'KayKit authored Throw clip must remain available for spear release');
+const normalizedWorkNames = [...generalNames, ...meleeNames].map(name => name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+assert.ok(
+  normalizedWorkNames.some(name => ['interact', 'chop', 'attack', 'heavy'].some(token => name.includes(token))),
+  'KayKit production animation assets must retain a usable full-body work/strike action for Axe, Hammer and Pickaxe'
+);
 
 const [appSource, hudSource, logSource, rockSource, projectileSource, gatherSource, toolSource, playerSource, assetSource, hammerSvg, pickaxeSvg, swordSvg] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
@@ -143,6 +160,8 @@ for (const requirement of [
   'this.player.playSpearThrow(() =>',
   'target: () => this.hunt.getProjectileTargetPosition()',
   'onHit: () => this.hunt.applyDamage',
+  'this.physicalLogs.update(this.playerPosition, this.playerFacing)',
+  'this.physicalLogs.build(null, this.playerPosition, this.playerFacing)',
   'TOOLBELT_INPUT_ORDER'
 ]) {
   assert.ok(appSource.includes(requirement), `GameApp is missing survival interaction contract: ${requirement}`);
@@ -156,17 +175,26 @@ for (const requirement of [
   "hand: ui.hand",
   'setToolbelt(entries)',
   'class="log-build-tray"',
-  'data-build="lay"',
-  'data-build="post"',
-  'data-build="drop"'
+  'data-build="raw"',
+  'data-build="floor"',
+  'data-build="frame"',
+  'data-build="wall"',
+  'data-build="angle"',
+  'data-build="drop"',
+  'setLogBuildMode(carrying, state = null)'
 ]) {
   assert.ok(hudSource.includes(requirement), `Mobile HUD is missing tool/build contract: ${requirement}`);
 }
 
 for (const requirement of [
   "takePhysical(playerPosition, 'log')",
-  'this.player.root.add(item.root)',
-  "['lay', 'post'].includes(mode)",
+  'PHYSICAL_LOG.carryPosition',
+  'setBuildMode(mode)',
+  'cycleBuildMode()',
+  "mode === 'floor'",
+  "mode === 'frame'",
+  "mode === 'wall'",
+  "mode === 'angle'",
   "type: 'placed-log'",
   'getDemolitionTarget(playerPosition)',
   'demolish(playerPosition)'
@@ -188,9 +216,12 @@ assert.ok(projectileSource.includes('Math.sin(progress * Math.PI) * this.arcHeig
 assert.ok(projectileSource.includes("typeof target === 'function' ? target : () => target"), 'Projectile must preserve a live target provider for auto-lock tracking');
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'), 'Non-spear tools must mount through the Ranger right-hand attachment boundary');
-assert.ok(toolSource.includes("toolId === 'hammer'") && toolSource.includes("toolId === 'pickaxe'") && toolSource.includes("toolId === 'sword'"), 'Ranger tool presentation must support all non-spear basic tools');
+assert.ok(toolSource.includes("const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])"), 'Axe, Hammer and Pickaxe must share the skeleton-driven work-action path');
+assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Work tools must request a Ranger skeleton action instead of independently swinging the hand-mounted prop');
+assert.ok(toolSource.includes('this.#applyRestPose();') && toolSource.includes('this.skeletalActionActive = true'), 'Hand-mounted work tool must remain rigidly attached during the Ranger action');
 assert.ok(playerSource.includes('mountRightHandObject(object)'), 'Ranger controller must expose one shared hand-mount boundary for held tools');
 assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpearThrow(onRelease)'), 'Spear must use the authored Throw animation and a timed release callback');
+assert.ok(playerSource.includes('playToolAction(toolId)') && playerSource.includes('#selectToolAction(toolId)'), 'Ranger controller must own work-action selection and timing');
 
 for (const [name, path, svg] of [
   ['hammer', "hammer: asset('ui/mobile/icon-hammer.svg')", hammerSvg],
@@ -200,5 +231,7 @@ for (const [name, path, svg] of [
   assert.ok(assetSource.includes(path), `${name} icon must be registered in shared runtime assets`);
   assert.ok(svg.includes('<svg') && svg.includes('#FFFFFF'), `${name} icon must remain a valid white SVG glyph`);
 }
+assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
+assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Survival hand/tool mounting, physical logs and arcing projectile contracts verified');
+console.log('Survival hand/tool skeleton actions, original-reference log building and arcing projectile contracts verified');

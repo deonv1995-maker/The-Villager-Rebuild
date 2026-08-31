@@ -31,12 +31,12 @@ export class GameApp {
 
   async start() {
     this.sceneSystem = new SceneSystem(this.canvas);
-    this.setStatus('FOUNDATION 0.3.6 · LOADING ISLAND');
+    this.setStatus('FOUNDATION 0.3.7 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
     await this.island.load();
 
-    this.setStatus('FOUNDATION 0.3.6 · LOADING RANGER');
+    this.setStatus('FOUNDATION 0.3.7 · LOADING RANGER');
     this.player = new RangerController({
       scene: this.sceneSystem.scene,
       camera: this.sceneSystem.camera,
@@ -102,6 +102,7 @@ export class GameApp {
           onBuildOption: mode => this.#tryLogBuildOption(mode)
         });
         this.player.getPosition(this.playerPosition);
+        this.player.getFacingDirection(this.playerFacing);
         this.#refreshTargets(0);
         this.#syncProgress();
       })
@@ -123,9 +124,12 @@ export class GameApp {
 
     if (this.player) {
       this.player.getPosition(this.playerPosition);
+      this.player.getFacingDirection(this.playerFacing);
       if (this.campfire?.isPreviewing()) {
-        this.player.getFacingDirection(this.playerFacing);
         this.campfire.updatePreview(this.playerPosition, this.playerFacing);
+      }
+      if (this.physicalLogs?.isCarrying()) {
+        this.physicalLogs.update(this.playerPosition, this.playerFacing);
       }
       this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
       if (this.gatherables && this.hunt) this.#refreshTargets(dt);
@@ -155,8 +159,17 @@ export class GameApp {
       this.treeHarvest?.update(this.playerPosition, false);
       this.rockHarvest?.update(this.playerPosition, false);
       this.gatherables?.update(this.playerPosition, () => false);
-      this.currentInteractionTarget = null;
-      this.hud?.setInteractionTarget(null);
+      const buildState = this.physicalLogs.getBuildState();
+      this.currentInteractionTarget = {
+        type: 'carried-log-build',
+        label: buildState.label,
+        icon: 'hand',
+        actionLabel: buildState.previewValid
+          ? `Place ${buildState.label}`
+          : `Cannot place ${buildState.label} here`
+      };
+      this.hud?.setInteractionTarget(this.currentInteractionTarget);
+      this.hud?.setLogBuildMode(true, buildState);
       this.hud?.setAttackTarget(null, toolId);
       return;
     }
@@ -182,8 +195,30 @@ export class GameApp {
   }
 
   #tryInteract() {
-    if (!this.player || !this.inventory || this.physicalLogs?.isCarrying()) return;
+    if (!this.player || !this.inventory) return;
     this.player.getPosition(this.playerPosition);
+    this.player.getFacingDirection(this.playerFacing);
+
+    if (this.physicalLogs?.isCarrying()) {
+      this.physicalLogs.update(this.playerPosition, this.playerFacing);
+      const buildState = this.physicalLogs.getBuildState();
+      if (!buildState.previewValid) {
+        this.setStatus(`${buildState.label.toUpperCase()} · CANNOT PLACE HERE`);
+        this.hud?.setObjective('Red preview is blocked · move or change build mode');
+        return;
+      }
+      const built = this.physicalLogs.build(null, this.playerPosition, this.playerFacing);
+      if (!built) {
+        this.setStatus('LOG · PLACEMENT CHANGED · TRY AGAIN');
+        return;
+      }
+      this.#syncEquippedToolPresentation();
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(`${built.label.toUpperCase()} ${built.snapped ? 'SNAPPED' : 'PLACED'}`);
+      return;
+    }
+
     this.#refreshTargets(0);
     const target = this.currentInteractionTarget;
     if (!target) return;
@@ -246,6 +281,8 @@ export class GameApp {
     if (target.type === 'physical-resource' && target.resourceId === 'log') {
       const carried = this.physicalLogs?.pickup(this.playerPosition);
       if (!carried) return;
+      this.player.getFacingDirection(this.playerFacing);
+      this.physicalLogs.update(this.playerPosition, this.playerFacing);
       this.#syncEquippedToolPresentation();
       this.#refreshTargets(0);
       this.#syncProgress();
@@ -264,7 +301,7 @@ export class GameApp {
   #trySelectTool(toolId) {
     if (!this.toolbelt || !this.inventory) return;
     if (this.physicalLogs?.isCarrying()) {
-      this.setStatus('LOG IN HAND · PLACE OR DROP IT FIRST');
+      this.setStatus('LOG ON SHOULDER · PLACE OR DROP IT FIRST');
       return;
     }
 
@@ -292,21 +329,26 @@ export class GameApp {
     this.player.getPosition(this.playerPosition);
     this.player.getFacingDirection(this.playerFacing);
 
-    const result = mode === 'drop'
-      ? this.physicalLogs.drop(this.playerPosition, this.playerFacing)
-      : this.physicalLogs.build(mode, this.playerPosition, this.playerFacing);
-    if (!result) {
-      this.setStatus('LOG · NEED CLEARER, FLATTER GROUND');
+    if (mode === 'drop') {
+      const result = this.physicalLogs.drop(this.playerPosition, this.playerFacing);
+      if (!result) return;
+      this.#syncEquippedToolPresentation();
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus('LOG DROPPED');
       return;
     }
 
-    this.#syncEquippedToolPresentation();
+    if (!this.physicalLogs.setBuildMode(mode)) return;
+    this.physicalLogs.update(this.playerPosition, this.playerFacing);
+    const state = this.physicalLogs.getBuildState();
+    this.hud?.setLogBuildMode(true, state);
     this.#refreshTargets(0);
-    this.#syncProgress();
-    this.setStatus(
-      mode === 'drop'
-        ? 'LOG DROPPED'
-        : `${result.label.toUpperCase()} PLACED`
+    this.setStatus(`${state.label.toUpperCase()} · ${state.previewValid ? 'READY' : 'NEEDS SUPPORT / CLEARANCE'}`);
+    this.hud?.setObjective(
+      state.previewValid
+        ? 'Green preview · tap the hand action to place this log'
+        : 'Red preview · move or choose another log build mode'
     );
   }
 
@@ -414,13 +456,14 @@ export class GameApp {
     if (!this.inventory || !this.toolbelt) return;
     const toolId = this.toolbelt.getEquippedToolId();
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
+    const logBuildState = this.physicalLogs?.getBuildState() ?? null;
     const campfireBuilt = this.campfire?.isBuilt() ?? false;
     const campfirePreviewing = this.campfire?.isPreviewing() ?? false;
     const canBuildCampfire = !carryingLog && !campfireBuilt && Boolean(this.campfire?.canBuild());
 
     this.hud?.setInventory(this.inventory.snapshot());
     this.hud?.setToolbelt(this.toolbelt.snapshot());
-    this.hud?.setLogBuildMode(carryingLog);
+    this.hud?.setLogBuildMode(carryingLog, logBuildState);
     this.hud?.setCampfireAction({
       available: canBuildCampfire || campfirePreviewing,
       previewing: campfirePreviewing,
@@ -429,8 +472,13 @@ export class GameApp {
     this.#syncEquippedToolPresentation();
 
     if (carryingLog) {
-      this.setStatus('LOG IN HAND · BUILD');
-      this.hud?.setObjective('Choose LAY LOG, POST or DROP');
+      const valid = Boolean(logBuildState?.previewValid);
+      this.setStatus(`${logBuildState?.label?.toUpperCase() ?? 'LOG'} · ${valid ? 'READY TO PLACE' : 'INVALID PLACEMENT'}`);
+      this.hud?.setObjective(
+        valid
+          ? 'Choose RAW / FLOOR / FRAME / WALL / ANGLE · green preview · hand action places'
+          : 'Red preview is blocked or unsupported · move or change build mode'
+      );
       this.hud?.setAttackTarget(null, toolId);
       return;
     }
@@ -443,7 +491,7 @@ export class GameApp {
 
     if (this.currentInteractionTarget?.type === 'physical-resource') {
       this.setStatus('PHYSICAL LOG · LIFT TO BUILD');
-      this.hud?.setObjective('Hand / E · lift log · it does not enter inventory');
+      this.hud?.setObjective('Hand / E · shoulder-carry the whole physical log');
       return;
     }
 
@@ -520,10 +568,13 @@ export class GameApp {
         this.#tryAttack();
       } else if (event.code === 'KeyB') {
         event.preventDefault();
-        this.#tryLogBuildOption('lay');
+        if (this.physicalLogs?.isCarrying()) {
+          this.physicalLogs.cycleBuildMode();
+          this.#tryLogBuildOption(this.physicalLogs.getBuildState().mode);
+        }
       } else if (event.code === 'KeyV') {
         event.preventDefault();
-        this.#tryLogBuildOption('post');
+        if (this.physicalLogs?.isCarrying()) this.#tryInteract();
       } else if (event.code === 'KeyG') {
         event.preventDefault();
         this.#tryLogBuildOption('drop');

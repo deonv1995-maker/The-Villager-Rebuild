@@ -10,20 +10,30 @@ Survive alone -> establish a home base -> recruit survivors -> give them homes a
 
 ## Current milestone
 
-**Foundation 0.3.6 — survival interaction presentation refinement**
+**Foundation 0.3.7 — work-tool animation and physical log construction refinement**
 
-Foundation 0.3.5 established the authoritative resource/tool/building model and passed device verification. Foundation 0.3.6 keeps those rules intact and fixes the presentation issues exposed on Android:
+Foundation 0.3.7 responds to Android visual verification of Foundation 0.3.6 and deliberately reuses the archived original game as a behavioural reference without copying its old technical architecture wholesale:
 
-- Stick, Stone, Grass and food remain inventory resources; Logs remain physical world resources that never enter `InventorySystem`;
-- the bottom toolbelt now begins with a permanent **Hand** slot representing the default Ranger state with no tool equipped, followed by Spear, Axe, Hammer, Pickaxe and Sword;
-- Axe, Hammer, Pickaxe and Sword use the Ranger's authored right-hand attachment slot instead of fixed root-relative offsets, so held tools follow the hand rather than floating beside the shoulder;
-- the Spear remains the auto-lock projectile weapon, but the Ranger now uses the authored KayKit `Throw` animation and releases the held spear during that motion instead of visually stabbing or instantly launching it;
-- the thrown Spear follows a visible ballistic-style arc while continuing to track the live locked target, and damage still resolves only when the projectile arrives;
-- campfire construction is now two-stage: first show a translucent green placement template on valid ground, then confirm that template to consume three Sticks plus three Stones and create the real campfire;
-- the campfire template has no collision, consumes no materials and follows the existing Ranger-facing terrain/slope/collision placement rules until confirmed;
-- dedicated survival and campfire regression checks lock the Hand slot, authored Throw clip, shared hand attachment, arcing projectile and preview-before-consumption rules.
+- Axe, Hammer and Pickaxe remain mounted to the Ranger's authored `handslot.r`, but their work motion is now driven by Ranger skeleton one-shot actions instead of independently rotating the held prop around the wrist;
+- Sword and Spear keep their established combat paths; the Spear still uses the authored KayKit `Throw` animation with timed release and a live-target ballistic arc;
+- the Pickaxe toolbelt glyph is replaced with a clearer white 48x48 silhouette so the tool remains visible at mobile HUD scale;
+- physical Logs use one authoritative original-reference size of 2.90 units long with bark, visible cut ends and a terrain-aware resting pose instead of the previous short generic cylinder;
+- lifting a Log shoulder-carries that same physical object; Logs still never enter `InventorySystem`;
+- holding a Log exposes the original-reference construction modes **RAW, FLOOR, FRAME, WALL and ANGLE**, plus **DROP**;
+- the selected construction mode shows a live green/red world ghost which follows Ranger position/facing; the normal Hand interaction confirms only a valid green placement;
+- floor pieces snap on a 0.25 grid, construction yaw snaps in 45-degree increments, frames snap to floor corners, walls require a supported frame pair, and raw beams can snap across supported frame pairs;
+- placed floor/raw pieces use the shared standable collision path, frame/wall/angle pieces register shared construction collision, and Hammer demolition returns construction back to a physical Log pickup;
+- regression checks lock the original-reference log dimensions/modes, mobile build tray, live construction ghost, shared collision boundaries, skeletal work-tool actions and Pickaxe icon asset.
 
-The expanded-world rules from the prior acceptance passes remain authoritative:
+Foundation 0.3.6 rules remain intact:
+
+- Stick, Stone, Grass and food remain inventory resources; Logs remain physical world resources;
+- the bottom toolbelt starts with permanent **Hand**, followed by Spear, Axe, Hammer, Pickaxe and Sword;
+- all handheld tools continue to use the shared authored right-hand attachment boundary;
+- campfire construction still previews before consuming exactly three Sticks plus three Stones;
+- the expanded mainland, procedural terrain, chunk streaming, water, tree transparency, PWA install architecture and deterministic Pages deployment ordering are unchanged by this pass.
+
+The expanded-world rules from prior acceptance passes remain authoritative:
 
 - forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same tree; tree placement and trunk collision remain unchanged;
 - the mainland is approximately 2x the previous linear coast scale, while the existing Day-1 beach remains a deep southern inlet so the proven opening route is not moved inland;
@@ -32,7 +42,7 @@ The expanded-world rules from the prior acceptance passes remain authoritative:
 - water remains a lightweight in-house Three.js presentation over the authoritative terrain. Deep water stays inexpensive, while chunked turquoise shallows follow terrain depth substantially inland across low coastal shelves, satellite edges and sandbars;
 - walking through traversable shallow water emits pooled expanding ripples around the Ranger without creating a second water-physics system or unbounded particles.
 
-Foundation 0.3.6 remains under device/gameplay acceptance. Later cooking, hostile-enemy behaviour and more advanced structures should extend the interaction boundaries established here rather than bypassing them.
+Foundation 0.3.7 remains under device/gameplay acceptance. Later hauling capacity, upper-floor construction, roofing and other advanced building behaviour should extend these physical-material and snapping boundaries rather than bypassing them.
 
 ## Installation
 

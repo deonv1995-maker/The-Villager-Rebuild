@@ -1,7 +1,17 @@
 import * as THREE from 'three';
+import {
+  LOG_BUILD_LABELS,
+  LOG_BUILD_MODES,
+  PHYSICAL_LOG
+} from '../data/PhysicalLogDefinitions.js';
+import {
+  createConstructionLogVisual,
+  tintConstructionPreview
+} from './PhysicalLogVisual.js';
 
 const INTERACTION_RADIUS = 2.8;
-const BUILD_DISTANCE = 2.05;
+const PREVIEW_VALID = 0x65d879;
+const PREVIEW_INVALID = 0xd85d57;
 
 export class PhysicalLogSystem {
   constructor({ group, player, terrain, collision, gatherables }) {
@@ -16,6 +26,24 @@ export class PhysicalLogSystem {
     this.carriedItem = null;
     this.builtLogs = [];
     this.nextBuiltId = 0;
+    this.buildMode = 'raw';
+    this.previewRoot = null;
+    this.previewMode = null;
+    this.previewPlacement = null;
+    this.previewValid = false;
+    this.previewMaterial = new THREE.MeshBasicMaterial({
+      color: PREVIEW_VALID,
+      transparent: true,
+      opacity: 0.44,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    this.tempAxisX = new THREE.Vector3();
+    this.tempAxisY = new THREE.Vector3();
+    this.tempAxisZ = new THREE.Vector3();
+    this.tempUp = new THREE.Vector3(0, 1, 0);
+    this.tempMatrix = new THREE.Matrix4();
+    this.tempQuaternion = new THREE.Quaternion();
   }
 
   isCarrying() {
@@ -28,6 +56,32 @@ export class PhysicalLogSystem {
       : { carrying: false, resourceId: null, label: null };
   }
 
+  getBuildState() {
+    return {
+      carrying: this.isCarrying(),
+      mode: this.buildMode,
+      label: LOG_BUILD_LABELS[this.buildMode],
+      modes: [...LOG_BUILD_MODES],
+      previewValid: this.previewValid,
+      previewing: Boolean(this.previewRoot)
+    };
+  }
+
+  setBuildMode(mode) {
+    if (!LOG_BUILD_MODES.includes(mode)) return false;
+    if (this.buildMode === mode) return true;
+    this.buildMode = mode;
+    this.#destroyPreview();
+    return true;
+  }
+
+  cycleBuildMode() {
+    const index = LOG_BUILD_MODES.indexOf(this.buildMode);
+    const next = LOG_BUILD_MODES[(index + 1) % LOG_BUILD_MODES.length];
+    this.setBuildMode(next);
+    return next;
+  }
+
   pickup(playerPosition) {
     if (this.carriedItem) return null;
     const item = this.gatherables.takePhysical(playerPosition, 'log');
@@ -35,86 +89,91 @@ export class PhysicalLogSystem {
 
     this.carriedItem = item;
     this.player.root.add(item.root);
-    item.root.position.set(0, 1.05, 0.62);
-    item.root.rotation.set(0, 0, 0);
-    item.root.scale.setScalar(1.18);
+    item.root.scale.setScalar(1);
+    item.root.position.set(...PHYSICAL_LOG.carryPosition);
+    item.root.rotation.set(...PHYSICAL_LOG.carryEuler);
     item.root.name = `carried-log-${item.id}`;
+    const roll = item.root.userData?.rollGroup;
+    if (roll) roll.rotation.x = 0;
+    this.#destroyPreview();
     return this.getCarryState();
+  }
+
+  update(playerPosition, facingDirection) {
+    if (!this.carriedItem || !playerPosition || !facingDirection) {
+      this.#destroyPreview();
+      return this.getBuildState();
+    }
+    const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
+    this.#showPreview(this.buildMode, placement);
+    return this.getBuildState();
   }
 
   drop(playerPosition, facingDirection) {
     if (!this.carriedItem) return null;
-    const placement = this.#placementPoint(playerPosition, facingDirection, 1.55);
+    const point = this.#placementPoint(playerPosition, facingDirection, PHYSICAL_LOG.dropDistance, false);
+    const yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
+    const pose = this.#terrainLogPose(point.x, point.z, yaw);
     const item = this.carriedItem;
     this.player.root.remove(item.root);
     item.root.scale.setScalar(1);
     this.carriedItem = null;
-    this.gatherables.returnPhysical(item, {
-      x: placement.x,
-      z: placement.z,
-      yaw: Math.atan2(facingDirection.x, facingDirection.z)
-    });
-    return { mode: 'drop', position: placement };
+    this.#destroyPreview();
+    this.gatherables.returnPhysical(item, { x: point.x, z: point.z, yaw });
+    item.root.position.copy(pose.position);
+    item.root.quaternion.copy(pose.quaternion);
+    return { mode: 'drop', position: { x: point.x, y: pose.position.y, z: point.z } };
   }
 
   build(mode, playerPosition, facingDirection) {
-    if (!this.carriedItem || !['lay', 'post'].includes(mode)) return null;
-    const placement = this.#findBuildPlacement(mode, playerPosition, facingDirection);
-    if (!placement) return null;
+    if (!this.carriedItem) return null;
+    if (mode && !this.setBuildMode(mode)) return null;
+    const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
+    if (!placement?.valid) {
+      this.#showPreview(this.buildMode, placement);
+      return null;
+    }
 
     const item = this.carriedItem;
     this.player.root.remove(item.root);
-    this.carriedItem = null;
     item.root.scale.setScalar(1);
-    item.root.name = `built-log-${this.nextBuiltId}`;
-    item.root.position.set(placement.x, placement.y, placement.z);
-    item.root.rotation.set(
-      0,
-      placement.yaw,
-      mode === 'post' ? Math.PI / 2 : 0
-    );
-    this.group.add(item.root);
+    this.carriedItem = null;
+    this.#destroyPreview();
 
-    const collisionHandle = mode === 'post'
-      ? this.collision.addObstacle({
-          x: placement.x,
-          z: placement.z,
-          radius: 0.28,
-          type: 'placed-log',
-          label: item.root.name,
-          bottomY: placement.y,
-          topY: placement.y + 1.28
-        })
-      : this.collision.addBox({
-          x: placement.x,
-          z: placement.z,
-          halfX: 0.68,
-          halfZ: 0.24,
-          yaw: placement.yaw,
-          type: 'placed-log',
-          label: item.root.name,
-          bottomY: placement.y,
-          topY: placement.y + 0.46,
-          standable: true,
-          supportHalfX: 0.56,
-          supportHalfZ: 0.17,
-          supportY: placement.y + 0.42,
-          stepHeight: 0.48
-        });
+    const root = this.#materializePlacement(this.buildMode, placement, item);
+    if (!root) {
+      this.carriedItem = item;
+      this.player.root.add(item.root);
+      item.root.position.set(...PHYSICAL_LOG.carryPosition);
+      item.root.rotation.set(...PHYSICAL_LOG.carryEuler);
+      return null;
+    }
 
+    root.name = `built-log-${this.nextBuiltId}-${this.buildMode}`;
+    this.group.add(root);
+    const collisionHandle = this.#registerCollision(this.buildMode, placement, root);
     const built = {
       id: this.nextBuiltId,
-      mode,
-      root: item.root,
+      mode: this.buildMode,
+      root,
       collisionHandle,
-      active: true
+      active: true,
+      x: placement.x,
+      z: placement.z,
+      yaw: placement.yaw,
+      baseY: placement.baseY ?? placement.ground,
+      centerY: root.position.y,
+      topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root)
     };
     this.nextBuiltId += 1;
     this.builtLogs.push(built);
+
     return {
-      mode,
-      label: mode === 'post' ? 'Log post' : 'Laid log',
-      position: { x: placement.x, y: placement.y, z: placement.z }
+      mode: built.mode,
+      label: LOG_BUILD_LABELS[built.mode],
+      snapped: Boolean(placement.snapKind),
+      snapKind: placement.snapKind ?? null,
+      position: { x: root.position.x, y: root.position.y, z: root.position.z }
     };
   }
 
@@ -134,9 +193,9 @@ export class PhysicalLogSystem {
     return {
       type: 'placed-log',
       id: best.id,
-      label: best.mode === 'post' ? 'Log post' : 'Laid log',
+      label: LOG_BUILD_LABELS[best.mode],
       icon: 'hammer',
-      actionLabel: 'Demolish log'
+      actionLabel: `Demolish ${LOG_BUILD_LABELS[best.mode].toLowerCase()}`
     };
   }
 
@@ -147,34 +206,475 @@ export class PhysicalLogSystem {
     if (!built) return null;
 
     built.active = false;
-    this.collision.removeObstacle(built.collisionHandle);
+    if (built.collisionHandle) this.collision.removeObstacle(built.collisionHandle);
     this.group.remove(built.root);
-    const position = built.root.position.clone();
     this.gatherables.spawn('log', {
-      x: position.x,
-      z: position.z,
-      yaw: built.root.rotation.y
+      x: built.root.position.x,
+      z: built.root.position.z,
+      yaw: built.yaw
     });
     return target;
   }
 
-  #findBuildPlacement(mode, playerPosition, facingDirection) {
-    const base = this.#placementPoint(playerPosition, facingDirection, BUILD_DISTANCE);
-    const radius = mode === 'post' ? 0.36 : 0.78;
-    if (!this.terrain.isPlayable(base.x, base.z, radius + 0.25)) return null;
-    if (this.terrain.slopeAt(base.x, base.z) > (mode === 'post' ? 0.62 : 0.48)) return null;
-    if (!this.collision.isCircleClear(base.x, base.z, radius)) return null;
+  #resolvePlacement(mode, playerPosition, facingDirection) {
+    const base = this.#placementPoint(playerPosition, facingDirection, PHYSICAL_LOG.placeDistance, true);
+    base.yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
+    base.ground = this.terrain.heightAt(base.x, base.z);
+    base.snapKind = null;
+    base.valid = false;
+
+    if (mode === 'raw') return this.#rawPlacement(base);
+    if (mode === 'floor') return this.#floorPlacement(base);
+    if (mode === 'frame') return this.#framePlacement(base);
+    if (mode === 'wall') return this.#wallPlacement(base);
+    if (mode === 'angle') return this.#anglePlacement(base);
+    return base;
+  }
+
+  #rawPlacement(base) {
+    const beam = this.#nearestFramePair(base, PHYSICAL_LOG.frameSnapRange + 0.45);
+    if (beam) {
+      return {
+        ...base,
+        x: beam.x,
+        z: beam.z,
+        yaw: beam.yaw,
+        ground: this.terrain.heightAt(beam.x, beam.z),
+        y: beam.topY,
+        topY: beam.topY + PHYSICAL_LOG.radius,
+        snapKind: 'frame-pair-top',
+        valid: true
+      };
+    }
+
+    const valid = this.#groundPlacementValid(base.x, base.z, 0.52, 0.5);
+    const pose = this.#terrainLogPose(base.x, base.z, base.yaw);
+    return { ...base, y: pose.position.y, quaternion: pose.quaternion, valid };
+  }
+
+  #floorPlacement(base) {
+    const snapped = this.#nearestFloorEdge(base);
+    const candidate = snapped ?? base;
+    const ground = this.terrain.heightAt(candidate.x, candidate.z);
+    const valid = this.#groundPlacementValid(candidate.x, candidate.z, 0.62, 0.42);
     return {
       ...base,
-      y: this.terrain.heightAt(base.x, base.z),
-      yaw: Math.atan2(facingDirection.x, facingDirection.z)
+      ...candidate,
+      ground,
+      y: ground + 0.275,
+      topY: ground + 0.32,
+      snapKind: snapped ? 'floor-edge' : null,
+      valid
     };
   }
 
-  #placementPoint(playerPosition, facingDirection, distance) {
+  #framePlacement(base) {
+    const corner = this.#nearestFloorCorner(base);
+    if (!corner) {
+      return {
+        ...base,
+        y: base.ground + PHYSICAL_LOG.halfLength,
+        topY: base.ground + PHYSICAL_LOG.length,
+        valid: false
+      };
+    }
+    const occupied = this.#activeBuilt('frame').some(frame =>
+      Math.hypot(frame.x - corner.x, frame.z - corner.z) < 0.34 &&
+      Math.abs(frame.baseY - corner.baseY) < 0.4
+    );
+    return {
+      ...base,
+      x: corner.x,
+      z: corner.z,
+      ground: corner.baseY,
+      baseY: corner.baseY,
+      y: corner.baseY + PHYSICAL_LOG.halfLength,
+      topY: corner.baseY + PHYSICAL_LOG.length,
+      snapKind: 'floor-corner',
+      valid: !occupied
+    };
+  }
+
+  #wallPlacement(base) {
+    const pair = this.#nearestFramePair(base, PHYSICAL_LOG.wallSnapRange);
+    if (!pair) return { ...base, y: base.ground + 0.26, valid: false };
+
+    const stacked = this.#activeBuilt('wall')
+      .filter(wall =>
+        Math.hypot(wall.x - pair.x, wall.z - pair.z) < 0.38 &&
+        this.#axisYawDelta(wall.yaw, pair.yaw) < 0.16
+      )
+      .sort((a, b) => b.topY - a.topY)[0];
+    const centerY = stacked ? stacked.topY + 0.02 : pair.baseY + 0.26;
+    const topY = centerY + 0.76;
+    return {
+      ...base,
+      x: pair.x,
+      z: pair.z,
+      yaw: pair.yaw,
+      ground: pair.baseY,
+      baseY: pair.baseY,
+      y: centerY,
+      topY,
+      snapKind: 'between-frames',
+      valid: topY <= pair.topY + 0.08
+    };
+  }
+
+  #anglePlacement(base) {
+    let best = null;
+    let bestDistance = PHYSICAL_LOG.angleSnapRange;
+    for (const frame of this.#activeBuilt('frame')) {
+      const forwardX = Math.sin(base.yaw);
+      const forwardZ = Math.cos(base.yaw);
+      const projection = PHYSICAL_LOG.halfLength * Math.SQRT1_2;
+      const x = frame.x + forwardX * projection;
+      const z = frame.z + forwardZ * projection;
+      const distance = Math.hypot(x - base.x, z - base.z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = {
+        x,
+        z,
+        yaw: base.yaw,
+        ground: this.terrain.heightAt(x, z),
+        baseY: frame.topY,
+        y: frame.topY + projection,
+        topY: frame.topY + projection * 2,
+        snapKind: 'frame-top',
+        valid: true
+      };
+    }
+    return best ? { ...base, ...best } : { ...base, y: base.ground + PHYSICAL_LOG.halfLength, valid: false };
+  }
+
+  #nearestFloorEdge(base) {
+    let best = null;
+    let bestDistance = PHYSICAL_LOG.floorSnapRange;
+    for (const floor of this.#activeBuilt('floor')) {
+      if (this.#axisYawDelta(floor.yaw, base.yaw) > 0.18) continue;
+      const basis = this.#basis(floor.yaw);
+      const offsets = [
+        [basis.xX * PHYSICAL_LOG.length, basis.xZ * PHYSICAL_LOG.length],
+        [-basis.xX * PHYSICAL_LOG.length, -basis.xZ * PHYSICAL_LOG.length],
+        [basis.zX * PHYSICAL_LOG.floorWidth, basis.zZ * PHYSICAL_LOG.floorWidth],
+        [-basis.zX * PHYSICAL_LOG.floorWidth, -basis.zZ * PHYSICAL_LOG.floorWidth]
+      ];
+      for (const [ox, oz] of offsets) {
+        const x = this.#snapGrid(floor.x + ox);
+        const z = this.#snapGrid(floor.z + oz);
+        const distance = Math.hypot(x - base.x, z - base.z);
+        if (distance >= bestDistance) continue;
+        bestDistance = distance;
+        best = { x, z, yaw: floor.yaw };
+      }
+    }
+    return best;
+  }
+
+  #nearestFloorCorner(base) {
+    let best = null;
+    let bestDistance = PHYSICAL_LOG.frameSnapRange;
+    for (const floor of this.#activeBuilt('floor')) {
+      const basis = this.#basis(floor.yaw);
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) {
+          const x = floor.x + basis.xX * PHYSICAL_LOG.halfLength * sx + basis.zX * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
+          const z = floor.z + basis.xZ * PHYSICAL_LOG.halfLength * sx + basis.zZ * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
+          const distance = Math.hypot(x - base.x, z - base.z);
+          if (distance >= bestDistance) continue;
+          bestDistance = distance;
+          best = { x, z, baseY: floor.topY };
+        }
+      }
+    }
+    return best;
+  }
+
+  #nearestFramePair(base, range) {
+    const frames = this.#activeBuilt('frame');
+    let best = null;
+    let bestDistance = range;
+    for (let aIndex = 0; aIndex < frames.length; aIndex += 1) {
+      const a = frames[aIndex];
+      for (let bIndex = aIndex + 1; bIndex < frames.length; bIndex += 1) {
+        const b = frames[bIndex];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const spacing = Math.hypot(dx, dz);
+        if (Math.abs(spacing - PHYSICAL_LOG.length) > PHYSICAL_LOG.frameSpacingTolerance) continue;
+        if (Math.abs(a.topY - b.topY) > 0.3) continue;
+        const x = (a.x + b.x) * 0.5;
+        const z = (a.z + b.z) * 0.5;
+        const distance = Math.hypot(x - base.x, z - base.z);
+        if (distance >= bestDistance) continue;
+        bestDistance = distance;
+        best = {
+          x,
+          z,
+          yaw: this.#snapYaw(Math.atan2(-dz, dx)),
+          baseY: Math.max(a.baseY, b.baseY),
+          topY: (a.topY + b.topY) * 0.5
+        };
+      }
+    }
+    return best;
+  }
+
+  #activeBuilt(mode = null) {
+    return this.builtLogs.filter(entry => entry.active && (!mode || entry.mode === mode));
+  }
+
+  #showPreview(mode, placement) {
+    if (!placement) {
+      this.#destroyPreview();
+      return;
+    }
+    if (!this.previewRoot || this.previewMode !== mode) {
+      this.#destroyPreview();
+      const wrapper = new THREE.Group();
+      wrapper.name = 'log-construction-preview';
+      wrapper.userData.constructionGhost = true;
+      const visual = createConstructionLogVisual(mode);
+      wrapper.add(visual);
+      tintConstructionPreview(wrapper, this.previewMaterial);
+      this.group.add(wrapper);
+      this.previewRoot = wrapper;
+      this.previewMode = mode;
+    }
+
+    this.previewPlacement = placement;
+    this.previewValid = Boolean(placement.valid);
+    this.previewMaterial.color.setHex(this.previewValid ? PREVIEW_VALID : PREVIEW_INVALID);
+    this.previewMaterial.opacity = this.previewValid ? 0.44 : 0.34;
+    this.#applyTransform(this.previewRoot, mode, placement, true);
+    this.previewRoot.visible = true;
+  }
+
+  #destroyPreview() {
+    if (this.previewRoot) this.group.remove(this.previewRoot);
+    this.previewRoot = null;
+    this.previewMode = null;
+    this.previewPlacement = null;
+    this.previewValid = false;
+  }
+
+  #materializePlacement(mode, placement, item) {
+    if (mode === 'raw' || mode === 'frame' || mode === 'angle') {
+      const root = item.root;
+      const roll = root.userData?.rollGroup;
+      if (roll) roll.rotation.x = 0;
+      this.#applyTransform(root, mode, placement, false);
+      return root;
+    }
+
+    const wrapper = new THREE.Group();
+    wrapper.add(createConstructionLogVisual(mode));
+    this.#applyTransform(wrapper, mode, placement, false);
+    return wrapper;
+  }
+
+  #applyTransform(root, mode, placement, preview) {
+    root.scale.setScalar(1);
+    root.quaternion.identity();
+    root.rotation.set(0, 0, 0);
+
+    if (mode === 'raw') {
+      root.position.set(placement.x, placement.y, placement.z);
+      if (placement.snapKind === 'frame-pair-top') {
+        root.rotation.y = placement.yaw;
+      } else if (placement.quaternion) {
+        root.quaternion.copy(placement.quaternion);
+      } else {
+        root.rotation.y = placement.yaw;
+      }
+      return;
+    }
+
+    if (mode === 'floor') {
+      root.position.set(placement.x, placement.y, placement.z);
+      root.rotation.y = placement.yaw;
+      return;
+    }
+
+    if (mode === 'frame') {
+      root.position.set(placement.x, placement.y, placement.z);
+      root.rotation.set(0, placement.yaw, Math.PI / 2);
+      return;
+    }
+
+    if (mode === 'wall') {
+      root.position.set(placement.x, placement.y, placement.z);
+      root.rotation.y = placement.yaw;
+      return;
+    }
+
+    if (mode === 'angle') {
+      root.position.set(placement.x, placement.y, placement.z);
+      root.rotation.set(0, placement.yaw - Math.PI / 2, Math.PI / 4);
+    }
+  }
+
+  #registerCollision(mode, placement, root) {
+    const label = root.name;
+    if (mode === 'frame') {
+      return this.collision.addObstacle({
+        x: placement.x,
+        z: placement.z,
+        radius: 0.3,
+        type: 'placed-log',
+        label,
+        bottomY: placement.baseY,
+        topY: placement.topY
+      });
+    }
+
+    if (mode === 'wall') {
+      return this.collision.addBox({
+        x: placement.x,
+        z: placement.z,
+        halfX: PHYSICAL_LOG.halfLength,
+        halfZ: 0.28,
+        yaw: placement.yaw,
+        type: 'placed-log',
+        label,
+        bottomY: placement.y - 0.28,
+        topY: placement.topY
+      });
+    }
+
+    if (mode === 'angle') {
+      return this.collision.addObstacle({
+        x: placement.x,
+        z: placement.z,
+        radius: 0.34,
+        type: 'placed-log',
+        label,
+        bottomY: placement.baseY,
+        topY: placement.topY
+      });
+    }
+
+    if (mode === 'floor') {
+      return this.collision.addBox({
+        x: placement.x,
+        z: placement.z,
+        halfX: PHYSICAL_LOG.halfLength,
+        halfZ: PHYSICAL_LOG.floorWidth * 0.5,
+        yaw: placement.yaw,
+        type: 'placed-log',
+        label,
+        bottomY: placement.ground,
+        topY: placement.topY,
+        standable: true,
+        supportHalfX: PHYSICAL_LOG.halfLength - 0.12,
+        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 - 0.08,
+        supportY: placement.topY,
+        stepHeight: 0.42
+      });
+    }
+
+    return this.collision.addBox({
+      x: placement.x,
+      z: placement.z,
+      halfX: PHYSICAL_LOG.halfLength,
+      halfZ: PHYSICAL_LOG.radius,
+      yaw: placement.yaw,
+      type: 'placed-log',
+      label,
+      bottomY: placement.snapKind ? placement.y - PHYSICAL_LOG.radius : placement.ground,
+      topY: placement.y + PHYSICAL_LOG.radius * 2,
+      standable: true,
+      supportHalfX: PHYSICAL_LOG.halfLength - 0.14,
+      supportHalfZ: PHYSICAL_LOG.radius * 0.7,
+      supportY: placement.y + PHYSICAL_LOG.radius,
+      stepHeight: 0.58
+    });
+  }
+
+  #topYForMode(mode, placement, root) {
+    if (mode === 'frame') return placement.baseY + PHYSICAL_LOG.length;
+    if (mode === 'wall') return root.position.y + 0.76;
+    if (mode === 'angle') return placement.baseY + PHYSICAL_LOG.length * Math.SQRT1_2;
+    if (mode === 'floor') return placement.ground + 0.32;
+    return root.position.y + PHYSICAL_LOG.radius;
+  }
+
+  #groundPlacementValid(x, z, radius, maxSlope) {
+    if (!this.terrain.isPlayable(x, z, radius + 0.3)) return false;
+    if (this.terrain.slopeAt(x, z) > maxSlope) return false;
+    return this.collision.isCircleClear(x, z, radius);
+  }
+
+  #terrainLogPose(x, z, yaw) {
+    const horizontalX = Math.cos(yaw);
+    const horizontalZ = -Math.sin(yaw);
+    const reach = PHYSICAL_LOG.halfLength * 0.86;
+    const halfReach = reach * 0.5;
+    const heightAt = (px, pz) => this.terrain.heightAt(px, pz);
+    const hMinus = heightAt(x - horizontalX * reach, z - horizontalZ * reach);
+    const hPlus = heightAt(x + horizontalX * reach, z + horizontalZ * reach);
+    const hMinusMid = heightAt(x - horizontalX * halfReach, z - horizontalZ * halfReach);
+    const hPlusMid = heightAt(x + horizontalX * halfReach, z + horizontalZ * halfReach);
+    const hCenter = heightAt(x, z);
+    const rawTilt = Math.atan2(hPlus - hMinus, Math.max(0.001, reach * 2));
+    const tilt = THREE.MathUtils.clamp(rawTilt, -Math.PI * 0.3, Math.PI * 0.3);
+    const cosTilt = Math.cos(tilt);
+    const sinTilt = Math.sin(tilt);
+
+    this.tempAxisX.set(horizontalX * cosTilt, sinTilt, horizontalZ * cosTilt).normalize();
+    this.tempAxisZ.crossVectors(this.tempAxisX, this.tempUp);
+    if (this.tempAxisZ.lengthSq() < 0.0001) this.tempAxisZ.set(-horizontalZ, 0, horizontalX);
+    else this.tempAxisZ.normalize();
+    this.tempAxisY.crossVectors(this.tempAxisZ, this.tempAxisX).normalize();
+    this.tempMatrix.makeBasis(this.tempAxisX, this.tempAxisY, this.tempAxisZ);
+    this.tempQuaternion.setFromRotationMatrix(this.tempMatrix);
+
+    const endRise = this.tempAxisX.y * reach;
+    const midRise = this.tempAxisX.y * halfReach;
+    const y = Math.max(
+      hCenter + PHYSICAL_LOG.radius,
+      hMinus + PHYSICAL_LOG.radius + endRise,
+      hPlus + PHYSICAL_LOG.radius - endRise,
+      hMinusMid + PHYSICAL_LOG.radius + midRise,
+      hPlusMid + PHYSICAL_LOG.radius - midRise
+    );
+    return {
+      position: new THREE.Vector3(x, y, z),
+      quaternion: this.tempQuaternion.clone()
+    };
+  }
+
+  #placementPoint(playerPosition, facingDirection, distance, snap) {
     const length = Math.max(0.001, Math.hypot(facingDirection.x, facingDirection.z));
-    const x = playerPosition.x + facingDirection.x / length * distance;
-    const z = playerPosition.z + facingDirection.z / length * distance;
+    let x = playerPosition.x + facingDirection.x / length * distance;
+    let z = playerPosition.z + facingDirection.z / length * distance;
+    if (snap) {
+      x = this.#snapGrid(x);
+      z = this.#snapGrid(z);
+    }
     return { x, y: this.terrain.heightAt(x, z), z };
+  }
+
+  #snapGrid(value) {
+    return Math.round(value / PHYSICAL_LOG.gridStep) * PHYSICAL_LOG.gridStep;
+  }
+
+  #snapYaw(yaw) {
+    return Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
+  }
+
+  #axisYawDelta(a, b) {
+    const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+    return Math.min(delta, Math.abs(Math.PI - delta));
+  }
+
+  #basis(yaw) {
+    return {
+      xX: Math.cos(yaw),
+      xZ: -Math.sin(yaw),
+      zX: Math.sin(yaw),
+      zZ: Math.cos(yaw)
+    };
   }
 }
