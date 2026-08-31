@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RESOURCE_DEFINITIONS } from '../data/ResourceDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
+import { createPhysicalLogVisual } from './PhysicalLogVisual.js';
 
 const INTERACTION_RADIUS = 2.4;
 
@@ -78,7 +80,7 @@ export class GatherableSystem {
 
     item.active = true;
     item.root.scale.setScalar(1);
-    item.root.position.set(x, this.terrain.heightAt(x, z), z);
+    item.root.position.set(x, this.#groundY(item.resourceId, x, z), z);
     item.root.rotation.set(0, yaw, 0);
     item.root.name = `gatherable-${item.resourceId}-return-${item.id}`;
     this.group.add(item.root);
@@ -95,7 +97,7 @@ export class GatherableSystem {
     const spawnId = this.nextSpawnId;
     this.nextSpawnId += 1;
     const root = this.#createResourceVisual(resourceId, spawnId);
-    root.position.set(x, this.terrain.heightAt(x, z), z);
+    root.position.set(x, this.#groundY(resourceId, x, z), z);
     root.rotation.y = yaw;
     root.name = `gatherable-${resourceId}-spawn-${spawnId}`;
     this.group.add(root);
@@ -135,7 +137,7 @@ export class GatherableSystem {
   #populate() {
     WORLD_LAYOUT.dayOneResources.forEach(([resourceId, x, z], index) => {
       const root = this.#createResourceVisual(resourceId, index);
-      root.position.set(x, this.terrain.heightAt(x, z), z);
+      root.position.set(x, this.#groundY(resourceId, x, z), z);
       root.name = `gatherable-${resourceId}-${index}`;
       this.group.add(root);
       this.items.push({
@@ -146,6 +148,11 @@ export class GatherableSystem {
         quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity
       });
     });
+  }
+
+  #groundY(resourceId, x, z) {
+    const ground = this.terrain.heightAt(x, z);
+    return resourceId === 'log' ? ground + PHYSICAL_LOG.radius : ground;
   }
 
   #createResourceVisual(resourceId, index) {
@@ -202,24 +209,8 @@ export class GatherableSystem {
   }
 
   #createLog(index) {
-    const group = new THREE.Group();
-    const bark = new THREE.MeshStandardMaterial({ color: 0x704829, roughness: 1, flatShading: true });
-    const cut = new THREE.MeshStandardMaterial({ color: 0xb88752, roughness: 1, flatShading: true });
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.22, 1.18, 8), bark);
-    log.rotation.z = Math.PI / 2;
-    log.rotation.y = (index % 4) * 0.22;
-    log.position.y = 0.22;
-    log.castShadow = true;
-    log.receiveShadow = true;
-    group.add(log);
-
-    const endA = new THREE.Mesh(new THREE.CircleGeometry(0.185, 8), cut);
-    const endB = endA.clone();
-    endA.rotation.y = Math.PI / 2;
-    endB.rotation.y = -Math.PI / 2;
-    endA.position.set(0.595, 0.22, 0);
-    endB.position.set(-0.595, 0.22, 0);
-    group.add(endA, endB);
+    const group = createPhysicalLogVisual('RawLog');
+    group.rotation.y = (index % 4) * 0.22;
     return group;
   }
 
