@@ -22,12 +22,16 @@ The Foundation 0.3.3 tree/log loop has passed device verification and remains au
 - a successful build consumes the three Logs once, creates a grounded stone/log/fire presentation, and registers one normal world collision handle;
 - the fire uses lightweight emissive geometry plus one non-shadow-casting point light so it can later become the shared cooking/sleep proximity anchor without introducing a separate visual system;
 - the Ranger exposes facing direction through its controller boundary for placement instead of world systems reading controller internals;
-- a dedicated campfire regression contract runs alongside the existing gameplay, tree-harvest, landscape, runtime-asset, production-build and PWA checks.
+- a dedicated campfire regression contract runs alongside the existing gameplay, tree-harvest, landscape, world-streaming, runtime-asset, production-build and PWA checks.
 
-Device feedback during the 0.3.4 acceptance pass also established two landscape-presentation rules that now belong to the shared world layer:
+Device feedback during the 0.3.4 acceptance pass also established world-presentation rules that belong to the shared world layer:
 
-- forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same instanced tree; tree placement and trunk collision remain unchanged;
-- water remains a lightweight in-house Three.js presentation over the authoritative continuous terrain. The deep-water plane keeps its existing traversal relationship, while animated wave shimmer plus broader turquoise shoreline/satellite/sandbar shelves make shallow water visibly reach around the sides of the smaller islands instead of reading as one flat blue surface.
+- forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same tree; tree placement and trunk collision remain unchanged;
+- the mainland is approximately 2x the previous linear coast scale, while the existing Day-1 beach remains a deep southern inlet so the proven opening route is not moved inland;
+- the larger world keeps one authoritative procedural terrain/collision surface, while terrain meshes, shallow-water overlays, forest batches, grass, ferns and numerous static dressing are owned by shared render chunks so distant/off-screen areas do not remain active render batches;
+- satellite islands are deterministic but procedurally varied in position, size, proportions, rotation, edge warp, elevation and shoal geometry rather than using five similarly shaped compass-point cays;
+- water remains a lightweight in-house Three.js presentation over the authoritative terrain. Deep water stays inexpensive, while chunked turquoise shallows follow terrain depth substantially inland across low coastal shelves, satellite edges and sandbars;
+- walking through traversable shallow water emits pooled expanding ripples around the Ranger without creating a second water-physics system or unbounded particles.
 
 Foundation 0.3.4 remains under device/gameplay acceptance before cooking is added. The next playable milestone after this gate is **cook the gathered meat at the campfire**.
 
@@ -53,6 +57,7 @@ On Android Chrome or a Chromium desktop browser, use the browser-owned **Install
 - `docs/GAME_LOOP.md` — opening tutorial and long-term gameplay loop.
 - `docs/NPC_VILLAGER_DESIGN.md` — recruitment, homes, jobs and routines.
 - `docs/WORLD_AND_PROGRESSION.md` — island design and settlement progression.
+- `docs/WORLD_STREAMING.md` — expanded mainland, render chunks, shallow water and tree-instance ownership.
 - `docs/TECHNICAL_ARCHITECTURE.md` — intended technical foundation.
 - `docs/DEVELOPMENT_RULES.md` — implementation and stability rules.
 - `docs/ROADMAP.md` — staged development plan.
