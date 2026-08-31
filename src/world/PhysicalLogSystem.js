@@ -750,7 +750,12 @@ export class PhysicalLogSystem {
         0.35,
         1.08
       );
-      root.quaternion.copy(placement.quaternion);
+      if (placement.quaternion?.isQuaternion) {
+        root.quaternion.copy(placement.quaternion);
+      } else {
+        root.rotation.y = placement.yaw ?? 0;
+      }
+      return;
     }
   }
 
