@@ -172,8 +172,8 @@ export class TitleStormSystem {
     const position = this.ocean.geometry.attributes.position;
     const array = position.array;
     const base = this.oceanBasePositions;
-    const amplitude = THREE.MathUtils.lerp(0.12, 1.52, danger);
-    const speed = 1 + danger * 1.75;
+    const amplitude = THREE.MathUtils.lerp(0.12, TITLE_SCENE.stormWaveAmplitudeMax, danger);
+    const speed = 1 + danger * TITLE_SCENE.stormWaveSpeedBoost;
 
     for (let index = 0; index < position.count; index += 1) {
       const offset = index * 3;
@@ -181,20 +181,20 @@ export class TitleStormSystem {
       const z = base[offset + 2];
       const primary = Math.sin(x * 0.065 + this.elapsed * 0.92 * speed);
       const secondary = Math.cos(z * 0.052 - this.elapsed * 0.76 * speed);
-      const chop = Math.sin((x + z) * 0.17 + this.elapsed * 3.2) * danger;
+      const chop = Math.sin((x + z) * 0.17 + this.elapsed * 2.7) * danger;
       const crest = primary * Math.abs(primary) * danger;
       array[offset + 1] = amplitude * (
-        primary * 0.48 +
-        secondary * 0.32 +
-        chop * 0.12 +
-        crest * 0.18
+        primary * 0.5 +
+        secondary * 0.34 +
+        chop * 0.08 +
+        crest * 0.12
       );
     }
 
     position.needsUpdate = true;
     this.ocean.geometry.computeVertexNormals();
     this.ocean.material.color.copy(this.oceanCalmColor).lerp(this.oceanStormColor, danger * 0.92);
-    this.ocean.material.roughness = THREE.MathUtils.lerp(0.32, 0.2, danger);
+    this.ocean.material.roughness = THREE.MathUtils.lerp(0.32, 0.22, danger);
   }
 
   #updateAtmosphere(dt, danger, introProgress) {
@@ -243,10 +243,10 @@ export class TitleStormSystem {
     this.ship.localToWorld(this.bowWorld);
 
     this.bowFoam.position.set(this.bowWorld.x, TITLE_SCENE.oceanY + 0.035, this.bowWorld.z + 0.4);
-    const foamPulse = 1 + Math.sin(this.elapsed * (1.8 + danger * 2.2)) * 0.12;
-    const foamScale = foamPulse * THREE.MathUtils.lerp(1, 2.1, danger);
+    const foamPulse = 1 + Math.sin(this.elapsed * (1.8 + danger * 1.8)) * 0.1;
+    const foamScale = foamPulse * THREE.MathUtils.lerp(1, 1.82, danger);
     this.bowFoam.scale.set(1.3 * foamScale, foamScale, 1);
-    this.bowFoam.material.opacity = THREE.MathUtils.lerp(0.12, 0.64, danger);
+    this.bowFoam.material.opacity = THREE.MathUtils.lerp(0.12, 0.56, danger);
 
     const impact = THREE.MathUtils.smoothstep(introProgress, 0.66, 0.78);
     this.wreckFoam.visible = impact > 0.02;
@@ -257,7 +257,7 @@ export class TitleStormSystem {
       this.wreckFoam.material.opacity = (1 - impact * 0.52) * 0.78;
     }
 
-    const rate = introProgress > 0 ? THREE.MathUtils.lerp(5, 125, danger) : 2;
+    const rate = introProgress > 0 ? THREE.MathUtils.lerp(5, 96, danger) : 2;
     this.sprayAccumulator += dt * rate;
     while (this.sprayAccumulator >= 1) {
       this.sprayAccumulator -= 1;
@@ -278,8 +278,8 @@ export class TitleStormSystem {
       if (this.sprayLife[index] <= 0) sprayArray[offset + 1] = -100;
     }
     sprayPosition.needsUpdate = true;
-    this.spray.material.opacity = THREE.MathUtils.lerp(0.2, 0.9, danger);
-    this.spray.material.size = THREE.MathUtils.lerp(0.12, 0.22, danger);
+    this.spray.material.opacity = THREE.MathUtils.lerp(0.2, 0.76, danger);
+    this.spray.material.size = THREE.MathUtils.lerp(0.12, 0.2, danger);
   }
 
   #spawnSprayParticle(danger) {
@@ -287,14 +287,14 @@ export class TitleStormSystem {
     this.sprayCursor = (this.sprayCursor + 1) % this.sprayLife.length;
     const offset = index * 3;
     const positions = this.spray.geometry.attributes.position.array;
-    const side = (this.random() * 2 - 1) * (0.8 + danger * 1.4);
+    const side = (this.random() * 2 - 1) * (0.8 + danger * 1.2);
     positions[offset] = this.bowWorld.x + side;
     positions[offset + 1] = TITLE_SCENE.oceanY + 0.12 + this.random() * 0.18;
     positions[offset + 2] = this.bowWorld.z - this.random() * 0.9;
-    this.sprayVelocities[offset] = side * (0.6 + danger * 0.9);
-    this.sprayVelocities[offset + 1] = 1.4 + this.random() * (1.6 + danger * 3.8);
-    this.sprayVelocities[offset + 2] = -0.8 - this.random() * (0.9 + danger * 2.8);
-    this.sprayLife[index] = 0.45 + this.random() * (0.35 + danger * 0.45);
+    this.sprayVelocities[offset] = side * (0.6 + danger * 0.8);
+    this.sprayVelocities[offset + 1] = 1.4 + this.random() * (1.5 + danger * 3.1);
+    this.sprayVelocities[offset + 2] = -0.8 - this.random() * (0.9 + danger * 2.2);
+    this.sprayLife[index] = 0.45 + this.random() * (0.35 + danger * 0.4);
   }
 
   #updateRangerSplash(dt) {
