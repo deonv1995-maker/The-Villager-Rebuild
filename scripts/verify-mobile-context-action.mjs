@@ -71,12 +71,12 @@ const thatch = resolveContextAction({
     available: true,
     icon: 'hand',
     label: 'Thatch roof panel with 4 Grass',
-    caption: '4 GRASS'
+    caption: 'THATCH'
   }]
 });
 assert.equal(thatch.source, 'external');
 assert.equal(thatch.externalId, 'roof-thatch');
-assert.equal(thatch.caption, '4 GRASS');
+assert.equal(thatch.caption, 'THATCH');
 
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
@@ -87,12 +87,28 @@ assert.doesNotMatch(mobileHudSource, /class="hud-button interact"/, 'Legacy inte
 assert.doesNotMatch(mobileHudSource, /class="hud-button attack"/, 'Legacy attack round button must be removed');
 assert.doesNotMatch(mobileHudSource, /class="hud-button craft"/, 'Legacy campfire round button must be removed');
 assert.match(mobileHudSource, /setExternalAction\(id, action = null\)/, 'External construction actions must use the same Action surface');
+assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
+assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
+assert.match(mobileHudSource, /aria-expanded/, 'Build menu collapse control must expose expansion state');
 assert.match(thatchControllerSource, /setExternalAction\(ACTION_ID/, 'Roof thatching must route through the unified Action button');
+assert.match(thatchControllerSource, /\? 'THATCH' : `NEED/, 'Affordable roof thatching must identify itself explicitly as THATCH');
 assert.doesNotMatch(thatchControllerSource, /roof-thatch-tray/, 'Roof thatching must not add a separate mobile button tray');
 
-assert.match(stylesSource, /\.log-build-tray\s*\{[\s\S]*?top: max\(4px, calc\(env\(safe-area-inset-top\) \+ 2px\)\)/, 'Build tray must sit at the top safe area');
-assert.match(stylesSource, /\.inventory-strip\s*\{[\s\S]*?flex-direction: column/, 'Inventory must render as a vertical stack');
-assert.match(stylesSource, /\.mobile-hud\.log-carrying \.inventory-strip\s*\{[\s\S]*?top: max\(51px/, 'Inventory must stack below the top construction bar while building');
+assert.match(
+  stylesSource,
+  /\.log-build-tray\s*\{[\s\S]*?right: max\(8px,[\s\S]*?flex-direction: column/,
+  'Build tray must render as a vertical right-side construction menu'
+);
+assert.match(
+  stylesSource,
+  /\.log-build-tray\.collapsed \.build-tray-options\s*\{\s*display: none;/,
+  'Collapsed build menu must hide only its mode options while leaving the toggle accessible'
+);
+assert.match(
+  stylesSource,
+  /\.inventory-strip\s*\{[\s\S]*?left: max\(10px,[\s\S]*?right: auto;[\s\S]*?flex-direction: column/,
+  'Inventory must remain a vertical stack on the left side'
+);
 assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button needs a dedicated mobile layout');
 
-console.log('Unified mobile Action routing, top construction bar and stacked inventory verified');
+console.log('Unified mobile Action routing, explicit thatch action, collapsible right build menu and left inventory verified');
