@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 
 export class DistantMountainSystem {
-  constructor({ group, centerZ = -4 }) {
+  constructor({ group, centerZ = -4, radiusScale = 1 }) {
     this.group = group;
     this.centerZ = centerZ;
+    this.radiusScale = Math.max(1, radiusScale);
     this.state = 0x41c7d;
     this.mountainCount = 0;
   }
@@ -34,8 +35,8 @@ export class DistantMountainSystem {
       geometry,
       material: hazeMaterial,
       count: 11,
-      radiusMin: 325,
-      radiusMax: 370,
+      radiusMin: 325 * this.radiusScale,
+      radiusMax: 370 * this.radiusScale,
       heightMin: 7,
       heightMax: 14,
       widthMin: 38,
@@ -51,8 +52,8 @@ export class DistantMountainSystem {
       geometry,
       material: farMaterial,
       count: 14,
-      radiusMin: 385,
-      radiusMax: 455,
+      radiusMin: 385 * this.radiusScale,
+      radiusMax: 455 * this.radiusScale,
       heightMin: 10,
       heightMax: 20,
       widthMin: 52,
