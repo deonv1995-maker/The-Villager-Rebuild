@@ -227,7 +227,8 @@ for (const requirement of [
   "snapKind: snapped ? 'floor-edge-level' : null",
   'baseY: floor.baseY',
   'this.floorSupports.createForFloor',
-  '#roofRegions()',
+  'collectLocalRoofFramePairs',
+  'collectRoofRegions',
   "'roof-rafter'",
   "'roof-ridge'",
   'roofRegionKey: region.key',
@@ -278,4 +279,4 @@ for (const [name, path, svg] of [
 assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
 assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Foundation 0.3.8 survival, carry, building, tool-action, hit-feedback and preserved spear contracts verified');
+console.log('Foundation 0.3.8 survival, carry, bounded building, tool-action, hit-feedback and preserved spear contracts verified');
