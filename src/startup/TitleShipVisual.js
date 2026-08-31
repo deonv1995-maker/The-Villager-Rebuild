@@ -59,13 +59,35 @@ const createDeckGeometry = sections => {
   return geometry;
 };
 
+const createBowDeckGeometry = (tip, shoulder) => {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+    0, tip.top + 0.035, tip.z,
+    -shoulder.width * 0.88, shoulder.top + 0.035, shoulder.z,
+    shoulder.width * 0.88, shoulder.top + 0.035, shoulder.z
+  ], 3));
+  geometry.setIndex([0, 1, 2]);
+  geometry.computeVertexNormals();
+  return geometry;
+};
+
 export function createTitleShipVisual() {
   const ship = new THREE.Group();
   ship.name = 'title-voyage-ship';
   ship.position.set(0, -0.35, TITLE_SCENE.menuShipZ);
 
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6f472a, roughness: 0.94, flatShading: true });
-  const darkWood = new THREE.MeshStandardMaterial({ color: 0x3f2b1f, roughness: 1, flatShading: true });
+  const wood = new THREE.MeshStandardMaterial({
+    color: 0x6f472a,
+    roughness: 0.94,
+    flatShading: true,
+    side: THREE.DoubleSide
+  });
+  const darkWood = new THREE.MeshStandardMaterial({
+    color: 0x3f2b1f,
+    roughness: 1,
+    flatShading: true,
+    side: THREE.DoubleSide
+  });
   const trimWood = new THREE.MeshStandardMaterial({ color: 0x8a5931, roughness: 0.92, flatShading: true });
   const sail = new THREE.MeshStandardMaterial({ color: 0xe3d4ad, roughness: 0.96, side: THREE.DoubleSide });
   const rope = new THREE.MeshStandardMaterial({ color: 0x9a7952, roughness: 1 });
@@ -83,6 +105,10 @@ export function createTitleShipVisual() {
   const hullShell = new THREE.Mesh(createHullGeometry(hullSections), wood);
   hullShell.name = 'title-ship-pointed-hull';
   hull.add(hullShell);
+
+  const bowDeck = new THREE.Mesh(createBowDeckGeometry(hullSections[0], hullSections[1]), darkWood);
+  bowDeck.name = 'title-ship-solid-bow-deck';
+  hull.add(bowDeck);
 
   const deck = new THREE.Mesh(createDeckGeometry(hullSections.slice(1)), darkWood);
   deck.name = 'title-ship-tapered-deck';
