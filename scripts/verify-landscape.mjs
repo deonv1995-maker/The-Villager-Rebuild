@@ -3,6 +3,9 @@ import * as THREE from 'three';
 import { IslandTerrainSystem } from '../src/world/IslandTerrainSystem.js';
 import { FernFieldSystem } from '../src/world/FernFieldSystem.js';
 import { DistantMountainSystem } from '../src/world/DistantMountainSystem.js';
+import { WaterVisualSystem } from '../src/world/WaterVisualSystem.js';
+import { TreeOcclusionSystem } from '../src/world/TreeOcclusionSystem.js';
+import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const terrain = new IslandTerrainSystem(new THREE.Group());
 const satellites = terrain.getSatelliteIslands();
@@ -36,6 +39,23 @@ const approachZ = eastern.bar.z1 + dz * approachT + nz * eastern.bar.width * 0.7
 assert.equal(terrain.isPlayable(approachX, approachZ), true, 'satellite shoal must support an angled approach near the island');
 assert.equal(terrain.isSandAt(approachX, approachZ), true, 'angled satellite approach should still read as a sand/shallow-water shelf');
 
+const waterGroup = new THREE.Group();
+const waterVisuals = new WaterVisualSystem({ group: waterGroup, terrain });
+waterVisuals.create();
+assert.ok(waterGroup.getObjectByName('stylized-ocean-shimmer'), 'water must retain a lightweight animated ocean shimmer layer');
+assert.ok(waterGroup.getObjectByName('main-island-shallow-water-shelf'), 'main shoreline must expose a visible shallow-water shelf');
+for (const island of satellites) {
+  const satelliteShelf = waterGroup.getObjectByName(`satellite-shallow-water-${island.id}`);
+  const barShelf = waterGroup.getObjectByName(`sandbar-shallow-water-${island.id}`);
+  assert.ok(satelliteShelf, `${island.id} must have a visible shallow-water shelf around its sides`);
+  assert.ok(barShelf, `${island.id} sandbar must have a broad shallow-water visual reach`);
+  assert.equal(satelliteShelf.geometry.parameters.outerRadius >= 1.5, true, `${island.id} shallow shelf must visibly extend beyond the island edge`);
+}
+const shimmer = waterGroup.getObjectByName('stylized-ocean-shimmer');
+const initialWaterTime = shimmer.material.uniforms.uTime.value;
+waterVisuals.update(0.5);
+assert.equal(shimmer.material.uniforms.uTime.value > initialWaterTime, true, 'stylized water shimmer must animate without a texture dependency');
+
 let fernPeak = 0;
 for (let x = -120; x <= 120; x += 12) {
   for (let z = -100; z <= 100; z += 12) {
@@ -65,6 +85,48 @@ player.x = 0.35;
 ferns.update(1 / 60, player);
 assert.equal(ferns.active.size > 0, true, 'nearby ferns must enter the character-reaction set');
 assert.equal(ferns.entries.some(entry => Math.abs(entry.bendX) + Math.abs(entry.bendZ) + entry.compression > 0.001), true, 'reactive ferns must bend/compress when the Ranger moves through them');
+
+const occlusionGroup = new THREE.Group();
+const treeGeometry = new THREE.BoxGeometry(2, 6, 2);
+const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x2f7a3b });
+const treeBatch = new THREE.InstancedMesh(treeGeometry, treeMaterial, 1);
+treeBatch.name = 'forest-tree-batch-0-0';
+treeBatch.setMatrixAt(0, new THREE.Matrix4().makeTranslation(0, 3, 0));
+treeBatch.instanceMatrix.needsUpdate = true;
+occlusionGroup.add(treeBatch);
+const occlusionCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  isPlayable: () => true
+});
+occlusionCollision.addObstacle({ x: 0, z: 0, radius: 0.72, type: 'tree', label: 'forest-tree-0' });
+const treeOcclusion = new TreeOcclusionSystem({
+  group: occlusionGroup,
+  collision: occlusionCollision,
+  maxFadedTrees: 2
+});
+const camera = new THREE.PerspectiveCamera();
+camera.position.set(0, 4, 8);
+const ranger = new THREE.Vector3(0, 0, -8);
+treeOcclusion.update(ranger, camera);
+const hiddenMatrix = new THREE.Matrix4();
+const hiddenPosition = new THREE.Vector3();
+treeBatch.getMatrixAt(0, hiddenMatrix);
+hiddenPosition.setFromMatrixPosition(hiddenMatrix);
+assert.equal(hiddenPosition.y < -900, true, 'tree between camera and Ranger must leave the opaque forest batch');
+const fadeBatch = occlusionGroup.getObjectByName('forest-tree-occlusion-fade-0-0');
+assert.ok(fadeBatch, 'tree occlusion must use a bounded transparent instanced fade batch');
+assert.equal(fadeBatch.count, 1, 'only occluding trees should enter the transparent fade batch');
+assert.equal(fadeBatch.material.transparent, true, 'occluding tree presentation must be transparent');
+assert.equal(fadeBatch.material.opacity <= 0.25, true, 'foreground tree must become transparent enough to keep the Ranger visible');
+
+camera.position.set(20, 4, 8);
+treeOcclusion.update(ranger, camera);
+const restoredMatrix = new THREE.Matrix4();
+const restoredPosition = new THREE.Vector3();
+treeBatch.getMatrixAt(0, restoredMatrix);
+restoredPosition.setFromMatrixPosition(restoredMatrix);
+assert.equal(Math.abs(restoredPosition.y - 3) < 0.001, true, 'tree must return to opaque presentation when it no longer blocks the Ranger');
+assert.equal(fadeBatch.count, 0, 'transparent fade batch must clear after occlusion ends');
 
 const horizonGroup = new THREE.Group();
 const mountains = new DistantMountainSystem({ group: horizonGroup, centerZ: terrain.centerZ });

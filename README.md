@@ -24,6 +24,11 @@ The Foundation 0.3.3 tree/log loop has passed device verification and remains au
 - the Ranger exposes facing direction through its controller boundary for placement instead of world systems reading controller internals;
 - a dedicated campfire regression contract runs alongside the existing gameplay, tree-harvest, landscape, runtime-asset, production-build and PWA checks.
 
+Device feedback during the 0.3.4 acceptance pass also established two landscape-presentation rules that now belong to the shared world layer:
+
+- forest canopy may create limited sightlines, but any tree directly between the active camera and Ranger must temporarily render as a low-opacity version of that same instanced tree; tree placement and trunk collision remain unchanged;
+- water remains a lightweight in-house Three.js presentation over the authoritative continuous terrain. The deep-water plane keeps its existing traversal relationship, while animated wave shimmer plus broader turquoise shoreline/satellite/sandbar shelves make shallow water visibly reach around the sides of the smaller islands instead of reading as one flat blue surface.
+
 Foundation 0.3.4 remains under device/gameplay acceptance before cooking is added. The next playable milestone after this gate is **cook the gathered meat at the campfire**.
 
 ## Installation
