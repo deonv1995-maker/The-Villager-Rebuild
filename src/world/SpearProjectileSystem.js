@@ -9,11 +9,14 @@ export class SpearProjectileSystem {
     this.speed = speed;
     this.maxLifetime = maxLifetime;
     this.projectile = null;
-    this.velocity = new THREE.Vector3();
+    this.startPosition = new THREE.Vector3();
+    this.previousPosition = new THREE.Vector3();
     this.targetPosition = new THREE.Vector3();
     this.targetProvider = null;
     this.onHit = null;
-    this.remaining = 0;
+    this.elapsed = 0;
+    this.duration = 0;
+    this.arcHeight = 0;
   }
 
   isActive() {
@@ -32,18 +35,22 @@ export class SpearProjectileSystem {
     this.projectile = this.#createSpear();
     this.projectile.name = 'thrown-spear-projectile';
     this.projectile.position.set(origin.x, origin.y + 1.28, origin.z);
+    this.startPosition.copy(this.projectile.position);
+    this.previousPosition.copy(this.projectile.position);
     this.#setTargetPosition(targetPoint);
-    this.#updateVelocity();
-    this.#orientToVelocity();
+
+    const distance = this.startPosition.distanceTo(this.targetPosition);
+    this.duration = THREE.MathUtils.clamp(distance / this.speed, 0.38, this.maxLifetime);
+    this.arcHeight = THREE.MathUtils.clamp(distance * 0.24, 1.05, 2.75);
+    this.elapsed = 0;
     this.onHit = typeof onHit === 'function' ? onHit : null;
-    this.remaining = this.maxLifetime;
+    this.#orientToward(this.targetPosition.clone().sub(this.startPosition).setY(this.arcHeight));
     this.scene.add(this.projectile);
     return true;
   }
 
   update(dt) {
     if (!this.projectile) return null;
-    this.remaining -= dt;
 
     const targetPoint = this.#resolveTarget();
     if (!targetPoint) {
@@ -51,22 +58,21 @@ export class SpearProjectileSystem {
       return { hit: false, result: null };
     }
     this.#setTargetPosition(targetPoint);
-    this.#updateVelocity();
 
-    const step = this.velocity.clone().multiplyScalar(dt);
-    const remainingDistance = this.projectile.position.distanceTo(this.targetPosition);
-    if (step.length() >= remainingDistance || remainingDistance < 0.18) {
+    this.elapsed = Math.min(this.duration, this.elapsed + Math.max(0, dt));
+    const progress = this.duration > 0 ? this.elapsed / this.duration : 1;
+    this.previousPosition.copy(this.projectile.position);
+    this.projectile.position.lerpVectors(this.startPosition, this.targetPosition, progress);
+    this.projectile.position.y += Math.sin(progress * Math.PI) * this.arcHeight;
+
+    const travelDirection = this.projectile.position.clone().sub(this.previousPosition);
+    if (travelDirection.lengthSq() > 0.000001) this.#orientToward(travelDirection);
+
+    if (progress >= 1) {
       this.projectile.position.copy(this.targetPosition);
       const result = this.onHit?.() ?? null;
       this.#clear();
       return { hit: true, result };
-    }
-
-    this.projectile.position.add(step);
-    this.#orientToVelocity();
-    if (this.remaining <= 0) {
-      this.#clear();
-      return { hit: false, result: null };
     }
     return null;
   }
@@ -81,21 +87,20 @@ export class SpearProjectileSystem {
     this.targetPosition.set(target.x, target.y + 0.55, target.z);
   }
 
-  #updateVelocity() {
-    this.velocity.copy(this.targetPosition).sub(this.projectile.position).normalize().multiplyScalar(this.speed);
-  }
-
   #clear() {
     if (this.projectile) this.scene.remove(this.projectile);
     this.projectile = null;
     this.targetProvider = null;
     this.onHit = null;
-    this.remaining = 0;
+    this.elapsed = 0;
+    this.duration = 0;
+    this.arcHeight = 0;
   }
 
-  #orientToVelocity() {
-    const direction = this.velocity.clone().normalize();
-    this.projectile.quaternion.setFromUnitVectors(UP, direction);
+  #orientToward(direction) {
+    const normalized = direction.clone().normalize();
+    if (normalized.lengthSq() <= 0.000001) return;
+    this.projectile.quaternion.setFromUnitVectors(UP, normalized);
   }
 
   #createSpear() {
