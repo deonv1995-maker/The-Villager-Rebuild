@@ -6,6 +6,7 @@ import { FernFieldSystem } from './FernFieldSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
 import { WorldCollisionSystem } from './WorldCollisionSystem.js';
 import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
+import { WaterVisualSystem } from './WaterVisualSystem.js';
 
 export class TestIslandSystem {
   constructor(scene) {
@@ -41,6 +42,10 @@ export class TestIslandSystem {
       group: this.group,
       centerZ: this.terrain.centerZ
     });
+    this.waterVisuals = new WaterVisualSystem({
+      group: this.group,
+      terrain: this.terrain
+    });
     this.treeOcclusion = null;
     this.assetMode = 'terrain-only';
   }
@@ -73,6 +78,7 @@ export class TestIslandSystem {
   async load() {
     this.collision.clear();
     this.terrain.create();
+    this.waterVisuals.create();
     const mountainCount = this.mountains.create();
 
     let environmentLoaded = false;
@@ -106,6 +112,7 @@ export class TestIslandSystem {
   update(dt, playerPosition, camera = null) {
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
+    this.waterVisuals.update(dt);
     this.treeOcclusion?.update(playerPosition, camera);
   }
 }
