@@ -16,13 +16,14 @@
     "verify:harvesting": "node scripts/verify-tree-harvest.mjs",
     "verify:tree-shake": "node scripts/verify-tree-hit-shake.mjs",
     "verify:device-regressions": "node scripts/verify-device-regressions-0.3.11.mjs",
+    "verify:thatch-interior": "node scripts/verify-thatch-interior-occlusion.mjs",
     "verify:survival": "node scripts/verify-survival-interactions.mjs",
     "verify:campfire": "node scripts/verify-campfire.mjs",
     "verify:landscape": "node scripts/verify-landscape.mjs",
     "verify:streaming": "node scripts/verify-world-streaming.mjs",
     "verify:dist-assets": "node scripts/verify-runtime-assets.mjs dist",
     "verify:pwa": "node scripts/verify-pwa.mjs dist",
-    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:walls && npm run verify:roof && npm run verify:roof-runtime && npm run verify:harvesting && npm run verify:tree-shake && npm run verify:device-regressions && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
+    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:walls && npm run verify:roof && npm run verify:roof-runtime && npm run verify:harvesting && npm run verify:tree-shake && npm run verify:device-regressions && npm run verify:thatch-interior && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
   },
   "dependencies": {
     "three": "0.180.0"
