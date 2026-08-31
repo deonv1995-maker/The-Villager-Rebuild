@@ -2,6 +2,8 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 import { resolveContextAction } from './ContextActionPolicy.js';
 
+const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+
 export class MobileHud {
   constructor({ player, canvas, onInteract, onCampfire, onAttack, onToolSelect, onBuildOption }) {
     this.player = player;
@@ -68,6 +70,8 @@ export class MobileHud {
     this.actionButton = this.root.querySelector('.action');
     this.actionIcon = this.root.querySelector('[data-role="action-icon"]');
     this.actionCaption = this.root.querySelector('[data-role="action-caption"]');
+    this.attackButton = this.actionButton;
+    this.attackIcon = this.actionIcon;
     this.buildTray = this.root.querySelector('[data-role="log-build"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
@@ -187,11 +191,15 @@ export class MobileHud {
       externalActions: [...this.externalActions.values()]
     });
     this.activeAction = action;
-    this.actionButton.disabled = !action.available;
-    this.actionButton.setAttribute('aria-label', action.label);
-    this.actionIcon.src = this.toolIcons[action.icon] ?? this.toolIcons.hand;
+    const available = Boolean(action.available);
+    const equippedTool = action.icon;
+    this.attackButton.hidden = !available && !action.externalId;
+    this.attackButton.disabled = !available;
+    this.attackButton.setAttribute('aria-label', action.label);
+    this.attackIcon.src = this.toolIcons[equippedTool] ?? this.toolIcons.hand;
     this.actionCaption.textContent = action.caption ?? 'ACTION';
     this.actionButton.dataset.actionSource = action.source ?? 'none';
+    this.actionButton.classList.toggle('work-tool', WORK_ACTION_TOOLS.has(equippedTool));
   }
 
   #triggerAction() {
