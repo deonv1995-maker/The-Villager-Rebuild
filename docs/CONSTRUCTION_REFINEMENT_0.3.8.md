@@ -26,6 +26,10 @@ ROOF preview now uses a bounded player-local topology query instead. Only nearby
 
 The ordinary RAW/WALL frame-pair cache remains unchanged because those modes were already stable and do not perform the pair-of-pairs roof search.
 
+Android follow-up also exposed a separate runtime failure: an unsupported ROOF location correctly produced an invalid placement but had no resolved roof quaternion. Preview transforms must therefore tolerate placement data that exists only for valid structural snaps. Unsupported ROOF locations now retain a red preview using the snapped yaw instead of attempting to copy a missing quaternion. This is covered by a runtime regression that carries a physical Log, enters ROOF with no roof topology, advances repeated preview frames, and attempts an invalid confirmation without throwing.
+
+The construction-preview invariant is now explicit: **invalid previews must be render-safe and must never require fields that are only produced by valid placement resolution**. A failed preview may reject placement, but it must not terminate the animation loop.
+
 ## Roof completion
 
 ROOF detects a bounded region formed by two opposite, parallel frame pairs and creates missing inward roof members for that region: four eave-to-ridge rafters followed by the ridge member. Roof members use the physical Log visual and are length-fitted to the detected frame region.
