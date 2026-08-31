@@ -53,7 +53,8 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   opacity: .72;
   white-space: nowrap;
 }
-.mobile-hud.log-carrying .hud-note {
+.mobile-hud.log-carrying .hud-note,
+.mobile-hud.wall-customizing .hud-note {
   top: max(116px, calc(env(safe-area-inset-top) + 111px));
 }
 .toolbelt {
@@ -156,6 +157,43 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
 }
 .log-build-tray button.drop-log { color: #f6d5c7; }
 .log-build-tray button:active { transform: scale(.95); }
+.wall-customize-tray {
+  position: absolute;
+  left: 50%;
+  top: max(73px, calc(env(safe-area-inset-top) + 68px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: min(270px, calc(100vw - 24px));
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(24, 39, 29, .92);
+  border: 1px solid rgba(240, 207, 118, .58);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.wall-customize-tray[hidden] { display: none; }
+.wall-customize-tray button {
+  flex: 1 1 0;
+  min-width: 68px;
+  height: 34px;
+  border: 1px solid rgba(225, 207, 151, .38);
+  border-radius: 8px;
+  background: rgba(69, 72, 50, .92);
+  color: #fff0cb;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  pointer-events: auto;
+  touch-action: none;
+}
+.wall-customize-tray button.selected {
+  border-color: #f0cf76;
+  background: rgba(79, 91, 57, .98);
+  box-shadow: 0 0 0 1px rgba(240, 207, 118, .26) inset;
+}
+.wall-customize-tray button:active { transform: scale(.95); }
 .joystick {
   position: absolute;
   left: max(18px, calc(env(safe-area-inset-left) + 14px));
@@ -231,5 +269,9 @@ body { position: fixed; inset: 0; user-select: none; -webkit-user-select: none; 
   .log-build-tray {
     top: max(73px, calc(env(safe-area-inset-top) + 68px));
     width: calc(100vw - 20px);
+  }
+  .wall-customize-tray {
+    top: max(73px, calc(env(safe-area-inset-top) + 68px));
+    width: min(270px, calc(100vw - 20px));
   }
 }

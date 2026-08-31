@@ -42,6 +42,16 @@ For the current Foundation 0.3.8 log-frame milestone, a one-bay closed perimeter
 
 The roof remains presentation-only for collision in this milestone, matching the existing Foundation 0.3.8 boundary. A future enclosed-building pass should add purpose-built roof/interior collision rather than a broad blocking box.
 
+## Inward wall faces and Hammer panel customization
+
+The archived original `WallInteriorFacingSystem` establishes which split-log face is interior by voting from nearby floor strips on the same storey. The rebuild now preserves that rule as a separate wall-panel subsystem: exterior wall rows are flipped by 180 degrees when needed so the flat split face points toward the occupied floor footprint, independent of where the Ranger was standing when the wall was placed. The active WALL preview is corrected by the same rule.
+
+Stacked wall sections between the same two frame posts are treated as one wall-panel bay. Hammer customization is exposed only when that bay is complete, meaning there is no vertical room for another normal wall section below the frame top. Standing within the local interaction range with the Hammer equipped shows panel-specific `SOLID`, `DOOR`, and `WINDOW` choices across the top of the mobile HUD. Walking away, changing tools, or carrying a Log hides those choices automatically.
+
+`SOLID` keeps the original split-log rows and their existing section colliders. `DOOR` temporarily replaces that bay with split-log side pieces and timber jambs while replacing the full wall collision with two side colliders, leaving a real Ranger-sized walk-through opening. `WINDOW` creates a framed visible opening but intentionally remains a blocking wall for this milestone. Switching back to `SOLID` restores the original wall rows and colliders.
+
+Customization belongs to the specific frame-pair bay rather than to a global wall mode. If one of the original wall sections is demolished, the customized variant is removed and the remaining original wall sections are restored safely. The ordinary Hammer action remains demolition; the three-option tray is an additional proximity customization surface, not a replacement demolition system.
+
 ## Harvest feedback follow-up
 
 Axe impacts add a short damped shake to the existing instanced tree render handles in addition to the wood-chip/ring hit feedback. The shake reuses the shared instanced geometry, restores the original instance matrices after the reaction, and does not alter tree collision, harvest counts, drops, ecology, or world streaming.
