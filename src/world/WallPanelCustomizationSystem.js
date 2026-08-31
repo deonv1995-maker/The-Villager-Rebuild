@@ -20,7 +20,10 @@ const WINDOW_BOTTOM = 0.7;
 const WINDOW_TOP = 1.78;
 const TARGET_STOREY_TOLERANCE = 1.4;
 
-const snapYaw = yaw => Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
+const snapYaw = yaw => {
+  const snapped = Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
+  return Object.is(snapped, -0) ? 0 : snapped;
+};
 
 export function axisYawDelta(a, b) {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
