@@ -102,6 +102,17 @@ movementCollision.addBox({
   supportY: floorTop,
   stepHeight: 0.18
 });
+movementCollision.addBox({
+  x: 0,
+  z: 0,
+  halfX: PHYSICAL_LOG.halfLength,
+  halfZ: PHYSICAL_LOG.radius,
+  yaw: 0,
+  type: 'placed-log',
+  label: 'test-overhead-top-beam',
+  bottomY: 2.72,
+  topY: 3.28
+});
 
 function walk(start, dx, dz, steps = 12) {
   let position = { ...start };
@@ -120,10 +131,22 @@ function walk(start, dx, dz, steps = 12) {
   return position;
 }
 
+const structureEntry = walk({ x: 0, y: 0, z: -1.25 }, 0, 0.16, 15);
+assert.ok(
+  structureEntry.z > 0.8,
+  'Ranger must pass beneath an overhead RAW frame beam while stepping onto the floor through an open panel or door'
+);
 const sideExit = walk({ x: 0, y: floorTop, z: 0 }, 0, 0.16, 10);
 assert.ok(sideExit.z > floorHalfZ + 0.7, 'Ranger must be able to walk laterally off a floor instead of sticking to its side collider');
 const endExit = walk({ x: 0, y: floorTop, z: 0 }, 0.18, 0, 12);
 assert.ok(endExit.x > PHYSICAL_LOG.halfLength + 0.45, 'Ranger must be able to walk off the long edge of a floor in either movement axis');
+
+const revisionBefore = movementCollision.getRevision();
+const temporary = movementCollision.addObstacle({ x: 9, z: 9, radius: 0.5, type: 'test' });
+assert.ok(movementCollision.getRevision() > revisionBefore, 'Dynamic world systems need collision revision changes after construction is added');
+const revisionAfterAdd = movementCollision.getRevision();
+assert.equal(movementCollision.removeObstacle(temporary), true);
+assert.ok(movementCollision.getRevision() > revisionAfterAdd, 'Dynamic world systems need collision revision changes after construction is removed');
 
 const [logSource, supportSource, collisionSource, definitionsSource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
@@ -165,7 +188,9 @@ assert.ok(!logSource.includes('roofCandidateCacheRevision'), 'ROOF preview must 
 assert.ok(supportSource.includes('placement.baseY - PHYSICAL_LOG.floorUndersideDepth'), 'Automatic floor supports must terminate at the real split-log underside');
 assert.ok(supportSource.includes('this.terrain.baseHeightAt?.(x, z)'), 'Automatic floor supports must sample immutable base terrain instead of standable construction height');
 assert.ok(supportSource.includes('?? this.terrain.heightAt(x, z)'), 'Floor support terrain sampling must keep a compatibility fallback');
+assert.ok(collisionSource.includes('headY < obstacle.bottomY'), 'Movement collision must ignore structural beams that are fully above the Ranger capsule');
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Standable platform collision must explicitly allow movement away from platform edges');
 assert.ok(collisionSource.includes('#distanceSqToObstacle'), 'Standable edge escape must be geometry-aware instead of direction-specific');
+assert.ok(collisionSource.includes('getRevision()'), 'Construction-aware rendering needs a stable collision revision source');
 
-console.log('Exact floor seams, mobile frame snapping, free platform movement and bounded roof topology verified');
+console.log('Exact floor seams, open structure entry, mobile frame snapping, free platform movement and bounded roof topology verified');
