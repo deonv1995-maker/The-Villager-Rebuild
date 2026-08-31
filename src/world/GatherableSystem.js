@@ -16,6 +16,8 @@ export class GatherableSystem {
     this.items = [];
     this.target = null;
     this.nextSpawnId = 0;
+    this.scene.userData.services ??= {};
+    this.scene.userData.services.gatherables = this;
     this.#createIndicator();
     this.#populate();
   }
@@ -159,6 +161,7 @@ export class GatherableSystem {
     if (resourceId === 'stick') return this.#createStick(index);
     if (resourceId === 'stone') return this.#createStone(index);
     if (resourceId === 'grass') return this.#createGrass(index);
+    if (resourceId === 'meat') return this.#createMeat(index);
     if (resourceId === 'log') return this.#createLog(index);
     throw new Error(`No world pickup presentation for resource: ${resourceId}`);
   }
@@ -205,6 +208,36 @@ export class GatherableSystem {
       mesh.rotation.z = (blade % 2 ? 1 : -1) * 0.13;
       group.add(mesh);
     }
+    return group;
+  }
+
+  #createMeat(index) {
+    const group = new THREE.Group();
+    const meatMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8d3e38,
+      roughness: 0.88,
+      flatShading: true
+    });
+    const fatMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd8b08a,
+      roughness: 0.94,
+      flatShading: true
+    });
+
+    const meat = new THREE.Mesh(new THREE.DodecahedronGeometry(0.25, 0), meatMaterial);
+    meat.scale.set(1.35, 0.68, 0.92);
+    meat.position.y = 0.18;
+    meat.rotation.set(0.1 + index * 0.07, index * 0.41, 0.16);
+    meat.castShadow = true;
+    meat.receiveShadow = true;
+    group.add(meat);
+
+    const fat = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.055, 0.18), fatMaterial);
+    fat.position.set(0.02, 0.31, 0.01);
+    fat.rotation.y = -0.24 + index * 0.13;
+    fat.castShadow = true;
+    group.add(fat);
+
     return group;
   }
 
