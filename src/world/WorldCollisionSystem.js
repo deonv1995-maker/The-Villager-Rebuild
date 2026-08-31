@@ -233,6 +233,13 @@ export class WorldCollisionSystem {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
       if (feetY > obstacle.topY + 0.12) continue;
 
+      const standingOnTop = (
+        obstacle.standable &&
+        obstacle.supportY !== null &&
+        feetY >= obstacle.supportY - 0.16
+      );
+      if (standingOnTop) continue;
+
       const fromSupported = (
         obstacle.standable &&
         obstacle.supportY !== null &&
