@@ -15,11 +15,12 @@ const distanceToSegment2D = (x, z, x1, z1, x2, z2) => {
 };
 
 export class TreeOcclusionSystem {
-  constructor({ group, collision, maxFadedTrees = 8 }) {
+  constructor({ group, collision, treeRenderRegistry = null, maxFadedTrees = 8 }) {
     this.group = group;
     this.collision = collision;
+    this.treeRenderRegistry = treeRenderRegistry;
     this.maxFadedTrees = maxFadedTrees;
-    this.treeBatches = this.#collectTreeBatches();
+    this.treeBatches = this.treeRenderRegistry ? new Map() : this.#collectTreeBatches();
     this.treeVariantCount = Math.max(1, this.treeBatches.size);
     this.fadeBatches = this.#createFadeBatches();
     this.previousHidden = [];
@@ -32,7 +33,7 @@ export class TreeOcclusionSystem {
   }
 
   update(playerPosition, camera) {
-    if (!playerPosition || !camera || this.treeBatches.size === 0) return;
+    if (!playerPosition || !camera || this.fadeBatches.size === 0) return;
 
     const activeTrees = this.#collectActiveTrees();
     const activeIds = new Set(activeTrees.map(tree => tree.treeId));
@@ -70,34 +71,30 @@ export class TreeOcclusionSystem {
 
     candidates.sort((left, right) => left.score - right.score);
     const selected = candidates.slice(0, this.maxFadedTrees);
-    const slotsByVariant = new Map();
+    const slotsByTemplate = new Map();
 
     for (const tree of selected) {
-      const opaqueBatches = this.treeBatches.get(tree.variantIndex) ?? [];
-      const fadeBatches = this.fadeBatches.get(tree.variantIndex) ?? [];
-      const slot = slotsByVariant.get(tree.variantIndex) ?? 0;
+      const handles = this.#getRenderHandles(tree);
       const originals = [];
-
-      for (let meshIndex = 0; meshIndex < opaqueBatches.length; meshIndex += 1) {
-        const opaque = opaqueBatches[meshIndex];
-        const fade = fadeBatches[meshIndex];
-        if (!fade || tree.instanceIndex < 0 || tree.instanceIndex >= opaque.count) continue;
+      for (const handle of handles) {
+        const fade = this.fadeBatches.get(handle.templateKey);
+        if (!fade || handle.index < 0 || handle.index >= handle.mesh.count) continue;
+        const slot = slotsByTemplate.get(handle.templateKey) ?? 0;
+        if (slot >= this.maxFadedTrees) continue;
 
         const original = new THREE.Matrix4();
-        opaque.getMatrixAt(tree.instanceIndex, original);
-        originals.push({ opaque, matrix: original });
-        opaque.setMatrixAt(tree.instanceIndex, this.hiddenMatrix);
-        opaque.instanceMatrix.needsUpdate = true;
+        handle.mesh.getMatrixAt(handle.index, original);
+        originals.push({ mesh: handle.mesh, index: handle.index, matrix: original });
+        handle.mesh.setMatrixAt(handle.index, this.hiddenMatrix);
+        handle.mesh.instanceMatrix.needsUpdate = true;
 
         fade.setMatrixAt(slot, original);
         fade.count = Math.max(fade.count, slot + 1);
         fade.instanceMatrix.needsUpdate = true;
+        slotsByTemplate.set(handle.templateKey, slot + 1);
       }
 
-      if (originals.length > 0) {
-        this.previousHidden.push({ treeId: tree.treeId, originals });
-        slotsByVariant.set(tree.variantIndex, slot + 1);
-      }
+      if (originals.length > 0) this.previousHidden.push({ treeId: tree.treeId, originals });
     }
 
     this.#refreshFadeBounds();
@@ -119,6 +116,17 @@ export class TreeOcclusionSystem {
       .filter(Boolean);
   }
 
+  #getRenderHandles(tree) {
+    if (this.treeRenderRegistry) return this.treeRenderRegistry.getTreeRenderHandles(tree.treeId);
+    return (this.treeBatches.get(tree.variantIndex) ?? [])
+      .map((mesh, meshIndex) => ({
+        mesh,
+        index: tree.instanceIndex,
+        templateKey: `${tree.variantIndex}:${meshIndex}`
+      }))
+      .filter(handle => handle.mesh);
+  }
+
   #collectTreeBatches() {
     const batches = new Map();
     this.group.traverse(object => {
@@ -136,26 +144,36 @@ export class TreeOcclusionSystem {
 
   #createFadeBatches() {
     const result = new Map();
+    if (this.treeRenderRegistry) {
+      for (const template of this.treeRenderRegistry.getTreeTemplates().values()) {
+        result.set(template.key, this.#createFadeBatch(template.geometry, template.material, template.key));
+      }
+      return result;
+    }
+
     for (const [variantIndex, opaqueBatches] of this.treeBatches) {
-      const fadeBatches = [];
       opaqueBatches.forEach((opaque, meshIndex) => {
         if (!opaque) return;
-        const material = Array.isArray(opaque.material)
-          ? opaque.material.map(item => this.#createFadeMaterial(item))
-          : this.#createFadeMaterial(opaque.material);
-        const fade = new THREE.InstancedMesh(opaque.geometry, material, this.maxFadedTrees);
-        fade.name = `forest-tree-occlusion-fade-${variantIndex}-${meshIndex}`;
-        fade.count = 0;
-        fade.castShadow = false;
-        fade.receiveShadow = false;
-        fade.renderOrder = 3;
-        fade.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        this.group.add(fade);
-        fadeBatches[meshIndex] = fade;
+        const key = `${variantIndex}:${meshIndex}`;
+        result.set(key, this.#createFadeBatch(opaque.geometry, opaque.material, key));
       });
-      result.set(variantIndex, fadeBatches);
     }
     return result;
+  }
+
+  #createFadeBatch(geometry, sourceMaterial, key) {
+    const material = Array.isArray(sourceMaterial)
+      ? sourceMaterial.map(item => this.#createFadeMaterial(item))
+      : this.#createFadeMaterial(sourceMaterial);
+    const fade = new THREE.InstancedMesh(geometry, material, this.maxFadedTrees);
+    fade.name = `forest-tree-occlusion-fade-${key.replace(':', '-')}`;
+    fade.count = 0;
+    fade.castShadow = false;
+    fade.receiveShadow = false;
+    fade.renderOrder = 3;
+    fade.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.group.add(fade);
+    return fade;
   }
 
   #createFadeMaterial(source) {
@@ -171,34 +189,26 @@ export class TreeOcclusionSystem {
     for (const entry of this.previousHidden) {
       if (!activeIds.has(entry.treeId)) continue;
       for (const original of entry.originals) {
-        original.opaque.setMatrixAt(
-          Math.floor(entry.treeId / this.treeVariantCount),
-          original.matrix
-        );
-        original.opaque.instanceMatrix.needsUpdate = true;
+        original.mesh.setMatrixAt(original.index, original.matrix);
+        original.mesh.instanceMatrix.needsUpdate = true;
       }
     }
     this.previousHidden.length = 0;
   }
 
   #clearFadeBatches() {
-    for (const fadeBatches of this.fadeBatches.values()) {
-      for (const fade of fadeBatches) {
-        if (!fade) continue;
-        fade.count = 0;
-        fade.instanceMatrix.needsUpdate = true;
-      }
+    for (const fade of this.fadeBatches.values()) {
+      fade.count = 0;
+      fade.instanceMatrix.needsUpdate = true;
     }
   }
 
   #refreshFadeBounds() {
-    for (const fadeBatches of this.fadeBatches.values()) {
-      for (const fade of fadeBatches) {
-        if (!fade || fade.count === 0) continue;
-        fade.boundingBox = null;
-        fade.boundingSphere = null;
-        fade.computeBoundingSphere();
-      }
+    for (const fade of this.fadeBatches.values()) {
+      if (fade.count === 0) continue;
+      fade.boundingBox = null;
+      fade.boundingSphere = null;
+      fade.computeBoundingSphere();
     }
   }
 }
