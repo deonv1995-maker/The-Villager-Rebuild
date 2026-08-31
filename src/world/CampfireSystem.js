@@ -16,6 +16,8 @@ export class CampfireSystem {
     this.inventory = inventory;
     this.definition = definition;
     this.root = null;
+    this.previewRoot = null;
+    this.previewPlacement = null;
     this.collisionHandle = null;
     this.flames = [];
     this.light = null;
@@ -29,6 +31,10 @@ export class CampfireSystem {
     );
   }
 
+  isPreviewing() {
+    return Boolean(this.previewRoot);
+  }
+
   findPlacement(playerPosition, facingDirection) {
     if (!playerPosition || !facingDirection) return null;
     const baseAngle = Math.atan2(facingDirection.x, facingDirection.z);
@@ -39,19 +45,43 @@ export class CampfireSystem {
         const angle = baseAngle + angleOffset;
         const x = playerPosition.x + Math.sin(angle) * distance;
         const z = playerPosition.z + Math.cos(angle) * distance;
-        if (!this.terrain.isPlayable(x, z, this.definition.placementRadius + 0.35)) continue;
-        if (this.terrain.slopeAt(x, z) > this.definition.maxSlope) continue;
-        if (!this.collision.isCircleClear(x, z, this.definition.placementRadius)) continue;
+        if (!this.#isPlacementClear(x, z)) continue;
         return { x, y: this.terrain.heightAt(x, z), z };
       }
     }
     return null;
   }
 
-  build(playerPosition, facingDirection) {
+  beginPreview(playerPosition, facingDirection) {
     if (!this.canBuild()) return null;
+    if (!this.previewRoot) {
+      this.previewRoot = this.#createPlacementPreview();
+      this.previewRoot.name = 'campfire-placement-preview';
+      this.group.add(this.previewRoot);
+    }
+    return this.updatePreview(playerPosition, facingDirection);
+  }
+
+  updatePreview(playerPosition, facingDirection) {
+    if (!this.previewRoot) return null;
+    if (!this.canBuild()) {
+      this.cancelPreview();
+      return null;
+    }
+
     const placement = this.findPlacement(playerPosition, facingDirection);
+    this.previewPlacement = placement;
+    this.previewRoot.visible = Boolean(placement);
     if (!placement) return null;
+
+    this.previewRoot.position.set(placement.x, placement.y + 0.025, placement.z);
+    return this.getPreviewState();
+  }
+
+  confirmBuild() {
+    if (!this.previewRoot || !this.previewPlacement || !this.canBuild()) return null;
+    const placement = { ...this.previewPlacement };
+    if (!this.#isPlacementClear(placement.x, placement.z)) return null;
     if (!this.inventory.consume(this.definition.ingredients)) return null;
 
     this.root = this.#createVisual();
@@ -67,8 +97,22 @@ export class CampfireSystem {
       bottomY: placement.y,
       topY: placement.y + 1.15
     });
-
+    this.cancelPreview();
     return this.getState();
+  }
+
+  cancelPreview() {
+    if (this.previewRoot) this.group.remove(this.previewRoot);
+    this.previewRoot = null;
+    this.previewPlacement = null;
+  }
+
+  getPreviewState() {
+    if (!this.previewRoot || !this.previewPlacement) return { previewing: false, position: null };
+    return {
+      previewing: true,
+      position: { ...this.previewPlacement }
+    };
   }
 
   getDemolitionTarget(playerPosition) {
@@ -99,8 +143,12 @@ export class CampfireSystem {
   }
 
   update(dt) {
-    if (!this.root) return;
     this.time += dt;
+    if (this.previewRoot) {
+      const pulse = 0.94 + Math.sin(this.time * 5.2) * 0.06;
+      this.previewRoot.scale.setScalar(pulse);
+    }
+    if (!this.root) return;
     this.flames.forEach((flame, index) => {
       const phase = this.time * (4.8 + index * 0.7) + index * 1.9;
       const pulse = 1 + Math.sin(phase) * 0.08;
@@ -125,6 +173,49 @@ export class CampfireSystem {
         z: this.root.position.z
       }
     };
+  }
+
+  #isPlacementClear(x, z) {
+    if (!this.terrain.isPlayable(x, z, this.definition.placementRadius + 0.35)) return false;
+    if (this.terrain.slopeAt(x, z) > this.definition.maxSlope) return false;
+    return this.collision.isCircleClear(x, z, this.definition.placementRadius);
+  }
+
+  #createPlacementPreview() {
+    const root = new THREE.Group();
+    const material = new THREE.MeshBasicMaterial({
+      color: 0x58ff7b,
+      transparent: true,
+      opacity: 0.46,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+
+    for (let index = 0; index < 8; index += 1) {
+      const angle = index / 8 * Math.PI * 2;
+      const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22, 0), material);
+      stone.position.set(Math.sin(angle) * 0.62, 0.18, Math.cos(angle) * 0.62);
+      stone.scale.y = 0.72;
+      stone.rotation.set(0.18 * index, angle, 0.11 * index);
+      root.add(stone);
+    }
+
+    for (let index = 0; index < 6; index += 1) {
+      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.12, 6), material);
+      stick.position.y = 0.28 + (index % 2) * 0.035;
+      stick.rotation.z = Math.PI / 2;
+      stick.rotation.y = index * Math.PI / 3;
+      root.add(stick);
+    }
+
+    const flameGuide = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.92, 7), material);
+    flameGuide.position.y = 0.73;
+    root.add(flameGuide);
+    root.renderOrder = 5;
+    root.traverse(object => {
+      if (object.isMesh) object.renderOrder = 5;
+    });
+    return root;
   }
 
   #createVisual() {
