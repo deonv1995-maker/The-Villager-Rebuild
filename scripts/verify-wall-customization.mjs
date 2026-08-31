@@ -8,7 +8,8 @@ import {
   WallPanelCustomizationSystem,
   doorSideColliderSpecs,
   resolveWallInwardYaw,
-  wallPanelIsComplete
+  wallPanelIsComplete,
+  windowColliderSpecs
 } from '../src/world/WallPanelCustomizationSystem.js';
 
 assert.deepEqual(WALL_PANEL_VARIANTS, ['solid', 'door', 'window'], 'Hammer wall options must remain panel-scoped and explicit');
@@ -47,6 +48,19 @@ const doorCollision = new WorldCollisionSystem({
 for (const spec of doorSpecs) doorCollision.addBox({ ...spec, type: 'placed-log', label: 'test-door-side' });
 assert.equal(doorCollision.isCircleClear(0, 0, 0.42), true, 'Door centre must be physically walkable for the Ranger capsule');
 
+const windowSpecs = windowColliderSpecs({ x: 0, z: 0, yaw: 0, baseY: 0, topY: 2.58 });
+assert.equal(windowSpecs.length, 4, 'Window collision must follow sill, two jamb sides and lintel rather than one monolithic wall box');
+const windowFullSpanSpecs = windowSpecs.filter(spec => Math.abs(spec.halfX - PHYSICAL_LOG.halfLength) < 0.000001);
+const windowSideSpecs = windowSpecs.filter(spec => spec.halfX < PHYSICAL_LOG.halfLength - 0.01);
+assert.equal(windowFullSpanSpecs.length, 2, 'Window collision must retain full-width sill and lintel structure');
+assert.equal(windowSideSpecs.length, 2, 'Window collision must retain both side jamb regions around the opening');
+assert.ok(windowFullSpanSpecs.some(spec => spec.topY <= 0.71), 'Window sill collision must stop below the visible opening');
+assert.ok(windowFullSpanSpecs.some(spec => spec.bottomY >= 1.77), 'Window lintel collision must start above the visible opening');
+assert.ok(
+  windowSideSpecs.every(spec => spec.bottomY >= 0.69 && spec.topY <= 1.79),
+  'Window side collision must be limited to the opening height instead of filling the complete wall'
+);
+
 const sceneGroup = new THREE.Group();
 const obstacles = [];
 const collision = {
@@ -76,11 +90,12 @@ const makeFrame = (id, x, z) => ({
   root: new THREE.Group(),
   collisionHandle: null
 });
-const floor = {
-  id: 3,
+
+const makeFloor = (id, x) => ({
+  id,
   mode: 'floor',
   active: true,
-  x: 0,
+  x,
   z: PHYSICAL_LOG.floorWidth * 0.5,
   yaw: 0,
   baseY: 0,
@@ -88,14 +103,15 @@ const floor = {
   topY: 0,
   root: new THREE.Group(),
   collisionHandle: null
-};
+});
+
 const wallCenters = [0.26, 1.04, 1.82];
-const walls = wallCenters.map((centerY, index) => {
+const makeWalls = (centerX, idBase) => wallCenters.map((centerY, index) => {
   const root = new THREE.Group();
-  root.name = `built-log-${10 + index}-wall`;
-  root.position.set(0, centerY, 0);
+  root.name = `built-log-${idBase + index}-wall`;
+  root.position.set(centerX, centerY, 0);
   const collisionHandle = collision.addBox({
-    x: 0,
+    x: centerX,
     z: 0,
     halfX: PHYSICAL_LOG.halfLength,
     halfZ: 0.28,
@@ -106,10 +122,10 @@ const walls = wallCenters.map((centerY, index) => {
     topY: centerY + 0.76
   });
   return {
-    id: 10 + index,
+    id: idBase + index,
     mode: 'wall',
     active: true,
-    x: 0,
+    x: centerX,
     z: 0,
     yaw: Math.PI,
     baseY: 0,
@@ -120,56 +136,75 @@ const walls = wallCenters.map((centerY, index) => {
   };
 });
 
+const secondBayX = PHYSICAL_LOG.length * 2;
+const wallsA = makeWalls(0, 10);
+const wallsB = makeWalls(secondBayX, 30);
 const physicalLogs = {
   structureRevision: 1,
   builtLogs: [
     makeFrame(1, -PHYSICAL_LOG.halfLength, 0),
     makeFrame(2, PHYSICAL_LOG.halfLength, 0),
-    floor,
-    ...walls
+    makeFloor(3, 0),
+    ...wallsA,
+    makeFrame(21, secondBayX - PHYSICAL_LOG.halfLength, 0),
+    makeFrame(22, secondBayX + PHYSICAL_LOG.halfLength, 0),
+    makeFloor(23, secondBayX),
+    ...wallsB
   ]
 };
 const system = new WallPanelCustomizationSystem({ group: sceneGroup, collision, physicalLogs });
 const bays = system.sync();
-assert.equal(bays.length, 1, 'Three stacked wall sections between one frame pair must resolve as one panel bay');
-assert.equal(bays[0].complete, true, 'The three-section first-storey wall must expose customization');
-for (const wall of walls) {
+assert.equal(bays.length, 2, 'Each completed frame pair must resolve as its own wall-panel bay');
+assert.ok(bays.every(bay => bay.complete), 'Both three-section first-storey walls must expose customization');
+for (const wall of [...wallsA, ...wallsB]) {
   assert.equal(wall.yaw, 0, 'Archived floor-footprint voting must orient every section flat-side inward');
   assert.equal(wall.root.userData.wallFlatFaceInward, true, 'Wall visual must record the inward-facing invariant');
 }
 
-const target = system.getTarget({ x: 0, y: 0, z: 1.1 });
-assert.equal(target?.type, 'wall-panel');
-assert.equal(target?.variant, 'solid');
-assert.equal(target?.id, 'wall:1-2', 'Customization identity must belong to the specific frame-pair bay');
+const targetA = system.getTarget({ x: 0, y: 0, z: 1.1 });
+const targetB = system.getTarget({ x: secondBayX, y: 0, z: 1.1 });
+assert.equal(targetA?.type, 'wall-panel');
+assert.equal(targetA?.variant, 'solid');
+assert.equal(targetA?.id, 'wall:1-2', 'Customization identity must belong to the specific first frame-pair bay');
+assert.equal(targetB?.id, 'wall:21-22', 'A second completed wall must keep a distinct panel identity');
 
-const door = system.customize(target.id, 'door');
+const door = system.customize(targetA.id, 'door');
 assert.equal(door?.variant, 'door');
-assert.ok(walls.every(wall => wall.root.visible === false), 'Door customization must hide only the original rows in that wall bay');
-assert.ok(walls.every(wall => wall.collisionHandle === null), 'Door customization must remove the original solid wall colliders');
-assert.equal(obstacles.length, 2, 'Door customization must install exactly two side colliders');
+assert.ok(wallsA.every(wall => wall.root.visible === false), 'Door customization must hide only the targeted wall bay');
+assert.ok(wallsA.every(wall => wall.collisionHandle === null), 'Door customization must remove only the targeted original solid colliders');
+assert.ok(wallsB.every(wall => wall.root.visible === true), 'Customizing one wall bay must not visually alter a neighboring completed bay');
+assert.ok(wallsB.every(wall => wall.collisionHandle), 'Customizing one wall bay must not remove neighboring wall collision');
+assert.equal(obstacles.length, 5, 'Door customization must replace only three targeted row colliders with two door-side colliders');
 assert.equal(system.getTarget({ x: 0, y: 0, z: 1.1 })?.variant, 'door');
+assert.equal(system.getTarget({ x: secondBayX, y: 0, z: 1.1 })?.variant, 'solid');
 
-const windowResult = system.customize(target.id, 'window');
+const windowResult = system.customize(targetA.id, 'window');
 assert.equal(windowResult?.variant, 'window');
-assert.equal(obstacles.length, 1, 'Window customization remains a blocking wall with one full panel collider');
-assert.equal(obstacles[0].halfX, PHYSICAL_LOG.halfLength);
+const activeWindowColliders = obstacles.filter(obstacle => obstacle.label?.startsWith('wall-panel-window-wall:1-2-'));
+assert.equal(activeWindowColliders.length, 4, 'Window customization must install sill, jamb-side and lintel collision only for the targeted bay');
+assert.equal(obstacles.length, 7, 'Window customization must leave the neighboring bay untouched while replacing the targeted wall rows');
+assert.ok(wallsB.every(wall => wall.collisionHandle), 'Window customization must remain panel-specific');
 
-const solid = system.customize(target.id, 'solid');
+const solid = system.customize(targetA.id, 'solid');
 assert.equal(solid?.variant, 'solid');
-assert.ok(walls.every(wall => wall.root.visible === true), 'Solid customization must restore the original split-log wall rows');
-assert.ok(walls.every(wall => wall.collisionHandle), 'Solid customization must restore each original wall-section collider');
-assert.equal(obstacles.length, 3, 'Solid customization must restore the original three section colliders');
+assert.ok(wallsA.every(wall => wall.root.visible === true), 'Solid customization must restore the targeted original split-log wall rows');
+assert.ok(wallsA.every(wall => wall.collisionHandle), 'Solid customization must restore each targeted original wall-section collider');
+assert.ok(wallsB.every(wall => wall.root.visible === true && wall.collisionHandle), 'Restoring one panel must not disturb another completed wall bay');
+assert.equal(obstacles.length, 6, 'Solid customization must restore the original three colliders without changing the second bay');
 
-walls[2].active = false;
+collision.removeObstacle(wallsA[2].collisionHandle);
+wallsA[2].collisionHandle = null;
+wallsA[2].active = false;
 physicalLogs.structureRevision += 1;
 system.sync();
-assert.equal(system.getTarget({ x: 0, y: 0, z: 1.1 }), null, 'Removing one required wall section must immediately remove panel customization eligibility');
+assert.equal(system.getTarget({ x: 0, y: 0, z: 1.1 }), null, 'Removing one required wall section must immediately remove that panel customization eligibility');
+assert.equal(system.getTarget({ x: secondBayX, y: 0, z: 1.1 })?.id, 'wall:21-22', 'Demolishing one wall bay must not disable customization on another completed bay');
 
-const [controllerSource, mainSource, stylesSource] = await Promise.all([
+const [controllerSource, mainSource, stylesSource, gameSource] = await Promise.all([
   readFile('src/gameplay/WallPanelCustomizationController.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
-  readFile('src/styles.css', 'utf8')
+  readFile('src/styles.css', 'utf8'),
+  readFile('src/core/GameApp.js', 'utf8')
 ]);
 for (const requirement of [
   "toolId !== 'hammer'",
@@ -184,5 +219,10 @@ for (const requirement of [
 assert.ok(mainSource.includes('new WallPanelCustomizationController({ game })'), 'Started GameApp must attach the scoped wall customization controller');
 assert.ok(stylesSource.includes('.wall-customize-tray {'), 'Mobile HUD must style the proximity wall customization tray');
 assert.ok(stylesSource.includes('.mobile-hud.wall-customizing .hud-note'), 'Wall customization tray must preserve construction-view readability');
+assert.ok(
+  gameSource.includes("toolId === 'hammer' && (target.type === 'placed-log' || target.type === 'campfire')"),
+  'Hammer customization must not replace the existing placed-log/campfire demolition action'
+);
+assert.ok(gameSource.includes('this.physicalLogs?.demolish(this.playerPosition)'), 'Hammer must still call PhysicalLogSystem demolition for placed Logs');
 
-console.log('Inward wall faces, complete-bay targeting, door/window variants and door traversal verified');
+console.log('Inward wall faces, panel-specific SOLID/DOOR/WINDOW collision, real door traversal and Hammer demolition verified');
