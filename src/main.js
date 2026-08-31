@@ -1,4 +1,5 @@
 import { GameApp } from './core/GameApp.js';
+import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
@@ -21,6 +22,10 @@ async function bootGameplay(titleScene = null) {
     setStatus('FOUNDATION 0.3.8 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus });
     await game.start();
+
+    const equipmentRuntime = new EquipmentRuntimeController({ game });
+    equipmentRuntime.start();
+    game.equipmentRuntime = equipmentRuntime;
 
     const wallPanelCustomization = new WallPanelCustomizationController({ game });
     wallPanelCustomization.start();
