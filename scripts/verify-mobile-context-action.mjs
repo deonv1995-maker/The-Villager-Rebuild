@@ -129,9 +129,11 @@ assert.match(rangerControllerSource, /ANALOG_WALK_MAX_SPEED/, 'Ranger movement m
 assert.match(rangerControllerSource, /THREE\.MathUtils\.lerp\(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength\)/, 'Analog thumb distance must continuously control movement speed');
 assert.match(rangerControllerSource, /beginCameraLook\(\)/, 'Ranger controller must expose manual-look ownership');
 assert.match(rangerControllerSource, /endCameraLook\(\)/, 'Ranger controller must expose manual-look release');
-assert.match(rangerControllerSource, /CAMERA_RETURN_DELAY = 0\.35/, 'Camera must pause briefly before returning from a manual look');
+assert.match(rangerControllerSource, /CAMERA_RETURN_DELAY = 0\.5/, 'Camera must pause noticeably before returning from a manual look');
 assert.match(rangerControllerSource, /desiredYaw = this\.root\.rotation\.y \+ Math\.PI/, 'Automatic camera heading must follow behind the Ranger');
 assert.match(rangerControllerSource, /#dampAngle\(current, target, response, dt\)/, 'Camera heading changes must use angular damping instead of snapping');
-assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 2\.15/, 'Manual camera return must use a slower premium-feeling response');
+assert.match(rangerControllerSource, /CAMERA_FOLLOW_RESPONSE = 1\.85/, 'Automatic follow must deliberately trail Ranger turns');
+assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 1\.2/, 'Manual camera return must remain slower than ordinary follow');
+assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, hidden all-speed movement, contextual sprint gesture and smooth follow camera verified');
+console.log('Unified mobile actions, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
