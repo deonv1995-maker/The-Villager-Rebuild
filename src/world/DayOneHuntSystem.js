@@ -6,13 +6,20 @@ import { DayOneAnimalPresentation } from './DayOneAnimalPresentation.js';
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
 export class DayOneHuntSystem {
-  constructor({ scene, terrain, definition = ANIMAL_DEFINITIONS.dayOneHunt }) {
+  constructor({
+    scene,
+    terrain,
+    gatherables = scene.userData?.services?.gatherables ?? null,
+    definition = ANIMAL_DEFINITIONS.dayOneHunt
+  }) {
     this.scene = scene;
     this.terrain = terrain;
+    this.gatherables = gatherables;
     this.definition = definition;
     this.health = definition.maxHealth;
     this.defeated = false;
     this.harvested = false;
+    this.lootSpawned = 0;
     this.time = 0;
     this.hitFlash = 0;
     this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
@@ -150,13 +157,18 @@ export class DayOneHuntSystem {
     if (this.defeated || !Number.isFinite(damage) || damage <= 0) return null;
     this.health = Math.max(0, this.health - damage);
     this.hitFlash = 0.16;
+    let resultPosition = this.group.position;
 
     if (this.health === 0) {
+      const deathPosition = this.group.position.clone();
+      resultPosition = deathPosition;
       this.defeated = true;
+      this.harvested = true;
       this.behavior = 'defeated';
       this.targetRing.visible = false;
-      this.presentation.setDefeated(true);
-      this.group.position.y = this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.12;
+      this.harvestRing.visible = false;
+      this.scene.remove(this.group);
+      this.lootSpawned = this.#spawnLoot(deathPosition);
     } else {
       const resolvedThreat = this.#isFinitePosition(threatPosition)
         ? threatPosition
@@ -171,7 +183,8 @@ export class DayOneHuntSystem {
       health: this.health,
       maxHealth: this.definition.maxHealth,
       defeated: this.defeated,
-      position: { x: this.group.position.x, y: this.group.position.y, z: this.group.position.z }
+      lootSpawned: this.lootSpawned,
+      position: { x: resultPosition.x, y: resultPosition.y, z: resultPosition.z }
     };
   }
 
@@ -226,6 +239,7 @@ export class DayOneHuntSystem {
       maxHealth: this.definition.maxHealth,
       defeated: this.defeated,
       harvested: this.harvested,
+      lootSpawned: this.lootSpawned,
       behavior: this.behavior,
       threatCause: this.threatCause,
       grazingCenter: {
@@ -312,6 +326,22 @@ export class DayOneHuntSystem {
   #establishGrazingZone() {
     this.center.set(this.group.position.x, 0, this.group.position.z);
     this.grazingZoneRevision += 1;
+  }
+
+  #spawnLoot(position) {
+    if (!this.gatherables?.spawn || !this.definition.loot) return 0;
+    const total = Math.max(0, Math.floor(this.definition.loot.quantity ?? 0));
+    for (let index = 0; index < total; index += 1) {
+      const angle = 0.35 + index * GOLDEN_ANGLE;
+      const radius = total === 1 ? 0 : 0.38 + (index % 2) * 0.08;
+      this.gatherables.spawn(this.definition.loot.itemId, {
+        x: position.x + Math.cos(angle) * radius,
+        z: position.z + Math.sin(angle) * radius,
+        quantity: 1,
+        yaw: angle
+      });
+    }
+    return total;
   }
 
   #chooseWanderTarget() {
