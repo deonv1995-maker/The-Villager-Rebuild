@@ -93,6 +93,55 @@ export function doorSideColliderSpecs({ x, z, yaw, bottomY, topY }) {
   }));
 }
 
+export function windowColliderSpecs({ x, z, yaw, baseY, topY }) {
+  const openingBottomY = Math.min(topY, baseY + WINDOW_BOTTOM);
+  const openingTopY = Math.min(topY, baseY + WINDOW_TOP);
+  const sideLength = (PHYSICAL_LOG.length - WINDOW_WIDTH) * 0.5;
+  const sideOffset = WINDOW_WIDTH * 0.5 + sideLength * 0.5;
+  const wallBasis = basis(yaw);
+  const specs = [];
+
+  if (openingBottomY > baseY - 0.01) {
+    specs.push({
+      x,
+      z,
+      halfX: PHYSICAL_LOG.halfLength,
+      halfZ: WALL_THICKNESS,
+      yaw,
+      bottomY: baseY - 0.02,
+      topY: openingBottomY
+    });
+  }
+
+  if (openingTopY > openingBottomY + 0.01 && sideLength > 0.08) {
+    for (const sign of [-1, 1]) {
+      specs.push({
+        x: x + wallBasis.xX * sideOffset * sign,
+        z: z + wallBasis.xZ * sideOffset * sign,
+        halfX: sideLength * 0.5,
+        halfZ: WALL_THICKNESS,
+        yaw,
+        bottomY: openingBottomY,
+        topY: openingTopY
+      });
+    }
+  }
+
+  if (topY > openingTopY + 0.01) {
+    specs.push({
+      x,
+      z,
+      halfX: PHYSICAL_LOG.halfLength,
+      halfZ: WALL_THICKNESS,
+      yaw,
+      bottomY: openingTopY,
+      topY
+    });
+  }
+
+  return specs;
+}
+
 export class WallPanelCustomizationSystem {
   constructor({ group, collision, physicalLogs }) {
     if (!group || !collision || !physicalLogs) {
@@ -417,14 +466,14 @@ export class WallPanelCustomizationSystem {
   }
 
   #createVariantCollisions(bay, variant) {
-    const common = {
-      yaw: bay.yaw,
-      bottomY: bay.baseY - 0.02,
-      topY: bay.topY
-    };
-
     if (variant === 'door') {
-      return doorSideColliderSpecs({ x: bay.x, z: bay.z, ...common }).map((spec, index) =>
+      return doorSideColliderSpecs({
+        x: bay.x,
+        z: bay.z,
+        yaw: bay.yaw,
+        bottomY: bay.baseY - 0.02,
+        topY: bay.topY
+      }).map((spec, index) =>
         this.collision.addBox({
           ...spec,
           type: 'placed-log',
@@ -433,15 +482,19 @@ export class WallPanelCustomizationSystem {
       );
     }
 
-    return [this.collision.addBox({
+    return windowColliderSpecs({
       x: bay.x,
       z: bay.z,
-      halfX: PHYSICAL_LOG.halfLength,
-      halfZ: WALL_THICKNESS,
-      ...common,
-      type: 'placed-log',
-      label: `wall-panel-window-${bay.key}`
-    })];
+      yaw: bay.yaw,
+      baseY: bay.baseY,
+      topY: bay.topY
+    }).map((spec, index) =>
+      this.collision.addBox({
+        ...spec,
+        type: 'placed-log',
+        label: `wall-panel-window-${bay.key}-${index}`
+      })
+    );
   }
 
   #removeCustomizationState(state) {
