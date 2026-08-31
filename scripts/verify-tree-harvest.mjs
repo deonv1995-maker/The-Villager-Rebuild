@@ -131,14 +131,16 @@ for (const requirement of [
 }
 
 for (const requirement of [
-  "root.name = `floor-supports-${builtId}`",
+  "root.name = 'construction-floor-foundations'",
+  'FOUNDATION_MERGE_RADIUS',
+  'this.terrain.setConstructionFloors?.',
   "fill.name = 'automatic-floor-fill'",
   "createPhysicalLogVisual('AutomaticFloorSupport')",
-  'this.terrain.heightAt(x, z)'
+  'this.terrain.baseHeightAt?.(x, z)'
 ]) {
-  assert(floorSupportSource.includes(requirement), `Automatic floor support path is missing contract: ${requirement}`);
+  assert(floorSupportSource.includes(requirement), `Shared automatic floor foundation is missing contract: ${requirement}`);
 }
-assert(!floorSupportSource.includes('FoundationTerrainSystem'), 'Rebuild floor adaptation must not restore archived terrain mutation');
+assert(!floorSupportSource.includes('FoundationTerrainSystem'), 'Rebuild floor adaptation must not restore the archived terrain-mutation system');
 
 for (const requirement of [
   'class RangerLogCarryPose',
@@ -177,4 +179,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Physical tree harvesting, level floor support, bounded roof construction, carry posture and unified mobile action contracts verified');
+console.log('Physical tree harvesting, coherent floor foundation support, bounded roof construction, carry posture and unified mobile action contracts verified');
