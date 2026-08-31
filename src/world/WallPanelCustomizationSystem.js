@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
+import {
+  CONSTRUCTION_DIMENSIONS,
+  PHYSICAL_LOG
+} from '../data/PhysicalLogDefinitions.js';
 import {
   createPhysicalLogVisual,
   createSplitHalfLogVisual
@@ -10,15 +13,22 @@ export const WALL_CUSTOMIZE_RANGE = 2.65;
 
 const WALL_STOREY_TOLERANCE = 0.58;
 const WALL_SIDE_SEARCH_DISTANCE = 2.25;
-const WALL_SECTION_STEP = 0.78;
-const WALL_COMPLETION_TOP_TOLERANCE = 0.08;
-const WALL_THICKNESS = 0.28;
-const DOOR_WIDTH = 1.55;
-const DOOR_HEIGHT = 1.8;
-const WINDOW_WIDTH = 1.35;
-const WINDOW_BOTTOM = 0.7;
-const WINDOW_TOP = 1.78;
 const TARGET_STOREY_TOLERANCE = 1.4;
+
+const {
+  wallThickness: WALL_THICKNESS,
+  wallSectionStep: WALL_SECTION_STEP,
+  wallSectionTopOffset: WALL_SECTION_TOP_OFFSET,
+  wallCompletionTopTolerance: WALL_COMPLETION_TOP_TOLERANCE,
+  wallTopTuck: WALL_TOP_TUCK,
+  wallRowRadius: WALL_ROW_RADIUS,
+  doorClearWidth: DOOR_WIDTH,
+  doorClearHeight: DOOR_HEIGHT,
+  openingJambOutset: OPENING_JAMB_OUTSET,
+  windowClearWidth: WINDOW_WIDTH,
+  windowSillHeight: WINDOW_BOTTOM,
+  windowHeadHeight: WINDOW_TOP
+} = CONSTRUCTION_DIMENSIONS;
 
 const snapYaw = yaw => {
   const snapped = Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
@@ -43,6 +53,11 @@ const basis = yaw => ({
   zX: Math.sin(yaw),
   zZ: Math.cos(yaw)
 });
+
+export function wallPanelTopY(pairTopY) {
+  if (!Number.isFinite(pairTopY)) return pairTopY;
+  return pairTopY - PHYSICAL_LOG.radius + WALL_TOP_TUCK;
+}
 
 export function resolveWallInwardYaw({ x, z, yaw, baseY, floors }) {
   const wallBasis = basis(yaw ?? 0);
@@ -75,7 +90,8 @@ export function resolveWallInwardYaw({ x, z, yaw, baseY, floors }) {
 export function wallPanelIsComplete(entries, pairTopY) {
   if (!entries?.length || !Number.isFinite(pairTopY)) return false;
   const maxTopY = Math.max(...entries.map(entry => entry.topY));
-  return maxTopY + WALL_SECTION_STEP > pairTopY + WALL_COMPLETION_TOP_TOLERANCE;
+  const targetTopY = wallPanelTopY(pairTopY);
+  return maxTopY + WALL_SECTION_STEP > targetTopY + WALL_COMPLETION_TOP_TOLERANCE;
 }
 
 export function doorSideColliderSpecs({ x, z, yaw, bottomY, topY }) {
@@ -175,6 +191,7 @@ export class WallPanelCustomizationSystem {
 
     for (const bay of nextBays) {
       this.#orientEntriesInward(bay);
+      this.#fitCompleteBayToFrame(bay);
       const state = this.customizations.get(bay.key);
       if (!state) continue;
       state.root.position.set(bay.x, bay.baseY, bay.z);
@@ -301,18 +318,19 @@ export class WallPanelCustomizationSystem {
         floors
       });
       const sortedEntries = [...entries].sort((left, right) => left.centerY - right.centerY);
-      const topY = Math.max(...sortedEntries.map(entry => entry.topY));
+      const entryTopY = Math.max(...sortedEntries.map(entry => entry.topY));
+      const complete = wallPanelIsComplete(sortedEntries, pair.topY);
       bays.push({
         key: `wall:${pair.anchorIds.join('-')}`,
         x: pair.x,
         z: pair.z,
         yaw,
         baseY: pair.baseY,
-        topY,
+        topY: complete ? wallPanelTopY(pair.topY) : entryTopY,
         pairTopY: pair.topY,
         anchorIds: pair.anchorIds,
         entries: sortedEntries,
-        complete: wallPanelIsComplete(sortedEntries, pair.topY)
+        complete
       });
     }
 
@@ -368,6 +386,25 @@ export class WallPanelCustomizationSystem {
     }
   }
 
+  #fitCompleteBayToFrame(bay) {
+    if (!bay.complete || !bay.entries.length) return;
+    const topEntry = bay.entries[bay.entries.length - 1];
+    const targetTopY = bay.topY;
+    if (!Number.isFinite(targetTopY) || targetTopY <= topEntry.centerY + 0.05) return;
+
+    const targetScaleY = Math.max(1, (targetTopY - topEntry.centerY) / WALL_SECTION_TOP_OFFSET);
+    topEntry.root.scale.y = targetScaleY;
+    if (Math.abs(topEntry.topY - targetTopY) <= 0.001) return;
+
+    const hadCollision = Boolean(topEntry.collisionHandle);
+    if (hadCollision) {
+      this.collision.removeObstacle(topEntry.collisionHandle);
+      topEntry.collisionHandle = null;
+    }
+    topEntry.topY = targetTopY;
+    if (hadCollision) topEntry.collisionHandle = this.#addOriginalEntryCollision(topEntry);
+  }
+
   #hideOriginalEntries(entries) {
     for (const entry of entries) {
       if (!entry.active) continue;
@@ -384,18 +421,22 @@ export class WallPanelCustomizationSystem {
       if (!entry.active) continue;
       entry.root.visible = true;
       if (entry.collisionHandle) continue;
-      entry.collisionHandle = this.collision.addBox({
-        x: entry.x,
-        z: entry.z,
-        halfX: PHYSICAL_LOG.halfLength,
-        halfZ: WALL_THICKNESS,
-        yaw: entry.yaw,
-        type: 'placed-log',
-        label: entry.root.name,
-        bottomY: entry.centerY - 0.28,
-        topY: entry.topY
-      });
+      entry.collisionHandle = this.#addOriginalEntryCollision(entry);
     }
+  }
+
+  #addOriginalEntryCollision(entry) {
+    return this.collision.addBox({
+      x: entry.x,
+      z: entry.z,
+      halfX: PHYSICAL_LOG.halfLength,
+      halfZ: WALL_THICKNESS,
+      yaw: entry.yaw,
+      type: 'placed-log',
+      label: entry.root.name,
+      bottomY: entry.centerY - WALL_THICKNESS,
+      topY: entry.topY
+    });
   }
 
   #createVariantRoot(bay, variant) {
@@ -408,7 +449,7 @@ export class WallPanelCustomizationSystem {
 
     const rows = this.#wallRows(bay);
     for (const rowY of rows) {
-      if (variant === 'door' && rowY < DOOR_HEIGHT) {
+      if (variant === 'door' && rowY <= DOOR_HEIGHT) {
         this.#addOpeningRow(root, rowY, DOOR_WIDTH);
       } else if (variant === 'window' && rowY >= WINDOW_BOTTOM && rowY <= WINDOW_TOP) {
         this.#addOpeningRow(root, rowY, WINDOW_WIDTH);
@@ -418,11 +459,14 @@ export class WallPanelCustomizationSystem {
     }
 
     if (variant === 'door') {
-      this.#addJamb(root, -DOOR_WIDTH * 0.5, 0, DOOR_HEIGHT);
-      this.#addJamb(root, DOOR_WIDTH * 0.5, 0, DOOR_HEIGHT);
+      const jambX = DOOR_WIDTH * 0.5 + OPENING_JAMB_OUTSET;
+      const jambTop = Math.min(DOOR_HEIGHT, bay.topY - bay.baseY);
+      this.#addJamb(root, -jambX, 0, jambTop);
+      this.#addJamb(root, jambX, 0, jambTop);
     } else if (variant === 'window') {
-      this.#addJamb(root, -WINDOW_WIDTH * 0.5, WINDOW_BOTTOM, WINDOW_TOP);
-      this.#addJamb(root, WINDOW_WIDTH * 0.5, WINDOW_BOTTOM, WINDOW_TOP);
+      const jambX = WINDOW_WIDTH * 0.5 + OPENING_JAMB_OUTSET;
+      this.#addJamb(root, -jambX, WINDOW_BOTTOM, WINDOW_TOP);
+      this.#addJamb(root, jambX, WINDOW_BOTTOM, WINDOW_TOP);
     }
 
     return root;
@@ -432,10 +476,17 @@ export class WallPanelCustomizationSystem {
     const unique = new Set();
     for (const entry of bay.entries) {
       for (const y of [entry.centerY - bay.baseY, entry.centerY + 0.5 - bay.baseY]) {
-        if (y < -0.05 || bay.baseY + y > bay.topY + 0.08) continue;
+        if (y < -0.05 || bay.baseY + y > bay.topY + WALL_COMPLETION_TOP_TOLERANCE) continue;
         unique.add(Math.round(y * 1000) / 1000);
       }
     }
+
+    if (bay.complete) {
+      const closureY = bay.topY - bay.baseY - WALL_ROW_RADIUS;
+      const highest = unique.size ? Math.max(...unique) : -Infinity;
+      if (closureY > highest + 0.05) unique.add(Math.round(closureY * 1000) / 1000);
+    }
+
     return [...unique].sort((left, right) => left - right);
   }
 
