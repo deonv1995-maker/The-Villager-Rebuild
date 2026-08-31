@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
+import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 
@@ -16,6 +17,7 @@ export class TreeHarvestSystem {
     this.treeBatches = this.treeRenderRegistry ? new Map() : this.#collectTreeBatches();
     this.treeVariantCount = Math.max(1, this.treeBatches.size);
     this.trees = this.#collectTrees();
+    this.hitFeedback = new HarvestHitFeedback({ group });
     this.#createIndicator();
   }
 
@@ -24,6 +26,7 @@ export class TreeHarvestSystem {
   }
 
   update(playerPosition, enabled = true) {
+    this.hitFeedback.update();
     if (!enabled) {
       this.target = null;
       this.indicator.visible = false;
@@ -82,6 +85,7 @@ export class TreeHarvestSystem {
       this.terrain.heightAt(tree.obstacle.x, tree.obstacle.z),
       tree.obstacle.z
     );
+    this.hitFeedback.emit(position, 'wood');
 
     if (remainingHits > 0) {
       return {
