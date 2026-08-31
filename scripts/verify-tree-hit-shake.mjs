@@ -22,7 +22,7 @@ for (const requirement of [
   'handle.mesh.getMatrixAt(handle.index, baseMatrix)',
   'Math.sin(progress * Math.PI * 5)',
   'setFromAxisAngle(state.axis, angle)',
-  'handle.mesh.setMatrixAt(handle.index, this.tempMatrix)',
+  'entry.handle.mesh.setMatrixAt(entry.handle.index, this.tempMatrix)',
   'entry.handle.mesh.setMatrixAt(entry.handle.index, entry.baseMatrix)'
 ]) {
   assert.ok(shakeSource.includes(requirement), `Tree shake presentation is missing contract: ${requirement}`);
