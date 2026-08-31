@@ -23,7 +23,7 @@ export class FloorSupportVisual {
     const basis = this.#basis(placement.yaw);
     const halfX = PHYSICAL_LOG.halfLength * 0.92;
     const halfZ = PHYSICAL_LOG.floorWidth * 0.42;
-    const undersideY = placement.baseY + 0.02;
+    const undersideY = placement.baseY - PHYSICAL_LOG.floorUndersideDepth;
 
     for (const sx of [-1, 1]) {
       for (const sz of [-1, 1]) {
