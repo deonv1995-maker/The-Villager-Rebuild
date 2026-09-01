@@ -97,20 +97,20 @@ const createFlexibleRope = ({ name, start, end, material, segments = 9, sag = 0.
   return line;
 };
 
-const updateFlexibleRope = (line, time, wind, slack, upperShift = null) => {
+const updateFlexibleRope = (line, time, wind, slack, endOverride = null) => {
   const { start, end, segments, sag } = line.userData.rope;
+  const dynamicEnd = endOverride ?? end;
   const attribute = line.geometry.getAttribute('position');
-  const shiftedEnd = upperShift ? end.clone().add(upperShift) : end;
 
   for (let index = 0; index <= segments; index += 1) {
     const t = index / segments;
     const arc = Math.sin(Math.PI * t);
-    const x = THREE.MathUtils.lerp(start.x, shiftedEnd.x, t)
+    const x = THREE.MathUtils.lerp(start.x, dynamicEnd.x, t)
       + Math.sin(time * 1.7 + t * 5.1) * wind * arc;
-    const y = THREE.MathUtils.lerp(start.y, shiftedEnd.y, t)
+    const y = THREE.MathUtils.lerp(start.y, dynamicEnd.y, t)
       - arc * (sag + slack * 0.8)
       + Math.cos(time * 1.35 + t * 4.2) * wind * 0.18 * arc;
-    const z = THREE.MathUtils.lerp(start.z, shiftedEnd.z, t)
+    const z = THREE.MathUtils.lerp(start.z, dynamicEnd.z, t)
       + Math.sin(time * 1.15 + t * 3.7) * wind * 0.45 * arc;
     attribute.setXYZ(index, x, y, z);
   }
@@ -258,15 +258,16 @@ export function createTitleShipVisual() {
   yard.rotation.z = Math.PI / 2;
   yard.position.y = 7 - breakY;
   mastUpperPivot.add(yard);
+  ship.add(mast);
 
-  const sailGeometry = new THREE.PlaneGeometry(5.8, 5.35, 8, 6);
+  const sailWidth = 5.8;
+  const sailHeight = 5.35;
+  const sailGeometry = new THREE.PlaneGeometry(sailWidth, sailHeight, 8, 6);
   const sailMesh = new THREE.Mesh(sailGeometry, sail);
   sailMesh.name = 'title-flexing-sail';
-  sailMesh.position.set(0, 4.25 - breakY, 0.15);
-  mastUpperPivot.add(sailMesh);
+  sailMesh.frustumCulled = false;
+  ship.add(sailMesh);
   const sailBasePositions = Float32Array.from(sailGeometry.getAttribute('position').array);
-
-  ship.add(mast);
 
   const riggingLines = [
     createFlexibleRope({
@@ -312,31 +313,90 @@ export function createTitleShipVisual() {
   crate.position.set(-1.25, 1.78, 3.15);
   ship.add(crate);
 
-  const updateRigging = (time, { danger = 0, impact = 0 } = {}) => {
+  const upperTopLeftLocal = new THREE.Vector3(-sailWidth * 0.5, 7 - breakY - 0.05, 0.15);
+  const upperTopRightLocal = new THREE.Vector3(sailWidth * 0.5, 7 - breakY - 0.05, 0.15);
+  const rigPortLocal = new THREE.Vector3(-0.08, 3.26, 0.04);
+  const rigStarboardLocal = new THREE.Vector3(0.08, 3.26, 0.04);
+  const rigForeLocal = new THREE.Vector3(0, 3.30, 0.02);
+  const topLeft = new THREE.Vector3();
+  const topRight = new THREE.Vector3();
+  const rigPort = new THREE.Vector3();
+  const rigStarboard = new THREE.Vector3();
+  const rigFore = new THREE.Vector3();
+  const bottomLeft = new THREE.Vector3();
+  const bottomRight = new THREE.Vector3();
+
+  const resolveUpperPoint = (source, target) => {
+    target.copy(source);
+    mastUpperPivot.localToWorld(target);
+    ship.worldToLocal(target);
+    return target;
+  };
+
+  const updateSailCloth = (time, danger, impact) => {
+    ship.updateMatrixWorld(true);
+    resolveUpperPoint(upperTopLeftLocal, topLeft);
+    resolveUpperPoint(upperTopRightLocal, topRight);
+
+    bottomLeft.set(-2.48 - impact * 0.10, 2.78 - impact * 0.22, -0.38 + impact * 0.10);
+    bottomRight.set(2.48 - impact * 0.22, 2.78 - impact * 0.38, -0.38 + impact * 0.18);
+
     const position = sailGeometry.getAttribute('position');
+    const halfWidth = sailWidth * 0.5;
+    const halfHeight = sailHeight * 0.5;
     const flutter = THREE.MathUtils.lerp(
       TITLE_SCENE.sailFlutterCalm,
       TITLE_SCENE.sailFlutterStorm,
       danger
     );
+
     for (let index = 0; index < position.count; index += 1) {
       const baseX = sailBasePositions[index * 3];
       const baseY = sailBasePositions[index * 3 + 1];
-      const baseZ = sailBasePositions[index * 3 + 2];
-      const edgeWeight = 0.45 + Math.abs(baseX) / 5.8;
-      const billow = Math.sin(time * (1.35 + danger * 2.7) + baseX * 0.9 + baseY * 0.42)
-        * flutter * edgeWeight;
-      const crossFlutter = Math.cos(time * (0.9 + danger * 2.1) + baseY * 1.1)
-        * flutter * 0.45;
-      position.setXYZ(index, baseX + crossFlutter * 0.08, baseY, baseZ + billow + danger * 0.06);
+      const u = THREE.MathUtils.clamp((baseX + halfWidth) / sailWidth, 0, 1);
+      const v = THREE.MathUtils.clamp((halfHeight - baseY) / sailHeight, 0, 1);
+
+      const topX = THREE.MathUtils.lerp(topLeft.x, topRight.x, u);
+      const topY = THREE.MathUtils.lerp(topLeft.y, topRight.y, u);
+      const topZ = THREE.MathUtils.lerp(topLeft.z, topRight.z, u);
+      const bottomX = THREE.MathUtils.lerp(bottomLeft.x, bottomRight.x, u);
+      const bottomY = THREE.MathUtils.lerp(bottomLeft.y, bottomRight.y, u);
+      const bottomZ = THREE.MathUtils.lerp(bottomLeft.z, bottomRight.z, u);
+      const interior = Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
+      const rowSlack = Math.sin(Math.PI * v);
+      const flutterWave = Math.sin(time * (1.45 + danger * 2.5) + u * 5.4 + v * 2.6);
+      const crossWave = Math.cos(time * (0.95 + danger * 1.9) + v * 4.1 - u * 2.8);
+
+      const x = THREE.MathUtils.lerp(topX, bottomX, v)
+        + crossWave * flutter * 0.18 * interior
+        - impact * rowSlack * (0.18 + u * 0.16);
+      const y = THREE.MathUtils.lerp(topY, bottomY, v)
+        - interior * (0.10 + danger * 0.12 + impact * 0.92)
+        - impact * rowSlack * 0.18;
+      const z = THREE.MathUtils.lerp(topZ, bottomZ, v)
+        + flutterWave * flutter * (0.55 + interior * 0.75)
+        + impact * interior * (0.18 + 0.26 * Math.sin(time * 2.3 + u * 3.1));
+
+      position.setXYZ(index, x, y, z);
     }
+
     position.needsUpdate = true;
     sailGeometry.computeVertexNormals();
+  };
+
+  const updateRigging = (time, { danger = 0, impact = 0 } = {}) => {
+    updateSailCloth(time, danger, impact);
+
+    ship.updateMatrixWorld(true);
+    resolveUpperPoint(rigPortLocal, rigPort);
+    resolveUpperPoint(rigStarboardLocal, rigStarboard);
+    resolveUpperPoint(rigForeLocal, rigFore);
 
     const wind = 0.028 + danger * 0.11;
-    const slack = impact * 0.75;
-    const upperShift = new THREE.Vector3(-impact * 1.15, -impact * 0.62, impact * 0.15);
-    riggingLines.forEach(line => updateFlexibleRope(line, time, wind, slack, upperShift));
+    const slack = impact * 0.82;
+    updateFlexibleRope(riggingLines[0], time, wind, slack, rigPort);
+    updateFlexibleRope(riggingLines[1], time, wind, slack, rigStarboard);
+    updateFlexibleRope(riggingLines[2], time, wind, slack + impact * 0.18, rigFore);
   };
 
   return {
