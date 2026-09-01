@@ -19,7 +19,9 @@ The normal physical build sequence is:
 
 A two-bay gable therefore has **six unique angled rafters**, because the two rafters at the middle station are shared, plus **two Raw ridge segments**. Once those are complete it exposes **four thatch panels**, two slopes per bay.
 
-The existing ROOF build mode remains backward-compatible and resolves the same shared member descriptors. A legacy ROOF member can satisfy either role, but ANGLE rafters and RAW ridges are now the intended physical construction flow.
+The **ROOF** build option is the player-facing ordered coordinator over the same shared member descriptors. While ROOF remains selected, each carried physical Log targets an available rafter first and is recorded canonically as an ANGLE member. Only after every available rafter in the local roof footprint is complete does ROOF expose ridge positions, recording those Logs canonically as RAW members. It cannot skip directly to a ridge.
+
+After the final physical roof member is placed, the selected ROOF workflow hands off to the inventory-backed thatch action. If at least 4 Grass is available, the next reachable open roof panel exposes **ROOF · THATCH**; each trigger covers exactly one panel and consumes 4 Grass. If Grass runs out, completed panels remain and the action reports the missing amount.
 
 ## Why
 
@@ -44,7 +46,10 @@ Thatch remains panel-based and depends on completed roof framing. Because a mult
 - Each recovered ridge segment stays approximately one physical Log length.
 - A two-bay gable resolves six unique ANGLE rafters, two RAW ridge segments and four thatch panels.
 - Shared middle rafters are never duplicated merely because they belong to two adjacent logical roof regions.
-- Legacy ROOF-mode members remain valid against the same geometry descriptors.
+- Existing saved legacy ROOF-mode members remain valid against the same geometry descriptors.
+- New ROOF-option placements are stored as canonical ANGLE rafters or RAW ridges.
+- ROOF never offers a ridge while an available rafter remains unfinished.
+- Thatch is applied one panel per action, costs 4 Grass per panel, and never consumes Grass before physical roof completion.
 - Region identity and orientation remain deterministic if frame-pair iteration order changes.
 - Gameplay, terrain, collision, PWA, world generation and deployment systems are not part of this change.
 
@@ -53,3 +58,13 @@ Thatch remains panel-based and depends on completed roof framing. Because a mult
 `scripts/verify-roof-topology.mjs` continues to cover one-bay closed-loop behavior, incomplete frames, two-bay station segmentation, physical ridge lengths, thatch panel count, deterministic ordering, and dense-build mobile query caps.
 
 `scripts/verify-roof-build-sequence.mjs` adds the structural interaction contract: floor-strip seams cannot create close frame posts, two bays resolve six unique rafter positions and two ridge positions, ANGLE members satisfy rafter slots, RAW members satisfy ridge slots, and thatch stays locked until the complete physical sequence is present.
+
+
+## Android acceptance: unified ROOF option
+
+1. Complete the frame and top perimeter beams, carry a Log, and select ROOF.
+2. Every green placement must target an angled eave-to-ridge member until all rafters are laced.
+3. Continue carrying Logs with ROOF selected; only then may green placements fill the top ridge, one physical RAW segment per bay.
+4. After the final ridge segment, move near an open slope panel. With at least 4 Grass, **ROOF · THATCH** must appear without requiring a separate roof mode.
+5. Trigger it repeatedly while moving between panels. Exactly one panel must receive thatch and exactly 4 Grass must be consumed each time.
+6. With fewer than 4 Grass, no panel is lost or partially covered; the action reports the missing Grass.
