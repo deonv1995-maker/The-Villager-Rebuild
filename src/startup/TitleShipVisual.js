@@ -117,6 +117,19 @@ const updateFlexibleRope = (line, time, wind, slack, endOverride = null) => {
   attribute.needsUpdate = true;
 };
 
+const createBeamBetween = ({ name, start, end, radius, material, radialSegments = 7 }) => {
+  const direction = end.clone().sub(start);
+  const length = direction.length();
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, length, radialSegments),
+    material
+  );
+  beam.name = name;
+  beam.position.copy(start).add(end).multiplyScalar(0.5);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
+  return beam;
+};
+
 const createSplinter = (material, height, radius, x, z, yaw = 0) => {
   const splinter = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 4), material);
   splinter.position.set(x, height * 0.45, z);
@@ -196,10 +209,31 @@ export function createTitleShipVisual() {
   keel.rotation.x = 0.025;
   hull.add(keel);
 
-  const bowsprit = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.13, 3.4, 7), darkWood);
-  bowsprit.rotation.x = Math.PI / 2;
-  bowsprit.position.set(0, 1.72, -7.95);
+  const bowRoot = new THREE.Vector3(0, 1.42, -6.45);
+  const bowTip = new THREE.Vector3(0, 1.72, -9.65);
+  const bowsprit = createBeamBetween({
+    name: 'title-ship-bowsprit',
+    start: bowRoot,
+    end: bowTip,
+    radius: 0.12,
+    material: darkWood
+  });
   hull.add(bowsprit);
+
+  const bowspritKnee = createBeamBetween({
+    name: 'title-ship-bowsprit-knee',
+    start: new THREE.Vector3(0, 1.0, -6.12),
+    end: new THREE.Vector3(0, 1.49, -7.08),
+    radius: 0.145,
+    material: darkWood
+  });
+  hull.add(bowspritKnee);
+
+  const bowspritCollar = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.035, 6, 10), trimWood);
+  bowspritCollar.name = 'title-ship-bowsprit-collar';
+  bowspritCollar.position.set(0, 1.48, -7.08);
+  bowspritCollar.rotation.x = 0.1;
+  hull.add(bowspritCollar);
 
   const aftDeck = new THREE.Mesh(new THREE.BoxGeometry(3.85, 0.72, 1.55), darkWood);
   aftDeck.position.set(0, 1.5, 4.35);
@@ -286,7 +320,7 @@ export function createTitleShipVisual() {
     }),
     createFlexibleRope({
       name: 'title-rig-forestay',
-      start: new THREE.Vector3(0, 1.72, -8.85),
+      start: new THREE.Vector3(0, 1.65, -8.85),
       end: new THREE.Vector3(0, 9.22, -0.58),
       material: rope,
       sag: 0.18
@@ -313,8 +347,16 @@ export function createTitleShipVisual() {
   crate.position.set(-1.25, 1.78, 3.15);
   ship.add(crate);
 
-  const upperTopLeftLocal = new THREE.Vector3(-sailWidth * 0.5, 7 - breakY - 0.05, 0.15);
-  const upperTopRightLocal = new THREE.Vector3(sailWidth * 0.5, 7 - breakY - 0.05, 0.15);
+  const upperTopLeftLocal = new THREE.Vector3(
+    -sailWidth * 0.5,
+    7 - breakY - 0.05,
+    TITLE_SCENE.sailMastClearance
+  );
+  const upperTopRightLocal = new THREE.Vector3(
+    sailWidth * 0.5,
+    7 - breakY - 0.05,
+    TITLE_SCENE.sailMastClearance
+  );
   const rigPortLocal = new THREE.Vector3(-0.08, 3.26, 0.04);
   const rigStarboardLocal = new THREE.Vector3(0.08, 3.26, 0.04);
   const rigForeLocal = new THREE.Vector3(0, 3.30, 0.02);
@@ -338,8 +380,9 @@ export function createTitleShipVisual() {
     resolveUpperPoint(upperTopLeftLocal, topLeft);
     resolveUpperPoint(upperTopRightLocal, topRight);
 
-    bottomLeft.set(-2.48 - impact * 0.10, 2.78 - impact * 0.22, -0.38 + impact * 0.10);
-    bottomRight.set(2.48 - impact * 0.22, 2.78 - impact * 0.38, -0.38 + impact * 0.18);
+    const lowerSheetZ = mast.position.z + TITLE_SCENE.sailMastClearance * 0.82;
+    bottomLeft.set(-2.48 - impact * 0.10, 2.78 - impact * 0.22, lowerSheetZ + impact * 0.07);
+    bottomRight.set(2.48 - impact * 0.22, 2.78 - impact * 0.38, lowerSheetZ + impact * 0.11);
 
     const position = sailGeometry.getAttribute('position');
     const halfWidth = sailWidth * 0.5;
@@ -349,6 +392,11 @@ export function createTitleShipVisual() {
       TITLE_SCENE.sailFlutterStorm,
       danger
     );
+    const windBow = THREE.MathUtils.lerp(
+      TITLE_SCENE.sailBowCalm,
+      TITLE_SCENE.sailBowStorm,
+      danger
+    ) * (1 - impact * 0.28);
 
     for (let index = 0; index < position.count; index += 1) {
       const baseX = sailBasePositions[index * 3];
@@ -374,8 +422,9 @@ export function createTitleShipVisual() {
         - interior * (0.10 + danger * 0.12 + impact * 0.92)
         - impact * rowSlack * 0.18;
       const z = THREE.MathUtils.lerp(topZ, bottomZ, v)
-        + flutterWave * flutter * (0.55 + interior * 0.75)
-        + impact * interior * (0.18 + 0.26 * Math.sin(time * 2.3 + u * 3.1));
+        + interior * windBow
+        + flutterWave * flutter * (0.16 + interior * 0.34)
+        + impact * interior * (0.05 + 0.09 * Math.sin(time * 2.3 + u * 3.1));
 
       position.setXYZ(index, x, y, z);
     }
