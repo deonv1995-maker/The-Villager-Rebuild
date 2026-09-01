@@ -6,6 +6,7 @@ import { WaterVisualSystem } from '../src/world/WaterVisualSystem.js';
 
 const terrain = new ExpandedIslandTerrainSystem(new THREE.Group());
 assert.equal(terrain.mainlandScale, 2, 'expanded mainland must retain the agreed 2x linear scale');
+assert.equal(terrain.chunkTerrainSegments, 18, 'terrain must expose one shared chunk tessellation for terrain and shallow water');
 assert.equal(terrain.coastRadiusAt(0) > 300, true, 'expanded east/west mainland radius must materially exceed the old island');
 assert.equal(terrain.coastRadiusAt(Math.PI) > 300, true, 'expanded west mainland radius must materially exceed the old island');
 assert.equal(terrain.coastRadiusAt(Math.PI / 2) < 160, true, 'Day-1 southern coast must remain a deep inlet rather than moving the tutorial inland');
@@ -82,12 +83,64 @@ const waterTerrain = {
 };
 const water = new WaterVisualSystem({ group: waterGroup, terrain: waterTerrain, chunks: waterChunks });
 water.create();
-assert.ok(waterGroup.getObjectByName('stylized-ocean-shimmer'), 'expanded water must retain animated ocean shimmer');
-assert.equal([...waterChunks.chunks.values()].some(chunk => chunk.root.children.some(child => child.name.startsWith('shallow-water-chunk-'))), true, 'shallow-water geometry must be owned by render chunks');
+const shimmer = waterGroup.getObjectByName('stylized-ocean-shimmer');
+assert.ok(shimmer, 'expanded water must retain animated ocean shimmer');
+const shallowMeshes = [...waterChunks.chunks.values()]
+  .flatMap(chunk => chunk.root.children)
+  .filter(child => child.name.startsWith('shallow-water-chunk-'));
+assert.equal(shallowMeshes.length > 0, true, 'shallow-water geometry must be owned by render chunks');
+assert.equal(shimmer.renderOrder > shallowMeshes[0].renderOrder, true, 'water shimmer and shallow tint must have deterministic transparent render ordering');
 const ranger = new THREE.Vector3(0, 0, 0);
 water.update(1 / 60, ranger);
 ranger.x = 0.6;
 water.update(1 / 60, ranger);
 assert.equal(water.ripples.some(ripple => ripple.visible), true, 'walking through shallow water must emit a visible Ranger ripple');
+
+// Regression for the Android shoreline flicker: the old shallow-water builder
+// sampled only the centre of a cell and then drew the entire flat cell. On a
+// sloped beach that let the translucent water quad extend through dry sand,
+// producing depth fighting as the camera moved. Every emitted shallow-water
+// vertex must now remain on the submerged side of the authoritative waterline.
+const shorelineGroup = new THREE.Group();
+const shorelineChunks = new WorldChunkSystem({ group: shorelineGroup, chunkSize: 12, renderDistance: 40 });
+const shorelineHeightAt = x => x * 0.12 - 0.04;
+const shorelineTerrain = {
+  extentX: 6,
+  extentZ: 6,
+  centerZ: 0,
+  waterLevel: 0,
+  chunkTerrainSegments: 12,
+  heightAt: x => shorelineHeightAt(x),
+  shallowWaterStrengthAt: x => {
+    const height = shorelineHeightAt(x);
+    if (height > 0.08) return 0;
+    const depth = Math.max(0, -height);
+    return depth > 1.28 ? 0 : 0.9;
+  },
+  isShallowWaterAt: () => true
+};
+const shorelineWater = new WaterVisualSystem({
+  group: shorelineGroup,
+  terrain: shorelineTerrain,
+  chunks: shorelineChunks
+});
+shorelineWater.create();
+const shorelineMeshes = [...shorelineChunks.chunks.values()]
+  .flatMap(chunk => chunk.root.children)
+  .filter(child => child.name.startsWith('shallow-water-chunk-'));
+assert.equal(shorelineMeshes.length > 0, true, 'shoreline regression must still produce visible shallow water');
+shorelineGroup.updateMatrixWorld(true);
+const worldVertex = new THREE.Vector3();
+for (const mesh of shorelineMeshes) {
+  const positions = mesh.geometry.getAttribute('position');
+  for (let index = 0; index < positions.count; index += 1) {
+    worldVertex.fromBufferAttribute(positions, index).applyMatrix4(mesh.matrixWorld);
+    assert.equal(
+      shorelineTerrain.heightAt(worldVertex.x, worldVertex.z) < shorelineTerrain.waterLevel,
+      true,
+      'shallow-water geometry must never extend onto dry shoreline terrain'
+    );
+  }
+}
 
 console.log('expanded world streaming contracts verified');
