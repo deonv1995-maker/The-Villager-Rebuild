@@ -3,6 +3,7 @@ const FLOOR_WIDTH = LOG_LENGTH / 3;
 const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12;
 const MAX_FLOOR_TERRAIN_ADAPTATION = 2.35;
 const FRAME_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.35;
+const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
 
 export const PHYSICAL_LOG = Object.freeze({
@@ -22,6 +23,7 @@ export const PHYSICAL_LOG = Object.freeze({
   angleSnapRange: 1.85,
   roofSnapRange: 3.15,
   frameSpacingTolerance: FRAME_SPACING_TOLERANCE,
+  frameLevelTolerance: FRAME_LEVEL_TOLERANCE,
   frameIsolationRadius: FRAME_ISOLATION_RADIUS,
   floorGroundClearance: 0.08,
   // Compatibility name retained for PhysicalLogSystem placement validation. It now

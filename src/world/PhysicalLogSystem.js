@@ -476,7 +476,7 @@ export class PhysicalLogSystem {
     const pairs = collectLocalRoofFramePairs(this.#activeBuilt('frame'), base, {
       length: PHYSICAL_LOG.length,
       spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
-      topTolerance: 0.3,
+      topTolerance: PHYSICAL_LOG.frameLevelTolerance,
       yawStep: PHYSICAL_LOG.yawStep,
       searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
       frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
@@ -603,7 +603,7 @@ export class PhysicalLogSystem {
         const dz = b.z - a.z;
         const spacing = Math.hypot(dx, dz);
         if (Math.abs(spacing - PHYSICAL_LOG.length) > PHYSICAL_LOG.frameSpacingTolerance) continue;
-        if (Math.abs(a.topY - b.topY) > 0.3) continue;
+        if (Math.abs(a.topY - b.topY) > PHYSICAL_LOG.frameLevelTolerance) continue;
         const anchorIds = [a.id, b.id].sort((left, right) => left - right);
         pairs.push({
           a,
