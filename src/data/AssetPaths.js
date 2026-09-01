@@ -38,6 +38,12 @@ export const ASSET_PATHS = Object.freeze({
       campfire: asset('ui/mobile/icon-campfire.svg'),
       jump: asset('ui/mobile/icon-jump.svg'),
       spear: asset('ui/mobile/icon-spear.svg'),
+      resources: Object.freeze({
+        stick: asset('ui/mobile/icon-resource-stick.svg'),
+        stone: asset('ui/mobile/icon-resource-stone.svg'),
+        grass: asset('ui/mobile/icon-resource-grass.svg'),
+        meat: asset('ui/mobile/icon-resource-meat.svg')
+      }),
       build: Object.freeze({
         raw: asset('ui/mobile/icon-build-raw.svg'),
         floor: asset('ui/mobile/icon-build-floor.svg'),
