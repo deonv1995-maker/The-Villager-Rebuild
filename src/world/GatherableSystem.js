@@ -321,7 +321,10 @@ export class GatherableSystem {
 
     let patchIndex = 0;
     for (const center of centers) {
-      if (center.entries.length < 3) continue;
+      if (center.entries.length < 3) {
+        for (const entry of center.entries) this.#suppressGrassEntry(entry);
+        continue;
+      }
       const patch = {
         id: `grass-patch-${patchIndex}`,
         x: center.x,
