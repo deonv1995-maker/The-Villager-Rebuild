@@ -17,8 +17,16 @@ export class WildlifePopulationSystem {
     this.#populate();
   }
 
+  get primaryActor() {
+    return this.actors[0] ?? null;
+  }
+
+  get group() {
+    return this.primaryActor?.group ?? null;
+  }
+
   get definition() {
-    return this.activeAttackActor?.definition ?? ANIMAL_DEFINITIONS.dayOneHunt;
+    return this.activeAttackActor?.definition ?? this.primaryActor?.definition ?? ANIMAL_DEFINITIONS.dayOneHunt;
   }
 
   async load() {
@@ -57,6 +65,12 @@ export class WildlifePopulationSystem {
 
   applyDamage(damage = 1, threatPosition = null) {
     return this.activeAttackActor?.applyDamage(damage, threatPosition) ?? null;
+  }
+
+  attack(playerPosition) {
+    const selected = this.#selectAttackActor(playerPosition, 2.8);
+    if (!selected) return null;
+    return selected.attack(playerPosition);
   }
 
   meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
@@ -98,7 +112,10 @@ export class WildlifePopulationSystem {
       if (actor.defeated) bySpecies[id].defeated += 1;
       else bySpecies[id].active += 1;
     }
+
+    const primaryState = this.primaryActor?.getState() ?? {};
     return {
+      ...primaryState,
       total: this.actors.length,
       bySpecies
     };
