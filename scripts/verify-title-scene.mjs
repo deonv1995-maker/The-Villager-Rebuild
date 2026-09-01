@@ -1,16 +1,40 @@
 import { readFileSync } from 'node:fs';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const readBinary = path => readFileSync(new URL(`../${path}`, import.meta.url));
+const readGlbAnimationNames = path => {
+  const buffer = readBinary(path);
+  if (buffer.toString('utf8', 0, 4) !== 'glTF') return [];
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const chunkLength = buffer.readUInt32LE(offset);
+    const chunkType = buffer.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    if (chunkType === 0x4e4f534a) {
+      const json = JSON.parse(buffer.toString('utf8', chunkStart, chunkStart + chunkLength).replace(/\u0000+$/g, '').trim());
+      return (json.animations ?? []).map(animation => animation?.name).filter(Boolean);
+    }
+    offset = chunkStart + chunkLength;
+  }
+  return [];
+};
+
 const titleScene = read('src/startup/TitleSceneApp.js');
 const islandBackdrop = read('src/startup/TitleIslandBackdrop.js');
 const shipVisual = read('src/startup/TitleShipVisual.js');
 const stormSystem = read('src/startup/TitleStormSystem.js');
 const arrivalIntro = read('src/startup/BeachArrivalIntroController.js');
 const rangerController = read('src/player/RangerController.js');
+const crawlPose = read('src/player/RangerCrawlPose.js');
 const config = read('src/startup/TitleSceneConfig.js');
 const main = read('src/main.js');
 const index = read('index.html');
 const css = read('src/title.css');
+const movementAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
+const nativeCrawlAnimations = movementAnimations.filter(name => /crawl/i.test(name));
+
+console.log(`INFO KayKit movement animations: ${movementAnimations.join(', ')}`);
+console.log(`INFO Native crawl animations: ${nativeCrawlAnimations.join(', ') || 'none; procedural exhausted crawl required'}`);
 
 const checks = [
   ['title scene uses production Ranger asset registry', titleScene.includes('ASSET_PATHS.ranger.model')],
@@ -37,10 +61,13 @@ const checks = [
   ['Ranger exposes an exclusive cinematic-control boundary', rangerController.includes('beginCinematic(driver)') && rangerController.includes('endCinematic(driver)') && rangerController.includes('setCinematicPose') && rangerController.includes('playCinematicAnimation')],
   ['arrival intro owns prone crawl rise dust and settle phases', arrivalIntro.includes("PRONE: 'prone'") && arrivalIntro.includes("CRAWL: 'crawl'") && arrivalIntro.includes("RISE: 'rise'") && arrivalIntro.includes("DUST: 'dust'") && arrivalIntro.includes("SETTLE: 'settle'")],
   ['arrival intro begins and releases Ranger cinematic ownership', arrivalIntro.includes('this.player.beginCinematic(this)') && arrivalIntro.includes('this.player.endCinematic(this)')],
-  ['arrival intro derives wet sand from the current island and water level', arrivalIntro.includes('#findWetSandStart') && arrivalIntro.includes('waterLevel') && arrivalIntro.includes('isPlayable')],
+  ['arrival begins at the established shallow-water spawn when it is already shoreline-safe', arrivalIntro.includes('spawnHeight >= waterLevel - 0.35') && arrivalIntro.includes('return { x: spawn.x, z: spawn.z }')],
   ['arrival starts Ranger face-down rather than on his back', arrivalIntro.includes('modelPitch: 1.48') && !arrivalIntro.includes('modelPitch: -1.48')],
-  ['arrival crawl is deliberately slow and ends at the authoritative spawn', arrivalIntro.includes('[PHASE.CRAWL]: 6.0') && arrivalIntro.includes('this.crawlEnd = { ...this.spawn }')],
-  ['arrival crawl handles native and fallback animation orientation separately', arrivalIntro.includes('nativeCrawlAnimation') && arrivalIntro.includes("['Walking_A']") && arrivalIntro.includes('fallbackPitch')],
+  ['arrival crawl is short and terrain-derived rather than returning all the way to spawn', arrivalIntro.includes('[PHASE.CRAWL]: 4.4') && arrivalIntro.includes('SHORT_CRAWL_MAX_DISTANCE = 2.6') && arrivalIntro.includes('#findShortDrySandEnd') && !arrivalIntro.includes('this.crawlEnd = { ...this.spawn }')],
+  ['arrival remains at the dry crawl endpoint for rise, dust and gameplay handoff', arrivalIntro.includes('x: this.crawlEnd.x') && arrivalIntro.includes('z: this.crawlEnd.z') && arrivalIntro.includes('this.player.endCinematic(this)')],
+  ['arrival never falls back to a rotated walking animation', !arrivalIntro.includes("['Walking_A']") && arrivalIntro.includes('new RangerCrawlPose')],
+  ['procedural crawl animates alternating arms and legs through the existing Ranger mixer', crawlPose.includes('QuaternionKeyframeTrack') && crawlPose.includes('mixer.stopAllAction') && crawlPose.includes("upperarm.l") && crawlPose.includes("lowerarm.l") && crawlPose.includes("upperleg.l") && crawlPose.includes("lowerleg.l")],
+  ['native crawl is preferred when available while procedural crawl remains a valid fallback', arrivalIntro.includes('nativeCrawlAnimation') && arrivalIntro.includes('proceduralCrawlAnimation') && (nativeCrawlAnimations.length > 0 || crawlPose.includes('Cinematic_Exhausted_Crawl'))],
   ['main boots title before gameplay', main.includes('new TitleSceneApp') && main.includes('onPlay: () => bootGameplay(titleScene)') && main.includes('async function bootGameplay')],
   ['main starts beach arrival after existing gameplay systems load', main.includes('new BeachArrivalIntroController') && main.includes('arrivalIntro.start()') && main.includes('window.__villager = game')],
   ['gameplay still uses existing GameApp', main.includes("import { GameApp } from './core/GameApp.js';")],
