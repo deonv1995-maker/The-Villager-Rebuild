@@ -1,21 +1,32 @@
 import * as THREE from 'three';
 import { RESOURCE_DEFINITIONS } from '../data/ResourceDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
+import { WORLD_RESOURCE_DISTRIBUTION } from '../data/WorldResourceDistribution.js';
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { createPhysicalLogVisual } from './PhysicalLogVisual.js';
 
 const INTERACTION_RADIUS = 2.4;
 
 export class GatherableSystem {
-  constructor({ scene, terrain }) {
+  constructor({ scene, terrain, ecology = terrain, scatter = null, grassField = null }) {
     this.scene = scene;
     this.terrain = terrain;
+    this.ecology = ecology === terrain && terrain?.terrain ? terrain.terrain : ecology;
+    this.scatter = scatter ?? terrain?.scatter ?? null;
+    this.grassField = grassField ?? terrain?.grass ?? null;
     this.group = new THREE.Group();
     this.group.name = 'day-one-gatherables';
     this.scene.add(this.group);
     this.items = [];
     this.target = null;
     this.nextSpawnId = 0;
+    this.randomState = WORLD_RESOURCE_DISTRIBUTION.seed >>> 0;
+    this.sharedVisuals = {
+      stickGeometry: new THREE.CylinderGeometry(0.075, 0.095, 1.05, 6),
+      stickMaterial: new THREE.MeshStandardMaterial({ color: 0x6b4930, roughness: 1 }),
+      stoneGeometry: new THREE.DodecahedronGeometry(0.34, 0),
+      stoneMaterial: new THREE.MeshStandardMaterial({ color: 0x77766f, roughness: 1, flatShading: true })
+    };
     this.scene.userData.services ??= {};
     this.scene.userData.services.gatherables = this;
     this.#createIndicator();
@@ -138,18 +149,112 @@ export class GatherableSystem {
 
   #populate() {
     WORLD_LAYOUT.dayOneResources.forEach(([resourceId, x, z], index) => {
-      const root = this.#createResourceVisual(resourceId, index);
-      root.position.set(x, this.#groundY(resourceId, x, z), z);
-      root.name = `gatherable-${resourceId}-${index}`;
-      this.group.add(root);
-      this.items.push({
+      this.#addInitialItem({
         id: `initial-${index}`,
         resourceId,
-        root,
-        active: true,
-        quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity
+        x,
+        z,
+        visualIndex: index,
+        yaw: 0
       });
     });
+    this.#populateDistributedResources();
+  }
+
+  #populateDistributedResources() {
+    const spawn = WORLD_LAYOUT.spawn;
+    const bounds = this.ecology.getScatterBounds?.(28) ?? {
+      halfX: 214,
+      halfZ: 150,
+      centerZ: -4
+    };
+    let visualIndex = 1000;
+
+    for (const [resourceId, config] of Object.entries(WORLD_RESOURCE_DISTRIBUTION.resources)) {
+      let placed = 0;
+      let attempts = 0;
+      const attemptLimit = config.count * 180;
+
+      while (placed < config.count && attempts < attemptLimit) {
+        attempts += 1;
+        const x = (this.#random() * 2 - 1) * bounds.halfX;
+        const z = (this.#random() * 2 - 1) * bounds.halfZ + bounds.centerZ;
+        const dxSpawn = x - spawn.x;
+        const dzSpawn = z - spawn.z;
+        if (dxSpawn * dxSpawn + dzSpawn * dzSpawn < WORLD_RESOURCE_DISTRIBUTION.starterExclusionRadius ** 2) continue;
+
+        const suitability = this.#resourceSuitabilityAt(resourceId, x, z, config);
+        if (suitability <= 0 || this.#random() > suitability) continue;
+        if (this.scatter?.isGrassClear && !this.scatter.isGrassClear(x, z, config.scatterClearance)) continue;
+        if (!this.#isFarEnoughFromExisting(x, z, config.minSpacing)) continue;
+
+        this.#addInitialItem({
+          id: `ambient-${resourceId}-${placed}`,
+          resourceId,
+          x,
+          z,
+          visualIndex,
+          yaw: this.#random() * Math.PI * 2
+        });
+        visualIndex += 1;
+        placed += 1;
+      }
+    }
+  }
+
+  #resourceSuitabilityAt(resourceId, x, z, config) {
+    if (!this.ecology.isPlayable?.(x, z, 4.2)) return 0;
+    if (this.ecology.isSandAt?.(x, z)) return 0;
+    const slope = this.ecology.slopeAt?.(x, z) ?? 0;
+    if (slope > config.maxSlope) return 0;
+
+    if (resourceId === 'grass') {
+      return THREE.MathUtils.clamp(this.ecology.grassDensityAt?.(x, z) ?? 0.55, 0, 0.94);
+    }
+
+    const forest = THREE.MathUtils.clamp(this.ecology.forestCoverAt?.(x, z) ?? 0.45, 0, 1);
+    if (resourceId === 'stick') {
+      const vegetation = this.ecology.vegetationSuitabilityAt?.(x, z, config.maxSlope) ?? 0.7;
+      return THREE.MathUtils.clamp(vegetation * (0.28 + forest * 0.72), 0, 0.92);
+    }
+
+    if (resourceId === 'stone') {
+      const slopeStrength = THREE.MathUtils.clamp(slope / Math.max(0.001, config.maxSlope), 0, 1);
+      const exposedGround = 0.38 + slopeStrength * 0.38 + (1 - forest) * 0.24;
+      return THREE.MathUtils.clamp(exposedGround, 0.18, 0.88);
+    }
+
+    return 0;
+  }
+
+  #isFarEnoughFromExisting(x, z, minSpacing) {
+    const minDistanceSq = minSpacing * minSpacing;
+    for (const item of this.items) {
+      const dx = x - item.root.position.x;
+      const dz = z - item.root.position.z;
+      if (dx * dx + dz * dz < minDistanceSq) return false;
+    }
+    return true;
+  }
+
+  #addInitialItem({ id, resourceId, x, z, visualIndex, yaw }) {
+    const root = this.#createResourceVisual(resourceId, visualIndex);
+    root.position.set(x, this.#groundY(resourceId, x, z), z);
+    root.rotation.y = yaw;
+    root.name = `gatherable-${resourceId}-${id}`;
+    this.group.add(root);
+    this.items.push({
+      id,
+      resourceId,
+      root,
+      active: true,
+      quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity
+    });
+  }
+
+  #random() {
+    this.randomState = (this.randomState * 1664525 + 1013904223) >>> 0;
+    return this.randomState / 0x100000000;
   }
 
   #groundY(resourceId, x, z) {
@@ -168,8 +273,7 @@ export class GatherableSystem {
 
   #createStick(index) {
     const group = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({ color: 0x6b4930, roughness: 1 });
-    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 1.05, 6), material);
+    const stick = new THREE.Mesh(this.sharedVisuals.stickGeometry, this.sharedVisuals.stickMaterial);
     stick.rotation.z = Math.PI / 2;
     stick.rotation.y = (index % 5) * 0.27;
     stick.position.y = 0.12;
@@ -181,10 +285,9 @@ export class GatherableSystem {
 
   #createStone(index) {
     const group = new THREE.Group();
-    const stone = new THREE.Mesh(
-      new THREE.DodecahedronGeometry(0.34 + (index % 2) * 0.05, 0),
-      new THREE.MeshStandardMaterial({ color: 0x77766f, roughness: 1, flatShading: true })
-    );
+    const stone = new THREE.Mesh(this.sharedVisuals.stoneGeometry, this.sharedVisuals.stoneMaterial);
+    const scale = 1 + (index % 2) * 0.14;
+    stone.scale.set(scale, 0.88 + (index % 3) * 0.08, scale * (0.9 + (index % 4) * 0.035));
     stone.position.y = 0.22;
     stone.rotation.set(0.12 * index, 0.34 * index, 0.08 * index);
     stone.castShadow = true;
@@ -195,14 +298,30 @@ export class GatherableSystem {
 
   #createGrass(index) {
     const group = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x5f964e,
-      roughness: 1,
-      flatShading: true,
+    const geometry = this.grassField?.geometry;
+    const material = this.grassField?.material;
+
+    if (geometry && material) {
+      const grass = new THREE.Mesh(geometry, material);
+      const width = 0.82 + (index % 5) * 0.055;
+      const height = 0.78 + (index % 4) * 0.07;
+      grass.scale.set(width, height, width);
+      grass.position.y = 0.01;
+      grass.rotation.y = (index * 0.37) % (Math.PI * 2);
+      grass.castShadow = false;
+      grass.receiveShadow = true;
+      group.add(grass);
+      return group;
+    }
+
+    const materialFallback = new THREE.MeshStandardMaterial({
+      color: 0x6fa957,
+      roughness: 0.96,
+      metalness: 0,
       side: THREE.DoubleSide
     });
     for (let blade = 0; blade < 6; blade += 1) {
-      const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.58 + (blade % 3) * 0.08, 4), material);
+      const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.58 + (blade % 3) * 0.08, 4), materialFallback);
       const angle = blade / 6 * Math.PI * 2 + index * 0.17;
       mesh.position.set(Math.cos(angle) * 0.13, 0.25, Math.sin(angle) * 0.13);
       mesh.rotation.z = (blade % 2 ? 1 : -1) * 0.13;
