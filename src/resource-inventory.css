@@ -1,0 +1,46 @@
+.inventory-strip {
+  align-items: center;
+  width: 52px;
+  min-width: 0;
+  padding: 6px;
+  gap: 5px;
+}
+
+.inventory-row {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 34px;
+  gap: 0;
+  border: 1px solid rgba(225, 207, 151, .24);
+  border-radius: 9px;
+  background: rgba(35, 48, 39, .68);
+}
+
+.inventory-resource-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  pointer-events: none;
+  filter: brightness(.92) sepia(.12);
+}
+
+.inventory-row strong {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border: 1px solid rgba(225, 207, 151, .34);
+  border-radius: 999px;
+  background: rgba(20, 39, 29, .96);
+  color: #f0cf76;
+  font-size: 9px;
+  line-height: 1;
+  text-align: center;
+}

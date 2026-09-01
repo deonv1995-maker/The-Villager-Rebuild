@@ -45,6 +45,7 @@ export class MobileHud {
 
     const ui = ASSET_PATHS.ui.mobile;
     this.buildIcons = ui.build;
+    this.resourceIcons = ui.resources;
     this.toolIcons = Object.freeze({
       hand: ui.hand,
       spear: ui.spear,
@@ -146,11 +147,18 @@ export class MobileHud {
     this.inventoryElement.replaceChildren(...visible.map(entry => {
       const row = document.createElement('div');
       row.className = 'inventory-row';
-      const label = document.createElement('span');
-      label.textContent = entry.label;
+      row.dataset.resource = entry.id;
+      row.setAttribute('aria-label', `${entry.label}: ${entry.quantity}`);
+      row.title = `${entry.label}: ${entry.quantity}`;
+      const icon = document.createElement('img');
+      icon.className = 'inventory-resource-icon';
+      icon.src = this.resourceIcons[entry.id] ?? this.toolIcons.hand;
+      icon.alt = '';
+      icon.setAttribute('aria-hidden', 'true');
       const quantity = document.createElement('strong');
       quantity.textContent = String(entry.quantity);
-      row.append(label, quantity);
+      quantity.setAttribute('aria-hidden', 'true');
+      row.append(icon, quantity);
       return row;
     }));
   }
