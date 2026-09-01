@@ -93,7 +93,7 @@ export class PhysicalLogSystem {
   getBuildState() {
     return {
       carrying: this.isCarrying(),
-      mode: placedMode,
+      mode: this.buildMode,
       label: LOG_BUILD_LABELS[this.buildMode],
       modes: [...LOG_BUILD_MODES],
       previewValid: this.previewValid,
@@ -202,7 +202,7 @@ export class PhysicalLogSystem {
     const collisionHandle = this.#registerCollision(placedMode, placement, root);
     const built = {
       id: this.nextBuiltId,
-      mode: this.buildMode,
+      mode: placedMode,
       root,
       collisionHandle,
       supportRoot: null,
