@@ -75,6 +75,7 @@ assert.equal(WILDLIFE_POPULATION.species.deer.habitat, 'open-field');
 assert.equal(WILDLIFE_POPULATION.species.rabbit.habitat, 'forest');
 assert.equal(WILDLIFE_POPULATION.species.fox.habitat, 'forest');
 assert.equal(WILDLIFE_POPULATION.species.wolf.habitat, 'deep-forest');
+assert.ok(WILDLIFE_POPULATION.respawnClearanceRadius >= 40, 'wildlife respawn must keep a substantial off-screen player clearance');
 
 const ecology = {
   getScatterBounds: () => ({ halfX: 230, halfZ: 180, centerZ: -4 }),
@@ -112,4 +113,27 @@ assert.ok(deerActors.some((actor, index) => deerActors.slice(index + 1).some(oth
 const rabbits = population.actors.filter(actor => actor.definition.id === 'rabbit');
 assert.ok(rabbits.some((actor, index) => rabbits.slice(index + 1).some(other => actor.group.position.distanceTo(other.group.position) <= 7)), 'rabbits must spawn in forest clusters');
 
-console.log(`Wildlife ecology verified: ${state.total} animals — ${state.bySpecies.wild_pig.total} pigs, ${state.bySpecies.deer.total} deer, ${state.bySpecies.rabbit.total} rabbits, ${state.bySpecies.fox.total} foxes, ${state.bySpecies.wolf.total} wolf.`);
+const rabbitVictim = rabbits[0];
+const rabbitHome = rabbitVictim.group.position.clone();
+const victimInstanceId = rabbitVictim.instanceId;
+rabbitVictim.applyDamage(1, new THREE.Vector3(rabbitHome.x + 3, 0, rabbitHome.z));
+population.update(0, rabbitHome, false, 0);
+assert.equal(population.getState().bySpecies.rabbit.respawning, 1, 'a defeated wildlife slot must enter the respawn queue');
+
+const rabbitRespawnMax = WILDLIFE_POPULATION.species.rabbit.respawnDelay[1];
+population.update(rabbitRespawnMax + 1, rabbitHome, false, 0);
+assert.equal(
+  population.actors.some(actor => actor.instanceId.startsWith(`${victimInstanceId}-r`)),
+  false,
+  'wildlife must not respawn while the Ranger remains near the habitat slot'
+);
+
+const farRanger = new THREE.Vector3(rabbitHome.x + WILDLIFE_POPULATION.respawnClearanceRadius + 80, 0, rabbitHome.z + 80);
+population.update(WILDLIFE_POPULATION.respawnRetryDelay + 0.1, farRanger, false, 0);
+const replacementRabbit = population.actors.find(actor => actor.instanceId.startsWith(`${victimInstanceId}-r`));
+assert.ok(replacementRabbit, 'defeated wildlife must repopulate once its timer expires and the Ranger leaves the area');
+assert.equal(replacementRabbit.defeated, false, 'respawn replacement must be a fresh living actor');
+assert.equal(population.getState().bySpecies.rabbit.active, WILDLIFE_POPULATION.species.rabbit.count, 'respawn must restore the configured species population instead of growing beyond it');
+assert.equal(population.actors.length, expectedTotal, 'respawn must replace population slots rather than creating unbounded new actors');
+
+console.log(`Wildlife ecology verified: ${state.total} renewable animals — ${state.bySpecies.wild_pig.total} pigs, ${state.bySpecies.deer.total} deer, ${state.bySpecies.rabbit.total} rabbits, ${state.bySpecies.fox.total} foxes, ${state.bySpecies.wolf.total} wolf.`);
