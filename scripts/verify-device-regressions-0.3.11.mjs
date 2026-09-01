@@ -120,8 +120,14 @@ roofSystem.update(playerPosition, facingDirection);
 assert.equal(roofSystem.previewValid, true, 'Complete frame perimeter must expose a valid first roof slot');
 const firstPreview = { ...roofSystem.previewPlacement };
 assert.ok(roofSystem.build(null, playerPosition, facingDirection), 'First roof member must build');
-const firstRoof = roofSystem.builtLogs.find(entry => entry.active && entry.mode === 'roof');
+const firstRoof = roofSystem.builtLogs.find(entry => entry.active && entry.id === framePoints.length);
 assert.ok(firstRoof, 'First roof member must be recorded');
+assert.equal(
+  firstRoof.mode,
+  'angle',
+  'The selected ROOF workflow must record its first physical member canonically as an ANGLE rafter'
+);
+assert.equal(firstRoof.roofRole, 'rafter', 'The first ordered ROOF member must be a rafter');
 
 firstRoof.roofRegionKey = 'stale-region-after-topology-change';
 firstRoof.roofKey = 'stale-slot-after-topology-change';
