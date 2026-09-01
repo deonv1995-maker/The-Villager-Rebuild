@@ -1,6 +1,24 @@
 import { readFileSync } from 'node:fs';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+const readBinary = path => readFileSync(new URL(`../${path}`, import.meta.url));
+const readGlbAnimationNames = path => {
+  const buffer = readBinary(path);
+  if (buffer.toString('utf8', 0, 4) !== 'glTF') return [];
+  let offset = 12;
+  while (offset + 8 <= buffer.length) {
+    const chunkLength = buffer.readUInt32LE(offset);
+    const chunkType = buffer.readUInt32LE(offset + 4);
+    const chunkStart = offset + 8;
+    if (chunkType === 0x4e4f534a) {
+      const json = JSON.parse(buffer.toString('utf8', chunkStart, chunkStart + chunkLength).replace(/\u0000+$/g, '').trim());
+      return (json.animations ?? []).map(animation => animation?.name).filter(Boolean);
+    }
+    offset = chunkStart + chunkLength;
+  }
+  return [];
+};
+
 const titleScene = read('src/startup/TitleSceneApp.js');
 const islandBackdrop = read('src/startup/TitleIslandBackdrop.js');
 const shipVisual = read('src/startup/TitleShipVisual.js');
@@ -11,6 +29,9 @@ const config = read('src/startup/TitleSceneConfig.js');
 const main = read('src/main.js');
 const index = read('index.html');
 const css = read('src/title.css');
+const movementAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
+
+console.log(`INFO KayKit movement animations: ${movementAnimations.join(', ')}`);
 
 const checks = [
   ['title scene uses production Ranger asset registry', titleScene.includes('ASSET_PATHS.ranger.model')],
