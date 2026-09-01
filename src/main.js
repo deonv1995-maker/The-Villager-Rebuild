@@ -4,6 +4,7 @@ import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
+import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
 import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
@@ -47,12 +48,18 @@ async function bootGameplay(titleScene = null) {
     game.structureInteriorOcclusion = structureInteriorOcclusion;
 
     window.__villager = game;
-    setStatus('DAY 1 · GATHER A STICK + STONE');
+
+    const arrivalIntro = new BeachArrivalIntroController({ game, setStatus });
+    game.arrivalIntro = arrivalIntro;
+    const arrivalStarted = arrivalIntro.start();
+    if (!arrivalStarted) setStatus('DAY 1 · GATHER A STICK + STONE');
+
     document.body.classList.remove('title-scene-active');
     titleScene?.releaseTransition();
   } catch (error) {
     console.error('[BOOT]', error);
     document.body.classList.remove('title-scene-active');
+    document.body.classList.remove('arrival-intro-active', 'arrival-intro-revealing');
     titleScene?.releaseTransition();
     setStatus(`FOUNDATION 0.3.8 · ERROR · ${error?.message ?? error}`, true);
   }
