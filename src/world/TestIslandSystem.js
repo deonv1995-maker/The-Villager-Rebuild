@@ -127,7 +127,6 @@ export class TestIslandSystem {
       this.#removeObsoleteUnderstory();
       chunkedTreeCount = this.chunks.splitTreeBatches(this.group);
       this.chunks.adoptNamedObjects(this.group, object => (
-        object.name.startsWith('terrain-face-dressing-') ||
         object.name.startsWith('forest-rock-')
       ));
       this.treeOcclusion = new TreeOcclusionSystem({

@@ -81,25 +81,22 @@ export class EnvironmentScatterSystem {
     this.#reserveGameplayRoute();
 
     const loader = new GLTFLoader();
-    const [treeBroad, treeTall, forestRock, cliff, cliffRock] = await Promise.all([
+    const [treeBroad, treeTall, forestRock, cliffRock] = await Promise.all([
       loader.loadAsync(ASSET_PATHS.forest.treeBroad),
       loader.loadAsync(ASSET_PATHS.forest.treeTall),
       loader.loadAsync(ASSET_PATHS.forest.rock),
-      loader.loadAsync(ASSET_PATHS.cliffs.large),
       loader.loadAsync(ASSET_PATHS.cliffs.rock)
     ]);
 
     const assets = {
       trees: [treeBroad.scene, treeTall.scene],
       forestRock: forestRock.scene,
-      cliff: cliff.scene,
       cliffRock: cliffRock.scene
     };
-    for (const template of [...assets.trees, assets.forestRock, assets.cliff, assets.cliffRock]) {
+    for (const template of [...assets.trees, assets.forestRock, assets.cliffRock]) {
       this.#prepareStaticTemplate(template);
     }
 
-    this.#placeCliffFaceDressing(assets);
     this.#placeForest(assets);
     this.#placeUnderstory();
     return true;
@@ -138,76 +135,6 @@ export class EnvironmentScatterSystem {
     if (strength <= 0.08) return true;
     const effectiveWidth = width * (0.72 + strength * 0.28);
     return Math.abs(x - this.terrain.pathCenterX(z)) >= effectiveWidth;
-  }
-
-  #placeCliffFaceDressing({ cliff }) {
-    cliff.updateWorldMatrix(true, true);
-    const sourceBox = new THREE.Box3().setFromObject(cliff);
-    const sourceSize = new THREE.Vector3();
-    sourceBox.getSize(sourceSize);
-
-    const facePieces = [
-      [-43, 2, 10.5, 5.1, 4.2, 1.48],
-      [-47, 25, 7.4, 7.3, 3.3, 1.34],
-      [-52, -18, 8.6, 4.2, 5.8, 1.7],
-      [21, -43, 5.2, 4.4, 8.5, 0.08],
-      [31, 19, 4.7, 5.6, 7.1, -0.02],
-      [22, -8, 4.1, 5.2, 6.7, 0.03],
-      [49, -48, 9.6, 5.6, 3.9, -0.12],
-      [71, -73, 6.2, 6.8, 4.1, -0.2],
-      [76, -52, 7.7, 4.5, 5.2, -0.04],
-      [74, 22, 7.8, 4.7, 4.6, -0.33],
-      [92, 3, 5.3, 6.5, 4.2, -0.42],
-      [105, 41, 8.4, 5.5, 3.7, -0.5]
-    ];
-
-    facePieces.forEach(([x, z, sx, sy, sz, yaw], index) => {
-      if (!this.terrain.isPlayable(x, z, 2.5)) return;
-      const instance = cliff.clone(true);
-      instance.scale.set(sx, sy, sz);
-      instance.rotation.y = yaw;
-      instance.rotation.z = (index % 3 - 1) * 0.08;
-      instance.position.set(x, this.terrain.heightAt(x, z) - sy * 0.58, z);
-      instance.name = `terrain-face-dressing-${index}`;
-      this.group.add(instance);
-
-      instance.updateWorldMatrix(true, true);
-      const worldBox = new THREE.Box3().setFromObject(instance);
-      const worldCenter = new THREE.Vector3();
-      const worldSize = new THREE.Vector3();
-      worldBox.getCenter(worldCenter);
-      worldBox.getSize(worldSize);
-
-      // Broad cliff meshes need a broad collider footprint. Use an oriented
-      // box derived from the source mesh instead of a circular blocker so the
-      // visible wall is solid without creating large invisible corner walls.
-      const halfX = Math.max(0.65, sourceSize.x * sx * 0.46);
-      const halfZ = Math.max(0.65, sourceSize.z * sz * 0.46);
-      this.collision.addBox({
-        x: worldCenter.x,
-        z: worldCenter.z,
-        halfX,
-        halfZ,
-        yaw,
-        type: 'cliff-face',
-        label: instance.name,
-        bottomY: worldBox.min.y,
-        topY: worldBox.max.y,
-        standable: true,
-        supportHalfX: halfX * 0.72,
-        supportHalfZ: halfZ * 0.72,
-        supportY: worldBox.max.y - Math.min(0.12, worldSize.y * 0.025),
-        stepHeight: 0.56
-      });
-
-      this.reservations.add({
-        x,
-        z,
-        radius: Math.max(2.8, Math.min(sx, sz) * 0.55),
-        grassRadius: Math.max(1.3, Math.min(sx, sz) * 0.32),
-        type: 'cliff-face'
-      });
-    });
   }
 
   #registerStandableObject(object, type, reserveScale = 1) {
