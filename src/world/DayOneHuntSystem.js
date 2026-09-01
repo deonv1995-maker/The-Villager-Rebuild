@@ -10,19 +10,22 @@ export class DayOneHuntSystem {
     scene,
     terrain,
     gatherables = scene.userData?.services?.gatherables ?? null,
-    definition = ANIMAL_DEFINITIONS.dayOneHunt
+    definition = ANIMAL_DEFINITIONS.dayOneHunt,
+    center = WORLD_LAYOUT.huntAnimal,
+    instanceId = 'day-one'
   }) {
     this.scene = scene;
     this.terrain = terrain;
     this.gatherables = gatherables;
     this.definition = definition;
+    this.instanceId = instanceId;
     this.health = definition.maxHealth;
     this.defeated = false;
     this.harvested = false;
     this.lootSpawned = 0;
     this.time = 0;
     this.hitFlash = 0;
-    this.center = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
+    this.center = new THREE.Vector3(center.x, 0, center.z);
     this.grazingZoneRevision = 0;
     this.lastPosition = new THREE.Vector3();
     this.lastPlayerPosition = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
@@ -39,7 +42,7 @@ export class DayOneHuntSystem {
 
     this.presentation = new DayOneAnimalPresentation({ definition });
     this.group = this.presentation.root;
-    this.group.name = `day-1-${definition.id}`;
+    this.group.name = `wild-animal-${definition.id}-${instanceId}`;
     this.group.position.set(
       this.center.x,
       this.terrain.heightAt(this.center.x, this.center.z),
@@ -50,11 +53,11 @@ export class DayOneHuntSystem {
     this.scene.add(this.group);
 
     this.targetRing = this.#createRing(0xe6a94d, 0.86, 1.08);
-    this.targetRing.name = 'hunt-auto-lock-target';
+    this.targetRing.name = `hunt-auto-lock-target-${instanceId}`;
     this.scene.add(this.targetRing);
 
     this.harvestRing = this.#createRing(0xffe29a, 0.9, 1.12);
-    this.harvestRing.name = 'hunt-harvest-target';
+    this.harvestRing.name = `hunt-harvest-target-${instanceId}`;
     this.scene.add(this.harvestRing);
   }
 
@@ -62,7 +65,7 @@ export class DayOneHuntSystem {
     try {
       return await this.presentation.load();
     } catch (error) {
-      console.error('[DAY ONE ANIMAL FALLBACK]', error);
+      console.error('[WILD ANIMAL PRESENTATION FALLBACK]', this.instanceId, error);
       return this.presentation.assetMode;
     }
   }
@@ -82,11 +85,8 @@ export class DayOneHuntSystem {
       }
 
       this.lastPosition.copy(this.group.position);
-      if (this.behavior === 'flee') {
-        this.#updateFlee(dt);
-      } else {
-        this.#updateWander(dt);
-      }
+      if (this.behavior === 'flee') this.#updateFlee(dt);
+      else this.#updateWander(dt);
       movedDistance = Math.hypot(
         this.group.position.x - this.lastPosition.x,
         this.group.position.z - this.lastPosition.z
@@ -109,14 +109,18 @@ export class DayOneHuntSystem {
     }
 
     const target = armed ? this.getAttackTarget(playerPosition, range) : null;
-    this.targetRing.visible = Boolean(target);
-    if (target) this.#positionRing(this.targetRing);
+    this.setAttackIndicator(Boolean(target));
 
     const harvestTarget = this.getHarvestTarget(playerPosition);
     this.harvestRing.visible = Boolean(harvestTarget);
     if (harvestTarget) this.#positionRing(this.harvestRing);
 
     return target;
+  }
+
+  setAttackIndicator(visible) {
+    this.targetRing.visible = Boolean(visible && !this.defeated);
+    if (this.targetRing.visible) this.#positionRing(this.targetRing);
   }
 
   alertFrom(threatPosition, { cause = 'danger', duration = this.definition.fleeDuration } = {}) {
@@ -139,6 +143,7 @@ export class DayOneHuntSystem {
     if (distance > range) return null;
 
     return {
+      instanceId: this.instanceId,
       animalId: this.definition.id,
       label: this.definition.label,
       health: this.health,
@@ -177,6 +182,7 @@ export class DayOneHuntSystem {
     }
 
     return {
+      instanceId: this.instanceId,
       animalId: this.definition.id,
       label: this.definition.label,
       damage,
@@ -208,6 +214,7 @@ export class DayOneHuntSystem {
 
     return {
       type: 'carcass',
+      instanceId: this.instanceId,
       animalId: this.definition.id,
       label: this.definition.loot.label,
       icon: 'hand',
@@ -224,6 +231,7 @@ export class DayOneHuntSystem {
     this.targetRing.visible = false;
     this.scene.remove(this.group);
     return {
+      instanceId: this.instanceId,
       animalId: this.definition.id,
       itemId: this.definition.loot.itemId,
       label: this.definition.loot.label,
@@ -233,6 +241,7 @@ export class DayOneHuntSystem {
 
   getState() {
     return {
+      instanceId: this.instanceId,
       animalId: this.definition.id,
       label: this.definition.label,
       health: this.health,
@@ -272,7 +281,7 @@ export class DayOneHuntSystem {
     const step = Math.min(distance, this.definition.wanderSpeed * Math.max(0, dt));
     const x = this.group.position.x + (dx / distance) * step;
     const z = this.group.position.z + (dz / distance) * step;
-    this.group.position.set(x, this.terrain.heightAt(x, z), z);
+    this.#moveGrounded(x, z);
   }
 
   #updateFlee(dt) {
@@ -310,7 +319,7 @@ export class DayOneHuntSystem {
     const step = this.definition.fleeSpeed * Math.max(0, dt);
     const x = this.group.position.x + this.tempDirection.x * step;
     const z = this.group.position.z + this.tempDirection.z * step;
-    this.group.position.set(x, this.terrain.heightAt(x, z), z);
+    this.#moveGrounded(x, z);
 
     const threatDistance = this.#distanceTo(this.threatPosition);
     if (this.fleeRemaining <= 0 && threatDistance >= this.definition.safeDistance) {
@@ -321,6 +330,26 @@ export class DayOneHuntSystem {
       this.wanderPause = this.definition.wanderPauseMin;
       this.#chooseWanderTarget();
     }
+  }
+
+  #moveGrounded(x, z) {
+    const playable = this.terrain.isPlayable?.(x, z, 2.4) ?? true;
+    const slope = this.terrain.slopeAt?.(x, z) ?? 0;
+    if (playable && slope <= 0.72) {
+      this.group.position.set(x, this.terrain.heightAt(x, z), z);
+      return true;
+    }
+
+    const dx = this.center.x - this.group.position.x;
+    const dz = this.center.z - this.group.position.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0.001) return false;
+    const fallbackStep = Math.min(0.45, length);
+    const fallbackX = this.group.position.x + (dx / length) * fallbackStep;
+    const fallbackZ = this.group.position.z + (dz / length) * fallbackStep;
+    if (!(this.terrain.isPlayable?.(fallbackX, fallbackZ, 1.6) ?? true)) return false;
+    this.group.position.set(fallbackX, this.terrain.heightAt(fallbackX, fallbackZ), fallbackZ);
+    return true;
   }
 
   #establishGrazingZone() {
