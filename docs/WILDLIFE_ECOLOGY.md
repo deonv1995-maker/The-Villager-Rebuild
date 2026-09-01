@@ -51,7 +51,7 @@ The total live-plus-respawning slot budget therefore remains exactly 37. Repeate
 
 Shared states now include wandering, grazing, scavenging, prowling, fleeing, hunting, chasing and attacking. Deer/rabbits remain prey around the Ranger. Foxes select nearby rabbits as prey and trigger rabbit flight while pursuing them. This pass deliberately does not permanently consume rabbits through autonomous predation so a long session cannot silently empty the forest population.
 
-The wolf is territorial: entering its configured aggro radius starts a chase, and entering attack range creates a wildlife attack event. The Ranger integration applies collision-resolved knockback/stagger feedback rather than inventing a separate health/survival-stat system before that system exists as an authoritative gameplay layer.
+The wolf is territorial: entering its configured aggro radius starts a chase, and entering attack range creates a wildlife attack event. The chase enforces a species-owned stand-off radius so the adult wolf stops in front of the Ranger instead of pursuing the Ranger's centre point and visually clipping through the character. The Ranger integration applies collision-resolved knockback/stagger feedback rather than inventing a separate health/survival-stat system before that system exists as an authoritative gameplay layer.
 
 Social animals intentionally do not share a synchronized wander clock. `WildAnimalActor` derives a deterministic per-instance motion phase from the species and population-slot instance ID, then offsets initial pauses, wander targets and presentation phase. This preserves reproducible population behavior while preventing deer and rabbit groups from marching, stopping and animating in lockstep.
 

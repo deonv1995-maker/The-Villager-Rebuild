@@ -305,8 +305,8 @@ export class DayOneAnimalPresentation {
       const ear = rig.ears[index];
       const side = index === 0 ? -1 : 1;
       const idleTwitch = Math.sin(this.phase * 0.76 + index * 0.9) * 0.07;
-      ear.rotation.x = -0.2 - hop * (fast ? 0.56 : 0.4) + recoil * 0.05 + idleTwitch;
-      ear.rotation.z = side * (0.1 + Math.sin(this.phase * 0.58 + index * 0.7) * 0.035);
+      ear.rotation.x = -0.72 - hop * (fast ? 0.46 : 0.34) + recoil * 0.08 + idleTwitch;
+      ear.rotation.z = side * (0.2 + Math.sin(this.phase * 0.58 + index * 0.7) * 0.055);
     }
   }
 
@@ -401,11 +401,11 @@ export class DayOneAnimalPresentation {
       const earPivot = new THREE.Group();
       earPivot.name = side < 0 ? 'rabbit-ear-left' : 'rabbit-ear-right';
       earPivot.position.set(side * 0.09, 0.13, -0.05);
-      earPivot.rotation.x = -0.2;
-      earPivot.rotation.z = side * 0.1;
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.64, 6), fur);
-      ear.position.y = 0.3;
-      ear.scale.z = 0.72;
+      earPivot.rotation.x = -0.72;
+      earPivot.rotation.z = side * 0.2;
+      const ear = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.28, 4, 7), fur);
+      ear.position.y = 0.2;
+      ear.scale.set(0.9, 1, 0.62);
       earPivot.add(ear);
       head.add(earPivot);
       ears.push(earPivot);
