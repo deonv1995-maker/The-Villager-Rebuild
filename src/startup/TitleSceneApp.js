@@ -3,8 +3,13 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { createTitleIslandBackdrop } from './TitleIslandBackdrop.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
+import { addTitleShipDeckDetails } from './TitleShipDeckDetails.js';
 import { createTitleShipVisual } from './TitleShipVisual.js';
 import { TitleStormSystem } from './TitleStormSystem.js';
+
+const RANGER_DECK_BASE = Object.freeze({ x: 1.22, y: 1.14, z: 2.55 });
+const RANGER_DECK_MODEL_YAW = Math.PI * 0.92;
+const RANGER_DECK_IDLE_SPEED = 0.82;
 
 export class TitleSceneApp {
   constructor({ canvas, setStatus }) {
@@ -40,6 +45,7 @@ export class TitleSceneApp {
     this.sailMesh = shipVisual.sailMesh;
     this.crate = shipVisual.crate;
     this.updateRigging = shipVisual.updateRigging;
+    this.shipDeckDetails = addTitleShipDeckDetails(this.ship);
     this.scene.add(this.ship);
 
     this.storm = new TitleStormSystem({
@@ -139,14 +145,14 @@ export class TitleSceneApp {
 
   async #loadRanger() {
     const loader = new GLTFLoader();
-    const [rangerGltf, movementGltf] = await Promise.all([
+    const [rangerGltf, generalGltf] = await Promise.all([
       loader.loadAsync(ASSET_PATHS.ranger.model),
-      loader.loadAsync(ASSET_PATHS.ranger.movementBasic)
+      loader.loadAsync(ASSET_PATHS.ranger.general)
     ]);
 
     this.rangerRig = new THREE.Group();
     this.rangerRig.name = 'title-ranger-balance-rig';
-    this.rangerRig.position.set(0.95, 1.28, 2.25);
+    this.rangerRig.position.set(RANGER_DECK_BASE.x, RANGER_DECK_BASE.y, RANGER_DECK_BASE.z);
     this.ship.add(this.rangerRig);
 
     this.ranger = rangerGltf.scene;
@@ -158,17 +164,17 @@ export class TitleSceneApp {
       if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
     });
     this.ranger.position.set(0, 0, 0);
-    this.ranger.rotation.y = Math.PI;
+    this.ranger.rotation.y = RANGER_DECK_MODEL_YAW;
     this.rangerRig.add(this.ranger);
 
     this.mixer = new THREE.AnimationMixer(this.ranger);
-    const idle = movementGltf.animations.find(clip => clip.name === 'Idle_A')
-      ?? movementGltf.animations.find(clip => /idle/i.test(clip.name));
-    if (idle) {
-      this.idleAction = this.mixer.clipAction(idle, this.ranger);
-      this.idleAction.setEffectiveTimeScale(0.9);
-      this.idleAction.play();
-    }
+    const idle = [...generalGltf.animations, ...rangerGltf.animations]
+      .find(clip => clip.name === 'Idle_A');
+    if (!idle) throw new Error('Title Ranger requires KayKit Idle_A from the general animation set');
+
+    this.idleAction = this.mixer.clipAction(idle, this.ranger);
+    this.idleAction.setEffectiveTimeScale(RANGER_DECK_IDLE_SPEED);
+    this.idleAction.play();
   }
 
   #createMenuUi() {
@@ -239,9 +245,9 @@ export class TitleSceneApp {
     if (this.rangerRig && !this.rangerThrown) {
       const footShift = Math.sin(this.elapsed * 1.35) * TITLE_SCENE.rangerDeckSway;
       this.rangerRig.position.set(
-        0.95 + Math.sin(this.elapsed * 0.72) * 0.025,
-        1.28 + Math.abs(roll) * 0.16 + Math.cos(this.elapsed * 1.1) * 0.012,
-        2.25 + footShift
+        RANGER_DECK_BASE.x + Math.sin(this.elapsed * 0.72) * 0.025,
+        RANGER_DECK_BASE.y + Math.abs(roll) * 0.16 + Math.cos(this.elapsed * 1.1) * 0.012,
+        RANGER_DECK_BASE.z + footShift
       );
       this.rangerRig.rotation.x = -this.ship.rotation.x * 0.52 + Math.sin(this.elapsed * 0.83) * 0.018;
       this.rangerRig.rotation.z = -this.ship.rotation.z * 0.72 + Math.sin(this.elapsed * 1.18) * 0.014;
@@ -284,9 +290,9 @@ export class TitleSceneApp {
       this.rangerRig.rotation.x = -this.ship.rotation.x * 0.78 + severe * 0.08 + impact * 0.2 + brace * danger * 0.028;
       this.rangerRig.rotation.z = -this.ship.rotation.z * 0.82 + brace * severe * 0.055;
       this.rangerRig.rotation.y = Math.sin(this.elapsed * 1.25) * danger * 0.035;
-      this.rangerRig.position.x = 0.95 + Math.sin(this.elapsed * 1.8) * severe * 0.045;
-      this.rangerRig.position.y = 1.28 + Math.abs(this.ship.rotation.z) * 0.18 + Math.cos(this.elapsed * 2.4) * danger * 0.022;
-      this.rangerRig.position.z = 2.25 + impact * 0.16 + Math.sin(this.elapsed * 1.55) * severe * 0.035;
+      this.rangerRig.position.x = RANGER_DECK_BASE.x + Math.sin(this.elapsed * 1.8) * severe * 0.045;
+      this.rangerRig.position.y = RANGER_DECK_BASE.y + Math.abs(this.ship.rotation.z) * 0.18 + Math.cos(this.elapsed * 2.4) * danger * 0.022;
+      this.rangerRig.position.z = RANGER_DECK_BASE.z + impact * 0.16 + Math.sin(this.elapsed * 1.55) * severe * 0.035;
     }
 
     if (impact > 0) {
