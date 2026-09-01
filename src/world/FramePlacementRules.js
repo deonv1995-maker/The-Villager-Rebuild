@@ -1,6 +1,6 @@
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 
-const DEFAULT_LEVEL_TOLERANCE = 0.4;
+const DEFAULT_LEVEL_TOLERANCE = PHYSICAL_LOG.frameLevelTolerance;
 
 /**
  * Frames belong to a physical-Log structural lattice, not every narrow floor-strip seam.
