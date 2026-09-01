@@ -72,9 +72,15 @@ const rabbitHaunch = rabbitPresentation.fallback.getObjectByName('rabbit-haunch-
 assert.ok(rabbitEar, 'rabbit presentation must keep articulated ear pivots for floppy-ear motion');
 assert.ok(rabbitHaunch, 'rabbit presentation must keep pronounced hindquarters instead of generic four-legged proportions');
 const rabbitEarRest = rabbitEar.rotation.x;
-rabbitPresentation.update(0.08, { movedDistance: 0.2, behavior: 'wander' });
-assert.ok(rabbitPresentation.fallback.position.y > 0.03, 'moving rabbit must lift into a readable hop instead of sliding with a tiny generic bob');
-assert.notEqual(rabbitEar.rotation.x, rabbitEarRest, 'rabbit ears must flop with the hop cycle');
+let rabbitHopPeak = 0;
+let rabbitEarFlopped = false;
+for (let step = 0; step < 16; step += 1) {
+  rabbitPresentation.update(0.04, { movedDistance: 0.2, behavior: 'wander' });
+  rabbitHopPeak = Math.max(rabbitHopPeak, rabbitPresentation.fallback.position.y);
+  if (Math.abs(rabbitEar.rotation.x - rabbitEarRest) > 0.08) rabbitEarFlopped = true;
+}
+assert.ok(rabbitHopPeak > 0.1, 'moving rabbit must reach a readable hop peak instead of sliding with a tiny generic bob');
+assert.equal(rabbitEarFlopped, true, 'rabbit ears must visibly follow through across the hop cycle');
 
 const fox = new WildAnimalActor({
   scene: new THREE.Scene(),
