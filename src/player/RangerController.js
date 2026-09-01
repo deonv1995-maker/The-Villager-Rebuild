@@ -64,6 +64,7 @@ export class RangerController {
     this.tempHandLocal = new THREE.Vector3();
     this.tempHandQuaternion = new THREE.Quaternion();
     this.tempRootQuaternion = new THREE.Quaternion();
+    this.cinematicDriver = null;
     this.#bindKeyboard();
   }
 
@@ -169,11 +170,110 @@ export class RangerController {
   }
 
   setMove(x, y) {
+    if (this.cinematicDriver) return;
     this.input.x = THREE.MathUtils.clamp(x, -1, 1);
     this.input.y = THREE.MathUtils.clamp(y, -1, 1);
   }
 
-  setSprint(active) { this.input.sprint = Boolean(active); }
+  setSprint(active) {
+    if (this.cinematicDriver) return;
+    this.input.sprint = Boolean(active);
+  }
+
+  beginCinematic(driver) {
+    if (!driver || this.cinematicDriver) return false;
+    this.cinematicDriver = driver;
+    this.input.x = 0;
+    this.input.y = 0;
+    this.input.sprint = false;
+    this.keys.clear();
+    this.manualLookActive = false;
+    this.cameraRecovering = false;
+    this.cameraReturnDelay = 0;
+    this.jumpVelocity = 0;
+    this.grounded = true;
+    return true;
+  }
+
+  endCinematic(driver) {
+    if (!this.cinematicDriver || (driver && this.cinematicDriver !== driver)) return false;
+    this.cinematicDriver = null;
+    this.input.x = 0;
+    this.input.y = 0;
+    this.input.sprint = false;
+    this.keys.clear();
+    if (this.model) {
+      this.model.position.set(0, 0, 0);
+      this.model.rotation.set(0, 0, 0);
+    }
+    if (this.assetMode === 'kaykit') this.#setAnimation('Idle_A', true);
+    this.yaw = this.root.rotation.y + Math.PI;
+    this.pitch = CAMERA_DEFAULT_PITCH;
+    this.cameraRecovering = false;
+    this.cameraReturnDelay = 0;
+    return true;
+  }
+
+  setCinematicPose({
+    x = this.root.position.x,
+    z = this.root.position.z,
+    yaw = this.root.rotation.y,
+    modelPitch = 0,
+    modelYaw = 0,
+    modelRoll = 0,
+    modelYOffset = 0,
+    snapCamera = false
+  } = {}) {
+    if (!this.cinematicDriver) return false;
+    this.root.position.x = x;
+    this.root.position.z = z;
+    this.root.position.y = this.terrain.heightAt(x, z);
+    this.root.rotation.y = yaw;
+    if (this.model) {
+      this.model.position.set(0, modelYOffset, 0);
+      this.model.rotation.set(modelPitch, modelYaw, modelRoll);
+    }
+    if (snapCamera) {
+      this.yaw = yaw + Math.PI;
+      this.pitch = -0.17;
+      this.#updateCamera(true);
+    }
+    return true;
+  }
+
+  playCinematicAnimation(preferences, { loop = false, timeScale = 1 } = {}) {
+    if (!this.cinematicDriver || this.assetMode !== 'kaykit') return null;
+    const requested = Array.isArray(preferences) ? preferences : [preferences];
+    const names = [...this.actions.keys()];
+    const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    let selected = null;
+
+    for (const preferred of requested) {
+      const normalized = normalize(preferred);
+      selected = names.find(name => normalize(name) === normalized);
+      if (selected) break;
+    }
+    if (!selected) {
+      for (const preferred of requested) {
+        const normalized = normalize(preferred);
+        selected = names.find(name => normalize(name).includes(normalized));
+        if (selected) break;
+      }
+    }
+    if (!selected) return null;
+
+    const action = this.actions.get(selected);
+    if (!action) return null;
+    action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, loop ? Infinity : 1);
+    action.clampWhenFinished = !loop;
+    const clipDuration = action.getClip()?.duration ?? 0;
+    const safeScale = Math.max(0.1, timeScale);
+    this.#playOneShot(selected, safeScale);
+    return {
+      name: selected,
+      duration: clipDuration > 0 ? clipDuration / safeScale : 0
+    };
+  }
 
   getPosition(target = new THREE.Vector3()) {
     return target.copy(this.root.position);
@@ -252,25 +352,27 @@ export class RangerController {
   }
 
   beginCameraLook() {
+    if (this.cinematicDriver) return;
     this.manualLookActive = true;
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
   }
 
   rotateCamera(deltaX, deltaY) {
+    if (this.cinematicDriver) return;
     this.yaw -= deltaX * 0.005;
     this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, -0.75, 0.25);
   }
 
   endCameraLook() {
-    if (!this.manualLookActive) return;
+    if (this.cinematicDriver || !this.manualLookActive) return;
     this.manualLookActive = false;
     this.cameraRecovering = true;
     this.cameraReturnDelay = CAMERA_RETURN_DELAY;
   }
 
   jump() {
-    if (!this.grounded) return;
+    if (this.cinematicDriver || !this.grounded) return;
     this.grounded = false;
     this.jumpVelocity = 5.4;
     if (this.assetMode === 'kaykit' && this.actions.has('Jump_Full_Short')) {
@@ -280,6 +382,20 @@ export class RangerController {
 
   update(dt) {
     if (!this.model) return;
+
+    if (this.cinematicDriver) {
+      this.cinematicDriver.update?.(dt, this);
+      this.root.position.y = this.terrain.heightAt(this.root.position.x, this.root.position.z);
+      this.mixer?.update(dt);
+      this.#updateSpearAnchor();
+      if (this.spearMount) {
+        this.spearMount.position.copy(this.spearRestPosition);
+        this.spearMount.quaternion.copy(this.spearRestQuaternion);
+      }
+      this.#updateCamera(false, dt);
+      return;
+    }
+
     const keyboardX = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     const keyboardY = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     const mobileInputActive = Math.abs(this.input.x) > 0.05 || Math.abs(this.input.y) > 0.05;
@@ -519,6 +635,8 @@ export class RangerController {
     if (!next || this.animationState === name) return;
     const previous = this.animationState ? this.actions.get(this.animationState) : null;
     if (previous && previous !== next) previous.fadeOut(immediate ? 0.05 : 0.16);
+    next.setLoop(THREE.LoopRepeat, Infinity);
+    next.clampWhenFinished = false;
     next.reset().setEffectiveTimeScale(1).fadeIn(immediate ? 0.05 : 0.16).play();
     this.animationState = name;
   }
@@ -564,6 +682,10 @@ export class RangerController {
 
   #bindKeyboard() {
     window.addEventListener('keydown', event => {
+      if (this.cinematicDriver) {
+        if (event.code === 'Space') event.preventDefault();
+        return;
+      }
       this.keys.add(event.code);
       if (event.code === 'Space') {
         event.preventDefault();
