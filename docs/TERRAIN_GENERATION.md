@@ -105,6 +105,7 @@ The tutorial route and the visible trail remain separate concepts.
 ## Traversal and collision invariants
 
 - Coast bounds, satellite bounds, sandbar bounds, steep terrain and prop collision continue through `WorldCollisionSystem`.
+- Upright Ranger grounding samples the terrain beneath the full foot/body footprint and uses its highest contact point. A centre-only height sample is not sufficient on hillsides because rising ground inside the Ranger collision radius can intersect the visible body. This presentation correction does not alter the authoritative terrain field, slope limits or horizontal collision ownership.
 - Base terrain height and standable support height remain separate concerns: base terrain owns slope classification, while support-adjusted height is only used for standing, stepping, landing and falling from rocks/cliff tops.
 - Prop support height must never make nearby flat ground appear steep or make a Ranger standing on a rock fail a terrain-slope test.
 - Walkable terrain slope is evaluated along the attempted travel direction. The stylized walk limit remains 58 degrees; steeper terrain remains blocked uphill.
