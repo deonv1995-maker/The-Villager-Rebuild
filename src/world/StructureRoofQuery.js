@@ -112,7 +112,7 @@ export class StructureRoofQuery {
     const pairs = collectLocalRoofFramePairs(frames, point, {
       length: PHYSICAL_LOG.length,
       spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
-      topTolerance: 0.3,
+      topTolerance: PHYSICAL_LOG.frameLevelTolerance,
       yawStep: PHYSICAL_LOG.yawStep,
       searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
       frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,

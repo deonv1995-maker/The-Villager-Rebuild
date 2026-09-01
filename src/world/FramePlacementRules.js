@@ -7,10 +7,14 @@ const DEFAULT_LEVEL_TOLERANCE = PHYSICAL_LOG.frameLevelTolerance;
  * A candidate may extend an existing same-level structure only when it has at least one
  * neighbour one full Log away. Candidates near a structure but off that lattice are
  * rejected; a sufficiently isolated candidate may still begin a separate structure.
+ *
+ * This placement rule intentionally uses the stricter placement tolerance. Recognition
+ * of pairs between posts that were already accepted is slightly more forgiving so a
+ * closed bay can absorb small accumulated floor/grid drift without reopening short bays.
  */
 export function frameCornerFitsStructure(corner, frames, {
   length = PHYSICAL_LOG.length,
-  spacingTolerance = PHYSICAL_LOG.frameSpacingTolerance,
+  spacingTolerance = PHYSICAL_LOG.framePlacementSpacingTolerance,
   isolationRadius = PHYSICAL_LOG.frameIsolationRadius,
   levelTolerance = DEFAULT_LEVEL_TOLERANCE
 } = {}) {

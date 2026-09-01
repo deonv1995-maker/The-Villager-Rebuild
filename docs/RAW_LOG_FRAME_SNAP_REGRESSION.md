@@ -1,29 +1,59 @@
 # RAW Log frame-pair snap regression
 
-This scoped fix restores the established physical-Log construction contract after Android playtesting showed a RAW Log remaining on the ground instead of snapping across the top of an otherwise valid frame pair.
+This construction contract covers two Android regressions where an otherwise valid physical-Log frame stopped exposing the RAW top-beam slots needed to finish a cabin.
 
-## Root cause
+## Structural contract
 
-Upright FRAME placement and RAW/WALL/roof frame-pair discovery were using different vertical tolerances. `FramePlacementRules` accepted posts as belonging to the same structural level within 0.4 m, while `PhysicalLogSystem` rejected the same pair when their top heights differed by more than 0.3 m. A frame arrangement the construction system had already accepted could therefore become invisible to RAW beam snapping.
+There are two deliberately different tolerances in the frame system:
 
-## Single structural-level authority
+- **FRAME placement is strict.** New upright posts must still sit on the full physical-Log structural lattice. `PHYSICAL_LOG.framePlacementSpacingTolerance` prevents one-third/two-thirds split-floor seams and near-diagonal offsets from becoming wall stations.
+- **Already-valid frame-pair recognition is slightly more forgiving.** `PHYSICAL_LOG.frameSpacingTolerance` allows a bounded closing-edge error between posts that were each legally placed through another full-Log neighbour. This is necessary because a multi-edge floor/frame sequence can accumulate a small grid closure drift even when every individual FRAME placement was valid.
 
-`PHYSICAL_LOG.frameLevelTolerance` is the source of truth for the 0.4 m same-level tolerance. FRAME structural-fit checks, ordinary frame-pair discovery, and local roof frame-pair discovery all consume that same value.
+The pair tolerance remains below the known distance error produced by a one-floor-strip near-diagonal offset. It therefore does not restore short wall bays or the cramped door/window geometry that the full-Log lattice removed.
 
-Horizontal bay spacing remains strict at one full physical Log using `PHYSICAL_LOG.frameSpacingTolerance`. This change does not allow short wall bays, narrow floor-strip seams, or arbitrary diagonal posts to become structural frame pairs.
+## Vertical consistency
+
+`PHYSICAL_LOG.frameLevelTolerance` remains the single 0.4 m same-level authority. FRAME structural-fit checks, RAW/WALL pair discovery, construction roof discovery and `StructureRoofQuery` consume the same accepted level tolerance.
+
+A frame arrangement accepted by the building system must not later become invisible to RAW beams, roof rafters, thatch or interior roof queries simply because its supported posts differ slightly in height.
+
+## One-room cabin invariant
+
+A normal cabin may be built as:
+
+1. connected split-log floor panels;
+2. four legal upright FRAME posts on the outer corners;
+3. four RAW top beams closing the perimeter;
+4. WALL sections between the full-Log frame pairs;
+5. ANGLE roof rafters;
+6. RAW ridge member(s);
+7. thatch panels after the roof framework is complete.
+
+If three perimeter RAW beam slots are occupied, the remaining valid closing edge must still attract a carried RAW Log and turn the preview green. Closing that fourth edge must leave the established ANGLE-rafter roof sequence available.
 
 ## Preserved behavior
 
-- RAW top beams still use the two frame IDs as their `rawKey` occupancy slot.
+- RAW top beams still use the two frame IDs as their authoritative `rawKey` occupancy slot.
 - An occupied frame-pair slot cannot attract a duplicate RAW beam.
 - RAW ridge placement remains gated by completed angled rafters.
-- WALL and roof topology continue to use the established frame-pair architecture.
-- Terrain, floors, frame placement, wall customization, controls, resources, wildlife, shipwreck/title scene, PWA and deployment architecture are otherwise unchanged.
+- WALL bays remain full-Log structural bays.
+- One-third/two-thirds floor seams remain invalid FRAME stations.
+- The known one-floor-strip near-diagonal offset remains invalid as both a new FRAME placement and a recognized beam/wall pair.
+- Floor placement, wall customization, roof member sequencing, terrain, collision, controls, resources, wildlife, shipwreck/title scene, PWA and deployment architecture are otherwise unchanged.
 
 ## Regression coverage
 
-`scripts/verify-raw-log-frame-snap.mjs` constructs a full-Log frame pair with a 0.35 m level difference that is legal under the existing FRAME rule, then proves that RAW preview snaps to `frame-pair-top`, confirms at the pair midpoint/top, retains the authoritative `rawKey`, and refuses a duplicate beam in the occupied slot.
+`scripts/verify-raw-log-frame-snap.mjs` now proves all of the following:
+
+- a legal 0.35 m frame-level difference still produces a RAW top-beam snap;
+- an occupied RAW slot rejects a duplicate;
+- a four-post one-room frame whose closing edge accumulated 0.12 m of horizontal drift still resolves all four perimeter frame pairs and one roof region;
+- the missing fourth RAW beam builds instead of remaining as a red ground preview;
+- that closed frame immediately exposes the established ANGLE roof-rafter sequence;
+- a one-floor-strip near-diagonal offset remains rejected.
+
+`scripts/verify-roof-build-sequence.mjs` separately protects the strict FRAME lattice and the multi-bay ANGLE-rafter → RAW-ridge → thatch sequence.
 
 ## Android acceptance
 
-Build two valid upright frame posts across a full-Log bay on slightly uneven supported levels, carry another Log, select RAW, and approach the bay. The preview must turn green and attract to the top beam position. After placing the beam, the same slot must no longer attract another RAW Log.
+Build the same one-room cabin shape used in the earlier working device build: three floor strips across a full-Log square, four outer corner posts, then RAW top beams around the perimeter. Every open side must attract RAW to the post tops. After all four sides are closed, WALL placement and the ANGLE/RAW roof sequence must work as before. No closer one-third-floor frame stations should become available.
