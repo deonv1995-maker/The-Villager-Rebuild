@@ -1,4 +1,4 @@
-name: Ingest licensed wildlife assets
+name: Finalize wildlife ecology pass
 
 on:
   push:
@@ -6,45 +6,116 @@ on:
       - feat/wildlife-ecology-animation
     paths:
       - '.github/workflows/ingest-wildlife-assets.yml'
-      - '_asset_ingest/wildlife-source.lock'
 
 permissions:
   contents: write
 
 jobs:
-  ingest:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Download pinned CC0 wildlife assets
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Integrate wolf attack feedback through Ranger boundary
+        shell: python
+        run: |
+          from pathlib import Path
+
+          ranger_path = Path('src/player/RangerController.js')
+          ranger = ranger_path.read_text()
+          ranger_anchor = """  faceWorldPoint(point) {
+            if (!point) return;
+            const dx = point.x - this.root.position.x;
+            const dz = point.z - this.root.position.z;
+            if (Math.hypot(dx, dz) < 0.001) return;
+            this.root.rotation.y = Math.atan2(dx, dz);
+          }
+
+          mountRightHandObject(object) {
+          """
+          ranger_replacement = """  faceWorldPoint(point) {
+            if (!point) return;
+            const dx = point.x - this.root.position.x;
+            const dz = point.z - this.root.position.z;
+            if (Math.hypot(dx, dz) < 0.001) return;
+            this.root.rotation.y = Math.atan2(dx, dz);
+          }
+
+          receiveWildlifeImpact(sourcePosition, { distance = 1.2 } = {}) {
+            if (this.cinematicDriver || !sourcePosition) return false;
+            let dx = this.root.position.x - sourcePosition.x;
+            let dz = this.root.position.z - sourcePosition.z;
+            let length = Math.hypot(dx, dz);
+            if (length < 0.001) {
+              dx = -Math.sin(this.root.rotation.y);
+              dz = -Math.cos(this.root.rotation.y);
+              length = 1;
+            }
+            const desired = {
+              x: this.root.position.x + (dx / length) * distance,
+              z: this.root.position.z + (dz / length) * distance
+            };
+            const resolved = this.collision
+              ? this.collision.resolveMove(this.root.position, desired, { radius: PLAYER_RADIUS, airborne: !this.grounded })
+              : desired;
+            const moved = Math.hypot(resolved.x - this.root.position.x, resolved.z - this.root.position.z) > 0.01;
+            this.root.position.x = resolved.x;
+            this.root.position.z = resolved.z;
+            this.root.position.y = this.terrain.heightAt(resolved.x, resolved.z);
+            return moved;
+          }
+
+          mountRightHandObject(object) {
+          """
+          if ranger_anchor not in ranger:
+            raise SystemExit('Ranger integration anchor not found')
+          ranger_path.write_text(ranger.replace(ranger_anchor, ranger_replacement, 1))
+
+          app_path = Path('src/core/GameApp.js')
+          app = app_path.read_text()
+          update_anchor = """    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
+
+            if (carryingLog) {
+          """
+          update_replacement = """    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
+            const wildlifeAttack = this.hunt?.consumePlayerAttack?.();
+            if (wildlifeAttack) this.#handleWildlifeAttack(wildlifeAttack);
+
+            if (carryingLog) {
+          """
+          if update_anchor not in app:
+            raise SystemExit('GameApp wildlife update anchor not found')
+          app = app.replace(update_anchor, update_replacement, 1)
+
+          combat_anchor = """  #handleCombatResult(hit) {
+          """
+          combat_replacement = """  #handleWildlifeAttack(event) {
+            this.player?.receiveWildlifeImpact(event.position, { distance: 1.2 });
+            this.setStatus(`${event.label.toUpperCase()} ATTACK · CREATE DISTANCE`);
+            this.hud?.setObjective('Wolf attack · move away or fight back');
+          }
+
+          #handleCombatResult(hit) {
+          """
+          if combat_anchor not in app:
+            raise SystemExit('GameApp combat anchor not found')
+          app_path.write_text(app.replace(combat_anchor, combat_replacement, 1))
+      - name: Install dependencies
+        run: npm ci
+      - name: Run full repository checks
+        run: npm run check
+      - name: Commit verified integration and remove temporary workflow
         shell: bash
         run: |
           set -euo pipefail
-          source_commit='db3df04d1e4714298a09510b26fb6de6645138a2'
-          base="https://raw.githubusercontent.com/agentkaerf/FreeModels/${source_commit}/Ultimate%20Animated%20Animals%20-%20July%202021"
-          mkdir -p public/assets/animals/quaternius licenses
-          curl --fail --location --retry 3 "${base}/glTF/Deer.gltf" --output public/assets/animals/quaternius/Deer.gltf
-          curl --fail --location --retry 3 "${base}/glTF/Fox.gltf" --output public/assets/animals/quaternius/Fox.gltf
-          curl --fail --location --retry 3 "${base}/glTF/Wolf.gltf" --output public/assets/animals/quaternius/Wolf.gltf
-          curl --fail --location --retry 3 "${base}/License.txt" --output licenses/quaternius-ultimate-animated-animals-cc0.txt
-          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Deer.gltf
-          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Deer.gltf
-          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Fox.gltf
-          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Fox.gltf
-          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Wolf.gltf
-          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Wolf.gltf
-      - name: Commit vendored runtime assets
-        shell: bash
-        run: |
-          set -euo pipefail
+          rm .github/workflows/ingest-wildlife-assets.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add public/assets/animals/quaternius licenses/quaternius-ultimate-animated-animals-cc0.txt
-          if git diff --cached --quiet; then
-            echo 'Licensed wildlife assets already match the pinned source.'
-            exit 0
-          fi
-          git commit -m 'Vendor CC0 animated wildlife assets'
+          git add src/player/RangerController.js src/core/GameApp.js .github/workflows/ingest-wildlife-assets.yml
+          git commit -m 'Integrate wolf attack feedback'
           git push
