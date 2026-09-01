@@ -157,7 +157,7 @@ export function createTitleShipVisual() {
   });
   const trimWood = new THREE.MeshStandardMaterial({ color: 0x98613a, roughness: 0.92, flatShading: true });
   const rawWood = new THREE.MeshStandardMaterial({ color: 0xb9854e, roughness: 1, flatShading: true });
-  const sail = new THREE.MeshStandardMaterial({ color: 0xe3d4ad, roughness: 0.96, side: THREE.DoubleSide });
+  const sail = new THREE.MeshStandardMaterial({ color: 0xe3d4ad, roughness: 0.9, side: THREE.DoubleSide });
   const rope = new THREE.LineBasicMaterial({ color: 0x8f704e });
 
   const hullSections = [
@@ -209,30 +209,48 @@ export function createTitleShipVisual() {
   keel.rotation.x = 0.025;
   hull.add(keel);
 
-  const bowRoot = new THREE.Vector3(0, 1.42, -6.45);
-  const bowTip = new THREE.Vector3(0, 1.72, -9.65);
+  const bowspritBed = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.28, 1.72), wood);
+  bowspritBed.name = 'title-ship-bowsprit-bed';
+  bowspritBed.position.set(0, 1.29, -5.96);
+  bowspritBed.rotation.x = -0.055;
+  hull.add(bowspritBed);
+
+  const bowRoot = new THREE.Vector3(0, 1.36, -5.55);
+  const bowTip = new THREE.Vector3(0, 1.78, -9.72);
   const bowsprit = createBeamBetween({
     name: 'title-ship-bowsprit',
     start: bowRoot,
     end: bowTip,
-    radius: 0.12,
-    material: darkWood
+    radius: 0.145,
+    material: wood
   });
   hull.add(bowsprit);
 
   const bowspritKnee = createBeamBetween({
     name: 'title-ship-bowsprit-knee',
-    start: new THREE.Vector3(0, 1.0, -6.12),
-    end: new THREE.Vector3(0, 1.49, -7.08),
-    radius: 0.145,
+    start: new THREE.Vector3(0, 0.94, -5.92),
+    end: new THREE.Vector3(0, 1.48, -6.82),
+    radius: 0.115,
     material: darkWood
   });
   hull.add(bowspritKnee);
 
-  const bowspritCollar = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.035, 6, 10), trimWood);
+  for (const side of [-1, 1]) {
+    const brace = createBeamBetween({
+      name: `title-ship-bowsprit-side-brace-${side < 0 ? 'port' : 'starboard'}`,
+      start: new THREE.Vector3(side * 0.5, 1.12, -5.62),
+      end: new THREE.Vector3(0, 1.48, -6.82),
+      radius: 0.075,
+      material: trimWood,
+      radialSegments: 6
+    });
+    hull.add(brace);
+  }
+
+  const bowspritCollar = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.038, 6, 10), trimWood);
   bowspritCollar.name = 'title-ship-bowsprit-collar';
-  bowspritCollar.position.set(0, 1.48, -7.08);
-  bowspritCollar.rotation.x = 0.1;
+  bowspritCollar.position.set(0, 1.48, -6.82);
+  bowspritCollar.rotation.x = 0.10;
   hull.add(bowspritCollar);
 
   const aftDeck = new THREE.Mesh(new THREE.BoxGeometry(3.85, 0.72, 1.55), darkWood);
@@ -296,7 +314,7 @@ export function createTitleShipVisual() {
 
   const sailWidth = 5.8;
   const sailHeight = 5.35;
-  const sailGeometry = new THREE.PlaneGeometry(sailWidth, sailHeight, 8, 6);
+  const sailGeometry = new THREE.PlaneGeometry(sailWidth, sailHeight, 12, 8);
   const sailMesh = new THREE.Mesh(sailGeometry, sail);
   sailMesh.name = 'title-flexing-sail';
   sailMesh.frustumCulled = false;
@@ -380,9 +398,9 @@ export function createTitleShipVisual() {
     resolveUpperPoint(upperTopLeftLocal, topLeft);
     resolveUpperPoint(upperTopRightLocal, topRight);
 
-    const lowerSheetZ = mast.position.z + TITLE_SCENE.sailMastClearance * 0.82;
-    bottomLeft.set(-2.48 - impact * 0.10, 2.78 - impact * 0.22, lowerSheetZ + impact * 0.07);
-    bottomRight.set(2.48 - impact * 0.22, 2.78 - impact * 0.38, lowerSheetZ + impact * 0.11);
+    const lowerSheetZ = mast.position.z + TITLE_SCENE.sailMastClearance * 0.94;
+    bottomLeft.set(-2.22 - impact * 0.10, 2.78 - impact * 0.22, lowerSheetZ + impact * 0.07);
+    bottomRight.set(2.22 - impact * 0.22, 2.78 - impact * 0.38, lowerSheetZ + impact * 0.11);
 
     const position = sailGeometry.getAttribute('position');
     const halfWidth = sailWidth * 0.5;
@@ -412,17 +430,20 @@ export function createTitleShipVisual() {
       const bottomZ = THREE.MathUtils.lerp(bottomLeft.z, bottomRight.z, u);
       const interior = Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
       const rowSlack = Math.sin(Math.PI * v);
+      const edgeTuck = rowSlack * 0.18;
       const flutterWave = Math.sin(time * (1.45 + danger * 2.5) + u * 5.4 + v * 2.6);
       const crossWave = Math.cos(time * (0.95 + danger * 1.9) + v * 4.1 - u * 2.8);
+      const draftBias = 0.92 + u * 0.18;
 
       const x = THREE.MathUtils.lerp(topX, bottomX, v)
         + crossWave * flutter * 0.18 * interior
+        + (0.5 - u) * edgeTuck
         - impact * rowSlack * (0.18 + u * 0.16);
       const y = THREE.MathUtils.lerp(topY, bottomY, v)
-        - interior * (0.10 + danger * 0.12 + impact * 0.92)
+        - interior * (0.12 + danger * 0.14 + impact * 0.92)
         - impact * rowSlack * 0.18;
       const z = THREE.MathUtils.lerp(topZ, bottomZ, v)
-        + interior * windBow
+        + interior * windBow * draftBias
         + flutterWave * flutter * (0.16 + interior * 0.34)
         + impact * interior * (0.05 + 0.09 * Math.sin(time * 2.3 + u * 3.1));
 
