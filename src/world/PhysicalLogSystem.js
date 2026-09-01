@@ -27,6 +27,10 @@ const PREVIEW_INVALID = 0xd85d57;
 const FLOOR_CENTER_LIFT = 0;
 const FLOOR_TOP_LIFT = 0.028;
 const ROOF_SEAT_LIFT = 0.08;
+// The procedural raw-log mesh reads as a large block at shoulder distance on mobile.
+// Keep the physical carry state authoritative, but suppress that placeholder presentation
+// until it can be replaced by a natural dedicated carry asset/animation.
+const SHOW_CARRIED_LOG_VISUAL = false;
 
 export class PhysicalLogSystem {
   constructor({ group, player, terrain, collision, gatherables }) {
@@ -118,11 +122,12 @@ export class PhysicalLogSystem {
     item.root.scale.setScalar(1);
     item.root.position.set(...PHYSICAL_LOG.carryPosition);
     item.root.rotation.set(...PHYSICAL_LOG.carryEuler);
+    item.root.visible = SHOW_CARRIED_LOG_VISUAL;
     item.root.name = `carried-log-${item.id}`;
     const roll = item.root.userData?.rollGroup;
     if (roll) roll.rotation.x = 0;
-    this.carryPose.setActive(true);
-    this.carryPose.update();
+    this.carryPose.setActive(SHOW_CARRIED_LOG_VISUAL);
+    if (SHOW_CARRIED_LOG_VISUAL) this.carryPose.update();
     this.#destroyPreview();
     return this.getCarryState();
   }
@@ -133,8 +138,8 @@ export class PhysicalLogSystem {
       this.#destroyPreview();
       return this.getBuildState();
     }
-    this.carryPose.setActive(true);
-    this.carryPose.update();
+    this.carryPose.setActive(SHOW_CARRIED_LOG_VISUAL);
+    if (SHOW_CARRIED_LOG_VISUAL) this.carryPose.update();
     const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
     this.#showPreview(this.buildMode, placement);
     return this.getBuildState();
@@ -148,6 +153,7 @@ export class PhysicalLogSystem {
     const item = this.carriedItem;
     this.player.root.remove(item.root);
     item.root.scale.setScalar(1);
+    item.root.visible = true;
     this.carriedItem = null;
     this.carryPose.setActive(false);
     this.#destroyPreview();
@@ -169,6 +175,7 @@ export class PhysicalLogSystem {
     const item = this.carriedItem;
     this.player.root.remove(item.root);
     item.root.scale.setScalar(1);
+    item.root.visible = true;
     this.carriedItem = null;
     this.carryPose.setActive(false);
     this.#destroyPreview();
@@ -179,7 +186,9 @@ export class PhysicalLogSystem {
       this.player.root.add(item.root);
       item.root.position.set(...PHYSICAL_LOG.carryPosition);
       item.root.rotation.set(...PHYSICAL_LOG.carryEuler);
-      this.carryPose.setActive(true);
+      item.root.visible = SHOW_CARRIED_LOG_VISUAL;
+      this.carryPose.setActive(SHOW_CARRIED_LOG_VISUAL);
+      if (SHOW_CARRIED_LOG_VISUAL) this.carryPose.update();
       return null;
     }
 
