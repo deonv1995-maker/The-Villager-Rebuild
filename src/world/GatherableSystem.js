@@ -11,9 +11,9 @@ export class GatherableSystem {
   constructor({ scene, terrain, ecology = terrain, scatter = null, grassField = null }) {
     this.scene = scene;
     this.terrain = terrain;
-    this.ecology = ecology;
-    this.scatter = scatter;
-    this.grassField = grassField;
+    this.ecology = ecology === terrain && terrain?.terrain ? terrain.terrain : ecology;
+    this.scatter = scatter ?? terrain?.scatter ?? null;
+    this.grassField = grassField ?? terrain?.grass ?? null;
     this.group = new THREE.Group();
     this.group.name = 'day-one-gatherables';
     this.scene.add(this.group);
