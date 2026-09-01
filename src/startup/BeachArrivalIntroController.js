@@ -49,6 +49,12 @@ const SHALLOW_WATER_MAX_DEPTH = 0.22;
 const SHORT_CRAWL_MIN_DISTANCE = 1.0;
 const SHORT_CRAWL_MAX_DISTANCE = 3.4;
 const DRY_SAND_CLEARANCE = 0.24;
+const PRONE_BASE_CLEARANCE = 0.18;
+const CRAWL_BASE_CLEARANCE = 0.115;
+const NATIVE_CRAWL_BASE_CLEARANCE = 0.08;
+const CRAWL_BODY_HALF_WIDTH = 0.3;
+const CRAWL_BODY_SAMPLE_DISTANCES = Object.freeze([0.35, 0.8, 1.25, 1.7, 2.05]);
+const CRAWL_SURFACE_PADDING = 0.035;
 const smooth01 = value => THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(value, 0, 1), 0, 1);
 const normalizeAnimationName = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -96,7 +102,7 @@ export class BeachArrivalIntroController {
       yaw: this.forwardYaw,
       modelPitch: 1.48,
       modelRoll: 0.08,
-      modelYOffset: 0.18,
+      modelYOffset: this.#proneGroundOffsetAt(this.wetSand.x, this.wetSand.z, PRONE_BASE_CLEARANCE),
       snapCamera: true
     });
     this.setStatus?.('DAY 1 · WASHED ASHORE');
@@ -117,7 +123,7 @@ export class BeachArrivalIntroController {
         yaw: this.forwardYaw,
         modelPitch: 1.48 - breathe,
         modelRoll: 0.08,
-        modelYOffset: 0.18
+        modelYOffset: this.#proneGroundOffsetAt(this.wetSand.x, this.wetSand.z, PRONE_BASE_CLEARANCE)
       });
     } else if (this.phase === PHASE.CRAWL) {
       const eased = smooth01(progress);
@@ -125,13 +131,17 @@ export class BeachArrivalIntroController {
       const z = THREE.MathUtils.lerp(this.wetSand.z, this.crawlEnd.z, eased);
       const pullCycle = Math.sin(progress * Math.PI * 4);
       const pullLift = Math.max(0, pullCycle) * (1 - eased * 0.25);
+      const crawlBaseClearance = this.nativeCrawlAnimation
+        ? NATIVE_CRAWL_BASE_CLEARANCE
+        : CRAWL_BASE_CLEARANCE;
       player.setCinematicPose({
         x,
         z,
         yaw: this.forwardYaw,
         modelPitch: this.nativeCrawlAnimation ? 0 : THREE.MathUtils.lerp(1.45, 1.39, eased),
         modelRoll: this.nativeCrawlAnimation ? 0 : pullCycle * 0.035,
-        modelYOffset: this.nativeCrawlAnimation ? 0 : 0.115 + pullLift * 0.014
+        modelYOffset: this.#proneGroundOffsetAt(x, z, crawlBaseClearance)
+          + (this.nativeCrawlAnimation ? 0 : pullLift * 0.014)
       });
     } else if (this.phase === PHASE.RISE) {
       const eased = smooth01(progress);
@@ -171,6 +181,31 @@ export class BeachArrivalIntroController {
 
   #terrainHeightAt(x, z) {
     return this.island.baseHeightAt?.(x, z) ?? this.island.heightAt(x, z);
+  }
+
+  #proneGroundOffsetAt(x, z, baseClearance) {
+    const rootHeight = this.#terrainHeightAt(x, z);
+    if (!Number.isFinite(rootHeight)) return baseClearance;
+
+    const lateralDirection = new THREE.Vector2(-this.inlandDirection.y, this.inlandDirection.x);
+    let highestRise = 0;
+
+    for (const distance of CRAWL_BODY_SAMPLE_DISTANCES) {
+      for (const lateralSign of [-1, 0, 1]) {
+        const lateral = lateralSign * CRAWL_BODY_HALF_WIDTH;
+        const sampleX = x
+          + this.inlandDirection.x * distance
+          + lateralDirection.x * lateral;
+        const sampleZ = z
+          + this.inlandDirection.y * distance
+          + lateralDirection.y * lateral;
+        const sampleHeight = this.#terrainHeightAt(sampleX, sampleZ);
+        if (!Number.isFinite(sampleHeight)) continue;
+        highestRise = Math.max(highestRise, sampleHeight - rootHeight);
+      }
+    }
+
+    return baseClearance + Math.max(0, highestRise) + (highestRise > 0 ? CRAWL_SURFACE_PADDING : 0);
   }
 
   #resolveSeawardDirection(spawn) {
