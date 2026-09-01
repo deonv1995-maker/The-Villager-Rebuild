@@ -34,7 +34,6 @@ const half = PHYSICAL_LOG.halfLength;
 const width = PHYSICAL_LOG.floorWidth;
 const floorBaseY = 0.08;
 const floorTopY = floorBaseY + 0.028;
-const snapGrid = value => Math.round(value / PHYSICAL_LOG.gridStep) * PHYSICAL_LOG.gridStep;
 
 const makeFloor = (id, z) => ({
   id,
@@ -131,12 +130,8 @@ for (const existing of frames) {
   );
 }
 
-// Rotated construction exposes a second failure mode from the same structural contract.
-// Connected floor centers are quantized on the world grid while their corners are derived
-// from the exact 45-degree local basis. Across three strips that produces a bounded long
-// edge: too far for the strict new-post tolerance, but still inside the established pair
-// recognition tolerance. A legal post must therefore use strict tolerance only as the
-// minimum-distance guard and the pair tolerance to recognize its full-Log neighbour.
+// Rotated connected floors must inherit the exact local basis. Three strips therefore
+// close into one perfect physical-Log square without accumulating world-grid drift.
 const rotatedGroup = new THREE.Group();
 const rotatedPlayer = { root: new THREE.Group(), model: null };
 const rotatedSystem = new PhysicalLogSystem({
@@ -149,8 +144,8 @@ const rotatedSystem = new PhysicalLogSystem({
 const rotatedYaw = Math.PI / 4;
 const cosYaw = Math.cos(rotatedYaw);
 const sinYaw = Math.sin(rotatedYaw);
-const snappedStripStepX = snapGrid(sinYaw * width);
-const snappedStripStepZ = snapGrid(cosYaw * width);
+const snappedStripStepX = sinYaw * width;
+const snappedStripStepZ = cosYaw * width;
 const rotatedFloors = [0, 1, 2].map(index => ({
   id: 20 + index,
   mode: 'floor',
@@ -178,12 +173,8 @@ const rotatedBackDistance = Math.hypot(
 const rotatedDrift = rotatedBackDistance - length;
 
 assert.ok(
-  rotatedDrift > PHYSICAL_LOG.framePlacementSpacingTolerance,
-  '45-degree three-strip fixture must exceed the strict placement connection tolerance'
-);
-assert.ok(
-  rotatedDrift <= PHYSICAL_LOG.frameSpacingTolerance,
-  '45-degree three-strip fixture must remain inside bounded structural pair drift'
+  Math.abs(rotatedDrift) < 0.000001,
+  'Three connected rotated floor strips must close into one exact physical-Log square'
 );
 
 const rotatedFrames = [
@@ -224,4 +215,58 @@ assert.ok(
   'Rotated repair must preserve the strict no-short-bay placement guard'
 );
 
-console.log('FRAME structural corner snapping verified for cardinal and rotated three-strip cabins without reopening short wall bays.');
+// A FRAME must never materialize through the Ranger. If the Ranger overlaps the intended
+// station, placement may choose another legal exterior station or remain invalid.
+const safetySystem = new PhysicalLogSystem({
+  group: new THREE.Group(),
+  player: { root: new THREE.Group(), model: null },
+  terrain,
+  collision,
+  gatherables
+});
+safetySystem.builtLogs = floors.map(floor => ({ ...floor, root: new THREE.Group() }));
+const overlappedCorner = { x: rightX, z: frontZ };
+const safetyPlayer = new THREE.Vector3(rightX + 0.18, 0, frontZ);
+assert.ok(safetySystem.pickup(safetyPlayer), 'Ranger-clearance regression needs one carried Log');
+assert.equal(safetySystem.setBuildMode('frame'), true);
+safetySystem.update(safetyPlayer, new THREE.Vector3(-1, 0, 0));
+if (safetySystem.previewValid) {
+  assert.ok(
+    Math.hypot(
+      safetySystem.previewPlacement.x - safetyPlayer.x,
+      safetySystem.previewPlacement.z - safetyPlayer.z
+    ) >= 0.7,
+    'FRAME placement must not create a collision post through the Ranger'
+  );
+}
+assert.notDeepEqual(
+  safetySystem.previewValid
+    ? { x: safetySystem.previewPlacement.x, z: safetySystem.previewPlacement.z }
+    : null,
+  overlappedCorner,
+  'The overlapped exterior corner must not remain a valid FRAME target'
+);
+
+// Interior one-third strip seams are floor geometry, not structural stations. The first
+// FRAME on a three-strip square must resolve to one of the four outer Log-square corners.
+const seamSystem = new PhysicalLogSystem({
+  group: new THREE.Group(),
+  player: { root: new THREE.Group(), model: null },
+  terrain,
+  collision,
+  gatherables
+});
+seamSystem.builtLogs = floors.map(floor => ({ ...floor, root: new THREE.Group() }));
+const seamZ = width * 0.5;
+const seamPlayer = new THREE.Vector3(leftX - PHYSICAL_LOG.placeDistance, 0, seamZ);
+assert.ok(seamSystem.pickup(seamPlayer), 'Perimeter regression needs one carried Log');
+assert.equal(seamSystem.setBuildMode('frame'), true);
+seamSystem.update(seamPlayer, new THREE.Vector3(1, 0, 0));
+assert.equal(seamSystem.previewValid, true, 'An exterior structural corner must remain reachable');
+assert.ok(
+  Math.abs(seamSystem.previewPlacement.z - frontZ) < 0.000001 ||
+  Math.abs(seamSystem.previewPlacement.z - backZ) < 0.000001,
+  'FRAME candidates must skip one-third floor seams and stay on the outer structural lattice'
+);
+
+console.log('FRAME structural corners, exact three-strip floors, perimeter lattice and Ranger clearance verified.');

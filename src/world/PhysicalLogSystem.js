@@ -27,6 +27,9 @@ const PREVIEW_INVALID = 0xd85d57;
 const FLOOR_CENTER_LIFT = 0;
 const FLOOR_TOP_LIFT = 0.028;
 const ROOF_SEAT_LIFT = 0.08;
+const FRAME_PLAYER_CLEARANCE = 0.72;
+const FLOOR_COMPONENT_GAP = 0.16;
+const STRUCTURAL_LATTICE_TOLERANCE = PHYSICAL_LOG.framePlacementSpacingTolerance;
 // The procedural raw-log mesh reads as a large block at shoulder distance on mobile.
 // Keep the physical carry state authoritative, but suppress that placeholder presentation
 // until it can be replaced by a natural dedicated carry asset/animation.
@@ -281,7 +284,7 @@ export class PhysicalLogSystem {
 
     if (mode === 'raw') return this.#rawPlacement(base);
     if (mode === 'floor') return this.#floorPlacement(base);
-    if (mode === 'frame') return this.#framePlacement(base);
+    if (mode === 'frame') return this.#framePlacement(base, playerPosition);
     if (mode === 'wall') return this.#wallPlacement(base);
     if (mode === 'angle') return this.#anglePlacement(base);
     if (mode === 'roof') return this.#roofPlacement(base);
@@ -347,8 +350,11 @@ export class PhysicalLogSystem {
     };
   }
 
-  #framePlacement(base) {
-    const compatibleCorner = this.#nearestFloorCorner(base, { requireStructuralFit: true });
+  #framePlacement(base, playerPosition) {
+    const compatibleCorner = this.#nearestFloorCorner(base, {
+      requireStructuralFit: true,
+      playerPosition
+    });
     const corner = compatibleCorner ?? this.#nearestFloorCorner(base);
     if (!corner) {
       return {
@@ -549,8 +555,11 @@ export class PhysicalLogSystem {
         [-basis.zX * PHYSICAL_LOG.floorWidth, -basis.zZ * PHYSICAL_LOG.floorWidth]
       ];
       for (const [ox, oz] of offsets) {
-        const x = this.#snapGrid(floor.x + ox);
-        const z = this.#snapGrid(floor.z + oz);
+        // A snapped floor inherits its neighbour's exact local basis. Re-quantizing
+        // each center to the world grid accumulates drift at rotated orientations and
+        // prevents three strips from closing into one exact physical-Log square.
+        const x = floor.x + ox;
+        const z = floor.z + oz;
         const distance = Math.hypot(x - base.x, z - base.z);
         if (distance >= bestDistance) continue;
         bestDistance = distance;
@@ -566,7 +575,10 @@ export class PhysicalLogSystem {
     return best;
   }
 
-  #nearestFloorCorner(base, { requireStructuralFit = false } = {}) {
+  #nearestFloorCorner(base, {
+    requireStructuralFit = false,
+    playerPosition = null
+  } = {}) {
     let best = null;
     let bestDistance = PHYSICAL_LOG.frameSnapRange;
     const frames = requireStructuralFit ? this.#activeBuilt('frame') : null;
@@ -577,6 +589,11 @@ export class PhysicalLogSystem {
           const x = floor.x + basis.xX * PHYSICAL_LOG.halfLength * sx + basis.zX * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
           const z = floor.z + basis.xZ * PHYSICAL_LOG.halfLength * sx + basis.zZ * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
           const candidate = { x, z, baseY: floor.topY };
+          if (!this.#isOuterStructuralCorner(floor, candidate)) continue;
+          if (
+            playerPosition &&
+            Math.hypot(x - playerPosition.x, z - playerPosition.z) < FRAME_PLAYER_CLEARANCE
+          ) continue;
           if (requireStructuralFit && !frameCornerFitsStructure(candidate, frames)) continue;
           const distance = Math.hypot(x - base.x, z - base.z);
           if (distance >= bestDistance) continue;
@@ -586,6 +603,76 @@ export class PhysicalLogSystem {
       }
     }
     return best;
+  }
+
+  #isOuterStructuralCorner(seedFloor, candidate) {
+    const component = this.#connectedFloorComponent(seedFloor);
+    const basis = this.#basis(seedFloor.yaw);
+    const projectX = (x, z) => x * basis.xX + z * basis.xZ;
+    const projectZ = (x, z) => x * basis.zX + z * basis.zZ;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+
+    for (const floor of component) {
+      const centerX = projectX(floor.x, floor.z);
+      const centerZ = projectZ(floor.x, floor.z);
+      minX = Math.min(minX, centerX - PHYSICAL_LOG.halfLength);
+      maxX = Math.max(maxX, centerX + PHYSICAL_LOG.halfLength);
+      minZ = Math.min(minZ, centerZ - PHYSICAL_LOG.floorWidth * 0.5);
+      maxZ = Math.max(maxZ, centerZ + PHYSICAL_LOG.floorWidth * 0.5);
+    }
+
+    const x = projectX(candidate.x, candidate.z);
+    const z = projectZ(candidate.x, candidate.z);
+    const onEnvelope =
+      Math.abs(x - minX) <= STRUCTURAL_LATTICE_TOLERANCE ||
+      Math.abs(x - maxX) <= STRUCTURAL_LATTICE_TOLERANCE ||
+      Math.abs(z - minZ) <= STRUCTURAL_LATTICE_TOLERANCE ||
+      Math.abs(z - maxZ) <= STRUCTURAL_LATTICE_TOLERANCE;
+    if (!onEnvelope) return false;
+
+    const xStep = (x - minX) / PHYSICAL_LOG.length;
+    const zStep = (z - minZ) / PHYSICAL_LOG.length;
+    return (
+      Math.abs(xStep - Math.round(xStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE &&
+      Math.abs(zStep - Math.round(zStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE
+    );
+  }
+
+  #connectedFloorComponent(seedFloor) {
+    const floors = this.#activeBuilt('floor');
+    const component = [];
+    const pending = [seedFloor];
+    const visited = new Set();
+
+    while (pending.length) {
+      const floor = pending.pop();
+      if (!floor || visited.has(floor.id)) continue;
+      visited.add(floor.id);
+      component.push(floor);
+
+      for (const candidate of floors) {
+        if (visited.has(candidate.id)) continue;
+        if (this.#axisYawDelta(candidate.yaw, seedFloor.yaw) > 0.16) continue;
+        if (Math.abs(candidate.baseY - seedFloor.baseY) > PHYSICAL_LOG.frameLevelTolerance) continue;
+        const basis = this.#basis(seedFloor.yaw);
+        const dx = candidate.x - floor.x;
+        const dz = candidate.z - floor.z;
+        const alongX = Math.abs(dx * basis.xX + dz * basis.xZ);
+        const alongZ = Math.abs(dx * basis.zX + dz * basis.zZ);
+        const neighboursAlongLength =
+          alongX <= PHYSICAL_LOG.length + FLOOR_COMPONENT_GAP &&
+          alongZ <= PHYSICAL_LOG.floorWidth + FLOOR_COMPONENT_GAP;
+        const neighboursAcrossWidth =
+          alongX <= PHYSICAL_LOG.floorWidth + FLOOR_COMPONENT_GAP &&
+          alongZ <= PHYSICAL_LOG.length + FLOOR_COMPONENT_GAP;
+        if (neighboursAlongLength || neighboursAcrossWidth) pending.push(candidate);
+      }
+    }
+
+    return component;
   }
 
   #framePairs() {
