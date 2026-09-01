@@ -26,6 +26,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     super(group);
     this.chunks = chunks;
     this.mainlandScale = MAINLAND_SCALE;
+    this.chunkTerrainSegments = 18;
     this.satelliteIslands = this.#generateSatelliteIslands();
     this.extentX = Math.max(
       410,
@@ -174,7 +175,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
   #createChunkedTerrain() {
     const chunkSize = this.chunks?.chunkSize ?? 72;
-    const segments = 18;
+    const segments = this.chunkTerrainSegments;
     const minIx = Math.floor(-this.extentX / chunkSize);
     const maxIx = Math.floor(this.extentX / chunkSize);
     const minIz = Math.floor((this.centerZ - this.extentZ) / chunkSize);

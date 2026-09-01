@@ -4,6 +4,11 @@ const SHELF_COLOR = 0x72d4c6;
 const SHOAL_COLOR = 0x8bdcc7;
 const DEEP_SHALLOW_COLOR = new THREE.Color(0x55bdc4);
 const BEACH_SHALLOW_COLOR = new THREE.Color(0x9fe3c9);
+const SHALLOW_STRENGTH_CUTOFF = 0.075;
+const SHALLOW_TERRAIN_CLEARANCE = 0.015;
+const SHALLOW_SURFACE_OFFSET = 0.04;
+const SHALLOW_RENDER_ORDER = 2;
+const OCEAN_SHIMMER_RENDER_ORDER = 3;
 
 const smoothstep = (value, min, max) => THREE.MathUtils.smoothstep(value, min, max);
 
@@ -81,19 +86,23 @@ export class WaterVisualSystem {
     const shimmer = new THREE.Mesh(geometry, this.waveMaterial);
     shimmer.name = 'stylized-ocean-shimmer';
     shimmer.position.set(0, this.terrain.waterLevel + 0.022, this.terrain.centerZ);
-    shimmer.renderOrder = 2;
+    shimmer.renderOrder = OCEAN_SHIMMER_RENDER_ORDER;
     this.group.add(shimmer);
   }
 
   #createChunkedShallows() {
     const chunkSize = this.chunks.chunkSize;
-    const segments = 12;
+    const segments = Number.isInteger(this.terrain.chunkTerrainSegments)
+      ? this.terrain.chunkTerrainSegments
+      : 12;
     const cell = chunkSize / segments;
+    const gridSize = segments + 1;
     const minIx = Math.floor(-this.terrain.extentX / chunkSize);
     const maxIx = Math.floor(this.terrain.extentX / chunkSize);
     const minIz = Math.floor((this.terrain.centerZ - this.terrain.extentZ) / chunkSize);
     const maxIz = Math.floor((this.terrain.centerZ + this.terrain.extentZ) / chunkSize);
     const color = new THREE.Color();
+    const safeWaterHeight = this.terrain.waterLevel - SHALLOW_TERRAIN_CLEARANCE;
 
     for (let ix = minIx; ix <= maxIx; ix += 1) {
       for (let iz = minIz; iz <= maxIz; iz += 1) {
@@ -101,31 +110,73 @@ export class WaterVisualSystem {
         const centerZ = (iz + 0.5) * chunkSize;
         const positions = [];
         const colors = [];
+        const heights = new Float32Array(gridSize * gridSize);
+        const strengths = new Float32Array(gridSize * gridSize);
+
+        // Use the same vertex lattice as the chunked terrain. A shallow-water
+        // triangle is emitted only when every one of its terrain vertices is
+        // safely submerged, so the translucent water sheet cannot intersect
+        // dry beach triangles and z-fight as the camera moves.
+        for (let gx = 0; gx <= segments; gx += 1) {
+          const localX = -chunkSize * 0.5 + gx * cell;
+          for (let gz = 0; gz <= segments; gz += 1) {
+            const localZ = -chunkSize * 0.5 + gz * cell;
+            const worldX = centerX + localX;
+            const worldZ = centerZ + localZ;
+            const index = gx * gridSize + gz;
+            const height = this.terrain.heightAt(worldX, worldZ);
+            heights[index] = height;
+            strengths[index] = height <= safeWaterHeight
+              ? this.terrain.shallowWaterStrengthAt(worldX, worldZ)
+              : 0;
+          }
+        }
 
         for (let gx = 0; gx < segments; gx += 1) {
+          const localX0 = -chunkSize * 0.5 + gx * cell;
+          const localX1 = localX0 + cell;
           for (let gz = 0; gz < segments; gz += 1) {
-            const localX0 = -chunkSize * 0.5 + gx * cell;
             const localZ0 = -chunkSize * 0.5 + gz * cell;
-            const localX1 = localX0 + cell;
             const localZ1 = localZ0 + cell;
-            const worldX = centerX + (localX0 + localX1) * 0.5;
-            const worldZ = centerZ + (localZ0 + localZ1) * 0.5;
-            const strength = this.terrain.shallowWaterStrengthAt(worldX, worldZ);
-            if (strength <= 0.075) continue;
-            if (this.terrain.heightAt(worldX, worldZ) > this.terrain.waterLevel + 0.08) continue;
+            const i00 = gx * gridSize + gz;
+            const i10 = (gx + 1) * gridSize + gz;
+            const i11 = (gx + 1) * gridSize + gz + 1;
+            const i01 = gx * gridSize + gz + 1;
 
-            const y = this.terrain.waterLevel + 0.04;
-            positions.push(
-              localX0, y, localZ0,
-              localX1, y, localZ0,
-              localX1, y, localZ1,
-              localX0, y, localZ0,
-              localX1, y, localZ1,
-              localX0, y, localZ1
+            this.#appendShallowTriangle(
+              positions,
+              colors,
+              color,
+              heights,
+              strengths,
+              i00,
+              i10,
+              i11,
+              localX0,
+              localZ0,
+              localX1,
+              localZ0,
+              localX1,
+              localZ1,
+              safeWaterHeight
             );
-
-            color.copy(DEEP_SHALLOW_COLOR).lerp(BEACH_SHALLOW_COLOR, strength);
-            for (let vertex = 0; vertex < 6; vertex += 1) colors.push(color.r, color.g, color.b);
+            this.#appendShallowTriangle(
+              positions,
+              colors,
+              color,
+              heights,
+              strengths,
+              i00,
+              i11,
+              i01,
+              localX0,
+              localZ0,
+              localX1,
+              localZ1,
+              localX0,
+              localZ1,
+              safeWaterHeight
+            );
           }
         }
 
@@ -142,15 +193,61 @@ export class WaterVisualSystem {
           roughness: 0.3,
           metalness: 0,
           depthWrite: false,
+          depthTest: true,
           side: THREE.DoubleSide
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = `shallow-water-chunk-${ix}-${iz}`;
         mesh.position.set(centerX, 0, centerZ);
-        mesh.renderOrder = 2;
+        mesh.renderOrder = SHALLOW_RENDER_ORDER;
         this.chunks.addObjectToKey(mesh, `${ix}:${iz}`);
       }
     }
+  }
+
+  #appendShallowTriangle(
+    positions,
+    colors,
+    color,
+    heights,
+    strengths,
+    indexA,
+    indexB,
+    indexC,
+    ax,
+    az,
+    bx,
+    bz,
+    cx,
+    cz,
+    safeWaterHeight
+  ) {
+    if (
+      heights[indexA] > safeWaterHeight
+      || heights[indexB] > safeWaterHeight
+      || heights[indexC] > safeWaterHeight
+    ) return false;
+
+    const strengthA = strengths[indexA];
+    const strengthB = strengths[indexB];
+    const strengthC = strengths[indexC];
+    if (Math.max(strengthA, strengthB, strengthC) <= SHALLOW_STRENGTH_CUTOFF) return false;
+
+    const y = this.terrain.waterLevel + SHALLOW_SURFACE_OFFSET;
+    positions.push(
+      ax, y, az,
+      bx, y, bz,
+      cx, y, cz
+    );
+    this.#appendShallowColor(colors, color, strengthA);
+    this.#appendShallowColor(colors, color, strengthB);
+    this.#appendShallowColor(colors, color, strengthC);
+    return true;
+  }
+
+  #appendShallowColor(colors, color, strength) {
+    color.copy(DEEP_SHALLOW_COLOR).lerp(BEACH_SHALLOW_COLOR, strength);
+    colors.push(color.r, color.g, color.b);
   }
 
   #createRipplePool() {
@@ -252,7 +349,7 @@ export class WaterVisualSystem {
 
     const shelf = new THREE.Mesh(geometry, this.#createShelfMaterial(SHELF_COLOR, 0.2));
     shelf.name = 'main-island-shallow-water-shelf';
-    shelf.renderOrder = 2;
+    shelf.renderOrder = SHALLOW_RENDER_ORDER;
     this.group.add(shelf);
   }
 
@@ -263,10 +360,10 @@ export class WaterVisualSystem {
       geometry.rotateX(-Math.PI / 2);
       const shelf = new THREE.Mesh(geometry, this.#createShelfMaterial(SHELF_COLOR, 0.25));
       shelf.name = `satellite-shallow-water-${island.id}`;
-      shelf.position.set(island.x, this.terrain.waterLevel + 0.04, island.z);
+      shelf.position.set(island.x, this.terrain.waterLevel + SHALLOW_SURFACE_OFFSET, island.z);
       shelf.scale.set(island.halfX, 1, island.halfZ);
       shelf.rotation.y = island.yaw;
-      shelf.renderOrder = 2;
+      shelf.renderOrder = SHALLOW_RENDER_ORDER;
       this.group.add(shelf);
     }
   }
@@ -275,7 +372,7 @@ export class WaterVisualSystem {
     for (const island of this.terrain.getSatelliteIslands()) {
       const ribbon = this.#createShoalRibbon(island.bar);
       ribbon.name = `sandbar-shallow-water-${island.id}`;
-      ribbon.renderOrder = 2;
+      ribbon.renderOrder = SHALLOW_RENDER_ORDER;
       this.group.add(ribbon);
     }
   }
