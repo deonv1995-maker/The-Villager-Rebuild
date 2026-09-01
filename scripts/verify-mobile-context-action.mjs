@@ -74,13 +74,13 @@ const thatch = resolveContextAction({
     priority: 40,
     available: true,
     icon: 'hand',
-    label: 'Thatch roof panel with 4 Grass',
-    caption: 'THATCH'
+    label: 'Continue roof · thatch next panel with 4 Grass',
+    caption: 'ROOF · THATCH'
   }]
 });
 assert.equal(thatch.source, 'external');
 assert.equal(thatch.externalId, 'roof-thatch');
-assert.equal(thatch.caption, 'THATCH');
+assert.equal(thatch.caption, 'ROOF · THATCH');
 
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const contextActionSource = fs.readFileSync(new URL('../src/ui/ContextActionPolicy.js', import.meta.url), 'utf8');
@@ -115,7 +115,11 @@ for (const mode of ['raw', 'floor', 'frame', 'wall', 'angle', 'roof', 'drop']) {
 }
 assert.doesNotMatch(mobileHudSource, /data-build="raw">RAW/, 'Build modes must not fall back to tall text buttons');
 assert.match(thatchControllerSource, /setExternalAction\(ACTION_ID/, 'Roof thatching must route through the unified Action button');
-assert.match(thatchControllerSource, /\? 'THATCH' : `NEED/, 'Affordable roof thatching must identify itself explicitly as THATCH');
+assert.match(
+  thatchControllerSource,
+  /\? 'ROOF · THATCH' : `NEED/,
+  'Affordable panel thatching must identify itself as the continuation of the selected ROOF workflow'
+);
 assert.doesNotMatch(thatchControllerSource, /roof-thatch-tray/, 'Roof thatching must not add a separate mobile button tray');
 
 assert.match(

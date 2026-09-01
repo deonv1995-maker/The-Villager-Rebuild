@@ -38,7 +38,8 @@ export class RoofThatchController {
 
     const carryingLog = this.game.physicalLogs?.isCarrying() ?? false;
     const toolId = this.game.toolbelt?.getEquippedToolId() ?? null;
-    if (carryingLog || toolId !== null || !this.game.player) {
+    const roofWorkflowSelected = this.game.physicalLogs?.getBuildState?.().mode === 'roof';
+    if (carryingLog || (toolId !== null && !roofWorkflowSelected) || !this.game.player) {
       this.#setTarget(null);
       return;
     }
@@ -84,9 +85,9 @@ export class RoofThatchController {
       available: this.currentTarget.canAfford,
       icon: 'hand',
       label: this.currentTarget.canAfford
-        ? `Thatch roof panel with ${THATCH_GRASS_COST} Grass`
-        : `Need ${this.currentTarget.missingGrass} Grass for thatch`,
-      caption: this.currentTarget.canAfford ? 'THATCH' : `NEED ${this.currentTarget.missingGrass}`,
+        ? `Continue roof · thatch next panel with ${THATCH_GRASS_COST} Grass`
+        : `Roof frame complete · need ${this.currentTarget.missingGrass} Grass`,
+      caption: this.currentTarget.canAfford ? 'ROOF · THATCH' : `NEED ${this.currentTarget.missingGrass}`,
       priority: 40,
       onTrigger: () => this.#buildThatch()
     });
@@ -94,7 +95,9 @@ export class RoofThatchController {
 
   #buildThatch() {
     if (!this.currentTarget || !this.game.player) return;
-    if (this.game.toolbelt?.getEquippedToolId() !== null) return;
+    const toolId = this.game.toolbelt?.getEquippedToolId() ?? null;
+    const roofWorkflowSelected = this.game.physicalLogs?.getBuildState?.().mode === 'roof';
+    if (toolId !== null && !roofWorkflowSelected) return;
     if (this.game.physicalLogs?.isCarrying()) return;
 
     this.game.player.getPosition(this.playerPosition);
@@ -111,7 +114,7 @@ export class RoofThatchController {
 
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus?.(`ROOF PANEL THATCHED · ${THATCH_GRASS_COST} GRASS USED`);
-    this.game.hud?.setObjective('Move to the next open roof panel · Hand selected · tap THATCH again · 4 Grass per panel');
+    this.game.hud?.setObjective('Move to the next open roof panel · tap ROOF · THATCH again · 4 Grass per panel');
     this.#setTarget(this.system.getTarget(this.playerPosition));
   }
 }
