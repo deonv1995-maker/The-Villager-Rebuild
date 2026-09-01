@@ -10,11 +10,11 @@ const PHASE = Object.freeze({
 });
 
 const PHASE_DURATION = Object.freeze({
-  [PHASE.PRONE]: 0.75,
-  [PHASE.CRAWL]: 2.4,
-  [PHASE.RISE]: 1.45,
-  [PHASE.DUST]: 1.6,
-  [PHASE.SETTLE]: 0.55
+  [PHASE.PRONE]: 0.9,
+  [PHASE.CRAWL]: 6.0,
+  [PHASE.RISE]: 1.55,
+  [PHASE.DUST]: 1.7,
+  [PHASE.SETTLE]: 0.65
 });
 
 const CRAWL_ANIMATIONS = Object.freeze([
@@ -40,6 +40,7 @@ const DUST_ANIMATIONS = Object.freeze([
 ]);
 
 const smooth01 = value => THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(value, 0, 1), 0, 1);
+const normalizeAnimationName = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export class BeachArrivalIntroController {
   constructor({ game, setStatus, onComplete = null }) {
@@ -53,6 +54,7 @@ export class BeachArrivalIntroController {
     this.started = false;
     this.completed = false;
     this.phaseAnimation = null;
+    this.nativeCrawlAnimation = false;
     this.spawn = null;
     this.wetSand = null;
     this.crawlEnd = null;
@@ -67,10 +69,7 @@ export class BeachArrivalIntroController {
     this.completed = false;
     this.spawn = this.island.getSpawnPoint?.() ?? { x: 0, z: 91 };
     this.wetSand = this.#findWetSandStart(this.spawn);
-    this.crawlEnd = {
-      x: THREE.MathUtils.lerp(this.wetSand.x, this.spawn.x, 0.78),
-      z: THREE.MathUtils.lerp(this.wetSand.z, this.spawn.z, 0.78)
-    };
+    this.crawlEnd = { ...this.spawn };
     this.forwardYaw = Math.atan2(
       this.spawn.x - this.wetSand.x,
       this.spawn.z - this.wetSand.z
@@ -83,9 +82,9 @@ export class BeachArrivalIntroController {
       x: this.wetSand.x,
       z: this.wetSand.z,
       yaw: this.forwardYaw,
-      modelPitch: -1.48,
-      modelRoll: -0.08,
-      modelYOffset: 0.28,
+      modelPitch: 1.48,
+      modelRoll: 0.08,
+      modelYOffset: 0.18,
       snapCamera: true
     });
     this.setStatus?.('DAY 1 · WASHED ASHORE');
@@ -99,39 +98,37 @@ export class BeachArrivalIntroController {
     const progress = THREE.MathUtils.clamp(this.phaseElapsed / duration, 0, 1);
 
     if (this.phase === PHASE.PRONE) {
-      const breathe = Math.sin(this.phaseElapsed * 5.2) * 0.018;
+      const breathe = Math.sin(this.phaseElapsed * 4.4) * 0.014;
       player.setCinematicPose({
         x: this.wetSand.x,
         z: this.wetSand.z,
         yaw: this.forwardYaw,
-        modelPitch: -1.48 + breathe,
-        modelRoll: -0.08,
-        modelYOffset: 0.28
+        modelPitch: 1.48 - breathe,
+        modelRoll: 0.08,
+        modelYOffset: 0.18
       });
     } else if (this.phase === PHASE.CRAWL) {
       const eased = smooth01(progress);
       const x = THREE.MathUtils.lerp(this.wetSand.x, this.crawlEnd.x, eased);
       const z = THREE.MathUtils.lerp(this.wetSand.z, this.crawlEnd.z, eased);
-      const fallbackPitch = this.phaseAnimation ? 0 : THREE.MathUtils.lerp(-1.18, -0.38, eased);
+      const fallbackPitch = THREE.MathUtils.lerp(1.40, 1.18, eased);
       player.setCinematicPose({
         x,
         z,
         yaw: this.forwardYaw,
-        modelPitch: fallbackPitch,
-        modelRoll: Math.sin(this.phaseElapsed * 5.4) * 0.045 * (1 - eased * 0.4),
-        modelYOffset: this.phaseAnimation ? 0 : 0.12
+        modelPitch: this.nativeCrawlAnimation ? 0 : fallbackPitch,
+        modelRoll: Math.sin(this.phaseElapsed * 3.2) * 0.028 * (1 - eased * 0.45),
+        modelYOffset: this.nativeCrawlAnimation ? 0 : 0.12
       });
     } else if (this.phase === PHASE.RISE) {
       const eased = smooth01(progress);
-      const x = THREE.MathUtils.lerp(this.crawlEnd.x, this.spawn.x, eased);
-      const z = THREE.MathUtils.lerp(this.crawlEnd.z, this.spawn.z, eased);
-      const fallbackPitch = this.phaseAnimation ? 0 : THREE.MathUtils.lerp(-0.42, 0, eased);
+      const fallbackPitch = this.phaseAnimation ? 0 : THREE.MathUtils.lerp(0.52, 0, eased);
       player.setCinematicPose({
-        x,
-        z,
+        x: this.spawn.x,
+        z: this.spawn.z,
         yaw: this.forwardYaw,
         modelPitch: fallbackPitch,
-        modelRoll: Math.sin(progress * Math.PI) * -0.055,
+        modelRoll: Math.sin(progress * Math.PI) * 0.045,
         modelYOffset: this.phaseAnimation ? 0 : THREE.MathUtils.lerp(0.08, 0, eased)
       });
     } else if (this.phase === PHASE.DUST) {
@@ -193,23 +190,37 @@ export class BeachArrivalIntroController {
     this.phase = phase;
     this.phaseElapsed = 0;
     this.phaseAnimation = null;
+    this.nativeCrawlAnimation = false;
 
-    if (phase === PHASE.CRAWL) {
+    if (phase === PHASE.PRONE) {
+      this.player.playCinematicAnimation(['Idle_A'], {
+        loop: true,
+        timeScale: 0.72
+      });
+    } else if (phase === PHASE.CRAWL) {
       this.phaseAnimation = this.player.playCinematicAnimation(CRAWL_ANIMATIONS, {
         loop: true,
-        timeScale: 0.9
+        timeScale: 0.55
       });
+      const crawlName = normalizeAnimationName(this.phaseAnimation?.name);
+      this.nativeCrawlAnimation = crawlName.includes('crawl') && !crawlName.includes('crouch');
+      if (!this.phaseAnimation) {
+        this.phaseAnimation = this.player.playCinematicAnimation(['Walking_A'], {
+          loop: true,
+          timeScale: 0.42
+        });
+      }
       this.setStatus?.('DAY 1 · CRAWL TO SHORE');
     } else if (phase === PHASE.RISE) {
       this.phaseAnimation = this.#playPhaseAnimation(RISE_ANIMATIONS, {
         loop: false,
-        timeScale: 0.95
+        timeScale: 0.82
       });
       this.setStatus?.('DAY 1 · FIND YOUR FEET');
     } else if (phase === PHASE.DUST) {
       this.phaseAnimation = this.#playPhaseAnimation(DUST_ANIMATIONS, {
         loop: false,
-        timeScale: 0.88
+        timeScale: 0.82
       });
       this.setStatus?.('DAY 1 · ASHORE');
     } else if (phase === PHASE.SETTLE) {
