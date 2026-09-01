@@ -5,16 +5,22 @@ const DEFAULT_LEVEL_TOLERANCE = PHYSICAL_LOG.frameLevelTolerance;
 /**
  * Frames belong to a physical-Log structural lattice, not every narrow floor-strip seam.
  * A candidate may extend an existing same-level structure only when it has at least one
- * neighbour one full Log away. Candidates near a structure but off that lattice are
- * rejected; a sufficiently isolated candidate may still begin a separate structure.
+ * neighbour approximately one full Log away. Candidates near a structure but off that
+ * lattice are rejected; a sufficiently isolated candidate may still begin a separate
+ * structure.
  *
- * This placement rule intentionally uses the stricter placement tolerance. Recognition
- * of pairs between posts that were already accepted is slightly more forgiving so a
- * closed bay can absorb small accumulated floor/grid drift without reopening short bays.
+ * Placement has two distinct tolerances:
+ * - spacingTolerance is the strict minimum-distance guard for new FRAME posts;
+ * - connectionTolerance recognizes a full-Log neighbour across bounded floor/grid drift.
+ *
+ * Keeping those responsibilities separate preserves the no-short-bay rule while allowing
+ * rotated three-strip floors to close cleanly when grid quantization makes an otherwise
+ * legal full-Log edge slightly longer than the strict placement tolerance.
  */
 export function frameCornerFitsStructure(corner, frames, {
   length = PHYSICAL_LOG.length,
   spacingTolerance = PHYSICAL_LOG.framePlacementSpacingTolerance,
+  connectionTolerance = PHYSICAL_LOG.frameSpacingTolerance,
   isolationRadius = PHYSICAL_LOG.frameIsolationRadius,
   levelTolerance = DEFAULT_LEVEL_TOLERANCE
 } = {}) {
@@ -33,7 +39,7 @@ export function frameCornerFitsStructure(corner, frames, {
   for (const frame of sameLevel) {
     const distance = Math.hypot(frame.x - corner.x, frame.z - corner.z);
     if (distance < minimumSpacing) return false;
-    if (Math.abs(distance - length) <= spacingTolerance) connectedAtLogLength = true;
+    if (Math.abs(distance - length) <= connectionTolerance) connectedAtLogLength = true;
     if (distance <= isolationRadius) nearExistingStructure = true;
   }
 
