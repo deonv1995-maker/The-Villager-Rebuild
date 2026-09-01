@@ -42,8 +42,12 @@ export class TitleSceneApp {
     this.ship = shipVisual.ship;
     this.hull = shipVisual.hull;
     this.mast = shipVisual.mast;
+    this.mastUpperPivot = shipVisual.mastUpperPivot;
+    this.lowerSplinters = shipVisual.lowerSplinters;
+    this.upperSplinters = shipVisual.upperSplinters;
     this.sailMesh = shipVisual.sailMesh;
     this.crate = shipVisual.crate;
+    this.updateRigging = shipVisual.updateRigging;
     this.scene.add(this.ship);
 
     this.storm = new TitleStormSystem({
@@ -178,7 +182,7 @@ export class TitleSceneApp {
       ?? movementGltf.animations.find(clip => /idle/i.test(clip.name));
     if (idle) {
       this.idleAction = this.mixer.clipAction(idle, this.ranger);
-      this.idleAction.setEffectiveTimeScale(0.72);
+      this.idleAction.setEffectiveTimeScale(0.9);
       this.idleAction.play();
     }
   }
@@ -239,9 +243,12 @@ export class TitleSceneApp {
 
   #applyRangerArmRestPose() {
     if (!this.rangerArmRestPose.length || this.rangerThrown) return;
-    const blend = this.state === 'menu'
+    const baseBlend = this.state === 'menu'
       ? TITLE_SCENE.rangerArmRestBlendMenu
       : TITLE_SCENE.rangerArmRestBlendStorm;
+    const blend = this.state === 'menu'
+      ? baseBlend
+      : THREE.MathUtils.lerp(baseBlend, 0.04, this.stormDanger);
 
     for (const { bone, quaternion } of this.rangerArmRestPose) {
       bone.quaternion.slerp(quaternion, blend);
@@ -255,14 +262,21 @@ export class TitleSceneApp {
     this.ship.position.set(0, -0.35 + bob, TITLE_SCENE.menuShipZ);
     this.ship.rotation.z = roll;
     this.ship.rotation.x = Math.sin(this.elapsed * 0.52) * 0.012;
-    this.mast.rotation.z = 0;
-    this.sailMesh.rotation.y = Math.sin(this.elapsed * 0.72) * 0.015;
-    this.sailMesh.rotation.z = 0;
+    this.mastUpperPivot.rotation.set(0, 0, 0);
+    this.lowerSplinters.visible = false;
+    this.upperSplinters.visible = false;
+    this.updateRigging?.(this.elapsed, { danger: 0, impact: 0 });
 
     if (this.rangerRig && !this.rangerThrown) {
-      this.rangerRig.position.set(0.95, 1.28, 2.25);
-      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.42;
-      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.48;
+      const footShift = Math.sin(this.elapsed * 1.35) * TITLE_SCENE.rangerDeckSway;
+      this.rangerRig.position.set(
+        0.95 + Math.sin(this.elapsed * 0.72) * 0.025,
+        1.28 + Math.abs(roll) * 0.16 + Math.cos(this.elapsed * 1.1) * 0.012,
+        2.25 + footShift
+      );
+      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.52 + Math.sin(this.elapsed * 0.83) * 0.018;
+      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.72 + Math.sin(this.elapsed * 1.18) * 0.014;
+      this.rangerRig.rotation.y = Math.sin(this.elapsed * 0.42) * 0.018;
     }
 
     this.camera.position.x = 8.5 + Math.sin(this.elapsed * 0.13) * 0.45;
@@ -277,6 +291,7 @@ export class TitleSceneApp {
     const danger = THREE.MathUtils.smoothstep(t, 0.12, 0.64);
     const severe = THREE.MathUtils.smoothstep(t, 0.42, 0.72);
     const impact = THREE.MathUtils.smoothstep(t, 0.66, 0.76);
+    const mastBreak = THREE.MathUtils.smoothstep(impact, TITLE_SCENE.mastBreakStart, 1);
     this.stormDanger = danger;
 
     const forward = THREE.MathUtils.smoothstep(t, 0.02, 0.72);
@@ -286,19 +301,28 @@ export class TitleSceneApp {
       + Math.sin(this.elapsed * 5.5) * severe * 0.08;
     this.ship.rotation.x = Math.sin(this.elapsed * 2.2) * danger * TITLE_SCENE.stormShipPitch + impact * 0.08;
     this.ship.rotation.z = Math.sin(this.elapsed * 2.65) * danger * TITLE_SCENE.stormShipRoll;
-    this.sailMesh.rotation.y = Math.sin(this.elapsed * 4.3) * danger * 0.07;
-    this.sailMesh.rotation.z = Math.sin(this.elapsed * 3.4) * danger * 0.03;
+
+    this.mastUpperPivot.rotation.z = -mastBreak * TITLE_SCENE.mastBreakAngle;
+    this.mastUpperPivot.rotation.x = mastBreak * 0.14;
+    this.lowerSplinters.visible = mastBreak > 0.015;
+    this.upperSplinters.visible = mastBreak > 0.015;
+    this.lowerSplinters.rotation.y = Math.sin(this.elapsed * 4.1) * mastBreak * 0.18;
+    this.upperSplinters.rotation.y = -Math.sin(this.elapsed * 3.7) * mastBreak * 0.16;
+    this.updateRigging?.(this.elapsed, { danger, impact: mastBreak });
 
     if (this.rangerRig && !this.rangerThrown) {
-      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.58 + severe * 0.06 + impact * 0.18;
-      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.62 + Math.sin(this.elapsed * 3.1) * severe * 0.03;
-      this.rangerRig.position.y = 1.28 + Math.abs(this.ship.rotation.z) * 0.1;
-      this.rangerRig.position.z = 2.25 + impact * 0.16;
+      const brace = Math.sin(this.elapsed * (2.2 + danger * 1.7));
+      this.rangerRig.rotation.x = -this.ship.rotation.x * 0.78 + severe * 0.08 + impact * 0.2 + brace * danger * 0.028;
+      this.rangerRig.rotation.z = -this.ship.rotation.z * 0.82 + brace * severe * 0.055;
+      this.rangerRig.rotation.y = Math.sin(this.elapsed * 1.25) * danger * 0.035;
+      this.rangerRig.position.x = 0.95 + Math.sin(this.elapsed * 1.8) * severe * 0.045;
+      this.rangerRig.position.y = 1.28 + Math.abs(this.ship.rotation.z) * 0.18 + Math.cos(this.elapsed * 2.4) * danger * 0.022;
+      this.rangerRig.position.z = 2.25 + impact * 0.16 + Math.sin(this.elapsed * 1.55) * severe * 0.035;
     }
 
-    this.mast.rotation.z = -impact * 1.02;
     if (impact > 0) {
       this.crate.rotation.x += dt * impact * 5.2;
+      this.crate.rotation.z += dt * impact * 1.8;
       this.crate.position.z -= dt * impact * 4.2;
     }
 
