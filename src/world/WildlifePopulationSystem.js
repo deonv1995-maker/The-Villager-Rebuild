@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../data/AnimalDefinitions.js';
 import { WILDLIFE_POPULATION } from '../data/WildlifePopulationDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
-import { DayOneHuntSystem } from './DayOneHuntSystem.js';
+import { WildAnimalActor } from './WildAnimalActor.js';
 
 export class WildlifePopulationSystem {
   constructor({ scene, terrain, gatherables = scene.userData?.services?.gatherables ?? null }) {
@@ -12,6 +12,7 @@ export class WildlifePopulationSystem {
     this.gatherables = gatherables;
     this.actors = [];
     this.activeAttackActor = null;
+    this.harvestActor = null;
     this.randomState = WILDLIFE_POPULATION.seed >>> 0;
     this.#populate();
   }
@@ -121,7 +122,7 @@ export class WildlifePopulationSystem {
   #addActor(speciesKey, center, instanceId) {
     const definition = ANIMAL_DEFINITIONS[speciesKey];
     if (!definition) throw new Error(`Unknown wildlife species: ${speciesKey}`);
-    this.actors.push(new DayOneHuntSystem({
+    this.actors.push(new WildAnimalActor({
       scene: this.scene,
       terrain: this.terrain,
       gatherables: this.gatherables,
