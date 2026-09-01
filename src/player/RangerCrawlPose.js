@@ -1,10 +1,17 @@
 import * as THREE from 'three';
 
+const CRAWL_CLIP_NAME = 'Cinematic_Exhausted_Crawl';
+const CRAWL_CLIP_DURATION = 2.2;
+const CRAWL_SAMPLE_TIMES = Object.freeze([0, 0.55, 1.1, 1.65, CRAWL_CLIP_DURATION]);
+const LEFT_REACH_SAMPLES = Object.freeze([0.5, 1, 0.5, 0, 0.5]);
+
 export class RangerCrawlPose {
   constructor({ player }) {
     this.player = player;
     this.model = null;
     this.bones = new Map();
+    this.clip = null;
+    this.action = null;
     this.tempBonePosition = new THREE.Vector3();
     this.tempChildPosition = new THREE.Vector3();
     this.tempTarget = new THREE.Vector3();
@@ -16,43 +23,86 @@ export class RangerCrawlPose {
     this.tempTargetQuaternion = new THREE.Quaternion();
   }
 
-  update({ time = 0, resting = false } = {}) {
-    if (!this.player?.model) return;
-    if (this.model !== this.player.model) this.#indexBones();
-    if (!this.bones.size) return;
+  play({ timeScale = 0.78 } = {}) {
+    if (!this.player?.model || !this.player?.mixer) return false;
+    if (this.model !== this.player.model || !this.clip) this.#buildClip();
+    if (!this.clip) return false;
 
-    // RangerController applies this after the AnimationMixer. The base Idle_A
-    // animation supplies subtle breathing while this overlay turns the limbs
-    // into a low, alternating drag instead of rotating a walk cycle sideways.
-    this.player.model.updateMatrixWorld(true);
+    // This is a cinematic-only animation action. It replaces the previous
+    // locomotion action instead of tipping Walking_A onto its side, so the
+    // hands, elbows and knees visibly pull the exhausted Ranger forward.
+    this.player.mixer.stopAllAction();
+    this.action = this.player.mixer.clipAction(this.clip, this.player.model);
+    this.action
+      .reset()
+      .setLoop(THREE.LoopRepeat, Infinity)
+      .setEffectiveTimeScale(Math.max(0.1, timeScale))
+      .setEffectiveWeight(1)
+      .play();
+    return true;
+  }
 
-    if (resting) {
-      this.#poseArm('l', 0.72, 0.94);
-      this.#poseArm('r', 0.28, 0.94);
-      this.#poseLeg('l', 0.34, 0.9);
-      this.#poseLeg('r', 0.58, 0.9);
-    } else {
-      const cycle = Math.sin(time * 2.55);
-      const leftReach = 0.5 + cycle * 0.5;
-      const rightReach = 1 - leftReach;
-      this.#poseArm('l', leftReach, 0.98);
-      this.#poseArm('r', rightReach, 0.98);
-      // Contralateral knees advance with the opposite arm, which reads as a
-      // tired crawl rather than both legs continuing a walking stride.
-      this.#poseLeg('l', rightReach, 0.94);
-      this.#poseLeg('r', leftReach, 0.94);
+  stop() {
+    this.action?.stop();
+    this.action = null;
+  }
+
+  #buildClip() {
+    this.model = this.player.model;
+    this.#indexBones();
+    const poseBones = this.#poseBones();
+    if (!poseBones.length) {
+      this.clip = null;
+      return;
     }
 
-    this.player.model.updateMatrixWorld(true);
+    const restPose = new Map(poseBones.map(bone => [bone, bone.quaternion.clone()]));
+    const samples = new Map(poseBones.map(bone => [bone, []]));
+
+    for (let index = 0; index < CRAWL_SAMPLE_TIMES.length; index += 1) {
+      for (const bone of poseBones) bone.quaternion.copy(restPose.get(bone));
+      this.model.updateMatrixWorld(true);
+
+      const leftReach = LEFT_REACH_SAMPLES[index];
+      const rightReach = 1 - leftReach;
+      this.#poseArm('l', leftReach, 1);
+      this.#poseArm('r', rightReach, 1);
+      this.#poseLeg('l', rightReach, 1);
+      this.#poseLeg('r', leftReach, 1);
+
+      for (const bone of poseBones) samples.get(bone).push(...bone.quaternion.toArray());
+    }
+
+    for (const bone of poseBones) bone.quaternion.copy(restPose.get(bone));
+    this.model.updateMatrixWorld(true);
+
+    const tracks = poseBones.map(bone => new THREE.QuaternionKeyframeTrack(
+      `${bone.uuid}.quaternion`,
+      CRAWL_SAMPLE_TIMES,
+      samples.get(bone)
+    ));
+    this.clip = new THREE.AnimationClip(CRAWL_CLIP_NAME, CRAWL_CLIP_DURATION, tracks);
   }
 
   #indexBones() {
-    this.model = this.player.model;
     this.bones.clear();
     this.model?.traverse(object => {
       if (!object.isBone || !object.name) return;
       this.bones.set(this.#normalize(object.name), object);
     });
+  }
+
+  #poseBones() {
+    return [
+      this.#bone('upperarm.l', 'leftupperarm', 'upperarmleft'),
+      this.#bone('lowerarm.l', 'leftlowerarm', 'lowerarmleft'),
+      this.#bone('upperarm.r', 'rightupperarm', 'upperarmright'),
+      this.#bone('lowerarm.r', 'rightlowerarm', 'lowerarmright'),
+      this.#bone('upperleg.l', 'leftupperleg', 'upperlegleft'),
+      this.#bone('lowerleg.l', 'leftlowerleg', 'lowerlegleft'),
+      this.#bone('upperleg.r', 'rightupperleg', 'upperlegright'),
+      this.#bone('lowerleg.r', 'rightlowerleg', 'lowerlegright')
+    ].filter((bone, index, bones) => bone && bones.indexOf(bone) === index);
   }
 
   #normalize(value) {
@@ -99,14 +149,14 @@ export class RangerCrawlPose {
     if (!upper || !lower || !hand) return;
 
     const elbowLocal = {
-      x: sideSign * THREE.MathUtils.lerp(0.33, 0.29, reach),
-      y: THREE.MathUtils.lerp(0.19, 0.23, reach),
-      z: THREE.MathUtils.lerp(1.22, 1.58, reach)
+      x: sideSign * THREE.MathUtils.lerp(0.34, 0.29, reach),
+      y: THREE.MathUtils.lerp(0.17, 0.22, reach),
+      z: THREE.MathUtils.lerp(1.12, 1.54, reach)
     };
     const handLocal = {
-      x: sideSign * THREE.MathUtils.lerp(0.37, 0.32, reach),
-      y: THREE.MathUtils.lerp(0.09, 0.12, reach),
-      z: THREE.MathUtils.lerp(1.43, 2.06, reach)
+      x: sideSign * THREE.MathUtils.lerp(0.39, 0.31, reach),
+      y: THREE.MathUtils.lerp(0.075, 0.11, reach),
+      z: THREE.MathUtils.lerp(1.34, 2.02, reach)
     };
 
     this.#aimBoneAt(upper, lower, this.#playerLocalPoint(elbowLocal), weight);
@@ -134,14 +184,14 @@ export class RangerCrawlPose {
     if (!upper || !lower || !foot) return;
 
     const kneeLocal = {
-      x: sideSign * 0.24,
-      y: THREE.MathUtils.lerp(0.13, 0.2, advance),
-      z: THREE.MathUtils.lerp(0.46, 0.9, advance)
+      x: sideSign * 0.25,
+      y: THREE.MathUtils.lerp(0.12, 0.19, advance),
+      z: THREE.MathUtils.lerp(0.42, 0.88, advance)
     };
     const footLocal = {
       x: sideSign * 0.22,
-      y: 0.07,
-      z: THREE.MathUtils.lerp(0.08, 0.28, advance)
+      y: 0.065,
+      z: THREE.MathUtils.lerp(0.05, 0.25, advance)
     };
 
     this.#aimBoneAt(upper, lower, this.#playerLocalPoint(kneeLocal), weight);
