@@ -635,8 +635,10 @@ export class RangerController {
     if (!next || this.animationState === name) return;
     const previous = this.animationState ? this.actions.get(this.animationState) : null;
     if (previous && previous !== next) previous.fadeOut(immediate ? 0.05 : 0.16);
-    next.setLoop(THREE.LoopRepeat, Infinity);
-    next.clampWhenFinished = false;
+    if (LOOPING_CLIPS.has(name)) {
+      next.setLoop(THREE.LoopRepeat, Infinity);
+      next.clampWhenFinished = false;
+    }
     next.reset().setEffectiveTimeScale(1).fadeIn(immediate ? 0.05 : 0.16).play();
     this.animationState = name;
   }
