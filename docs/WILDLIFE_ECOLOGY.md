@@ -16,7 +16,7 @@ The mobile-first runtime budget is 37 animals:
 | Fox | 2 | solitary | forest | prowling / rabbit hunting |
 | Wolf | 1 | solitary | deep forest | prowling / territorial aggression |
 
-`src/data/WildlifePopulationDefinitions.js` is the single source of truth for population counts, group size, grouping radius, spacing, slope limits, and habitat selection.
+`src/data/WildlifePopulationDefinitions.js` is the single source of truth for population counts, group size, grouping radius, spacing, slope limits, habitat selection, and respawn timing.
 
 ## Habitat rules
 
@@ -28,6 +28,22 @@ The mobile-first runtime budget is 37 animals:
 - The wolf uses the strongest forest-cover weighting and is kept to a single deep-forest territorial animal.
 
 The population sampler keeps a Ranger-spawn exclusion radius and terrain slope/playability checks. If a member offset is invalid, it falls back toward its valid group anchor rather than creating an invalid actor.
+
+## Renewable population
+
+Wildlife is managed as a fixed set of population slots. Killing an animal empties that slot temporarily; it does **not** permanently reduce the island population and it does not create an unbounded number of replacement actors.
+
+Each species has a respawn-delay range:
+
+- Rabbit: 55–100 seconds
+- Wild Pig: 90–150 seconds
+- Deer: 120–210 seconds
+- Fox: 180–300 seconds
+- Wolf: 240–360 seconds
+
+A timed-out slot may only repopulate when the Ranger is at least 48 world units from the selected habitat point. If the Ranger is still nearby, the slot retries after 12 seconds. Replacement animals are sampled back into their original social-group habitat, not spawned beside the Ranger or at arbitrary world positions. This keeps local hunting pressure readable while preventing the island from being hunted to extinction.
+
+The total live-plus-respawning slot budget therefore remains exactly 37. Repeated hunting cannot grow the population above its configured cap, which is important for mobile performance.
 
 ## Behavior boundaries
 
