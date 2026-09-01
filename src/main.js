@@ -98,7 +98,7 @@ async function boot() {
     setStatus('VOYAGE · PREPARING');
     titleScene = new TitleSceneApp({ canvas, setStatus });
     await titleScene.start({
-      onPlay: () => bootGameplay(titleScene, { resume: false })
+      onPlay: () => bootGameplay(titleScene)
     });
 
     const saveMenu = new TitleSaveMenuController({
