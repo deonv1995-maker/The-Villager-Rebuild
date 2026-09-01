@@ -16,6 +16,7 @@ import {
   collectRoofRegions
 } from './RoofTopology.js';
 import {
+  orderedRoofBuildCandidates,
   roofMemberCandidates,
   roofMemberOccupied,
   roofRaftersComplete
@@ -92,7 +93,7 @@ export class PhysicalLogSystem {
   getBuildState() {
     return {
       carrying: this.isCarrying(),
-      mode: this.buildMode,
+      mode: placedMode,
       label: LOG_BUILD_LABELS[this.buildMode],
       modes: [...LOG_BUILD_MODES],
       previewValid: this.previewValid,
@@ -183,7 +184,8 @@ export class PhysicalLogSystem {
     this.carryPose.setActive(false);
     this.#destroyPreview();
 
-    const root = this.#materializePlacement(this.buildMode, placement, item);
+    const placedMode = this.#resolvedPlacementMode(this.buildMode, placement);
+    const root = this.#materializePlacement(placedMode, placement, item);
     if (!root) {
       this.carriedItem = item;
       this.player.root.add(item.root);
@@ -195,9 +197,9 @@ export class PhysicalLogSystem {
       return null;
     }
 
-    root.name = `built-log-${this.nextBuiltId}-${this.buildMode}`;
+    root.name = `built-log-${this.nextBuiltId}-${placedMode}`;
     this.group.add(root);
-    const collisionHandle = this.#registerCollision(this.buildMode, placement, root);
+    const collisionHandle = this.#registerCollision(placedMode, placement, root);
     const built = {
       id: this.nextBuiltId,
       mode: this.buildMode,
@@ -210,7 +212,7 @@ export class PhysicalLogSystem {
       yaw: placement.yaw,
       baseY: placement.baseY ?? placement.ground,
       centerY: root.position.y,
-      topY: placement.topY ?? this.#topYForMode(this.buildMode, placement, root),
+      topY: placement.topY ?? this.#topYForMode(placedMode, placement, root),
       rawKey: placement.rawKey ?? null,
       snapKind: placement.snapKind ?? null,
       roofKey: placement.roofKey ?? null,
@@ -437,10 +439,25 @@ export class PhysicalLogSystem {
   }
 
   #roofPlacement(base) {
-    const best = this.#nearestRoofCandidate(base, { range: PHYSICAL_LOG.roofSnapRange });
+    const staged = orderedRoofBuildCandidates(this.#roofCandidates(base));
+    let best = null;
+    let bestDistance = PHYSICAL_LOG.roofSnapRange;
+    for (const candidate of staged) {
+      const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = candidate;
+    }
     return best
       ? this.#roofMemberPlacement(base, best)
       : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+  }
+
+  #resolvedPlacementMode(requestedMode, placement) {
+    if (requestedMode !== 'roof') return requestedMode;
+    if (placement?.roofRole === 'rafter') return 'angle';
+    if (placement?.roofRole === 'ridge') return 'raw';
+    return requestedMode;
   }
 
   #roofMemberPlacement(base, candidate) {
