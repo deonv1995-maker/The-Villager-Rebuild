@@ -1,0 +1,50 @@
+name: Ingest licensed wildlife assets
+
+on:
+  push:
+    branches:
+      - feat/wildlife-ecology-animation
+    paths:
+      - '.github/workflows/ingest-wildlife-assets.yml'
+      - '_asset_ingest/wildlife-source.lock'
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download pinned CC0 wildlife assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit='db3df04d1e4714298a09510b26fb6de6645138a2'
+          base="https://raw.githubusercontent.com/agentkaerf/FreeModels/${source_commit}/Ultimate%20Animated%20Animals%20-%20July%202021"
+          mkdir -p public/assets/animals/quaternius licenses
+          curl --fail --location --retry 3 "${base}/glTF/Deer.gltf" --output public/assets/animals/quaternius/Deer.gltf
+          curl --fail --location --retry 3 "${base}/glTF/Fox.gltf" --output public/assets/animals/quaternius/Fox.gltf
+          curl --fail --location --retry 3 "${base}/glTF/Wolf.gltf" --output public/assets/animals/quaternius/Wolf.gltf
+          curl --fail --location --retry 3 "${base}/License.txt" --output licenses/quaternius-ultimate-animated-animals-cc0.txt
+          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Deer.gltf
+          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Deer.gltf
+          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Fox.gltf
+          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Fox.gltf
+          grep -q '"name" : "Walk"' public/assets/animals/quaternius/Wolf.gltf
+          grep -q '"name" : "Gallop"' public/assets/animals/quaternius/Wolf.gltf
+      - name: Commit vendored runtime assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/animals/quaternius licenses/quaternius-ultimate-animated-animals-cc0.txt
+          if git diff --cached --quiet; then
+            echo 'Licensed wildlife assets already match the pinned source.'
+            exit 0
+          fi
+          git commit -m 'Vendor CC0 animated wildlife assets'
+          git push
