@@ -81,19 +81,17 @@ export class EnvironmentScatterSystem {
     this.#reserveGameplayRoute();
 
     const loader = new GLTFLoader();
-    const [treeBroad, treeTall, forestRock, cliffRock] = await Promise.all([
+    const [treeBroad, treeTall, forestRock] = await Promise.all([
       loader.loadAsync(ASSET_PATHS.forest.treeBroad),
       loader.loadAsync(ASSET_PATHS.forest.treeTall),
-      loader.loadAsync(ASSET_PATHS.forest.rock),
-      loader.loadAsync(ASSET_PATHS.cliffs.rock)
+      loader.loadAsync(ASSET_PATHS.forest.rock)
     ]);
 
     const assets = {
       trees: [treeBroad.scene, treeTall.scene],
-      forestRock: forestRock.scene,
-      cliffRock: cliffRock.scene
+      forestRock: forestRock.scene
     };
-    for (const template of [...assets.trees, assets.forestRock, assets.cliffRock]) {
+    for (const template of [...assets.trees, assets.forestRock]) {
       this.#prepareStaticTemplate(template);
     }
 
@@ -172,7 +170,7 @@ export class EnvironmentScatterSystem {
     });
   }
 
-  #placeForest({ trees, forestRock, cliffRock }) {
+  #placeForest({ trees, forestRock }) {
     const placementsByType = [[], []];
     let treesPlaced = 0;
     let attempts = 0;
@@ -216,7 +214,6 @@ export class EnvironmentScatterSystem {
       this.#createInstancedTemplate(trees[index], placements, `forest-tree-batch-${index}`);
     });
 
-    const rockTemplates = [forestRock, cliffRock];
     let rocksPlaced = 0;
     attempts = 0;
     while (rocksPlaced < 42 && attempts < 4600) {
@@ -231,7 +228,7 @@ export class EnvironmentScatterSystem {
       const reserveRadius = 1.15 + scale * 0.66;
       if (!this.reservations.isClear(x, z, reserveRadius)) continue;
 
-      const rock = rockTemplates[rocksPlaced % rockTemplates.length].clone(true);
+      const rock = forestRock.clone(true);
       const width = scale * (0.62 + this.random() * 0.85);
       const height = scale * (0.5 + this.random() * 0.82);
       const depth = scale * (0.58 + this.random() * 0.9);
