@@ -10,15 +10,17 @@ Both halves of the opening use the same production Ranger used by gameplay. The 
 
 The ship presentation keeps a small balance rig around the title Ranger, but it no longer blends arm bones back toward the imported model bind pose. That bind pose is effectively a T-pose and was the reason the Ranger kept stretching his arms sideways on deck. `Idle_A` now remains authoritative for the Ranger's limbs while the presentation rig supplies only whole-body deck sway, bracing and storm counter-motion.
 
-`RangerController` exposes one exclusive cinematic-control boundary for the beach arrival: `beginCinematic`, `setCinematicPose`, `playCinematicAnimation` and `endCinematic`. While that boundary is active, ordinary move, sprint, look, jump and keyboard input are ignored. When the arrival finishes, the controller is restored to the normal Day-1 locomotion/camera state. This keeps player control ownership in one place rather than duplicating movement logic in the intro controller.
+`RangerController` exposes one exclusive cinematic-control boundary for the beach arrival: `beginCinematic`, `setCinematicPose`, `playCinematicAnimation` and `endCinematic`. While that boundary is active, ordinary move, sprint, look, jump and keyboard input are ignored. When the arrival finishes, the controller is restored to the normal Day-1 locomotion/camera state. This keeps player control ownership in one place rather than duplicating normal movement logic in the intro controller.
 
-The arrival controller asks the already-loaded KayKit action registry for crawl/get-up/interaction-style clips by preference. A native crawl clip, when available, is used in its authored orientation. If no native crawl clip exists, the controller uses a deliberately slow locomotion fallback while rotating the production Ranger into a face-down prone posture. The fallback pitch is positive because the Ranger's local forward axis is +Z; a negative quarter-turn lays him on his back and puts his feet toward shore.
+The arrival controller first asks the already-loaded KayKit action registry for a true crawl clip. Crouching and ordinary walking clips are intentionally excluded because rotating a walking cycle onto the sand does not read as an exhausted survivor crawling ashore. If the currently shipped animation pack has no native crawl, `RangerCrawlPose` builds a small cinematic-only animation clip on the production Ranger's existing `AnimationMixer`. The clip alternates hand/elbow reaches with contralateral tucked knees, while the arrival controller keeps the torso low and adds restrained shoulder roll. It is presentation-only and is stopped before the normal get-up animation begins.
 
 ## Island source of truth
 
 The distant title island remains a low-cost presentation generated from `ExpandedIslandTerrainSystem`, so its shoreline and elevation profile stay related to the playable world without creating the full world during the menu.
 
-The beach arrival does not guess a fixed second beach. It starts from the authoritative Day-1 spawn and samples the current island height, playability and water level to choose nearby wet sand on the seaward side. The Ranger crawls from that wet-sand point all the way to the established Day-1 spawn, then rises in place before control is returned.
+The arrival does not invent a second fixed beach. The established Day-1 spawn remains the reference point. When that spawn is already inside the shallow shoreline wash, as it is on the current terrain, the Ranger begins face-down there instead of being moved farther out to sea. If a future terrain revision places the spawn on dry ground, the controller can still sample nearby wet sand on the seaward side.
+
+From the wet start, the controller derives the inland direction from the live island and searches only a short distance for playable terrain that clears the water line. The crawl is capped at 2.6 world units and stops at the first suitable dry-sand point. The Ranger rises, dusts himself off and hands control to the player at that same point; there is no hidden glide or teleport back to the old spawn after the crawl.
 
 ## Ship presentation
 
@@ -58,15 +60,16 @@ Flexible sail/rope motion and the mast fracture remain in `TitleShipVisual`/`Tit
 6. At impact the upper mast fractures from the lower mast with visible splinters. The yard falls, the sail deforms between its moving top edge and lower sheet anchors, rigging gains slack, cargo tumbles and the Ranger is thrown into the water.
 7. The screen covers to black and the disposable title renderer is removed.
 8. Existing `GameApp` boots the full world and all normal gameplay systems at the established Day-1 coast.
-9. Before controls are exposed, `BeachArrivalIntroController` takes exclusive cinematic ownership of the already-loaded gameplay Ranger and places him face-down on sampled wet sand with his head pointing inland.
-10. After a short recovery beat, the Ranger crawls slowly to the Day-1 spawn over six seconds, rises in place, brushes/dusts himself off and settles.
-11. Cinematic ownership is released, the HUD/controllers fade in, the normal `DAY 1 · GATHER A STICK + STONE` objective appears and gameplay becomes authoritative.
+9. Before controls are exposed, `BeachArrivalIntroController` takes exclusive cinematic ownership of the already-loaded gameplay Ranger and places him face-down in the current shallow shoreline wash with his head pointing inland.
+10. After a short recovery beat, the Ranger performs a low exhausted crawl for only the short water-to-dry-sand distance, rises in place, brushes/dusts himself off and settles.
+11. Cinematic ownership is released at that dry-sand endpoint, the HUD/controllers fade in, the normal `DAY 1 · GATHER A STICK + STONE` objective appears and gameplay becomes authoritative.
 
 ## Architecture boundaries
 
 - `TitleSceneApp` remains an orchestrator; island, ship and storm rendering stay separate presentation modules.
 - `TitleSceneConfig` remains the single source of truth for title voyage timing, ocean level, backdrop scaling, storm motion, deck response, mast-break and sail-flutter tuning.
-- `BeachArrivalIntroController` is presentation sequencing only. It may read the authoritative island/spawn and drive the existing Ranger through the cinematic API, but it does not create or replace gameplay systems.
+- `BeachArrivalIntroController` is presentation sequencing only. It may read the authoritative island/spawn and drive the existing Ranger through the cinematic boundary, but it does not create or replace normal gameplay movement.
+- `RangerCrawlPose` is a narrowly scoped cinematic animation helper. It uses the already-created production Ranger and its existing `AnimationMixer`; it does not own position, collision, input or gameplay locomotion.
 - `RangerController` remains the single owner of Ranger movement/input/camera state. Cinematic control is explicit and exclusive, then released back to normal control.
 - `GameApp` remains the gameplay source of truth and still creates the normal world/HUD/controllers once.
 - The opening does not modify inventory, harvesting, construction, wildlife, terrain generation, PWA manifest, service worker, native Chrome installation architecture or Pages deployment ordering.
@@ -77,4 +80,4 @@ Flexible sail/rope motion and the mast fracture remain in `TitleShipVisual`/`Tit
 
 The title UI remains safe-area aware with a dedicated landscape layout. Renderer pixel ratio is capped at 1.5 and title shadows remain disabled. The cloth sail remains intentionally low vertex-count and the flexible ropes use short bounded line segments. All title presentation resources are disposed before gameplay.
 
-During the beach arrival the normal mobile HUD already exists because `GameApp` is loaded, but `arrival-intro-active` keeps it non-interactive and fully transparent. Only after `endCinematic` does the HUD/status receive the controlled opacity fade-in. This prevents accidental movement/look input during the arrival without introducing a second HUD implementation.
+The procedural crawl fallback is also deliberately small: it animates only the existing arm and leg bones through a short looping quaternion clip and adds no extra model or physics body. During the beach arrival the normal mobile HUD already exists because `GameApp` is loaded, but `arrival-intro-active` keeps it non-interactive and fully transparent. Only after `endCinematic` does the HUD/status receive the controlled opacity fade-in. This prevents accidental movement/look input during the arrival without introducing a second HUD implementation.
