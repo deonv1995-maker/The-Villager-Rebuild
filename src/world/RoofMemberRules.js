@@ -61,6 +61,19 @@ export function roofMemberCandidates(region) {
   ];
 }
 
+/**
+ * The unified ROOF option is an ordered coordinator over the canonical member roles.
+ * Every currently available angled rafter is completed before any raw ridge segment
+ * may be selected. Thatch remains a separate inventory-backed panel action after the
+ * physical member query reports the roof complete.
+ */
+export function orderedRoofBuildCandidates(candidates) {
+  const available = (candidates ?? []).filter(Boolean);
+  const rafters = available.filter(candidate => candidate.roofRole === 'rafter');
+  if (rafters.length) return rafters;
+  return available.filter(candidate => candidate.roofRole === 'ridge');
+}
+
 export function roofMemberModeMatches(candidate, member) {
   if (!candidate || !member) return false;
   if (member.mode === 'roof') return true;
