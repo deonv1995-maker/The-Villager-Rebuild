@@ -10,8 +10,6 @@ export const TITLE_SCENE = Object.freeze({
   stormShipHeave: 0.4,
   stormShipPitch: 0.13,
   stormShipRoll: 0.17,
-  rangerArmRestBlendMenu: 0.34,
-  rangerArmRestBlendStorm: 0.16,
   rangerDeckSway: 0.045,
   mastBreakStart: 0.54,
   mastBreakAngle: 1.18,

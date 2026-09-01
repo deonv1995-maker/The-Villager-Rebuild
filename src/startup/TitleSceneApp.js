@@ -6,13 +6,6 @@ import { TITLE_SCENE } from './TitleSceneConfig.js';
 import { createTitleShipVisual } from './TitleShipVisual.js';
 import { TitleStormSystem } from './TitleStormSystem.js';
 
-const TITLE_ARM_BONES = new Set([
-  'upperarm.l', 'upperarm.r',
-  'lowerarm.l', 'lowerarm.r',
-  'wrist.l', 'wrist.r',
-  'hand.l', 'hand.r'
-]);
-
 export class TitleSceneApp {
   constructor({ canvas, setStatus }) {
     this.canvas = canvas;
@@ -28,7 +21,6 @@ export class TitleSceneApp {
     this.rangerThrown = false;
     this.rangerSplashDone = false;
     this.rangerVelocity = new THREE.Vector3();
-    this.rangerArmRestPose = [];
   }
 
   async start({ onPlay } = {}) {
@@ -160,18 +152,10 @@ export class TitleSceneApp {
     this.ranger = rangerGltf.scene;
     this.ranger.name = 'title-production-ranger';
     this.ranger.traverse(object => {
-      if (object.isMesh) {
-        object.castShadow = false;
-        object.receiveShadow = false;
-        if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
-      }
-
-      if (TITLE_ARM_BONES.has(object.name?.toLowerCase())) {
-        this.rangerArmRestPose.push({
-          bone: object,
-          quaternion: object.quaternion.clone()
-        });
-      }
+      if (!object.isMesh) return;
+      object.castShadow = false;
+      object.receiveShadow = false;
+      if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
     });
     this.ranger.position.set(0, 0, 0);
     this.ranger.rotation.y = Math.PI;
@@ -227,7 +211,6 @@ export class TitleSceneApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.elapsed += dt;
     this.mixer?.update(dt);
-    this.#applyRangerArmRestPose();
 
     let introProgress = 0;
     if (this.state === 'menu') this.#updateMenu();
@@ -240,20 +223,6 @@ export class TitleSceneApp {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.#frame);
   };
-
-  #applyRangerArmRestPose() {
-    if (!this.rangerArmRestPose.length || this.rangerThrown) return;
-    const baseBlend = this.state === 'menu'
-      ? TITLE_SCENE.rangerArmRestBlendMenu
-      : TITLE_SCENE.rangerArmRestBlendStorm;
-    const blend = this.state === 'menu'
-      ? baseBlend
-      : THREE.MathUtils.lerp(baseBlend, 0.04, this.stormDanger);
-
-    for (const { bone, quaternion } of this.rangerArmRestPose) {
-      bone.quaternion.slerp(quaternion, blend);
-    }
-  }
 
   #updateMenu() {
     this.stormDanger = 0;
