@@ -7,6 +7,7 @@ import { WildAnimalActor } from './WildAnimalActor.js';
 const GROUP_MEMBER_ATTEMPTS = 48;
 const GROUP_ANCHOR_ATTEMPTS = 1200;
 const HABITAT_ACCEPTANCE = 0.5;
+const RESPAWN_POINT_ATTEMPTS = 36;
 
 export class WildlifePopulationSystem {
   constructor({ scene, terrain, gatherables = scene.userData?.services?.gatherables ?? null }) {
@@ -15,10 +16,12 @@ export class WildlifePopulationSystem {
     this.ecology = terrain?.terrain ?? terrain;
     this.gatherables = gatherables;
     this.actors = [];
+    this.slots = [];
     this.activeAttackActor = null;
     this.harvestActor = null;
     this.playerAttackQueue = [];
     this.randomState = WILDLIFE_POPULATION.seed >>> 0;
+    this.elapsedTime = 0;
     this.#populate();
   }
 
@@ -40,6 +43,7 @@ export class WildlifePopulationSystem {
   }
 
   update(dt, playerPosition, armed = false, range = this.definition.spearLockRange) {
+    this.elapsedTime += Math.max(0, dt);
     this.#coordinatePredators();
 
     for (const actor of this.actors) {
@@ -48,6 +52,8 @@ export class WildlifePopulationSystem {
       const attack = actor.consumePlayerAttack?.();
       if (attack) this.playerAttackQueue.push(attack);
     }
+
+    this.#updateRespawns(playerPosition);
 
     if (!armed) return null;
     const selected = this.#selectAttackActor(playerPosition, range);
@@ -76,19 +82,26 @@ export class WildlifePopulationSystem {
   }
 
   applyDamage(damage = 1, threatPosition = null) {
-    return this.activeAttackActor?.applyDamage(damage, threatPosition) ?? null;
+    const actor = this.activeAttackActor;
+    const result = actor?.applyDamage(damage, threatPosition) ?? null;
+    if (result?.defeated) this.#scheduleRespawn(actor);
+    return result;
   }
 
   attack(playerPosition) {
     const selected = this.#selectAttackActor(playerPosition, 2.8);
     if (!selected) return null;
-    return selected.attack(playerPosition);
+    const result = selected.attack(playerPosition);
+    if (result?.defeated) this.#scheduleRespawn(selected);
+    return result;
   }
 
   meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
     const selected = this.#selectAttackActor(playerPosition, range);
     if (!selected) return null;
-    return selected.meleeAttack(playerPosition, { range, damage });
+    const result = selected.meleeAttack(playerPosition, { range, damage });
+    if (result?.defeated) this.#scheduleRespawn(selected);
+    return result;
   }
 
   getHarvestTarget(playerPosition) {
@@ -119,10 +132,15 @@ export class WildlifePopulationSystem {
     const bySpecies = {};
     for (const actor of this.actors) {
       const id = actor.definition.id;
-      bySpecies[id] ??= { total: 0, active: 0, defeated: 0 };
+      bySpecies[id] ??= { total: 0, active: 0, defeated: 0, respawning: 0 };
       bySpecies[id].total += 1;
       if (actor.defeated) bySpecies[id].defeated += 1;
       else bySpecies[id].active += 1;
+    }
+    for (const slot of this.slots) {
+      if (slot.respawnAt === null) continue;
+      const id = slot.actor.definition.id;
+      if (bySpecies[id]) bySpecies[id].respawning += 1;
     }
 
     const primaryState = this.primaryActor?.getState() ?? {};
@@ -137,7 +155,7 @@ export class WildlifePopulationSystem {
     // Preserve a safe minimal fallback for isolated actor/unit tests. The real
     // island exposes the ecology sampling API and receives the complete fauna.
     if (!this.#hasEcologyModel()) {
-      this.#addActor('wildPig', WORLD_LAYOUT.huntAnimal, 'wild-pig-1');
+      this.#addSlot('wildPig', WORLD_LAYOUT.huntAnimal, 'wild-pig-1', WORLD_LAYOUT.huntAnimal);
       return;
     }
 
@@ -157,10 +175,11 @@ export class WildlifePopulationSystem {
           const center = memberIndex === 0
             ? anchor
             : this.#sampleGroupMember(speciesKey, config, anchor);
-          this.#addActor(
+          this.#addSlot(
             speciesKey,
             center,
-            `${speciesKey}-g${groupIndex}-${memberIndex + 1}`
+            `${speciesKey}-g${groupIndex}-${memberIndex + 1}`,
+            anchor
           );
         }
         remaining -= groupSize;
@@ -176,17 +195,120 @@ export class WildlifePopulationSystem {
     );
   }
 
-  #addActor(speciesKey, center, instanceId) {
+  #addSlot(speciesKey, center, instanceId, groupAnchor) {
+    const actor = this.#createActor(speciesKey, center, instanceId);
+    this.actors.push(actor);
+    this.slots.push({
+      speciesKey,
+      instanceId,
+      groupAnchor: { x: groupAnchor.x, z: groupAnchor.z },
+      homeCenter: { x: center.x, z: center.z },
+      actor,
+      generation: 0,
+      respawnAt: null
+    });
+    return actor;
+  }
+
+  #createActor(speciesKey, center, instanceId) {
     const definition = ANIMAL_DEFINITIONS[speciesKey];
     if (!definition) throw new Error(`Unknown wildlife species: ${speciesKey}`);
-    this.actors.push(new WildAnimalActor({
+    return new WildAnimalActor({
       scene: this.scene,
       terrain: this.terrain,
       gatherables: this.gatherables,
       definition,
       center,
       instanceId
-    }));
+    });
+  }
+
+  #scheduleRespawn(actor) {
+    if (!actor?.defeated) return false;
+    const slot = this.slots.find(candidate => candidate.actor === actor);
+    if (!slot || slot.respawnAt !== null) return false;
+    const config = WILDLIFE_POPULATION.species[slot.speciesKey];
+    const [minimum = 90, maximum = minimum] = config?.respawnDelay ?? [90, 90];
+    slot.respawnAt = this.elapsedTime + minimum + this.#random() * Math.max(0, maximum - minimum);
+    if (this.activeAttackActor === actor) this.activeAttackActor = null;
+    if (this.harvestActor === actor) this.harvestActor = null;
+    return true;
+  }
+
+  #updateRespawns(playerPosition) {
+    for (const slot of this.slots) {
+      if (!slot.actor.defeated) continue;
+      if (slot.respawnAt === null) this.#scheduleRespawn(slot.actor);
+      if (slot.respawnAt === null || this.elapsedTime < slot.respawnAt) continue;
+
+      const config = WILDLIFE_POPULATION.species[slot.speciesKey];
+      const center = this.#sampleRespawnCenter(slot, config);
+      if (!center || !this.#isPlayerClear(center, playerPosition)) {
+        slot.respawnAt = this.elapsedTime + WILDLIFE_POPULATION.respawnRetryDelay;
+        continue;
+      }
+
+      const oldActor = slot.actor;
+      const actorIndex = this.actors.indexOf(oldActor);
+      slot.generation += 1;
+      const replacement = this.#createActor(
+        slot.speciesKey,
+        center,
+        `${slot.instanceId}-r${slot.generation}`
+      );
+
+      this.#retireActor(oldActor);
+      if (actorIndex >= 0) this.actors[actorIndex] = replacement;
+      else this.actors.push(replacement);
+      slot.actor = replacement;
+      slot.homeCenter = { x: center.x, z: center.z };
+      slot.respawnAt = null;
+
+      replacement.load().catch(error => {
+        console.error('[WILDLIFE RESPAWN PRESENTATION FALLBACK]', replacement.instanceId, error);
+      });
+    }
+  }
+
+  #sampleRespawnCenter(slot, config) {
+    const groupRadius = Math.max(0, config?.groupRadius ?? 0);
+    const radius = groupRadius > 0 ? groupRadius : 3.5;
+    for (let attempt = 0; attempt < RESPAWN_POINT_ATTEMPTS; attempt += 1) {
+      const angle = this.#random() * Math.PI * 2;
+      const offset = attempt === 0 ? 0 : Math.sqrt(this.#random()) * radius;
+      const x = slot.groupAnchor.x + Math.cos(angle) * offset;
+      const z = slot.groupAnchor.z + Math.sin(angle) * offset;
+      if (!this.#validHabitatPoint(slot.speciesKey, config, x, z, false)) continue;
+      if (!this.#farEnoughFromLiveAnimals(x, z, slot.actor, 1.8)) continue;
+      return { x, z };
+    }
+    return null;
+  }
+
+  #isPlayerClear(center, playerPosition) {
+    if (!this.#isFinitePosition(playerPosition)) return true;
+    return Math.hypot(
+      center.x - playerPosition.x,
+      center.z - playerPosition.z
+    ) >= WILDLIFE_POPULATION.respawnClearanceRadius;
+  }
+
+  #farEnoughFromLiveAnimals(x, z, ignoredActor, spacing) {
+    const minimumSq = spacing * spacing;
+    return this.actors.every(actor => {
+      if (actor === ignoredActor || actor.defeated) return true;
+      const dx = x - actor.group.position.x;
+      const dz = z - actor.group.position.z;
+      return dx * dx + dz * dz >= minimumSq;
+    });
+  }
+
+  #retireActor(actor) {
+    if (!actor) return;
+    actor.setAttackIndicator(false);
+    if (actor.targetRing) this.scene.remove(actor.targetRing);
+    if (actor.harvestRing) this.scene.remove(actor.harvestRing);
+    if (actor.group) this.scene.remove(actor.group);
   }
 
   #sampleGroupSize(groupSize) {
@@ -243,7 +365,7 @@ export class WildlifePopulationSystem {
   }
 
   #validHabitatPoint(speciesKey, config, x, z, strictHabitat) {
-    if (!this.ecology.isPlayable(x, z, 5)) return false;
+    if (!config || !this.ecology.isPlayable(x, z, 5)) return false;
     const slope = this.ecology.slopeAt?.(x, z) ?? 0;
     if (slope > config.maxSlope) return false;
 
@@ -342,6 +464,15 @@ export class WildlifePopulationSystem {
     }
     this.activeAttackActor = nearest;
     return nearest;
+  }
+
+  #isFinitePosition(position) {
+    return Boolean(
+      position
+      && Number.isFinite(position.x)
+      && Number.isFinite(position.y)
+      && Number.isFinite(position.z)
+    );
   }
 
   #random() {
