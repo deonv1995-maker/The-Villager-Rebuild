@@ -27,83 +27,59 @@ jobs:
 
           ranger_path = Path('src/player/RangerController.js')
           ranger = ranger_path.read_text()
-          ranger_anchor = """  faceWorldPoint(point) {
-            if (!point) return;
-            const dx = point.x - this.root.position.x;
-            const dz = point.z - this.root.position.z;
-            if (Math.hypot(dx, dz) < 0.001) return;
-            this.root.rotation.y = Math.atan2(dx, dz);
-          }
-
-          mountRightHandObject(object) {
-          """
-          ranger_replacement = """  faceWorldPoint(point) {
-            if (!point) return;
-            const dx = point.x - this.root.position.x;
-            const dz = point.z - this.root.position.z;
-            if (Math.hypot(dx, dz) < 0.001) return;
-            this.root.rotation.y = Math.atan2(dx, dz);
-          }
-
-          receiveWildlifeImpact(sourcePosition, { distance = 1.2 } = {}) {
-            if (this.cinematicDriver || !sourcePosition) return false;
-            let dx = this.root.position.x - sourcePosition.x;
-            let dz = this.root.position.z - sourcePosition.z;
-            let length = Math.hypot(dx, dz);
-            if (length < 0.001) {
-              dx = -Math.sin(this.root.rotation.y);
-              dz = -Math.cos(this.root.rotation.y);
-              length = 1;
-            }
-            const desired = {
-              x: this.root.position.x + (dx / length) * distance,
-              z: this.root.position.z + (dz / length) * distance
-            };
-            const resolved = this.collision
-              ? this.collision.resolveMove(this.root.position, desired, { radius: PLAYER_RADIUS, airborne: !this.grounded })
-              : desired;
-            const moved = Math.hypot(resolved.x - this.root.position.x, resolved.z - this.root.position.z) > 0.01;
-            this.root.position.x = resolved.x;
-            this.root.position.z = resolved.z;
-            this.root.position.y = this.terrain.heightAt(resolved.x, resolved.z);
-            return moved;
-          }
-
-          mountRightHandObject(object) {
-          """
+          ranger_anchor = '  mountRightHandObject(object) {'
+          ranger_method = (
+              '  receiveWildlifeImpact(sourcePosition, { distance = 1.2 } = {}) {\n'
+              '    if (this.cinematicDriver || !sourcePosition) return false;\n'
+              '    let dx = this.root.position.x - sourcePosition.x;\n'
+              '    let dz = this.root.position.z - sourcePosition.z;\n'
+              '    let length = Math.hypot(dx, dz);\n'
+              '    if (length < 0.001) {\n'
+              '      dx = -Math.sin(this.root.rotation.y);\n'
+              '      dz = -Math.cos(this.root.rotation.y);\n'
+              '      length = 1;\n'
+              '    }\n'
+              '    const desired = {\n'
+              '      x: this.root.position.x + (dx / length) * distance,\n'
+              '      z: this.root.position.z + (dz / length) * distance\n'
+              '    };\n'
+              '    const resolved = this.collision\n'
+              '      ? this.collision.resolveMove(this.root.position, desired, { radius: PLAYER_RADIUS, airborne: !this.grounded })\n'
+              '      : desired;\n'
+              '    const moved = Math.hypot(resolved.x - this.root.position.x, resolved.z - this.root.position.z) > 0.01;\n'
+              '    this.root.position.x = resolved.x;\n'
+              '    this.root.position.z = resolved.z;\n'
+              '    this.root.position.y = this.terrain.heightAt(resolved.x, resolved.z);\n'
+              '    return moved;\n'
+              '  }\n\n'
+          )
           if ranger_anchor not in ranger:
-            raise SystemExit('Ranger integration anchor not found')
-          ranger_path.write_text(ranger.replace(ranger_anchor, ranger_replacement, 1))
+              raise SystemExit('Ranger integration anchor not found')
+          ranger_path.write_text(ranger.replace(ranger_anchor, ranger_method + ranger_anchor, 1))
 
           app_path = Path('src/core/GameApp.js')
           app = app_path.read_text()
-          update_anchor = """    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
-
-            if (carryingLog) {
-          """
-          update_replacement = """    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
-            const wildlifeAttack = this.hunt?.consumePlayerAttack?.();
-            if (wildlifeAttack) this.#handleWildlifeAttack(wildlifeAttack);
-
-            if (carryingLog) {
-          """
+          update_anchor = '    this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;\n'
+          update_addition = (
+              update_anchor
+              + '    const wildlifeAttack = this.hunt?.consumePlayerAttack?.();\n'
+              + '    if (wildlifeAttack) this.#handleWildlifeAttack(wildlifeAttack);\n'
+          )
           if update_anchor not in app:
-            raise SystemExit('GameApp wildlife update anchor not found')
-          app = app.replace(update_anchor, update_replacement, 1)
+              raise SystemExit('GameApp wildlife update anchor not found')
+          app = app.replace(update_anchor, update_addition, 1)
 
-          combat_anchor = """  #handleCombatResult(hit) {
-          """
-          combat_replacement = """  #handleWildlifeAttack(event) {
-            this.player?.receiveWildlifeImpact(event.position, { distance: 1.2 });
-            this.setStatus(`${event.label.toUpperCase()} ATTACK · CREATE DISTANCE`);
-            this.hud?.setObjective('Wolf attack · move away or fight back');
-          }
-
-          #handleCombatResult(hit) {
-          """
+          combat_anchor = '  #handleCombatResult(hit) {'
+          combat_method = (
+              '  #handleWildlifeAttack(event) {\n'
+              '    this.player?.receiveWildlifeImpact(event.position, { distance: 1.2 });\n'
+              '    this.setStatus(`${event.label.toUpperCase()} ATTACK · CREATE DISTANCE`);\n'
+              "    this.hud?.setObjective('Wolf attack · move away or fight back');\n"
+              '  }\n\n'
+          )
           if combat_anchor not in app:
-            raise SystemExit('GameApp combat anchor not found')
-          app_path.write_text(app.replace(combat_anchor, combat_replacement, 1))
+              raise SystemExit('GameApp combat anchor not found')
+          app_path.write_text(app.replace(combat_anchor, combat_method + combat_anchor, 1))
       - name: Install dependencies
         run: npm install
       - name: Run full repository checks
