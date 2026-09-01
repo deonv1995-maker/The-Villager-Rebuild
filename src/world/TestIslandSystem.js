@@ -4,6 +4,7 @@ import { ConstructionTerrainAdaptationSystem } from './ConstructionTerrainAdapta
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
+import { AmbientWorldDetailSystem } from './AmbientWorldDetailSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
 import { WorldCollisionSystem } from './WorldCollisionSystem.js';
 import { WorldChunkSystem } from './WorldChunkSystem.js';
@@ -50,6 +51,14 @@ export class TestIslandSystem {
       constructionTerrain: this.constructionTerrain
     });
     this.ferns = new FernFieldSystem({
+      group: this.group,
+      terrain: this.terrain,
+      scatter: this.scatter,
+      chunks: this.chunks,
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
+    });
+    this.ambientDetails = new AmbientWorldDetailSystem({
       group: this.group,
       terrain: this.terrain,
       scatter: this.scatter,
@@ -130,11 +139,12 @@ export class TestIslandSystem {
       console.error('[ENVIRONMENT ASSET FALLBACK]', error);
     }
 
+    const ambientStats = this.ambientDetails.populate();
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
     const chunkStats = this.chunks.getStats();
-    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${mountainCount} horizon landforms`);
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
@@ -151,6 +161,7 @@ export class TestIslandSystem {
     this.chunks.update(camera, playerPosition);
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
+    this.ambientDetails.update();
     this.waterVisuals.update(dt, playerPosition);
     this.treeOcclusion?.update(playerPosition, camera);
   }
