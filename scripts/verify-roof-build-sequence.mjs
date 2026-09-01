@@ -54,8 +54,16 @@ assert.equal(
   'A sufficiently isolated frame may begin a separate structure'
 );
 assert.ok(
-  PHYSICAL_LOG.frameSpacingTolerance < PHYSICAL_LOG.floorWidth * 0.1,
-  'Frame-pair tolerance must be much tighter than one split-floor strip so offset seams cannot masquerade as full-Log bays'
+  PHYSICAL_LOG.framePlacementSpacingTolerance < PHYSICAL_LOG.floorWidth * 0.1,
+  'FRAME placement tolerance must stay much tighter than one split-floor strip so offset seams cannot become frame stations'
+);
+assert.ok(
+  PHYSICAL_LOG.frameSpacingTolerance > PHYSICAL_LOG.framePlacementSpacingTolerance,
+  'Already-valid frame-pair recognition needs slightly more closure tolerance than new FRAME placement'
+);
+assert.ok(
+  PHYSICAL_LOG.frameSpacingTolerance < Math.hypot(PHYSICAL_LOG.length, PHYSICAL_LOG.floorWidth) - PHYSICAL_LOG.length,
+  'Pair recognition must remain tighter than the known one-floor-strip near-diagonal offset'
 );
 
 const frames = [
@@ -69,7 +77,7 @@ const frames = [
 const pairOptions = {
   length: PHYSICAL_LOG.length,
   spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
-  topTolerance: 0.3,
+  topTolerance: PHYSICAL_LOG.frameLevelTolerance,
   yawStep: PHYSICAL_LOG.yawStep,
   searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
   frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
@@ -162,4 +170,4 @@ for (const requirement of [
   assert.ok(physicalLogSource.includes(requirement), `Physical Log runtime is missing structural sequence contract: ${requirement}`);
 }
 
-console.log('Full-Log frame lattice plus ANGLE-rafter, RAW-ridge and thatch roof sequence verified');
+console.log('Strict full-Log FRAME placement plus tolerant pair closure, ANGLE rafters, RAW ridge and thatch sequence verified');
