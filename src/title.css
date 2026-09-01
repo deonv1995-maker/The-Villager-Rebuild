@@ -1,7 +1,19 @@
+#boot-status,
+.mobile-hud {
+  transition: opacity 880ms ease;
+}
+
 body.title-scene-active #boot-status,
-body.title-scene-active .mobile-hud {
+body.title-scene-active .mobile-hud,
+body.arrival-intro-active #boot-status,
+body.arrival-intro-active .mobile-hud {
   opacity: 0;
   pointer-events: none;
+}
+
+body.arrival-intro-revealing #boot-status,
+body.arrival-intro-revealing .mobile-hud {
+  opacity: 1;
 }
 
 .title-scene-ui {
