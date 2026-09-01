@@ -3,22 +3,16 @@ export const WORLD_RESOURCE_DISTRIBUTION = Object.freeze({
   starterExclusionRadius: 24,
   resources: Object.freeze({
     stick: Object.freeze({
-      count: 36,
-      minSpacing: 5.2,
+      count: 160,
+      minSpacing: 3.1,
       maxSlope: 0.52,
-      scatterClearance: 0.28
+      scatterClearance: 0.2
     }),
     stone: Object.freeze({
-      count: 36,
-      minSpacing: 5.6,
+      count: 140,
+      minSpacing: 3.6,
       maxSlope: 0.6,
-      scatterClearance: 0.34
-    }),
-    grass: Object.freeze({
-      count: 48,
-      minSpacing: 4.6,
-      maxSlope: 0.48,
-      scatterClearance: 0.16
+      scatterClearance: 0.24
     })
   })
 });
