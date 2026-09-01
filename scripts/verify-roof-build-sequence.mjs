@@ -7,6 +7,7 @@ import {
   collectRoofRegions
 } from '../src/world/RoofTopology.js';
 import {
+  orderedRoofBuildCandidates,
   roofMemberCandidates,
   roofRaftersComplete,
   roofRegionComplete
@@ -123,6 +124,24 @@ assert.equal(
 );
 assert.equal(uniqueRidges.length, 2, 'A two-bay gable must expose exactly two physical raw ridge positions');
 
+const firstRoofStage = orderedRoofBuildCandidates(allCandidates);
+assert.ok(firstRoofStage.length > 0, 'Unified ROOF needs an available first construction stage');
+assert.ok(
+  firstRoofStage.every(member => member.roofRole === 'rafter'),
+  'Unified ROOF must lace every available angled rafter before exposing a raw ridge'
+);
+const secondRoofStage = orderedRoofBuildCandidates(uniqueRidges);
+assert.equal(
+  secondRoofStage.length,
+  uniqueRidges.length,
+  'Unified ROOF must expose all raw ridge segments after the rafter stage is complete'
+);
+assert.ok(
+  secondRoofStage.every(member => member.roofRole === 'ridge'),
+  'The second unified ROOF stage must contain only raw ridge segments'
+);
+
+
 const manualMembers = uniqueRafters.map((member, index) => ({
   id: 100 + index,
   mode: 'angle',
@@ -165,9 +184,25 @@ for (const requirement of [
   "placement.snapKind === 'roof-rafter'",
   "placement.snapKind === 'roof-ridge'",
   'roofRaftersComplete(region, activeMembers)',
-  'roofMemberOccupied(candidate, activeMembers)'
+  'roofMemberOccupied(candidate, activeMembers)',
+  'orderedRoofBuildCandidates(this.#roofCandidates(base))',
+  "if (placement?.roofRole === 'rafter') return 'angle'",
+  "if (placement?.roofRole === 'ridge') return 'raw'",
+  'mode: placedMode'
 ]) {
   assert.ok(physicalLogSource.includes(requirement), `Physical Log runtime is missing structural sequence contract: ${requirement}`);
 }
 
-console.log('Strict full-Log FRAME placement plus tolerant pair closure, ANGLE rafters, RAW ridge and thatch sequence verified');
+const thatchControllerSource = await readFile('src/gameplay/RoofThatchController.js', 'utf8');
+for (const requirement of [
+  "getBuildState?.().mode === 'roof'",
+  "'ROOF · THATCH'",
+  'tap ROOF · THATCH again'
+]) {
+  assert.ok(
+    thatchControllerSource.includes(requirement),
+    `Selected ROOF workflow is missing panel-by-panel thatch handoff: ${requirement}`
+  );
+}
+
+console.log('Unified ROOF ordering, canonical ANGLE rafters, RAW ridges and inventory-backed panel thatching verified');
