@@ -2,7 +2,8 @@ const LOG_LENGTH = 2.9;
 const FLOOR_WIDTH = LOG_LENGTH / 3;
 const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12;
 const MAX_FLOOR_TERRAIN_ADAPTATION = 2.35;
-const FRAME_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.35;
+const FRAME_PLACEMENT_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.35;
+const FRAME_PAIR_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.6;
 const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
 
@@ -22,7 +23,11 @@ export const PHYSICAL_LOG = Object.freeze({
   wallSnapRange: 1.7,
   angleSnapRange: 1.85,
   roofSnapRange: 3.15,
-  frameSpacingTolerance: FRAME_SPACING_TOLERANCE,
+  // FRAME placement is deliberately stricter than recognition of an already-valid
+  // frame pair. This prevents floor-strip seams becoming structural posts while
+  // allowing a closed bay to absorb the small accumulated drift of snapped floors.
+  framePlacementSpacingTolerance: FRAME_PLACEMENT_SPACING_TOLERANCE,
+  frameSpacingTolerance: FRAME_PAIR_SPACING_TOLERANCE,
   frameLevelTolerance: FRAME_LEVEL_TOLERANCE,
   frameIsolationRadius: FRAME_ISOLATION_RADIUS,
   floorGroundClearance: 0.08,
