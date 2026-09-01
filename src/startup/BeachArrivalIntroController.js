@@ -182,6 +182,13 @@ export class BeachArrivalIntroController {
     return { x: spawn.x, z: spawn.z + 3.5 };
   }
 
+  #playPhaseAnimation(preferences, options) {
+    const selected = this.player.playCinematicAnimation(preferences, options);
+    if (selected) return selected;
+    this.player.playCinematicAnimation(['Idle_A'], { loop: true, timeScale: 1 });
+    return null;
+  }
+
   #enterPhase(phase) {
     this.phase = phase;
     this.phaseElapsed = 0;
@@ -194,13 +201,13 @@ export class BeachArrivalIntroController {
       });
       this.setStatus?.('DAY 1 · CRAWL TO SHORE');
     } else if (phase === PHASE.RISE) {
-      this.phaseAnimation = this.player.playCinematicAnimation(RISE_ANIMATIONS, {
+      this.phaseAnimation = this.#playPhaseAnimation(RISE_ANIMATIONS, {
         loop: false,
         timeScale: 0.95
       });
       this.setStatus?.('DAY 1 · FIND YOUR FEET');
     } else if (phase === PHASE.DUST) {
-      this.phaseAnimation = this.player.playCinematicAnimation(DUST_ANIMATIONS, {
+      this.phaseAnimation = this.#playPhaseAnimation(DUST_ANIMATIONS, {
         loop: false,
         timeScale: 0.88
       });
