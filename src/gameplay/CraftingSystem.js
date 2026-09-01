@@ -22,6 +22,7 @@ export class CraftingSystem {
 
   craft(recipeId) {
     const recipe = this.getRecipe(recipeId);
+    if (!recipe.output) return null;
     if (!this.canCraft(recipeId)) return null;
 
     this.inventory.consume(recipe.ingredients);

@@ -100,6 +100,9 @@ assert.equal(toolbelt.craftingSnapshot().find(entry => entry.id === 'spear')?.in
 
 const campfireIngredients = Object.fromEntries(STRUCTURE_DEFINITIONS.campfire.ingredients.map(item => [item.itemId, item.quantity]));
 assert.deepEqual(campfireIngredients, { stick: 3, stone: 3 }, 'Campfire must use inventory sticks and stones, never logs');
+assert.equal(CRAFTING_RECIPES.campfire.kind, 'structure', 'Campfire must be represented as a placeable crafting recipe');
+assert.equal(CRAFTING_RECIPES.campfire.output, null, 'Campfire crafting must not create an inventory item');
+assert.equal(STRUCTURE_DEFINITIONS.campfire.ingredients, CRAFTING_RECIPES.campfire.ingredients, 'Campfire crafting and placement must share one ingredient definition');
 
 const flatTerrain = { heightAt: () => 0 };
 const huntScene = new THREE.Scene();
@@ -246,6 +249,9 @@ for (const requirement of [
   'class="craft-menu-toggle"',
   'class="craft-menu"',
   'setCrafting(entries)',
+  'setCraftPlacementAction(action)',
+  'data-role="craft-toggle-icon"',
+  'data-role="craft-toggle-label"',
   'data-role="tool-count"',
   'data-role="tool-durability-track"',
   'class="log-build-tray"',
@@ -267,12 +273,13 @@ for (const requirement of [
   'this.attackButton.hidden = !available && !action.externalId',
   'this.attackIcon.src = this.toolIcons[equippedTool]',
   "if (action.source === 'interaction')",
-  "if (action.source === 'campfire')",
   "if (action.source === 'attack')",
   "if (action.source === 'external')"
 ]) {
   assert.ok(hudSource.includes(requirement), `Mobile HUD is missing unified Action/build/crafting contract: ${requirement}`);
 }
+assert.ok(!hudSource.includes("if (action.source === 'campfire')"), 'Campfire construction must not be owned by the unified Action trigger');
+assert.ok(!contextActionSource.includes("source: 'campfire'"), 'Unified Action policy must not expose Campfire BUILD/PLACE');
 assert.ok(!hudSource.includes('tool-craft-mark'), 'Tool selection bar must not expose the old inline auto-craft marker');
 assert.ok(!hudSource.includes('class="hud-button interact"'), 'Legacy pickup/interact round button must not return');
 assert.ok(!hudSource.includes('class="hud-button attack"'), 'Legacy attack/tool round button must not return');
@@ -315,7 +322,10 @@ for (const requirement of [
   "this.#wrapToolUse(this.game.hunt, 'meleeAttack', 'sword')",
   "this.durability.takeForUse('spear')",
   "this.game.toolbelt.clearIfUnavailable()",
-  "hud.setCrafting(this.game.toolbelt.craftingSnapshot())",
+  "const CAMPFIRE_RECIPE_ID = 'campfire'",
+  '#craftCampfirePlacement()',
+  'hud.onCampfire();',
+  'hud.setCrafting(this.#craftingSnapshot())',
   "hud.setExternalAction(RETRIEVAL_ACTION_ID"
 ]) {
   assert.ok(equipmentRuntimeSource.includes(requirement), `Equipment runtime is missing contract: ${requirement}`);
@@ -393,4 +403,4 @@ for (const [name, path, svg] of [
 assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
 assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
-console.log('Foundation 0.3.8 selection-only toolbelt, dedicated crafting, durability, retrievable spear and preserved gameplay contracts verified');
+console.log('Foundation 0.3.8 selection-only toolbelt, dedicated crafting, crafting-owned campfire placement, durability, retrievable spear and preserved gameplay contracts verified');

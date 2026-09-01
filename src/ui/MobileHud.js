@@ -37,7 +37,7 @@ export class MobileHud {
     this.currentToolId = null;
     this.currentInteractionTarget = null;
     this.currentHuntTarget = null;
-    this.currentCampfireAction = null;
+    this.currentCraftPlacementAction = null;
     this.externalActions = new Map();
     this.activeAction = null;
     this.root = document.createElement('div');
@@ -71,8 +71,8 @@ export class MobileHud {
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <button class="craft-menu-toggle" type="button" data-role="craft-toggle" aria-label="Open crafting menu" aria-expanded="false">
-        <img src="${ui.hammer}" alt="" aria-hidden="true">
-        <span>CRAFT</span>
+        <img data-role="craft-toggle-icon" src="${ui.hammer}" alt="" aria-hidden="true">
+        <span data-role="craft-toggle-label">CRAFT</span>
       </button>
       <section class="craft-menu" data-role="craft-menu" aria-label="Crafting menu" hidden>
         <div class="craft-menu-header">
@@ -119,6 +119,8 @@ export class MobileHud {
     this.attackButton = this.actionButton;
     this.attackIcon = this.actionIcon;
     this.craftToggle = this.root.querySelector('[data-role="craft-toggle"]');
+    this.craftToggleIcon = this.root.querySelector('[data-role="craft-toggle-icon"]');
+    this.craftToggleLabel = this.root.querySelector('[data-role="craft-toggle-label"]');
     this.craftMenu = this.root.querySelector('[data-role="craft-menu"]');
     this.craftClose = this.root.querySelector('[data-role="craft-close"]');
     this.craftList = this.root.querySelector('[data-role="craft-list"]');
@@ -218,7 +220,7 @@ export class MobileHud {
       details.className = 'craft-recipe-details';
       const title = document.createElement('div');
       title.className = 'craft-recipe-title';
-      title.innerHTML = `<strong>${entry.label}</strong><span>Owned ${entry.quantity}</span>`;
+      title.innerHTML = `<strong>${entry.label}</strong><span>${entry.statusLabel ?? `Owned ${entry.quantity}`}</span>`;
       const costs = document.createElement('div');
       costs.className = 'craft-recipe-costs';
       for (const ingredient of entry.ingredients) {
@@ -234,9 +236,10 @@ export class MobileHud {
       craft.className = 'craft-recipe-button';
       craft.type = 'button';
       craft.dataset.craft = entry.id;
+      if (entry.kind) craft.dataset.craftKind = entry.kind;
       craft.disabled = !entry.canCraft;
-      craft.textContent = 'CRAFT';
-      craft.setAttribute('aria-label', `Craft ${entry.label}`);
+      craft.textContent = entry.actionLabel ?? 'CRAFT';
+      craft.setAttribute('aria-label', `${entry.actionLabel ?? 'Craft'} ${entry.label}`);
 
       row.append(icon, details, craft);
       fragment.appendChild(row);
@@ -276,12 +279,25 @@ export class MobileHud {
   }
 
   setCampfireAction(action) {
-    this.currentCampfireAction = action ? { ...action } : null;
-    this.#renderAction();
+    this.setCraftPlacementAction(action ? {
+      ...action,
+      recipeId: 'campfire',
+      icon: 'campfire',
+      caption: action.previewing ? 'PLACE' : 'BUILD'
+    } : null);
   }
 
   setCraftAction(action) {
-    this.setCampfireAction(action);
+    this.setCraftPlacementAction(action);
+  }
+
+  setCraftPlacementAction(action) {
+    this.currentCraftPlacementAction = action ? { ...action } : null;
+    if (this.currentCraftPlacementAction?.previewing) {
+      this.#setCraftMenuOpen(false);
+      return;
+    }
+    this.#renderCraftToggle();
   }
 
   setAttackTarget(target, toolId = null) {
@@ -298,11 +314,28 @@ export class MobileHud {
   }
 
   #setCraftMenuOpen(open) {
-    this.craftMenuOpen = Boolean(open);
+    const placementPreviewing = Boolean(this.currentCraftPlacementAction?.previewing);
+    this.craftMenuOpen = Boolean(open) && !placementPreviewing;
     this.craftMenu.hidden = !this.craftMenuOpen;
     this.craftToggle.classList.toggle('open', this.craftMenuOpen);
+    this.#renderCraftToggle();
+  }
+
+  #renderCraftToggle() {
+    if (!this.craftToggle || !this.craftToggleIcon || !this.craftToggleLabel) return;
+    const placement = this.currentCraftPlacementAction;
+    const previewing = Boolean(placement?.previewing);
+    const iconId = previewing ? placement.icon ?? 'campfire' : 'hammer';
+    this.craftToggleIcon.src = this.toolIcons[iconId] ?? this.toolIcons.hammer;
+    this.craftToggleLabel.textContent = previewing ? placement.caption ?? 'PLACE' : 'CRAFT';
+    this.craftToggle.classList.toggle('placement', previewing);
     this.craftToggle.setAttribute('aria-expanded', this.craftMenuOpen ? 'true' : 'false');
-    this.craftToggle.setAttribute('aria-label', this.craftMenuOpen ? 'Close crafting menu' : 'Open crafting menu');
+    this.craftToggle.setAttribute(
+      'aria-label',
+      previewing
+        ? placement.label ?? 'Confirm crafted placement'
+        : this.craftMenuOpen ? 'Close crafting menu' : 'Open crafting menu'
+    );
   }
 
   #setBuildTrayCollapsed(collapsed) {
@@ -324,7 +357,6 @@ export class MobileHud {
       carryingLog: this.carryingLog,
       buildPreviewValid: this.buildPreviewValid,
       interactionTarget: this.currentInteractionTarget,
-      campfireAction: this.currentCampfireAction,
       toolId: this.currentToolId,
       huntTarget: this.currentHuntTarget,
       externalActions: [...this.externalActions.values()]
@@ -346,10 +378,6 @@ export class MobileHud {
     if (!action?.available) return;
     if (action.source === 'interaction') {
       this.onInteract?.();
-      return;
-    }
-    if (action.source === 'campfire') {
-      this.onCampfire?.();
       return;
     }
     if (action.source === 'attack') {
@@ -446,6 +474,10 @@ export class MobileHud {
 
     this.craftToggle.addEventListener('pointerdown', event => {
       event.preventDefault();
+      if (this.currentCraftPlacementAction?.previewing) {
+        this.onCraft?.(this.currentCraftPlacementAction.recipeId ?? 'campfire');
+        return;
+      }
       this.#setCraftMenuOpen(!this.craftMenuOpen);
     });
 
@@ -459,6 +491,7 @@ export class MobileHud {
       if (!button || button.disabled) return;
       event.preventDefault();
       this.onCraft?.(button.dataset.craft);
+      if (button.dataset.craftKind === 'structure') this.#setCraftMenuOpen(false);
     });
 
     this.buildTrayToggle.addEventListener('pointerdown', event => {

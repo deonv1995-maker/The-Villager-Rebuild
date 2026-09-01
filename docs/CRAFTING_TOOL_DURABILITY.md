@@ -6,6 +6,10 @@ The bottom mobile tool bar is an equipment selection bar only. Selecting a slot 
 
 Crafting is owned by `CraftingSystem` and exposed through the dedicated top-screen crafting menu. `CraftingDefinitions.js` remains the recipe source of truth. The menu reads the same recipe data and live inventory quantities, so UI costs must not duplicate gameplay values.
 
+The crafting menu can contain both inventory-output recipes and placeable structure recipes. Inventory-output recipes such as tools are consumed immediately by `CraftingSystem.craft()`. A placeable structure recipe does not create a temporary inventory item: selecting it starts the authoritative world-placement flow and its ingredients are consumed only after placement is confirmed.
+
+The Campfire is the first placeable structure recipe. Its Stick/Stone cost is defined once in `CraftingDefinitions.js`, and `StructureDefinitions.js` reuses that same ingredient array for world validation and final consumption. On mobile the flow is `CRAFT -> Campfire BUILD -> green world preview -> PLACE` on the top crafting control. Campfire construction never takes ownership of the unified Action button. Hammer demolition of an already-built Campfire remains a normal contextual tool action.
+
 `ToolDurabilitySystem` is the source of truth for per-tool-instance durability. Shared durability tuning lives in `ToolDefinitions.js`:
 
 - maximum durability: 100%
@@ -35,16 +39,16 @@ The Spear selection slot shows the number currently available for throwing. Embe
 
 ## Integration
 
-`EquipmentRuntimeController` is the scoped integration boundary for this pass. It attaches durability to the existing authoritative harvest/combat/build systems without replacing their gameplay logic, synchronizes the dedicated crafting UI, transfers Spears between inventory and the world, and publishes nearby Spear retrieval through the existing unified Action system.
+`EquipmentRuntimeController` is the scoped integration boundary for this pass. It attaches durability to the existing authoritative harvest/combat/build systems without replacing their gameplay logic, synchronizes the dedicated crafting UI, transfers Spears between inventory and the world, and publishes nearby Spear retrieval through the existing unified Action system. It also supplies placeable crafting recipes to the same crafting menu while delegating final world placement to the existing world-system handler.
 
 The following stable systems remain authoritative and are not duplicated:
 
 - hidden left-half all-speed movement
 - right-half manual camera look and delayed recentering
-- unified context-sensitive Action button
+- unified context-sensitive Action button for world interaction/combat/tool actions
 - existing tree/rock harvesting handlers
 - existing Hammer demolition and wall customization handlers
 - existing Sword and Spear animation/combat handlers
-- existing physical-log construction, roof and campfire systems
+- existing physical-log construction, roof and campfire world systems
 
-Future craftable tools or recipes should extend the shared data definitions and the existing crafting/durability boundaries rather than adding crafting behavior back into individual tool slots.
+Future craftable tools, items or placeable structures should extend the shared crafting definitions and existing runtime boundaries rather than adding crafting behavior back into individual tool slots or the unified Action button.
