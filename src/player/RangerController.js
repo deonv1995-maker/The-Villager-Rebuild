@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { rangerGroundHeightAt } from './RangerGrounding.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 const PLAYER_RADIUS = 0.42;
@@ -29,7 +30,7 @@ export class RangerController {
     this.collision = collision;
     this.root = new THREE.Group();
     const spawn = terrain.getSpawnPoint?.() ?? { x: 0, z: 39 };
-    this.root.position.set(spawn.x, terrain.heightAt(spawn.x, spawn.z), spawn.z);
+    this.root.position.set(spawn.x, rangerGroundHeightAt(terrain, spawn.x, spawn.z), spawn.z);
     this.scene.add(this.root);
 
     this.input = { x: 0, y: 0, sprint: false };
@@ -311,7 +312,7 @@ export class RangerController {
     const moved = Math.hypot(resolved.x - this.root.position.x, resolved.z - this.root.position.z) > 0.01;
     this.root.position.x = resolved.x;
     this.root.position.z = resolved.z;
-    this.root.position.y = this.terrain.heightAt(resolved.x, resolved.z);
+    this.root.position.y = this.#groundHeightAt(resolved.x, resolved.z);
     return moved;
   }
 
@@ -436,7 +437,7 @@ export class RangerController {
     const runningAnimation = sprinting || (mobileInputActive && speed >= RUN_ANIMATION_THRESHOLD);
     const throwing = this.isSpearThrowing();
     const toolActing = this.isToolActing();
-    const previousGround = this.terrain.heightAt(this.root.position.x, this.root.position.z);
+    const previousGround = this.#groundHeightAt(this.root.position.x, this.root.position.z);
 
     if (length > 0.08) {
       const nx = inputX / Math.max(1, length);
@@ -472,7 +473,7 @@ export class RangerController {
       this.#setAnimation('Idle_A');
     }
 
-    const ground = this.terrain.heightAt(this.root.position.x, this.root.position.z);
+    const ground = this.#groundHeightAt(this.root.position.x, this.root.position.z);
     if (this.grounded && previousGround - ground > 0.5) {
       this.grounded = false;
       this.jumpVelocity = Math.min(0, this.jumpVelocity);
@@ -503,6 +504,10 @@ export class RangerController {
     }
     this.#updateSpearThrow(dt);
     this.#updateCamera(false, dt);
+  }
+
+  #groundHeightAt(x, z) {
+    return rangerGroundHeightAt(this.terrain, x, z);
   }
 
   #createSpearVisual() {
