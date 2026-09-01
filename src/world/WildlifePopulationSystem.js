@@ -124,6 +124,16 @@ export class WildlifePopulationSystem {
   #populate() {
     this.#addActor('wildPig', WORLD_LAYOUT.huntAnimal, 'wild-pig-1');
 
+    // A minimal/fallback terrain has no ecology model. Preserve the proven
+    // single Day-1 animal in that mode rather than inventing population
+    // placement without habitat data. The production island exposes all of
+    // these signals and therefore receives the configured full population.
+    if (
+      typeof this.ecology?.getScatterBounds !== 'function'
+      || typeof this.ecology?.isPlayable !== 'function'
+      || typeof this.ecology?.vegetationSuitabilityAt !== 'function'
+    ) return;
+
     const reservedCenters = [{ x: WORLD_LAYOUT.huntAnimal.x, z: WORLD_LAYOUT.huntAnimal.z }];
     for (const [speciesKey, config] of Object.entries(WILDLIFE_POPULATION.species)) {
       const existingCount = speciesKey === 'wildPig' ? 1 : 0;
@@ -150,11 +160,7 @@ export class WildlifePopulationSystem {
   }
 
   #sampleCenter(speciesKey, config, reservedCenters) {
-    const bounds = this.ecology.getScatterBounds?.(34) ?? {
-      halfX: 210,
-      halfZ: 150,
-      centerZ: -4
-    };
+    const bounds = this.ecology.getScatterBounds(34);
     const spawn = WORLD_LAYOUT.spawn;
     const attempts = 1200;
 
@@ -163,7 +169,7 @@ export class WildlifePopulationSystem {
       const z = (this.#random() * 2 - 1) * bounds.halfZ + bounds.centerZ;
       const spawnDistance = Math.hypot(x - spawn.x, z - spawn.z);
       if (spawnDistance < WILDLIFE_POPULATION.spawnExclusionRadius) continue;
-      if (!(this.ecology.isPlayable?.(x, z, 7) ?? true)) continue;
+      if (!this.ecology.isPlayable(x, z, 7)) continue;
       if (this.ecology.isSandAt?.(x, z)) continue;
       const slope = this.ecology.slopeAt?.(x, z) ?? 0;
       if (slope > config.maxSlope) continue;
@@ -178,7 +184,7 @@ export class WildlifePopulationSystem {
 
   #habitatSuitability(speciesKey, x, z, config) {
     const vegetation = THREE.MathUtils.clamp(
-      this.ecology.vegetationSuitabilityAt?.(x, z, config.maxSlope) ?? 0.7,
+      this.ecology.vegetationSuitabilityAt(x, z, config.maxSlope),
       0,
       1
     );
