@@ -46,6 +46,8 @@ These additions do not create sailing physics or a reusable boat gameplay system
 - storm clouds, rain and deterministic lightning appear as danger rises;
 - bow foam and spray respond to ship motion;
 - wreck impact and Ranger water entry produce separate foam/splash feedback;
+- before the hull reaches the wreck impact, the Ranger deliberately jumps overboard using the production `Jump_Full_Short` clip and a deterministic cinematic arc; the Ranger is hidden exactly at water entry after triggering the splash, so no title prop can visibly continue through the ocean or ship;
+- the loose crate remains parented to the ship and receives only a bounded deck lurch during impact instead of accumulating free translation through the hull;
 - water, sky, fog and lighting darken together.
 
 Flexible sail/rope motion and the mast fracture remain in `TitleShipVisual`/`TitleSceneApp`; they do not move into the storm system merely because storm intensity drives them.

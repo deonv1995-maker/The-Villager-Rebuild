@@ -41,8 +41,11 @@ console.log(`INFO Native crawl animations: ${nativeCrawlAnimations.join(', ') ||
 
 const checks = [
   ['title scene uses production Ranger asset registry', titleScene.includes('ASSET_PATHS.ranger.model')],
-  ['title scene uses the real KayKit Idle_A instead of Jump_Idle fallback', titleScene.includes('ASSET_PATHS.ranger.general') && titleScene.includes("clip.name === 'Idle_A'") && !titleScene.includes('ASSET_PATHS.ranger.movementBasic') && !titleScene.includes('/idle/i.test') && generalAnimations.includes('Idle_A')],
+  ['title scene uses the real KayKit Idle_A instead of Jump_Idle fallback', titleScene.includes('ASSET_PATHS.ranger.general') && titleScene.includes("clip.name === 'Idle_A'") && !titleScene.includes("clip.name === 'Jump_Idle'") && !titleScene.includes('/idle/i.test') && generalAnimations.includes('Idle_A')],
   ['Ranger uses a ship-balance presentation rig', titleScene.includes('title-ranger-balance-rig') && titleScene.includes('this.scene.attach(this.rangerRig)')],
+  ['Ranger abandons ship on a controlled animated jump arc', titleScene.includes("clip.name === 'Jump_Full_Short'") && titleScene.includes('#beginRangerJump()') && titleScene.includes('#updateRangerJump(dt)') && titleScene.includes('rangerJumpHeight')],
+  ['Ranger water entry ends in a splash instead of passing below the ocean', titleScene.includes('triggerRangerSplash(this.rangerRig.position)') && titleScene.includes('this.rangerRig.visible = false')],
+  ['loose crate remains deck-owned through a bounded crash lurch', titleScene.includes('CRATE_DECK_BASE') && titleScene.includes('const crateLurch = Math.sin(impact * Math.PI)') && !titleScene.includes('this.crate.position.z -=')],
   ['Ranger deck stance is planted away from the mast and uses one base pose', titleScene.includes('RANGER_DECK_BASE') && titleScene.includes('x: 1.22') && titleScene.includes('y: 1.14') && titleScene.includes('z: 2.55') && titleScene.includes('RANGER_DECK_MODEL_YAW')],
   ['Ranger title arms are no longer blended toward the model bind pose', !titleScene.includes('TITLE_ARM_BONES') && !titleScene.includes('#applyRangerArmRestPose') && !config.includes('rangerArmRestBlend')],
   ['Ranger deck presentation includes body sway', titleScene.includes('rangerDeckSway') && titleScene.includes('footShift')],
