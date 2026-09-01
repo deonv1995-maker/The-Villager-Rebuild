@@ -10,6 +10,7 @@ import { TitleStormSystem } from './TitleStormSystem.js';
 const RANGER_DECK_BASE = Object.freeze({ x: 1.22, y: 1.14, z: 2.55 });
 const RANGER_DECK_MODEL_YAW = Math.PI * 0.92;
 const RANGER_DECK_IDLE_SPEED = 0.82;
+const CRATE_DECK_BASE = Object.freeze({ x: -1.25, y: 1.78, z: 3.15 });
 
 export class TitleSceneApp {
   constructor({ canvas, setStatus }) {
@@ -25,7 +26,9 @@ export class TitleSceneApp {
     this.onPlay = null;
     this.rangerThrown = false;
     this.rangerSplashDone = false;
-    this.rangerVelocity = new THREE.Vector3();
+    this.rangerJumpStart = new THREE.Vector3();
+    this.rangerJumpEnd = new THREE.Vector3();
+    this.rangerJumpElapsed = 0;
   }
 
   async start({ onPlay } = {}) {
@@ -145,9 +148,10 @@ export class TitleSceneApp {
 
   async #loadRanger() {
     const loader = new GLTFLoader();
-    const [rangerGltf, generalGltf] = await Promise.all([
+    const [rangerGltf, generalGltf, movementGltf] = await Promise.all([
       loader.loadAsync(ASSET_PATHS.ranger.model),
-      loader.loadAsync(ASSET_PATHS.ranger.general)
+      loader.loadAsync(ASSET_PATHS.ranger.general),
+      loader.loadAsync(ASSET_PATHS.ranger.movementBasic)
     ]);
 
     this.rangerRig = new THREE.Group();
@@ -175,6 +179,12 @@ export class TitleSceneApp {
     this.idleAction = this.mixer.clipAction(idle, this.ranger);
     this.idleAction.setEffectiveTimeScale(RANGER_DECK_IDLE_SPEED);
     this.idleAction.play();
+
+    const jump = movementGltf.animations.find(clip => clip.name === 'Jump_Full_Short');
+    if (!jump) throw new Error('Title Ranger requires KayKit Jump_Full_Short for the shipwreck jump');
+    this.jumpAction = this.mixer.clipAction(jump, this.ranger);
+    this.jumpAction.setLoop(THREE.LoopOnce, 1);
+    this.jumpAction.clampWhenFinished = true;
   }
 
   #createMenuUi() {
@@ -295,10 +305,15 @@ export class TitleSceneApp {
       this.rangerRig.position.z = RANGER_DECK_BASE.z + impact * 0.16 + Math.sin(this.elapsed * 1.55) * severe * 0.035;
     }
 
-    if (impact > 0) {
-      this.crate.rotation.x += dt * impact * 5.2;
-      this.crate.rotation.z += dt * impact * 1.8;
-      this.crate.position.z -= dt * impact * 4.2;
+    if (this.crate) {
+      const crateLurch = Math.sin(impact * Math.PI) * 0.42;
+      this.crate.position.set(
+        CRATE_DECK_BASE.x - crateLurch * 0.28,
+        CRATE_DECK_BASE.y + Math.sin(impact * Math.PI * 2) * 0.06,
+        CRATE_DECK_BASE.z - crateLurch
+      );
+      this.crate.rotation.x = crateLurch * 0.48;
+      this.crate.rotation.z = -crateLurch * 0.2;
     }
 
     const cameraAdvance = THREE.MathUtils.smoothstep(t, 0.02, 0.68);
@@ -312,8 +327,8 @@ export class TitleSceneApp {
     this.camera.position.x += Math.sin(this.elapsed * 39) * shakeStrength;
     this.camera.position.y += Math.cos(this.elapsed * 34) * shakeStrength * 0.65;
 
-    if (t >= 0.79 && !this.rangerThrown) this.#throwRanger();
-    if (this.rangerThrown) this.#updateThrownRanger(dt);
+    if (t >= TITLE_SCENE.rangerJumpStart && !this.rangerThrown) this.#beginRangerJump();
+    if (this.rangerThrown) this.#updateRangerJump(dt);
 
     this.camera.lookAt(this.ship.position.x, 1.45, this.ship.position.z - 9.5);
 
@@ -327,26 +342,41 @@ export class TitleSceneApp {
     return t;
   }
 
-  #throwRanger() {
+  #beginRangerJump() {
     if (!this.rangerRig || this.rangerThrown) return;
     this.rangerThrown = true;
     this.ship.updateMatrixWorld(true);
     this.scene.attach(this.rangerRig);
-    this.rangerVelocity.set(0.55, 4.8, -7.1);
-    if (this.idleAction) this.idleAction.paused = true;
-    this.setStatus('VOYAGE · SHIPWRECK');
+    this.rangerJumpStart.copy(this.rangerRig.position);
+    this.rangerJumpEnd.set(
+      this.rangerJumpStart.x + TITLE_SCENE.rangerJumpOutward,
+      TITLE_SCENE.oceanY,
+      this.rangerJumpStart.z + TITLE_SCENE.rangerJumpForward
+    );
+    this.rangerJumpElapsed = 0;
+    this.idleAction?.fadeOut(0.12);
+    this.jumpAction?.reset().fadeIn(0.08).play();
+    this.setStatus('VOYAGE · ABANDON SHIP');
   }
 
-  #updateThrownRanger(dt) {
-    if (!this.rangerRig) return;
-    this.rangerRig.position.addScaledVector(this.rangerVelocity, dt);
-    this.rangerVelocity.y -= 9.8 * dt;
-    this.rangerRig.rotation.x += dt * 3.1;
-    this.rangerRig.rotation.z += dt * 1.15;
+  #updateRangerJump(dt) {
+    if (!this.rangerRig || this.rangerSplashDone) return;
+    this.rangerJumpElapsed += dt;
+    const jumpT = THREE.MathUtils.clamp(
+      this.rangerJumpElapsed / TITLE_SCENE.rangerJumpDuration,
+      0,
+      1
+    );
+    this.rangerRig.position.lerpVectors(this.rangerJumpStart, this.rangerJumpEnd, jumpT);
+    this.rangerRig.position.y += Math.sin(jumpT * Math.PI) * TITLE_SCENE.rangerJumpHeight;
+    this.rangerRig.rotation.x = THREE.MathUtils.lerp(0.12, -0.38, jumpT);
+    this.rangerRig.rotation.z = Math.sin(jumpT * Math.PI) * -0.18;
 
-    if (!this.rangerSplashDone && this.rangerRig.position.y <= TITLE_SCENE.oceanY + 0.15) {
+    if (jumpT >= 1) {
       this.rangerSplashDone = true;
       this.storm?.triggerRangerSplash(this.rangerRig.position);
+      this.rangerRig.visible = false;
+      this.setStatus('VOYAGE · WASHED ASHORE');
     }
   }
 
