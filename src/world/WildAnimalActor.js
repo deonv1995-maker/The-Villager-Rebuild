@@ -35,6 +35,11 @@ export class WildAnimalActor {
     this.fleeRemaining = 0;
     this.wanderPause = 0;
     this.wanderIndex = 0;
+    this.playerAttackCooldown = 0;
+    this.attackAnimationRemaining = 0;
+    this.pendingPlayerAttack = null;
+    this.pursuitTarget = null;
+    this.pursuitCause = null;
     this.threatPosition = new THREE.Vector3();
     this.wanderTarget = new THREE.Vector3();
     this.tempDirection = new THREE.Vector3();
@@ -72,21 +77,32 @@ export class WildAnimalActor {
 
   update(dt, playerPosition, armed = false, range = this.definition.spearLockRange) {
     this.time += dt;
+    this.playerAttackCooldown = Math.max(0, this.playerAttackCooldown - dt);
+    this.attackAnimationRemaining = Math.max(0, this.attackAnimationRemaining - dt);
     let movedDistance = 0;
 
     if (this.#isFinitePosition(playerPosition)) this.lastPlayerPosition.copy(playerPosition);
 
     if (!this.defeated) {
       const playerDistance = this.#distanceTo(playerPosition);
-      if (playerDistance <= this.definition.awarenessRange) {
-        this.alertFrom(playerPosition, { cause: 'proximity' });
-      } else if (this.behavior === 'flee' && this.#isFinitePosition(playerPosition)) {
-        this.threatPosition.copy(playerPosition);
+      const ecology = this.definition.ecology ?? {};
+      const aggression = ecology.aggression;
+      this.lastPosition.copy(this.group.position);
+
+      if (aggression && playerDistance <= aggression.aggroRange) {
+        this.#updatePlayerChase(dt, playerPosition, aggression, playerDistance);
+      } else {
+        if (ecology.playerResponse !== 'aggressive' && playerDistance <= this.definition.awarenessRange) {
+          this.alertFrom(playerPosition, { cause: 'proximity' });
+        } else if (this.behavior === 'flee' && this.#isFinitePosition(playerPosition) && this.threatCause !== 'predator') {
+          this.threatPosition.copy(playerPosition);
+        }
+
+        if (this.behavior === 'flee') this.#updateFlee(dt);
+        else if (this.pursuitTarget) this.#updatePursuit(dt);
+        else this.#updateWander(dt);
       }
 
-      this.lastPosition.copy(this.group.position);
-      if (this.behavior === 'flee') this.#updateFlee(dt);
-      else this.#updateWander(dt);
       movedDistance = Math.hypot(
         this.group.position.x - this.lastPosition.x,
         this.group.position.z - this.lastPosition.z
@@ -99,7 +115,8 @@ export class WildAnimalActor {
       }
     }
 
-    this.presentation.update(dt, movedDistance);
+    const presentationBehavior = this.attackAnimationRemaining > 0 ? 'attack' : this.behavior;
+    this.presentation.update(dt, { movedDistance, behavior: presentationBehavior });
 
     if (this.hitFlash > 0) {
       this.hitFlash = Math.max(0, this.hitFlash - dt);
@@ -110,12 +127,30 @@ export class WildAnimalActor {
 
     const target = armed ? this.getAttackTarget(playerPosition, range) : null;
     this.setAttackIndicator(Boolean(target));
-
     const harvestTarget = this.getHarvestTarget(playerPosition);
     this.harvestRing.visible = Boolean(harvestTarget);
     if (harvestTarget) this.#positionRing(this.harvestRing);
-
     return target;
+  }
+
+  setPursuitTarget(position, { cause = 'prey' } = {}) {
+    if (this.defeated || !this.#isFinitePosition(position) || this.behavior === 'flee') return false;
+    if (!this.pursuitTarget) this.pursuitTarget = new THREE.Vector3();
+    this.pursuitTarget.copy(position);
+    this.pursuitCause = cause;
+    return true;
+  }
+
+  clearPursuitTarget() {
+    this.pursuitTarget = null;
+    this.pursuitCause = null;
+    if (this.behavior === 'hunt') this.behavior = 'wander';
+  }
+
+  consumePlayerAttack() {
+    const event = this.pendingPlayerAttack;
+    this.pendingPlayerAttack = null;
+    return event;
   }
 
   setAttackIndicator(visible) {
@@ -125,12 +160,15 @@ export class WildAnimalActor {
 
   alertFrom(threatPosition, { cause = 'danger', duration = this.definition.fleeDuration } = {}) {
     if (this.defeated || !this.#isFinitePosition(threatPosition)) return false;
+    if (this.definition.ecology?.playerResponse === 'aggressive' && cause === 'proximity') return false;
     this.threatPosition.copy(threatPosition);
     this.hasThreat = true;
     this.threatCause = cause;
     this.behavior = 'flee';
     this.fleeRemaining = Math.max(this.fleeRemaining, Math.max(0, duration));
     this.wanderPause = 0;
+    this.pursuitTarget = null;
+    this.pursuitCause = null;
     return true;
   }
 
@@ -141,7 +179,6 @@ export class WildAnimalActor {
       playerPosition.z - this.group.position.z
     );
     if (distance > range) return null;
-
     return {
       instanceId: this.instanceId,
       animalId: this.definition.id,
@@ -175,9 +212,7 @@ export class WildAnimalActor {
       this.scene.remove(this.group);
       this.lootSpawned = this.#spawnLoot(deathPosition);
     } else {
-      const resolvedThreat = this.#isFinitePosition(threatPosition)
-        ? threatPosition
-        : this.lastPlayerPosition;
+      const resolvedThreat = this.#isFinitePosition(threatPosition) ? threatPosition : this.lastPlayerPosition;
       if (this.#isFinitePosition(resolvedThreat)) this.alertFrom(resolvedThreat, { cause: 'hit' });
     }
 
@@ -211,7 +246,6 @@ export class WildAnimalActor {
       playerPosition.z - this.group.position.z
     );
     if (distance > this.definition.harvestRange) return null;
-
     return {
       type: 'carcass',
       instanceId: this.instanceId,
@@ -225,7 +259,6 @@ export class WildAnimalActor {
   harvest(playerPosition) {
     const target = this.getHarvestTarget(playerPosition);
     if (!target) return null;
-
     this.harvested = true;
     this.harvestRing.visible = false;
     this.targetRing.visible = false;
@@ -264,10 +297,15 @@ export class WildAnimalActor {
   #updateWander(dt) {
     if (this.wanderPause > 0) {
       this.wanderPause = Math.max(0, this.wanderPause - dt);
-      if (this.wanderPause === 0) this.#chooseWanderTarget();
+      this.behavior = this.definition.ecology?.idleBehavior ?? 'graze';
+      if (this.wanderPause === 0) {
+        this.behavior = 'wander';
+        this.#chooseWanderTarget();
+      }
       return;
     }
 
+    this.behavior = this.definition.ecology?.idleBehavior === 'prowl' ? 'prowl' : 'wander';
     const dx = this.wanderTarget.x - this.group.position.x;
     const dz = this.wanderTarget.z - this.group.position.z;
     const distance = Math.hypot(dx, dz);
@@ -279,9 +317,47 @@ export class WildAnimalActor {
     }
 
     const step = Math.min(distance, this.definition.wanderSpeed * Math.max(0, dt));
-    const x = this.group.position.x + (dx / distance) * step;
-    const z = this.group.position.z + (dz / distance) * step;
-    this.#moveGrounded(x, z);
+    this.#moveGrounded(
+      this.group.position.x + (dx / distance) * step,
+      this.group.position.z + (dz / distance) * step
+    );
+  }
+
+  #updatePursuit(dt) {
+    if (!this.pursuitTarget) return;
+    this.behavior = 'hunt';
+    const predator = this.definition.ecology?.predator;
+    this.#moveToward(this.pursuitTarget, predator?.chaseSpeed ?? this.definition.fleeSpeed, dt);
+  }
+
+  #updatePlayerChase(dt, playerPosition, aggression, playerDistance) {
+    if (!this.#isFinitePosition(playerPosition)) return;
+    this.pursuitTarget = null;
+    this.pursuitCause = null;
+    this.behavior = 'chase';
+    this.#moveToward(playerPosition, aggression.chaseSpeed, dt);
+    if (playerDistance > aggression.attackRange || this.playerAttackCooldown > 0) return;
+    this.behavior = 'attack';
+    this.attackAnimationRemaining = 0.38;
+    this.playerAttackCooldown = aggression.attackCooldown;
+    this.pendingPlayerAttack = {
+      instanceId: this.instanceId,
+      animalId: this.definition.id,
+      label: this.definition.label,
+      position: this.group.position.clone()
+    };
+  }
+
+  #moveToward(target, speed, dt) {
+    const dx = target.x - this.group.position.x;
+    const dz = target.z - this.group.position.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance <= 0.001) return false;
+    const step = Math.min(distance, Math.max(0, speed) * Math.max(0, dt));
+    return this.#moveGrounded(
+      this.group.position.x + (dx / distance) * step,
+      this.group.position.z + (dz / distance) * step
+    );
   }
 
   #updateFlee(dt) {
@@ -291,7 +367,6 @@ export class WildAnimalActor {
       0,
       this.group.position.z - this.threatPosition.z
     );
-
     if (this.tempDirection.lengthSq() <= 0.0001) {
       const escapeAngle = this.time * 0.83 + this.wanderIndex * GOLDEN_ANGLE;
       this.tempDirection.set(Math.sin(escapeAngle), 0, Math.cos(escapeAngle));
@@ -317,9 +392,10 @@ export class WildAnimalActor {
     }
 
     const step = this.definition.fleeSpeed * Math.max(0, dt);
-    const x = this.group.position.x + this.tempDirection.x * step;
-    const z = this.group.position.z + this.tempDirection.z * step;
-    this.#moveGrounded(x, z);
+    this.#moveGrounded(
+      this.group.position.x + this.tempDirection.x * step,
+      this.group.position.z + this.tempDirection.z * step
+    );
 
     const threatDistance = this.#distanceTo(this.threatPosition);
     if (this.fleeRemaining <= 0 && threatDistance >= this.definition.safeDistance) {
@@ -387,41 +463,28 @@ export class WildAnimalActor {
 
   #distanceTo(position) {
     if (!this.#isFinitePosition(position)) return Number.POSITIVE_INFINITY;
-    return Math.hypot(
-      position.x - this.group.position.x,
-      position.z - this.group.position.z
-    );
+    return Math.hypot(position.x - this.group.position.x, position.z - this.group.position.z);
   }
 
   #isFinitePosition(position) {
-    return Boolean(
-      position
-      && Number.isFinite(position.x)
-      && Number.isFinite(position.y)
-      && Number.isFinite(position.z)
-    );
+    return Boolean(position && Number.isFinite(position.x) && Number.isFinite(position.y) && Number.isFinite(position.z));
   }
 
   #createRing(color, innerRadius, outerRadius) {
     const ring = new THREE.Mesh(
-      new THREE.RingGeometry(innerRadius, outerRadius, 28),
-      new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.78,
-        side: THREE.DoubleSide,
-        depthWrite: false
-      })
+      new THREE.RingGeometry(innerRadius, outerRadius, 32),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })
     );
     ring.rotation.x = -Math.PI / 2;
     ring.visible = false;
+    ring.renderOrder = 8;
     return ring;
   }
 
   #positionRing(ring) {
     ring.position.set(
       this.group.position.x,
-      this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.055,
+      this.terrain.heightAt(this.group.position.x, this.group.position.z) + 0.05,
       this.group.position.z
     );
   }
