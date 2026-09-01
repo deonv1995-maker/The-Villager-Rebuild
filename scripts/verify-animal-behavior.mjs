@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../src/data/AnimalDefinitions.js';
+import { WILDLIFE_POPULATION } from '../src/data/WildlifePopulationDefinitions.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
-import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
+import { WildAnimalActor } from '../src/world/WildAnimalActor.js';
+import { WildlifePopulationSystem } from '../src/world/WildlifePopulationSystem.js';
 import { GatherableSystem } from '../src/world/GatherableSystem.js';
 
 const definition = ANIMAL_DEFINITIONS.dayOneHunt;
@@ -11,9 +13,15 @@ assert.ok(definition.awarenessRange >= 4.5, 'Wild pig must react before the Rang
 assert.ok(definition.safeDistance > definition.awarenessRange, 'Wild pig must keep retreating until it has created real separation');
 assert.ok(definition.fleeSpeed > 3.4, 'Wild pig flee speed must exceed the Ranger walking speed');
 assert.ok(definition.maxRoamRadius > definition.wanderRadius, 'Fleeing must have more room than ordinary wandering');
+assert.equal(ANIMAL_DEFINITIONS.deer.presentation.proceduralKind, 'deer', 'deer should have a dedicated stylized presentation');
+assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.proceduralKind, 'rabbit', 'rabbit should have a dedicated stylized presentation');
 
-const flatTerrain = { heightAt: () => 0 };
-const makeHunt = () => new DayOneHuntSystem({ scene: new THREE.Scene(), terrain: flatTerrain });
+const flatTerrain = {
+  heightAt: () => 0,
+  isPlayable: () => true,
+  slopeAt: () => 0
+};
+const makeHunt = () => new WildAnimalActor({ scene: new THREE.Scene(), terrain: flatTerrain });
 const pigCenter = new THREE.Vector3(WORLD_LAYOUT.huntAnimal.x, 0, WORLD_LAYOUT.huntAnimal.z);
 
 const wanderHunt = makeHunt();
@@ -107,7 +115,7 @@ assert.equal(spearHitHunt.getHarvestTarget(spearRanger), null, 'Defeated pig mus
 
 const lootScene = new THREE.Scene();
 const lootGatherables = new GatherableSystem({ scene: lootScene, terrain: flatTerrain });
-const lootHunt = new DayOneHuntSystem({ scene: lootScene, terrain: flatTerrain });
+const lootHunt = new WildAnimalActor({ scene: lootScene, terrain: flatTerrain });
 const deathPosition = lootHunt.group.position.clone();
 const lootResult = lootHunt.applyDamage(definition.maxHealth, spearRanger);
 const meatDrops = lootGatherables.items.filter(item => item.active && item.resourceId === definition.loot.itemId);
@@ -129,10 +137,46 @@ const collectedMeat = lootGatherables.gather(firstMeatPosition);
 assert.equal(collectedMeat?.resourceId, 'meat', 'Gathering spawned meat must feed the normal inventory resource ID');
 assert.equal(collectedMeat?.quantity, 1, 'Each spawned meat pickup must add one Raw Meat');
 
+const populationEcology = {
+  getScatterBounds: () => ({ halfX: 230, halfZ: 180, centerZ: -4 }),
+  isPlayable: () => true,
+  isSandAt: () => false,
+  slopeAt: () => 0.1,
+  vegetationSuitabilityAt: () => 0.92,
+  forestCoverAt: () => 0.55,
+  grassDensityAt: () => 0.72
+};
+const populationTerrain = {
+  terrain: populationEcology,
+  heightAt: () => 0,
+  isPlayable: () => true,
+  slopeAt: () => 0.1
+};
+const population = new WildlifePopulationSystem({
+  scene: new THREE.Scene(),
+  terrain: populationTerrain,
+  gatherables: { spawn: () => ({}) }
+});
+const expectedPopulation = Object.values(WILDLIFE_POPULATION.species).reduce((sum, species) => sum + species.count, 0);
+const populationState = population.getState();
+assert.equal(populationState.total, expectedPopulation, 'wildlife population should fill every configured species budget');
+assert.equal(populationState.bySpecies.wild_pig.total, WILDLIFE_POPULATION.species.wildPig.count, 'island should contain multiple wild pigs');
+assert.equal(populationState.bySpecies.deer.total, WILDLIFE_POPULATION.species.deer.count, 'island should contain deer');
+assert.equal(populationState.bySpecies.rabbit.total, WILDLIFE_POPULATION.species.rabbit.count, 'island should contain rabbits');
+assert.ok(populationState.bySpecies.wild_pig.total > 1, 'wild pig population must no longer be a single tutorial animal');
+
+const targetActor = population.actors.find(actor => actor.definition.id === 'rabbit');
+const targetPoint = targetActor.group.position.clone().add(new THREE.Vector3(0.8, 0, 0));
+const populationTarget = population.getAttackTarget(targetPoint, 3);
+assert.equal(populationTarget?.animalId, 'rabbit', 'population targeting should choose the nearby animal rather than one global pig');
+assert.strictEqual(population.getProjectileTargetPosition(), targetActor.group.position, 'projectile target should remain bound to the selected wildlife actor');
+
 const appSource = await readFile('src/core/GameApp.js', 'utf8');
 assert.ok(
   appSource.includes("this.hunt.alertFrom(releaseOrigin, { cause: 'spear-throw' })"),
-  'GameApp must route a successful spear release into the wildlife threat system before impact'
+  'GameApp must keep routing successful spear release into the wildlife threat interface before impact'
 );
+const huntSource = await readFile('src/world/DayOneHuntSystem.js', 'utf8');
+assert.ok(huntSource.includes('extends WildlifePopulationSystem'), 'established GameApp hunt interface should now be backed by the wildlife population layer');
 
-console.log('Animal threat/flee/grazing-zone/death-loot verification passed.');
+console.log(`Animal behavior verified with ${populationState.total} island animals: ${populationState.bySpecies.wild_pig.total} pigs, ${populationState.bySpecies.deer.total} deer, ${populationState.bySpecies.rabbit.total} rabbits.`);
