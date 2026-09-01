@@ -27,7 +27,6 @@ export function resolveContextAction({
   carryingLog = false,
   buildPreviewValid = false,
   interactionTarget = null,
-  campfireAction = null,
   toolId = null,
   huntTarget = null,
   externalActions = []
@@ -38,16 +37,6 @@ export function resolveContextAction({
       available: Boolean(interactionTarget) && Boolean(buildPreviewValid),
       icon: 'hand',
       label: interactionTarget?.actionLabel ?? 'Place carried log',
-      caption: 'PLACE'
-    };
-  }
-
-  if (campfireAction?.previewing) {
-    return {
-      source: 'campfire',
-      available: Boolean(campfireAction.available),
-      icon: 'campfire',
-      label: campfireAction.label ?? 'Confirm campfire placement',
       caption: 'PLACE'
     };
   }
@@ -102,16 +91,6 @@ export function resolveContextAction({
   }
 
   if (sortedExternal.length > 0) return resolveExternalAction(sortedExternal[0]);
-
-  if (campfireAction?.available) {
-    return {
-      source: 'campfire',
-      available: true,
-      icon: 'campfire',
-      label: campfireAction.label ?? 'Preview campfire placement',
-      caption: 'BUILD'
-    };
-  }
 
   return {
     source: null,
