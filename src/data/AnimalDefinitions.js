@@ -21,8 +21,8 @@ const WILD_PIG = Object.freeze({
     assetKey: 'qiwiiPig',
     format: 'fbx',
     fallbackKind: 'pig',
-    targetLength: 1.75,
-    maxHeight: 1.12,
+    targetLength: 1.9,
+    maxHeight: 1.2,
     yawOffset: 0
   }),
   loot: Object.freeze({ itemId: 'meat', label: 'Raw Meat', quantity: 2 })
@@ -102,8 +102,8 @@ const FOX = Object.freeze({
     assetKey: 'quaterniusFox',
     format: 'gltf',
     fallbackKind: 'fox',
-    targetLength: 1.25,
-    maxHeight: 0.9,
+    targetLength: 1.4,
+    maxHeight: 0.98,
     yawOffset: 0
   }),
   loot: Object.freeze({ itemId: 'meat', label: 'Raw Meat', quantity: 1 })
@@ -134,8 +134,8 @@ const WOLF = Object.freeze({
     assetKey: 'quaterniusWolf',
     format: 'gltf',
     fallbackKind: 'wolf',
-    targetLength: 1.5,
-    maxHeight: 1.05,
+    targetLength: 2.05,
+    maxHeight: 1.32,
     yawOffset: 0
   }),
   loot: Object.freeze({ itemId: 'meat', label: 'Raw Meat', quantity: 2 })

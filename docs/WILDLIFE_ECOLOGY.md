@@ -53,13 +53,17 @@ Shared states now include wandering, grazing, scavenging, prowling, fleeing, hun
 
 The wolf is territorial: entering its configured aggro radius starts a chase, and entering attack range creates a wildlife attack event. The Ranger integration applies collision-resolved knockback/stagger feedback rather than inventing a separate health/survival-stat system before that system exists as an authoritative gameplay layer.
 
+Social animals intentionally do not share a synchronized wander clock. `WildAnimalActor` derives a deterministic per-instance motion phase from the species and population-slot instance ID, then offsets initial pauses, wander targets and presentation phase. This preserves reproducible population behavior while preventing deer and rabbit groups from marching, stopping and animating in lockstep.
+
 ## Presentation and animation
 
 `DayOneAnimalPresentation` is the shared visual adapter. It supports both FBX and glTF, skeleton-safe cloning, cached source templates, `AnimationMixer` playback and state-driven clip selection/crossfades.
 
 - Deer, fox and wolf use vendored Quaternius animated glTF assets.
 - The existing Qiwii pig remains the authoritative pig model in this pass. Its source model is static, so scavenging and locomotion receive lightweight procedural presentation motion while preserving that production mesh.
-- Rabbit remains a lightweight articulated procedural runtime animal to avoid adding another unverified asset source; its head and limbs now animate for hopping/walking, fleeing and grazing instead of the old rigid primitive bob.
+- Rabbit remains a lightweight articulated procedural runtime animal to avoid adding another unverified asset source. Its runtime rig uses a compact body, pronounced hindquarters, shorter forelegs and articulated ear pivots. Locomotion is a hop cycle with coordinated hind-leg extension and floppy ear follow-through rather than a generic four-legged stride.
+- Pig and fox presentation normalization is slightly larger so shoreline pigs and forest foxes remain readable at the normal gameplay camera distance without changing their habitat rules or population counts.
+- Wolf normalization is substantially larger than the fox and no longer compresses the production model to the previous undersized silhouette.
 
 Animation lookup is tolerant of source clip naming and maps behavior onto idle, walk, run/gallop, attack and foraging-like clips. When an imported animal lacks a dedicated grazing/eating clip, a small presentation-layer foraging posture makes the state readable without changing ecology logic.
 
