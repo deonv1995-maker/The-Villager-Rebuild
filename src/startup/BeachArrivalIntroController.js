@@ -41,9 +41,14 @@ const DUST_ANIMATIONS = Object.freeze([
   'Idle_B'
 ]);
 
-const SHORT_CRAWL_MIN_DISTANCE = 1.2;
-const SHORT_CRAWL_MAX_DISTANCE = 2.6;
-const DRY_SAND_CLEARANCE = 0.45;
+const SHORE_SEARCH_MAX_DISTANCE = 48;
+const SHORE_SEARCH_STEP = 0.25;
+const SHALLOW_WATER_TARGET_DEPTH = 0.11;
+const SHALLOW_WATER_MIN_DEPTH = 0.045;
+const SHALLOW_WATER_MAX_DEPTH = 0.22;
+const SHORT_CRAWL_MIN_DISTANCE = 1.0;
+const SHORT_CRAWL_MAX_DISTANCE = 3.4;
+const DRY_SAND_CLEARANCE = 0.24;
 const smooth01 = value => THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(value, 0, 1), 0, 1);
 const normalizeAnimationName = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -76,8 +81,9 @@ export class BeachArrivalIntroController {
     this.started = true;
     this.completed = false;
     this.spawn = this.island.getSpawnPoint?.() ?? { x: 0, z: 91 };
-    this.wetSand = this.#findWetSandStart(this.spawn);
-    this.inlandDirection = this.#resolveInlandDirection(this.wetSand, this.spawn);
+    const seawardDirection = this.#resolveSeawardDirection(this.spawn);
+    this.wetSand = this.#findShallowWaterStart(this.spawn, seawardDirection);
+    this.inlandDirection = seawardDirection.clone().multiplyScalar(-1);
     this.crawlEnd = this.#findShortDrySandEnd(this.wetSand, this.inlandDirection);
     this.forwardYaw = Math.atan2(this.inlandDirection.x, this.inlandDirection.y);
 
@@ -167,51 +173,54 @@ export class BeachArrivalIntroController {
     return this.island.baseHeightAt?.(x, z) ?? this.island.heightAt(x, z);
   }
 
-  #findWetSandStart(spawn) {
-    const waterLevel = this.island?.terrain?.waterLevel ?? -0.92;
-    const spawnHeight = this.#terrainHeightAt(spawn.x, spawn.z);
-    if (
-      this.island.isPlayable?.(spawn.x, spawn.z, 0.35)
-      && Number.isFinite(spawnHeight)
-      && spawnHeight >= waterLevel - 0.35
-      && spawnHeight <= waterLevel + 0.65
-    ) {
-      return { x: spawn.x, z: spawn.z };
-    }
-
-    const candidates = [];
-    for (let offset = 2; offset <= 10; offset += 0.75) {
-      const point = { x: spawn.x, z: spawn.z + offset };
-      if (!this.island.isPlayable?.(point.x, point.z, 0.35)) continue;
-      const height = this.#terrainHeightAt(point.x, point.z);
-      if (!Number.isFinite(height) || height <= waterLevel + 0.035) continue;
-      candidates.push({ ...point, height, shoreDelta: height - waterLevel });
-    }
-
-    const wet = candidates
-      .filter(candidate => candidate.shoreDelta <= 0.58)
-      .sort((a, b) => a.shoreDelta - b.shoreDelta || b.z - a.z)[0];
-    if (wet) return { x: wet.x, z: wet.z };
-
-    const nearest = candidates.sort((a, b) => a.z - b.z)[0];
-    if (nearest) return { x: nearest.x, z: nearest.z };
-    return { x: spawn.x, z: spawn.z };
+  #resolveSeawardDirection(spawn) {
+    const centerX = this.island?.terrain?.centerX ?? 0;
+    const centerZ = this.island?.terrain?.centerZ ?? 0;
+    const outward = new THREE.Vector2(spawn.x - centerX, spawn.z - centerZ);
+    if (outward.lengthSq() > 0.001) return outward.normalize();
+    return new THREE.Vector2(0, 1);
   }
 
-  #resolveInlandDirection(wetSand, spawn) {
-    const towardSpawn = new THREE.Vector2(spawn.x - wetSand.x, spawn.z - wetSand.z);
-    if (towardSpawn.lengthSq() > 0.25) return towardSpawn.normalize();
+  #findShallowWaterStart(spawn, seawardDirection) {
+    const waterLevel = this.island?.terrain?.waterLevel ?? -0.92;
+    let shallowWater = null;
+    let shallowWaterError = Infinity;
+    let closestShore = null;
+    let closestShoreError = Infinity;
 
-    const towardIsland = new THREE.Vector2(-wetSand.x, -wetSand.z);
-    if (towardIsland.lengthSq() > 0.001) return towardIsland.normalize();
-    return new THREE.Vector2(0, -1);
+    for (let distance = 0; distance <= SHORE_SEARCH_MAX_DISTANCE + 0.001; distance += SHORE_SEARCH_STEP) {
+      const point = {
+        x: spawn.x + seawardDirection.x * distance,
+        z: spawn.z + seawardDirection.y * distance
+      };
+      const height = this.#terrainHeightAt(point.x, point.z);
+      if (!Number.isFinite(height)) continue;
+
+      const shoreError = Math.abs(height - waterLevel);
+      if (shoreError < closestShoreError) {
+        closestShore = point;
+        closestShoreError = shoreError;
+      }
+
+      const depth = waterLevel - height;
+      if (depth < SHALLOW_WATER_MIN_DEPTH || depth > SHALLOW_WATER_MAX_DEPTH) continue;
+      if (this.island.isPlayable && !this.island.isPlayable(point.x, point.z, 0.05)) continue;
+
+      const targetError = Math.abs(depth - SHALLOW_WATER_TARGET_DEPTH);
+      if (targetError < shallowWaterError) {
+        shallowWater = point;
+        shallowWaterError = targetError;
+      }
+    }
+
+    return shallowWater ?? closestShore ?? { x: spawn.x, z: spawn.z };
   }
 
   #findShortDrySandEnd(wetSand, direction) {
     const waterLevel = this.island?.terrain?.waterLevel ?? -0.92;
     let furthestValid = null;
 
-    for (let distance = SHORT_CRAWL_MIN_DISTANCE; distance <= SHORT_CRAWL_MAX_DISTANCE + 0.001; distance += 0.2) {
+    for (let distance = SHORT_CRAWL_MIN_DISTANCE; distance <= SHORT_CRAWL_MAX_DISTANCE + 0.001; distance += 0.15) {
       const point = {
         x: wetSand.x + direction.x * distance,
         z: wetSand.z + direction.y * distance
