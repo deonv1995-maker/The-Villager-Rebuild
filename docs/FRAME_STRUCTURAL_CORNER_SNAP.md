@@ -37,3 +37,19 @@ The existing RAW frame-pair, WALL, roof and thatch regressions remain authoritat
 ## Android acceptance
 
 Build three floor strips side by side into one square floor, including a rotated/diagonal orientation. Place the two rear exterior FRAME posts as in the reported screenshot. With another Log carried and FRAME selected, approach either front exterior corner. The preview must snap to that exterior corner and turn green instead of remaining red. Complete all four posts, then continue with the established RAW top beams, WALL and ANGLE-rafter → RAW-ridge → thatch sequence.
+
+
+## Exact floor and perimeter contract
+
+Connected floor placement inherits the supporting panel's exact local basis. Only the first free floor is quantized to the world construction grid. This guarantees that three adjacent split-log strips form an exact physical-Log square at every supported rotation.
+
+FRAME stations are derived from the exterior envelope of each connected, co-planar floor component and remain aligned to the full physical-Log lattice. Narrow one-third floor seams are never structural stations. Larger rectangular footprints may expose full-Log stations along their outer edges, while missing floor panels inside the footprint do not create inner FRAME stations or require the center to be covered.
+
+A FRAME candidate within Ranger collision clearance is skipped before it can become a valid placement. This prevents a newly materialized upright from trapping the Ranger; the resolver may select another reachable legal exterior station, otherwise the preview remains invalid until the Ranger moves clear.
+
+### Device acceptance
+
+- Place three floor strips at a cardinal and diagonal angle; their outside edges must close as a perfect square.
+- Stand against an exterior corner and attempt FRAME placement; no upright may appear through or trap the Ranger.
+- Move clear and face the same corner, including a corner visually behind the bottom tool belt; the world-space snap must remain available.
+- Lay out a larger perimeter footprint while leaving the middle floor area open. Full-Log FRAME stations must remain available around the outer boundary without requiring interior floor strips or interior posts.
