@@ -18,9 +18,9 @@ The arrival controller first asks the already-loaded KayKit action registry for 
 
 The distant title island remains a low-cost presentation generated from `ExpandedIslandTerrainSystem`, so its shoreline and elevation profile stay related to the playable world without creating the full world during the menu.
 
-The arrival does not invent a second fixed beach. The established Day-1 spawn remains the reference point. When that spawn is already inside the shallow shoreline wash, as it is on the current terrain, the Ranger begins face-down there instead of being moved farther out to sea. If a future terrain revision places the spawn on dry ground, the controller can still sample nearby wet sand on the seaward side.
+The established Day-1 spawn is an inland gameplay reference, not the cinematic water-entry point. The arrival controller derives a seaward vector from the live island centre through that spawn and samples outward across the authoritative terrain until it finds genuinely shallow water. The preferred start is terrain roughly `0.11` world units below the current water level, bounded to a shallow `0.045–0.22` depth band. The search can travel up to 48 world units because the current Day-1 bay places the visible waterline substantially farther seaward than the gameplay spawn.
 
-From the wet start, the controller derives the inland direction from the live island and searches only a short distance for playable terrain that clears the water line. The crawl is capped at 2.6 world units and stops at the first suitable dry-sand point. The Ranger rises, dusts himself off and hands control to the player at that same point; there is no hidden glide or teleport back to the old spawn after the crawl.
+From that shallow-water start, the controller reverses the same vector and searches only a short distance inland. The crawl is bounded to `1.0–3.4` world units and stops at the first playable point that is clearly above the water line (`0.24` world units of clearance). The Ranger therefore begins visibly in the surf, drags himself across the wet edge onto nearby dry sand, rises, dusts himself off and hands control to the player at that same endpoint. There is no hidden glide or teleport back to the inland gameplay spawn.
 
 ## Ship presentation
 
@@ -60,8 +60,8 @@ Flexible sail/rope motion and the mast fracture remain in `TitleShipVisual`/`Tit
 6. At impact the upper mast fractures from the lower mast with visible splinters. The yard falls, the sail deforms between its moving top edge and lower sheet anchors, rigging gains slack, cargo tumbles and the Ranger is thrown into the water.
 7. The screen covers to black and the disposable title renderer is removed.
 8. Existing `GameApp` boots the full world and all normal gameplay systems at the established Day-1 coast.
-9. Before controls are exposed, `BeachArrivalIntroController` takes exclusive cinematic ownership of the already-loaded gameplay Ranger and places him face-down in the current shallow shoreline wash with his head pointing inland.
-10. After a short recovery beat, the Ranger performs a low exhausted crawl for only the short water-to-dry-sand distance, rises in place, brushes/dusts himself off and settles.
+9. Before controls are exposed, `BeachArrivalIntroController` uses the Day-1 spawn only to resolve the local seaward direction, then places the already-loaded Ranger face-down in sampled shallow water with his head pointing inland.
+10. After a short recovery beat, the Ranger performs a low exhausted crawl only from the surf onto the first nearby dry-sand point, rises in place, brushes/dusts himself off and settles.
 11. Cinematic ownership is released at that dry-sand endpoint, the HUD/controllers fade in, the normal `DAY 1 · GATHER A STICK + STONE` objective appears and gameplay becomes authoritative.
 
 ## Architecture boundaries
