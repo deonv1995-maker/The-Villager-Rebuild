@@ -13,6 +13,9 @@ export const TITLE_SCENE = Object.freeze({
   rangerDeckSway: 0.045,
   mastBreakStart: 0.54,
   mastBreakAngle: 1.18,
+  sailForwardOffset: 0.34,
+  sailBowCalm: 0.42,
+  sailBowStorm: 0.68,
   sailFlutterCalm: 0.055,
   sailFlutterStorm: 0.2
 });
