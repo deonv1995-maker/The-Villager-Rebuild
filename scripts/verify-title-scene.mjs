@@ -22,6 +22,7 @@ const readGlbAnimationNames = path => {
 const titleScene = read('src/startup/TitleSceneApp.js');
 const islandBackdrop = read('src/startup/TitleIslandBackdrop.js');
 const shipVisual = read('src/startup/TitleShipVisual.js');
+const shipDeckDetails = read('src/startup/TitleShipDeckDetails.js');
 const stormSystem = read('src/startup/TitleStormSystem.js');
 const arrivalIntro = read('src/startup/BeachArrivalIntroController.js');
 const rangerController = read('src/player/RangerController.js');
@@ -31,15 +32,18 @@ const main = read('src/main.js');
 const index = read('index.html');
 const css = read('src/title.css');
 const movementAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
+const generalAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_General.glb');
 const nativeCrawlAnimations = movementAnimations.filter(name => /crawl/i.test(name));
 
 console.log(`INFO KayKit movement animations: ${movementAnimations.join(', ')}`);
+console.log(`INFO KayKit general animations: ${generalAnimations.join(', ')}`);
 console.log(`INFO Native crawl animations: ${nativeCrawlAnimations.join(', ') || 'none; procedural exhausted crawl required'}`);
 
 const checks = [
   ['title scene uses production Ranger asset registry', titleScene.includes('ASSET_PATHS.ranger.model')],
-  ['title scene uses Ranger idle animation pack', titleScene.includes('ASSET_PATHS.ranger.movementBasic') && titleScene.includes("clip.name === 'Idle_A'")],
+  ['title scene uses the real KayKit Idle_A instead of Jump_Idle fallback', titleScene.includes('ASSET_PATHS.ranger.general') && titleScene.includes("clip.name === 'Idle_A'") && !titleScene.includes('ASSET_PATHS.ranger.movementBasic') && !titleScene.includes('/idle/i.test') && generalAnimations.includes('Idle_A')],
   ['Ranger uses a ship-balance presentation rig', titleScene.includes('title-ranger-balance-rig') && titleScene.includes('this.scene.attach(this.rangerRig)')],
+  ['Ranger deck stance is planted away from the mast and uses one base pose', titleScene.includes('RANGER_DECK_BASE') && titleScene.includes('x: 1.22') && titleScene.includes('y: 1.14') && titleScene.includes('z: 2.55') && titleScene.includes('RANGER_DECK_MODEL_YAW')],
   ['Ranger title arms are no longer blended toward the model bind pose', !titleScene.includes('TITLE_ARM_BONES') && !titleScene.includes('#applyRangerArmRestPose') && !config.includes('rangerArmRestBlend')],
   ['Ranger deck presentation includes body sway', titleScene.includes('rangerDeckSway') && titleScene.includes('footShift')],
   ['title island samples the playable terrain source of truth', islandBackdrop.includes('ExpandedIslandTerrainSystem') && islandBackdrop.includes('title-island-playable-profile')],
@@ -48,10 +52,11 @@ const checks = [
   ['title ship closes bow deck and renders hull surfaces double-sided', shipVisual.includes('title-ship-solid-bow-deck') && shipVisual.includes('side: THREE.DoubleSide')],
   ['title ship has an internal water occluder', shipVisual.includes('title-ship-water-occluder') && shipVisual.includes('waterOccluder')],
   ['title ship has additional hull strakes and keel detail', shipVisual.includes('createHullStrake') && shipVisual.includes('keel')],
+  ['title ship has raised side rails and rope safety nets', titleScene.includes('addTitleShipDeckDetails') && shipDeckDetails.includes("details.name = 'title-ship-side-rails-and-netting'") && shipDeckDetails.includes('title-ship-rail-post-') && shipDeckDetails.includes('title-ship-top-rail-') && shipDeckDetails.includes('title-ship-rope-net-') && shipDeckDetails.includes('new THREE.LineSegments')],
   ['title rigging uses flexible segmented lines rather than rigid rope cylinders', shipVisual.includes('createFlexibleRope') && shipVisual.includes('new THREE.Line') && shipVisual.includes('updateFlexibleRope')],
   ['title sail is ship-owned cloth instead of a rigid child of the falling mast', shipVisual.includes("sailMesh.name = 'title-flexing-sail'") && shipVisual.includes('ship.add(sailMesh)') && !shipVisual.includes('mastUpperPivot.add(sailMesh)')],
   ['title sail deforms between moving yard anchors and lower sheet anchors', shipVisual.includes('updateSailCloth') && shipVisual.includes('mastUpperPivot.localToWorld') && shipVisual.includes('bottomLeft.set') && shipVisual.includes('bottomRight.set')],
-  ['title sail has strong visible mast clearance and a deep wind-filled draft', config.includes('sailMastClearance: 0.9') && config.includes('sailBowCalm: 1.12') && config.includes('sailBowStorm: 1.62') && shipVisual.includes('new THREE.PlaneGeometry(sailWidth, sailHeight, 12, 8)') && shipVisual.includes('TITLE_SCENE.sailMastClearance * 0.94') && shipVisual.includes('const edgeTuck = rowSlack * 0.18') && shipVisual.includes('const draftBias = 0.92 + u * 0.18') && shipVisual.includes('interior * windBow * draftBias')],
+  ['title sail stays on the bow side of the mast with a deep wind-filled draft', config.includes('sailMastClearance: -0.9') && config.includes('sailBowCalm: -1.12') && config.includes('sailBowStorm: -1.62') && shipVisual.includes('new THREE.PlaneGeometry(sailWidth, sailHeight, 12, 8)') && shipVisual.includes('TITLE_SCENE.sailMastClearance * 0.94') && shipVisual.includes('const edgeTuck = rowSlack * 0.18') && shipVisual.includes('const draftBias = 0.92 + u * 0.18') && shipVisual.includes('interior * windBow * draftBias')],
   ['mast fracture uses a separate upper pivot and visible splinter groups', shipVisual.includes('title-mast-broken-upper-pivot') && shipVisual.includes('title-mast-lower-splinters') && shipVisual.includes('title-mast-upper-splinters') && titleScene.includes('mastUpperPivot.rotation')],
   ['storm system owns rain and bow spray', stormSystem.includes('title-storm-rain') && stormSystem.includes('title-bow-spray')],
   ['storm system recalculates ocean normals for visible waves', stormSystem.includes('computeVertexNormals()') && stormSystem.includes('stormWaveAmplitudeMax')],
