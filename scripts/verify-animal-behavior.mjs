@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { ANIMAL_DEFINITIONS } from '../src/data/AnimalDefinitions.js';
 import { WILDLIFE_POPULATION } from '../src/data/WildlifePopulationDefinitions.js';
+import { DayOneAnimalPresentation } from '../src/world/DayOneAnimalPresentation.js';
 import { WildAnimalActor } from '../src/world/WildAnimalActor.js';
 import { WildlifePopulationSystem } from '../src/world/WildlifePopulationSystem.js';
 
@@ -38,6 +39,43 @@ for (let step = 0; step < 600; step += 1) {
 }
 assert.equal(sawGrazing, true, 'deer must alternate roaming with a readable grazing state');
 
+const herdMemberA = new WildAnimalActor({
+  scene: new THREE.Scene(),
+  terrain: flatTerrain,
+  definition: ANIMAL_DEFINITIONS.deer,
+  center: { x: 0, z: 0 },
+  instanceId: 'deer-herd-a'
+});
+const herdMemberB = new WildAnimalActor({
+  scene: new THREE.Scene(),
+  terrain: flatTerrain,
+  definition: ANIMAL_DEFINITIONS.deer,
+  center: { x: 0, z: 0 },
+  instanceId: 'deer-herd-b'
+});
+for (let step = 0; step < 30; step += 1) {
+  const remoteRanger = new THREE.Vector3(100, 0, 100);
+  herdMemberA.update(0.1, remoteRanger);
+  herdMemberB.update(0.1, remoteRanger);
+}
+assert.ok(
+  herdMemberA.group.position.distanceTo(herdMemberB.group.position) > 0.45,
+  'animals sharing a herd anchor must use per-instance movement phases instead of marching in lockstep'
+);
+
+const rabbitPresentation = new DayOneAnimalPresentation({
+  definition: ANIMAL_DEFINITIONS.rabbit,
+  phaseOffset: 0.35
+});
+const rabbitEar = rabbitPresentation.fallback.getObjectByName('rabbit-ear-left');
+const rabbitHaunch = rabbitPresentation.fallback.getObjectByName('rabbit-haunch-left');
+assert.ok(rabbitEar, 'rabbit presentation must keep articulated ear pivots for floppy-ear motion');
+assert.ok(rabbitHaunch, 'rabbit presentation must keep pronounced hindquarters instead of generic four-legged proportions');
+const rabbitEarRest = rabbitEar.rotation.x;
+rabbitPresentation.update(0.08, { movedDistance: 0.2, behavior: 'wander' });
+assert.ok(rabbitPresentation.fallback.position.y > 0.03, 'moving rabbit must lift into a readable hop instead of sliding with a tiny generic bob');
+assert.notEqual(rabbitEar.rotation.x, rabbitEarRest, 'rabbit ears must flop with the hop cycle');
+
 const fox = new WildAnimalActor({
   scene: new THREE.Scene(),
   terrain: flatTerrain,
@@ -70,6 +108,11 @@ assert.equal(ANIMAL_DEFINITIONS.deer.presentation.format, 'gltf', 'deer must use
 assert.equal(ANIMAL_DEFINITIONS.fox.presentation.format, 'gltf', 'fox must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.wolf.presentation.format, 'gltf', 'wolf must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.proceduralKind, 'rabbit', 'rabbit keeps its lightweight articulated runtime presentation');
+assert.ok(ANIMAL_DEFINITIONS.wildPig.presentation.targetLength >= 1.85, 'shoreline pig presentation must remain readable against the beach at gameplay camera distance');
+assert.ok(ANIMAL_DEFINITIONS.fox.presentation.targetLength >= 1.35, 'forest fox presentation must remain readable through vegetation at gameplay camera distance');
+assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength >= 2, 'wolf must read as an adult-sized territorial threat instead of a fox-sized animal');
+assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.maxHeight >= 1.25, 'wolf height normalization must not shrink the production model back below the corrected size');
+assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength > ANIMAL_DEFINITIONS.fox.presentation.targetLength * 1.4, 'wolf silhouette must stay substantially larger than the fox');
 assert.equal(WILDLIFE_POPULATION.species.wildPig.habitat, 'shoreline');
 assert.equal(WILDLIFE_POPULATION.species.deer.habitat, 'open-field');
 assert.equal(WILDLIFE_POPULATION.species.rabbit.habitat, 'forest');

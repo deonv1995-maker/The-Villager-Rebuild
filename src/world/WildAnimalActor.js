@@ -5,6 +5,20 @@ import { DayOneAnimalPresentation } from './DayOneAnimalPresentation.js';
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
 
+const stableUnitValue = value => {
+  let hash = 2166136261;
+  for (const character of String(value ?? '')) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x7feb352d);
+  hash ^= hash >>> 15;
+  hash = Math.imul(hash, 0x846ca68b);
+  hash ^= hash >>> 16;
+  return (hash >>> 0) / 0x100000000;
+};
+
 export class WildAnimalActor {
   constructor({
     scene,
@@ -33,8 +47,9 @@ export class WildAnimalActor {
     this.threatCause = null;
     this.hasThreat = false;
     this.fleeRemaining = 0;
-    this.wanderPause = 0;
-    this.wanderIndex = 0;
+    this.motionPhase = stableUnitValue(`${definition.id}:${instanceId}`);
+    this.wanderPause = definition.wanderPauseMin * this.motionPhase * 0.78;
+    this.wanderIndex = Math.floor(this.motionPhase * 11);
     this.playerAttackCooldown = 0;
     this.attackAnimationRemaining = 0;
     this.pendingPlayerAttack = null;
@@ -45,7 +60,10 @@ export class WildAnimalActor {
     this.tempDirection = new THREE.Vector3();
     this.tempInward = new THREE.Vector3();
 
-    this.presentation = new DayOneAnimalPresentation({ definition });
+    this.presentation = new DayOneAnimalPresentation({
+      definition,
+      phaseOffset: this.motionPhase * Math.PI * 2
+    });
     this.group = this.presentation.root;
     this.group.name = `wild-animal-${definition.id}-${instanceId}`;
     this.group.position.set(
@@ -311,7 +329,7 @@ export class WildAnimalActor {
     const distance = Math.hypot(dx, dz);
     if (distance <= 0.22) {
       const pauseSpan = Math.max(0, this.definition.wanderPauseMax - this.definition.wanderPauseMin);
-      const pauseBias = (Math.sin(this.wanderIndex * 1.71) + 1) * 0.5;
+      const pauseBias = (Math.sin(this.wanderIndex * 1.71 + this.motionPhase * Math.PI * 2) + 1) * 0.5;
       this.wanderPause = this.definition.wanderPauseMin + pauseSpan * pauseBias;
       return;
     }
@@ -451,8 +469,9 @@ export class WildAnimalActor {
 
   #chooseWanderTarget() {
     this.wanderIndex += 1;
-    const angle = this.wanderIndex * GOLDEN_ANGLE + 0.45;
-    const radialBias = 0.42 + ((Math.sin(this.wanderIndex * 1.37) + 1) * 0.5) * 0.5;
+    const phase = this.motionPhase * Math.PI * 2;
+    const angle = this.wanderIndex * GOLDEN_ANGLE + 0.45 + phase;
+    const radialBias = 0.42 + ((Math.sin(this.wanderIndex * 1.37 + phase * 0.73) + 1) * 0.5) * 0.5;
     const radius = this.definition.wanderRadius * radialBias;
     this.wanderTarget.set(
       this.center.x + Math.cos(angle) * radius,

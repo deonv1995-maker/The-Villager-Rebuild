@@ -33,11 +33,11 @@ async function loadModelTemplate(path, format = 'fbx') {
 const normalizeClipName = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 export class DayOneAnimalPresentation {
-  constructor({ definition }) {
+  constructor({ definition, phaseOffset = 0 }) {
     this.definition = definition;
     this.root = new THREE.Group();
     this.root.name = 'day-one-animal-presentation';
-    this.phase = 0;
+    this.phase = Number.isFinite(phaseOffset) ? phaseOffset : 0;
     this.defeated = false;
     this.assetMode = 'fallback';
     this.productionPivot = null;
@@ -252,6 +252,11 @@ export class DayOneAnimalPresentation {
       return;
     }
 
+    if (this.definition.id === 'rabbit') {
+      this.#updateRabbitProcedural(rig, motion, behavior, moving);
+      return;
+    }
+
     const fast = motion === 'run';
     const stride = moving ? Math.sin(this.phase * (fast ? 2.25 : 1.55)) * (fast ? 0.72 : 0.46) : 0;
     if (rig.frontLegs) {
@@ -267,6 +272,42 @@ export class DayOneAnimalPresentation {
       rig.head.rotation.x = foraging ? 0.58 + Math.sin(this.phase * 0.7) * 0.12 : 0;
     }
     this.fallback.position.y = moving ? Math.abs(Math.sin(this.phase * 2)) * (fast ? 0.09 : 0.045) : 0;
+  }
+
+  #updateRabbitProcedural(rig, motion, behavior, moving) {
+    const fast = motion === 'run';
+    const foraging = behavior === 'graze';
+    const cycleRate = fast ? 1.18 : 0.92;
+    const hop = moving
+      ? Math.pow(0.5 - Math.cos(this.phase * cycleRate) * 0.5, 1.28)
+      : 0;
+    const recoil = moving ? Math.sin(this.phase * cycleRate) : 0;
+
+    this.fallback.position.y = hop * (fast ? 0.2 : 0.13);
+    if (rig.body) rig.body.rotation.x = moving ? -0.08 + hop * 0.18 : 0;
+
+    for (const front of rig.frontLegs ?? []) {
+      front.rotation.x = moving ? -0.12 + hop * 0.82 : 0;
+    }
+    for (const back of rig.backLegs ?? []) {
+      back.rotation.x = moving ? 0.94 - hop * 1.12 : 0.88;
+    }
+
+    if (rig.head) {
+      rig.head.rotation.x = foraging
+        ? 0.5 + Math.sin(this.phase * 0.7) * 0.1
+        : moving
+          ? -0.06 + hop * 0.12
+          : Math.sin(this.phase * 0.42) * 0.035;
+    }
+
+    for (let index = 0; index < (rig.ears?.length ?? 0); index += 1) {
+      const ear = rig.ears[index];
+      const side = index === 0 ? -1 : 1;
+      const idleTwitch = Math.sin(this.phase * 0.76 + index * 0.9) * 0.07;
+      ear.rotation.x = -0.2 - hop * (fast ? 0.56 : 0.4) + recoil * 0.05 + idleTwitch;
+      ear.rotation.z = side * (0.1 + Math.sin(this.phase * 0.58 + index * 0.7) * 0.035);
+    }
   }
 
   #createPig() {
@@ -333,45 +374,73 @@ export class DayOneAnimalPresentation {
     const fur = this.#material(0x8b7766, 0.98);
     const light = this.#material(0xd8d0c5, 1);
     const dark = this.#material(0x332c28, 1);
-    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 0), fur);
-    body.scale.set(0.85, 0.78, 1.12);
-    body.position.set(0, 0.42, -0.05);
+
+    const body = new THREE.Mesh(new THREE.DodecahedronGeometry(0.37, 0), fur);
+    body.name = 'rabbit-body';
+    body.scale.set(0.9, 0.9, 1.18);
+    body.position.set(0, 0.4, -0.08);
     group.add(body);
-    const head = new THREE.Group();
-    head.position.set(0, 0.66, 0.4);
-    const skull = new THREE.Mesh(new THREE.DodecahedronGeometry(0.28, 0), fur);
-    head.add(skull);
+
     for (const side of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.105, 0.56, 6), fur);
-      ear.position.set(side * 0.12, 0.38, -0.06);
-      ear.rotation.z = side * -0.08;
-      head.add(ear);
+      const haunch = new THREE.Mesh(new THREE.DodecahedronGeometry(0.29, 0), fur);
+      haunch.name = side < 0 ? 'rabbit-haunch-left' : 'rabbit-haunch-right';
+      haunch.scale.set(0.9, 1, 1.08);
+      haunch.position.set(side * 0.19, 0.36, -0.33);
+      group.add(haunch);
     }
-    const muzzle = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12, 0), light);
-    muzzle.scale.set(1.1, 0.72, 0.82);
-    muzzle.position.set(0, -0.07, 0.24);
+
+    const head = new THREE.Group();
+    head.name = 'rabbit-head';
+    head.position.set(0, 0.62, 0.38);
+    const skull = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24, 0), fur);
+    skull.scale.set(0.95, 0.96, 1.04);
+    head.add(skull);
+
+    const ears = [];
+    for (const side of [-1, 1]) {
+      const earPivot = new THREE.Group();
+      earPivot.name = side < 0 ? 'rabbit-ear-left' : 'rabbit-ear-right';
+      earPivot.position.set(side * 0.09, 0.13, -0.05);
+      earPivot.rotation.x = -0.2;
+      earPivot.rotation.z = side * 0.1;
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.64, 6), fur);
+      ear.position.y = 0.3;
+      ear.scale.z = 0.72;
+      earPivot.add(ear);
+      head.add(earPivot);
+      ears.push(earPivot);
+    }
+
+    const muzzle = new THREE.Mesh(new THREE.DodecahedronGeometry(0.105, 0), light);
+    muzzle.scale.set(1.15, 0.72, 0.86);
+    muzzle.position.set(0, -0.07, 0.21);
     head.add(muzzle);
-    const nose = new THREE.Mesh(new THREE.DodecahedronGeometry(0.055, 0), dark);
-    nose.position.set(0, -0.05, 0.35);
+    const nose = new THREE.Mesh(new THREE.DodecahedronGeometry(0.048, 0), dark);
+    nose.position.set(0, -0.05, 0.31);
     head.add(nose);
     group.add(head);
+
     const frontLegs = [];
     const backLegs = [];
     for (const side of [-1, 1]) {
-      const front = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.22, 3, 6), fur);
-      front.position.set(side * 0.16, 0.19, 0.25);
+      const front = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.15, 3, 6), fur);
+      front.name = side < 0 ? 'rabbit-front-left' : 'rabbit-front-right';
+      front.position.set(side * 0.12, 0.13, 0.24);
       group.add(front);
       frontLegs.push(front);
-      const back = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.3, 3, 6), fur);
-      back.position.set(side * 0.2, 0.2, -0.32);
-      back.rotation.x = 0.5;
+
+      const back = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.32, 3, 6), fur);
+      back.name = side < 0 ? 'rabbit-back-left' : 'rabbit-back-right';
+      back.position.set(side * 0.18, 0.15, -0.37);
+      back.rotation.x = 0.88;
       group.add(back);
       backLegs.push(back);
     }
-    const tail = new THREE.Mesh(new THREE.DodecahedronGeometry(0.14, 0), light);
-    tail.position.set(0, 0.48, -0.63);
+
+    const tail = new THREE.Mesh(new THREE.DodecahedronGeometry(0.12, 0), light);
+    tail.position.set(0, 0.44, -0.61);
     group.add(tail);
-    this.proceduralRig = { head, frontLegs, backLegs };
+    this.proceduralRig = { body, head, ears, frontLegs, backLegs };
     return group;
   }
 
