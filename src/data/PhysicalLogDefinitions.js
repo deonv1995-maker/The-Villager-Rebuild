@@ -4,6 +4,7 @@ const CONSTRUCTION_GRID_STEP = LOG_LENGTH / 12;
 const MAX_FLOOR_TERRAIN_ADAPTATION = 2.35;
 const FRAME_PLACEMENT_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.35;
 const FRAME_PAIR_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.6;
+const FRAME_SNAP_RANGE = LOG_LENGTH + FRAME_PAIR_SPACING_TOLERANCE;
 const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
 
@@ -18,7 +19,10 @@ export const PHYSICAL_LOG = Object.freeze({
   yawStep: Math.PI / 4,
   floorWidth: FLOOR_WIDTH,
   floorSplitOffset: FLOOR_WIDTH * 0.25,
-  frameSnapRange: 2.25,
+  // FRAME interaction must be able to reach the next full-Log structural corner even
+  // when the mobile placement point is currently sitting on an occupied/invalid seam.
+  // Spacing validity remains governed separately by framePlacementSpacingTolerance.
+  frameSnapRange: FRAME_SNAP_RANGE,
   floorSnapRange: 1.45,
   wallSnapRange: 1.7,
   angleSnapRange: 1.85,
