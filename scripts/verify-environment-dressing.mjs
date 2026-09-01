@@ -18,8 +18,18 @@ assert.equal(
 );
 assert.equal(
   scatterSource.includes('ASSET_PATHS.cliffs.rock'),
+  false,
+  'Grass-topped Kenney rock_largeA platforms must not be loaded into the playable island'
+);
+assert.equal(
+  scatterSource.includes('rockTemplates'),
+  false,
+  'Forest rock scatter must not alternate back to the removed Kenney terrain-platform asset'
+);
+assert.equal(
+  scatterSource.includes('ASSET_PATHS.forest.rock'),
   true,
-  'Natural rock dressing should remain available after broad cliff removal'
+  'KayKit natural forest-rock dressing should remain enabled'
 );
 assert.equal(
   islandSource.includes("object.name.startsWith('terrain-face-dressing-')"),
