@@ -291,6 +291,30 @@ export class RangerController {
     this.root.rotation.y = Math.atan2(dx, dz);
   }
 
+  receiveWildlifeImpact(sourcePosition, { distance = 1.2 } = {}) {
+    if (this.cinematicDriver || !sourcePosition) return false;
+    let dx = this.root.position.x - sourcePosition.x;
+    let dz = this.root.position.z - sourcePosition.z;
+    let length = Math.hypot(dx, dz);
+    if (length < 0.001) {
+      dx = -Math.sin(this.root.rotation.y);
+      dz = -Math.cos(this.root.rotation.y);
+      length = 1;
+    }
+    const desired = {
+      x: this.root.position.x + (dx / length) * distance,
+      z: this.root.position.z + (dz / length) * distance
+    };
+    const resolved = this.collision
+      ? this.collision.resolveMove(this.root.position, desired, { radius: PLAYER_RADIUS, airborne: !this.grounded })
+      : desired;
+    const moved = Math.hypot(resolved.x - this.root.position.x, resolved.z - this.root.position.z) > 0.01;
+    this.root.position.x = resolved.x;
+    this.root.position.z = resolved.z;
+    this.root.position.y = this.terrain.heightAt(resolved.x, resolved.z);
+    return moved;
+  }
+
   mountRightHandObject(object) {
     if (!object) return false;
     if (this.spearHandAnchor) {

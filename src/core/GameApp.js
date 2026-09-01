@@ -154,6 +154,8 @@ export class GameApp {
       attackRange = TOOL_DEFINITIONS.sword.range;
     }
     this.currentHuntTarget = this.hunt?.update(dt, this.playerPosition, armed, attackRange) ?? null;
+    const wildlifeAttack = this.hunt?.consumePlayerAttack?.();
+    if (wildlifeAttack) this.#handleWildlifeAttack(wildlifeAttack);
 
     if (carryingLog) {
       this.treeHarvest?.update(this.playerPosition, false);
@@ -432,6 +434,12 @@ export class GameApp {
       });
       if (hit) this.#handleCombatResult(hit);
     }
+  }
+
+  #handleWildlifeAttack(event) {
+    this.player?.receiveWildlifeImpact(event.position, { distance: 1.2 });
+    this.setStatus(`${event.label.toUpperCase()} ATTACK · CREATE DISTANCE`);
+    this.hud?.setObjective('Wolf attack · move away or fight back');
   }
 
   #handleCombatResult(hit) {
