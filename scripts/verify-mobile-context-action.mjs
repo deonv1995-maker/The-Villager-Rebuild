@@ -162,6 +162,7 @@ assert.match(rangerControllerSource, /ANALOG_WALK_MAX_SPEED/, 'Ranger movement m
 assert.match(rangerControllerSource, /THREE\.MathUtils\.lerp\(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength\)/, 'Analog thumb distance must continuously control movement speed');
 assert.match(rangerControllerSource, /beginCameraLook\(\)/, 'Ranger controller must expose manual-look ownership');
 assert.match(rangerControllerSource, /endCameraLook\(\)/, 'Ranger controller must expose manual-look release');
+assert.match(rangerControllerSource, /CAMERA_DEFAULT_PITCH = 0\.12/, 'Automatic camera return must settle into a forward-looking default pitch');
 assert.match(rangerControllerSource, /CAMERA_RETURN_DELAY = 1\.25/, 'Camera must pause noticeably before returning from a manual look');
 assert.match(rangerControllerSource, /desiredYaw = this\.root\.rotation\.y \+ Math\.PI/, 'Automatic camera heading must follow behind the Ranger');
 assert.match(rangerControllerSource, /#dampAngle\(current, target, response, dt\)/, 'Camera heading changes must use angular damping instead of snapping');
