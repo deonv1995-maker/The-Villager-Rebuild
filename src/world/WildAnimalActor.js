@@ -125,7 +125,12 @@ export class WildAnimalActor {
         this.group.position.x - this.lastPosition.x,
         this.group.position.z - this.lastPosition.z
       );
-      if (movedDistance > 0.001) {
+      if (aggression && playerDistance <= aggression.aggroRange && this.#isFinitePosition(playerPosition)) {
+        this.group.rotation.y = Math.atan2(
+          playerPosition.x - this.group.position.x,
+          playerPosition.z - this.group.position.z
+        );
+      } else if (movedDistance > 0.001) {
         this.group.rotation.y = Math.atan2(
           this.group.position.x - this.lastPosition.x,
           this.group.position.z - this.lastPosition.z
@@ -353,7 +358,22 @@ export class WildAnimalActor {
     this.pursuitTarget = null;
     this.pursuitCause = null;
     this.behavior = 'chase';
-    this.#moveToward(playerPosition, aggression.chaseSpeed, dt);
+    const standOffRange = aggression.standOffRange ?? aggression.attackRange;
+    if (playerDistance < standOffRange) {
+      this.tempDirection.set(
+        this.group.position.x - playerPosition.x,
+        0,
+        this.group.position.z - playerPosition.z
+      );
+      if (this.tempDirection.lengthSq() <= 0.0001) this.tempDirection.set(0, 0, -1);
+      else this.tempDirection.normalize();
+      this.#moveGrounded(
+        playerPosition.x + this.tempDirection.x * standOffRange,
+        playerPosition.z + this.tempDirection.z * standOffRange
+      );
+    } else {
+      this.#moveToward(playerPosition, aggression.chaseSpeed, dt, standOffRange);
+    }
     if (playerDistance > aggression.attackRange || this.playerAttackCooldown > 0) return;
     this.behavior = 'attack';
     this.attackAnimationRemaining = 0.38;
@@ -366,12 +386,13 @@ export class WildAnimalActor {
     };
   }
 
-  #moveToward(target, speed, dt) {
+  #moveToward(target, speed, dt, stopDistance = 0) {
     const dx = target.x - this.group.position.x;
     const dz = target.z - this.group.position.z;
     const distance = Math.hypot(dx, dz);
-    if (distance <= 0.001) return false;
-    const step = Math.min(distance, Math.max(0, speed) * Math.max(0, dt));
+    const remainingDistance = distance - Math.max(0, stopDistance);
+    if (remainingDistance <= 0.001) return false;
+    const step = Math.min(remainingDistance, Math.max(0, speed) * Math.max(0, dt));
     return this.#moveGrounded(
       this.group.position.x + (dx / distance) * step,
       this.group.position.z + (dz / distance) * step

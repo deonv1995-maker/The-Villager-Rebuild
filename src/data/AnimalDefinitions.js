@@ -128,14 +128,20 @@ const WOLF = Object.freeze({
   ecology: Object.freeze({
     playerResponse: 'aggressive',
     idleBehavior: 'prowl',
-    aggression: Object.freeze({ aggroRange: 8.2, chaseSpeed: 5.4, attackRange: 1.45, attackCooldown: 1.85 })
+    aggression: Object.freeze({
+      aggroRange: 8.2,
+      chaseSpeed: 5.4,
+      standOffRange: 1.9,
+      attackRange: 2.05,
+      attackCooldown: 1.85
+    })
   }),
   presentation: Object.freeze({
     assetKey: 'quaterniusWolf',
     format: 'gltf',
     fallbackKind: 'wolf',
-    targetLength: 2.05,
-    maxHeight: 1.32,
+    targetLength: 2.65,
+    maxHeight: 1.68,
     yawOffset: 0
   }),
   loot: Object.freeze({ itemId: 'meat', label: 'Raw Meat', quantity: 2 })

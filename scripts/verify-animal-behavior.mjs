@@ -110,14 +110,35 @@ assert.ok(wolfAttack, 'wolf must produce an attack event when the Ranger enters 
 assert.equal(wolfAttack.animalId, 'wolf');
 assert.notEqual(wolf.getState().behavior, 'flee', 'wolf must not use prey flee behavior for Ranger proximity');
 
+const wolfStandOff = ANIMAL_DEFINITIONS.wolf.ecology.aggression.standOffRange;
+wolf.group.position.set(0, 0, 0);
+const overlappingRanger = new THREE.Vector3(0.6, 0, 0);
+wolf.update(0.1, overlappingRanger);
+assert.ok(
+  wolf.group.position.distanceTo(overlappingRanger) >= wolfStandOff - 0.001,
+  'wolf contact resolution must separate an overlapping wolf from the Ranger'
+);
+assert.ok(
+  Math.abs(wolf.group.rotation.y - Math.PI / 2) < 0.001,
+  'wolf must keep facing the Ranger after contact separation instead of turning away'
+);
+
+wolf.group.position.set(0, 0, 0);
+const distantRanger = new THREE.Vector3(8, 0, 0);
+wolf.update(2, distantRanger);
+assert.ok(
+  wolf.group.position.distanceTo(distantRanger) >= wolfStandOff - 0.001,
+  'wolf chase must stop in front of the Ranger instead of moving through the Ranger centre'
+);
+
 assert.equal(ANIMAL_DEFINITIONS.deer.presentation.format, 'gltf', 'deer must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.fox.presentation.format, 'gltf', 'fox must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.wolf.presentation.format, 'gltf', 'wolf must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.proceduralKind, 'rabbit', 'rabbit keeps its lightweight articulated runtime presentation');
 assert.ok(ANIMAL_DEFINITIONS.wildPig.presentation.targetLength >= 1.85, 'shoreline pig presentation must remain readable against the beach at gameplay camera distance');
 assert.ok(ANIMAL_DEFINITIONS.fox.presentation.targetLength >= 1.35, 'forest fox presentation must remain readable through vegetation at gameplay camera distance');
-assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength >= 2, 'wolf must read as an adult-sized territorial threat instead of a fox-sized animal');
-assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.maxHeight >= 1.25, 'wolf height normalization must not shrink the production model back below the corrected size');
+assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength >= 2.6, 'wolf must read as an adult-sized territorial threat beside the Ranger');
+assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.maxHeight >= 1.65, 'wolf height normalization must not shrink the production model back below the corrected size');
 assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength > ANIMAL_DEFINITIONS.fox.presentation.targetLength * 1.4, 'wolf silhouette must stay substantially larger than the fox');
 assert.equal(WILDLIFE_POPULATION.species.wildPig.habitat, 'shoreline');
 assert.equal(WILDLIFE_POPULATION.species.deer.habitat, 'open-field');

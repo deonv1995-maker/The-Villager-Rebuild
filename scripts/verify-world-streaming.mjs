@@ -136,9 +136,9 @@ for (const mesh of shorelineMeshes) {
   for (let index = 0; index < positions.count; index += 1) {
     worldVertex.fromBufferAttribute(positions, index).applyMatrix4(mesh.matrixWorld);
     assert.equal(
-      shorelineTerrain.heightAt(worldVertex.x, worldVertex.z) < shorelineTerrain.waterLevel,
+      shorelineTerrain.heightAt(worldVertex.x, worldVertex.z) <= worldVertex.y - 0.015,
       true,
-      'shallow-water geometry must never extend onto dry shoreline terrain'
+      'shallow-water geometry must keep visible clearance above terrain instead of clipping through shoreline sand'
     );
   }
 }
