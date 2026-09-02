@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import { frameSeatYForFloor } from '../src/world/FloorFrameTopology.js';
 import { PhysicalLogSystem } from '../src/world/PhysicalLogSystem.js';
 import { createPhysicalLogVisual } from '../src/world/PhysicalLogVisual.js';
 import { collectUpperStoreyFloorCandidates } from '../src/world/UpperStoreyFloorRules.js';
@@ -59,7 +60,11 @@ assert.ok(
 );
 assert.ok(
   mirrored.every(candidate => Math.abs(candidate.baseY - (frameTopY + PHYSICAL_LOG.radius - 0.028)) < 1e-8),
-  'Upper split-log floor bodies must embed downward instead of lifting the next FRAME level'
+  'Upper split-log floor bodies must embed downward from the walking surface'
+);
+assert.ok(
+  mirrored.every(candidate => Math.abs(frameSeatYForFloor(candidate) - frameTopY) < 1e-8),
+  'Upper structural FRAME seats must interlock at the supporting RAW beam centreline'
 );
 
 const terrain = {
@@ -102,7 +107,6 @@ assert.equal(upperFloor?.storey, 1, 'Committed upper floors must retain their st
 assert.equal(upperFloor?.supportRoot, null, 'Upper floors must not grow terrain-to-storey foundation posts');
 
 const upperBaseY = frameTopY + PHYSICAL_LOG.radius - 0.028;
-const upperTopY = frameTopY + PHYSICAL_LOG.radius;
 for (const targetZ of [PHYSICAL_LOG.floorWidth * 1.5, PHYSICAL_LOG.floorWidth * 2.5]) {
   const nextPlayerPosition = new THREE.Vector3(0, 0, targetZ - PHYSICAL_LOG.placeDistance);
   assert.ok(system.pickup(nextPlayerPosition));
@@ -116,12 +120,16 @@ assert.equal(system.setBuildMode('frame'), true);
 system.update(playerPosition, facing);
 assert.equal(system.previewValid, true, 'A completed upper floor must expose its next-storey perimeter corners');
 assert.ok(
-  Math.abs(system.previewPlacement.baseY - upperTopY) < 1e-8,
-  'Upper FRAME posts must begin directly on the lower top-beam surface with no vertical seam'
+  Math.abs(system.previewPlacement.baseY - frameTopY) < 1e-8,
+  'Upper FRAME posts must overlap the supporting RAW beam to remove the visible storey gap'
 );
 assert.ok(
   Math.abs(upperFloor.baseY - upperBaseY) < 1e-8,
-  'Committed upper-floor body must retain the embedded support height'
+  'Committed upper-floor body must retain the walking-surface support height'
+);
+assert.ok(
+  Math.abs(frameSeatYForFloor(upperFloor) - frameTopY) < 1e-8,
+  'Committed upper floors must recover the same structural interlock seat after save-compatible reconstruction'
 );
 
-console.log('Closed-perimeter upper-floor support, flush frame seating and storey ownership verified.');
+console.log('Closed-perimeter upper-floor support, beam-interlocked FRAME seating and storey ownership verified.');
