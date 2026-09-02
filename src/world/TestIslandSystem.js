@@ -11,6 +11,8 @@ import { WorldChunkSystem } from './WorldChunkSystem.js';
 import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
 import { WaterVisualSystem } from './WaterVisualSystem.js';
 
+const UNBOUNDED_SUPPORT_REFERENCE = Number.MAX_SAFE_INTEGER;
+
 export class TestIslandSystem {
   constructor(scene) {
     this.scene = scene;
@@ -92,9 +94,26 @@ export class TestIslandSystem {
     return this.constructionTerrain.heightAt(x, z);
   }
 
+  /**
+   * Generic world queries retain the highest support semantics used by placement and
+   * world objects. Ranger locomotion uses walkableHeightAt instead so overlapping
+   * storeys are resolved from the actor's current vertical level rather than globally.
+   */
   heightAt(x, z) {
     const base = this.constructionHeightAt(x, z);
-    return this.collision.supportHeightAt(x, z, base);
+    return this.collision.supportHeightAt(x, z, base, {
+      referenceY: UNBOUNDED_SUPPORT_REFERENCE,
+      maxStepUp: UNBOUNDED_SUPPORT_REFERENCE
+    });
+  }
+
+  walkableHeightAt(x, z) {
+    const base = this.constructionHeightAt(x, z);
+    const referenceY = this.collision.getSupportReferenceY();
+    return this.collision.supportHeightAt(x, z, base, {
+      referenceY: Number.isFinite(referenceY) ? referenceY : base,
+      maxStepUp: 0.58
+    });
   }
 
   setConstructionFloors(floors) {

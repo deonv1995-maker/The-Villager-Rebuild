@@ -1,9 +1,9 @@
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
+import { frameSeatYForFloor } from './FloorFrameTopology.js';
 import {
   roofMemberCandidates,
   roofMemberOccupied,
-  roofRegionComplete,
-  roofRegionHasMembers
+  roofRegionComplete
 } from './RoofMemberRules.js';
 import { roofPanelDescriptors } from './StructureRoofQuery.js';
 
@@ -45,7 +45,7 @@ const supportingFloorForFrame = (frame, floors) => {
   let best = null;
   let bestDistance = Infinity;
   for (const floor of floors) {
-    if (Math.abs((floor.topY ?? 0) - (frame.baseY ?? 0)) > LEVEL_TOLERANCE) continue;
+    if (Math.abs(frameSeatYForFloor(floor) - (frame.baseY ?? 0)) > LEVEL_TOLERANCE) continue;
     const dx = frame.x - floor.x;
     const dz = frame.z - floor.z;
     const distance = Math.hypot(dx, dz);
@@ -64,7 +64,7 @@ const parseBeamAnchorIds = rawKey => {
 
 const regionStorey = (region, floors) => {
   const matching = floors
-    .filter(floor => Math.abs((floor.topY ?? 0) - (region.frameBaseY ?? 0)) <= LEVEL_TOLERANCE)
+    .filter(floor => Math.abs(frameSeatYForFloor(floor) - (region.frameBaseY ?? 0)) <= LEVEL_TOLERANCE)
     .map(floor => floor.storey ?? 0);
   return matching.length ? Math.max(...matching) : 0;
 };
@@ -77,23 +77,22 @@ const targetForSharedMember = (plan, member) => {
 };
 
 /**
- * Adjacent roof bays may share physical rafters. A partial stacked extension must not
- * steal one of those members from a neighbouring lower bay. A relocation plan is safe
- * only when every occupied region that currently uses any moved member has a matching
- * relocation to the same elevation and the shared member resolves to the same target.
+ * Adjacent roof bays may share physical rafters. A relocation plan is safe only when
+ * every completed region currently using a moved member has a matching relocation to
+ * the same elevation and the shared member resolves to the same physical target.
  */
 export function filterSharedRoofRelocationPlans(plans, regions, members) {
   const availablePlans = (plans ?? []).filter(Boolean);
   if (!availablePlans.length) return [];
   const planBySource = new Map(availablePlans.map(plan => [plan.source.key, plan]));
-  const occupiedRegions = (regions ?? []).filter(region => roofRegionHasMembers(region, members));
+  const completed = (regions ?? []).filter(region => roofRegionComplete(region, members));
 
   return availablePlans.filter(plan => {
     for (const sourceCandidate of roofMemberCandidates(plan.source)) {
       const member = (members ?? []).find(entry => roofMemberOccupied(sourceCandidate, [entry]));
-      if (!member) continue;
+      if (!member) return false;
 
-      for (const region of occupiedRegions) {
+      for (const region of completed) {
         if (region.key === plan.source.key) continue;
         const sharesMember = roofMemberCandidates(region)
           .some(candidate => roofMemberOccupied(candidate, [member]));
@@ -131,7 +130,7 @@ export function collectStackedRoofRelocationPlans(regions, members) {
 
     let sourceIndex = -1;
     for (let index = levels.length - 1; index >= 0; index -= 1) {
-      if (!roofRegionHasMembers(levels[index], members)) continue;
+      if (!roofRegionComplete(levels[index], members)) continue;
       sourceIndex = index;
       break;
     }
@@ -149,23 +148,14 @@ export function collectStackedRoofRelocationPlans(regions, members) {
       sourceMembers.some((candidate, index) => !memberPlansMatch(candidate, targetMembers[index]))
     ) continue;
 
-    let hasMovableMember = false;
-    let targetConflict = false;
-    for (let index = 0; index < sourceMembers.length; index += 1) {
-      const sourceCandidate = sourceMembers[index];
-      const targetCandidate = targetMembers[index];
-      const sourceMember = (members ?? []).find(entry => roofMemberOccupied(sourceCandidate, [entry]));
-      if (!sourceMember) continue;
-      hasMovableMember = true;
-      const occupiedTarget = (members ?? []).find(entry =>
+    const targetConflict = targetMembers.some((targetCandidate, index) => {
+      const sourceMember = (members ?? []).find(entry => roofMemberOccupied(sourceMembers[index], [entry]));
+      if (!sourceMember) return true;
+      return (members ?? []).some(entry =>
         entry?.id !== sourceMember.id && roofMemberOccupied(targetCandidate, [entry])
       );
-      if (occupiedTarget) {
-        targetConflict = true;
-        break;
-      }
-    }
-    if (!hasMovableMember || targetConflict) continue;
+    });
+    if (targetConflict) continue;
 
     candidates.push({
       planKey,

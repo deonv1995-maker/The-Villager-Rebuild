@@ -1,5 +1,7 @@
 const DEFAULT_PLAYER_RADIUS = 0.42;
 const DEFAULT_PLAYER_HEIGHT = 2.2;
+const DEFAULT_SUPPORT_STEP_HEIGHT = 0.58;
+const AIRBORNE_SUPPORT_TOLERANCE = 0.16;
 
 export class WorldCollisionSystem {
   constructor({
@@ -18,10 +20,12 @@ export class WorldCollisionSystem {
     this.slopeSampleDistance = slopeSampleDistance;
     this.obstacles = [];
     this.revision = 0;
+    this.supportReferenceY = null;
   }
 
   clear() {
     this.obstacles.length = 0;
+    this.supportReferenceY = null;
     this.revision += 1;
   }
 
@@ -130,6 +134,15 @@ export class WorldCollisionSystem {
     return this.revision;
   }
 
+  getSupportReferenceY() {
+    return Number.isFinite(this.supportReferenceY) ? this.supportReferenceY : null;
+  }
+
+  setSupportReferenceY(value) {
+    this.supportReferenceY = Number.isFinite(value) ? value : null;
+    return this.getSupportReferenceY();
+  }
+
   getObstaclesByType(type) {
     return this.obstacles.filter(obstacle => obstacle.type === type);
   }
@@ -150,15 +163,39 @@ export class WorldCollisionSystem {
     return this.obstacles.every(obstacle => shouldIgnore(obstacle) || !this.#overlapsObstacle(obstacle, x, z, radius));
   }
 
-  supportHeightAt(x, z, baseHeight) {
+  /**
+   * Resolve a standable surface for one vertical movement context. A support above the
+   * actor's reachable step is deliberately ignored, even when it shares the same X/Z.
+   * This is what allows a Ranger on storey zero to walk underneath storey one instead
+   * of being teleported to the highest floor collider.
+   */
+  supportHeightAt(x, z, baseHeight, {
+    referenceY = null,
+    maxStepUp = DEFAULT_SUPPORT_STEP_HEIGHT,
+    airborne = false
+  } = {}) {
+    const reference = Number.isFinite(referenceY)
+      ? referenceY
+      : Number.isFinite(this.supportReferenceY)
+        ? this.supportReferenceY
+        : baseHeight;
+    const upwardAllowance = airborne
+      ? AIRBORNE_SUPPORT_TOLERANCE
+      : Math.max(0, maxStepUp);
     let highestSupport = -Infinity;
     let overridesBase = false;
 
     for (const obstacle of this.obstacles) {
       if (!obstacle.standable || obstacle.supportY === null) continue;
       if (!this.#withinSupport(obstacle, x, z)) continue;
-      highestSupport = Math.max(highestSupport, obstacle.supportY);
+      if (obstacle.supportY > reference + upwardAllowance) continue;
+
+      if (obstacle.supportY > highestSupport) {
+        highestSupport = obstacle.supportY;
+        overridesBase = false;
+      }
       if (
+        obstacle.supportY >= highestSupport - 0.000001 &&
         obstacle.supportOverridesBase &&
         obstacle.supportY >= baseHeight - obstacle.supportOverrideTolerance
       ) {
@@ -177,6 +214,8 @@ export class WorldCollisionSystem {
     airborne = false
   } = {}) {
     const actorHeight = Number.isFinite(height) && height > 0 ? height : DEFAULT_PLAYER_HEIGHT;
+    if (Number.isFinite(from?.y)) this.supportReferenceY = from.y;
+
     if (this.#canOccupy(from, desired.x, desired.z, radius, actorHeight, airborne)) {
       return { x: desired.x, z: desired.z, blocked: false };
     }
@@ -271,11 +310,21 @@ export class WorldCollisionSystem {
     return uphillRise <= this.maxSlopeGradient * d;
   }
 
+  #walkableHeightAt(x, z, referenceY, airborne) {
+    const base = this.baseHeightAt(x, z);
+    return this.supportHeightAt(x, z, base, {
+      referenceY,
+      maxStepUp: DEFAULT_SUPPORT_STEP_HEIGHT,
+      airborne
+    });
+  }
+
   #canOccupy(from, x, z, radius, actorHeight, airborne) {
     if (!this.isPlayable(x, z, radius + 0.35)) return false;
 
-    const fromGround = this.heightAt(from.x, from.z);
-    const feetY = Number.isFinite(from.y) ? from.y : fromGround;
+    const fallbackBase = this.baseHeightAt(from.x, from.z);
+    const feetY = Number.isFinite(from.y) ? from.y : fallbackBase;
+    const fromGround = this.#walkableHeightAt(from.x, from.z, feetY, airborne);
     const headY = feetY + actorHeight;
     for (const obstacle of this.obstacles) {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
@@ -321,7 +370,7 @@ export class WorldCollisionSystem {
 
     if (airborne) return true;
 
-    const toGround = this.heightAt(x, z);
+    const toGround = this.#walkableHeightAt(x, z, feetY, false);
     if (fromGround - toGround > this.dropFallThreshold) return true;
 
     return this.#terrainSlopeAllows(from, x, z);

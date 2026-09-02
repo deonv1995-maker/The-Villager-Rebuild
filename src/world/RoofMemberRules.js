@@ -25,19 +25,23 @@ const descriptor = (region, suffix, start, end, roofRole, snapKind) => {
     roofRegionKey: region.key,
     roofRole,
     snapKind,
+    supportFrameTopY: region.frameTopY,
+    supportTopology: region.topology ?? null,
     start: { ...start },
     end: { ...end }
   };
 };
 
-const candidateHeight = candidate => Math.max(
-  candidate?.y ?? -Infinity,
-  candidate?.start?.y ?? -Infinity,
-  candidate?.end?.y ?? -Infinity
-);
+const topologyPriority = topology => {
+  if (topology === 'closed-loop') return 0;
+  if (topology === 'frame-bounds') return 1;
+  if (topology === 'frame-cell') return 2;
+  return 3;
+};
 
-const highestFirst = candidates => [...candidates].sort((left, right) => (
-  candidateHeight(right) - candidateHeight(left) ||
+const structuralTieOrder = candidates => [...candidates].sort((left, right) => (
+  topologyPriority(left?.supportTopology) - topologyPriority(right?.supportTopology) ||
+  (left?.supportFrameTopY ?? 0) - (right?.supportFrameTopY ?? 0) ||
   String(left?.roofRegionKey ?? '').localeCompare(String(right?.roofRegionKey ?? '')) ||
   String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
 ));
@@ -74,18 +78,28 @@ export function roofMemberCandidates(region) {
 }
 
 /**
- * The unified ROOF option is an ordered coordinator over the canonical member roles.
- * Every currently available angled rafter is completed before any raw ridge segment
- * may be selected. Within the same role, higher stacked-storey candidates are ordered
- * first so coincident lower and upper footprints cannot win merely by enumeration.
- * Thatch remains a separate inventory-backed panel action after the physical member
- * query reports the roof complete.
+ * Static topology callers receive the original unified two-stage contract: any
+ * available rafter keeps all ridges hidden until the rafter stage is complete.
+ * Runtime placement enriches candidates with a per-region `raftersComplete` flag;
+ * there, a ridge is gated only by its own support region so another room/storey cannot
+ * hijack the workflow. Exact stacked-plan ties stay on the established lower/outer
+ * closed support, after which a complete roof may reflow as one physical assembly.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
-  const rafters = available.filter(candidate => candidate.roofRole === 'rafter');
-  if (rafters.length) return highestFirst(rafters);
-  return highestFirst(available.filter(candidate => candidate.roofRole === 'ridge'));
+  const hasRuntimeRegionState = available.some(candidate => typeof candidate.raftersComplete === 'boolean');
+
+  if (!hasRuntimeRegionState) {
+    const rafters = available.filter(candidate => candidate.roofRole === 'rafter');
+    if (rafters.length) return structuralTieOrder(rafters);
+    return structuralTieOrder(available.filter(candidate => candidate.roofRole === 'ridge'));
+  }
+
+  const eligible = available.filter(candidate => (
+    candidate.roofRole === 'rafter' ||
+    (candidate.roofRole === 'ridge' && candidate.raftersComplete === true)
+  ));
+  return structuralTieOrder(eligible);
 }
 
 export function roofMemberModeMatches(candidate, member) {
