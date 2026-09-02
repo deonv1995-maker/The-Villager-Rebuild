@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { PhysicalLogSystem } from '../src/world/PhysicalLogSystem.js';
 import { createPhysicalLogVisual } from '../src/world/PhysicalLogVisual.js';
+import { collectOuterStructuralFloorCorners } from '../src/world/FloorFrameTopology.js';
 
 const group = new THREE.Group();
 const player = { root: new THREE.Group(), model: null };
@@ -75,6 +76,22 @@ const floors = [
   makeFloor(2, width),
   makeFloor(3, width * 2)
 ];
+
+assert.equal(
+  collectOuterStructuralFloorCorners(floors.slice(0, 1)).length,
+  0,
+  'One narrow floor strip must not expose premature FRAME stations'
+);
+assert.equal(
+  collectOuterStructuralFloorCorners(floors.slice(0, 2)).length,
+  0,
+  'Two narrow floor strips must not expose premature FRAME stations'
+);
+assert.equal(
+  collectOuterStructuralFloorCorners(floors).length,
+  4,
+  'Three floor strips must complete one full-Log square with four structural corners'
+);
 const frames = [
   makeFrame(10, leftX, frontZ),
   makeFrame(11, leftX, backZ),
@@ -269,4 +286,34 @@ assert.ok(
   'FRAME candidates must skip one-third floor seams and stay on the outer structural lattice'
 );
 
-console.log('FRAME structural corners, exact three-strip floors, perimeter lattice and Ranger clearance verified.');
+// A three-by-three footprint may leave its middle full-Log bay open. The hole is not
+// another structural perimeter: only the twelve stations around the outside survive.
+const openMiddleFloors = [];
+let openMiddleId = 100;
+for (let bayX = 0; bayX < 3; bayX += 1) {
+  for (let stripZ = 0; stripZ < 9; stripZ += 1) {
+    const bayZ = Math.floor(stripZ / 3);
+    if (bayX === 1 && bayZ === 1) continue;
+    openMiddleFloors.push({
+      ...makeFloor(openMiddleId++, stripZ * width),
+      x: bayX * length
+    });
+  }
+}
+const openMiddleCorners = collectOuterStructuralFloorCorners(openMiddleFloors);
+assert.equal(
+  openMiddleCorners.length,
+  12,
+  'An open-middle three-by-three footprint must expose only its twelve outer FRAME stations'
+);
+assert.ok(
+  openMiddleCorners.every(corner =>
+    Math.abs(corner.x + half) < 0.000001 ||
+    Math.abs(corner.x - (length * 2 + half)) < 0.000001 ||
+    Math.abs(corner.z + width * 0.5) < 0.000001 ||
+    Math.abs(corner.z - (width * 8.5)) < 0.000001
+  ),
+  'The open middle must not create interior FRAME stations around the hole'
+);
+
+console.log('Archived full-Log FRAME grid, exact floor squares, outer-only open footprints and Ranger clearance verified.');

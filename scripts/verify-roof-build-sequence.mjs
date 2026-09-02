@@ -82,7 +82,15 @@ const pairOptions = {
   yawStep: PHYSICAL_LOG.yawStep,
   searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
   frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
-  pairLimit: PHYSICAL_LOG.roofLocalPairLimit
+  pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
+  occupiedBeamKeys: new Set([
+    'beam:10-11',
+    'beam:11-12',
+    'beam:13-14',
+    'beam:14-15',
+    'beam:10-13',
+    'beam:12-15'
+  ])
 };
 const regionOptions = {
   yawTolerance: 0.16,
