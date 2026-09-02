@@ -32,6 +32,19 @@ const activeFloors = floors => (floors ?? []).filter(floor =>
   Number.isFinite(floor.topY)
 );
 
+/**
+ * The upper floor's walking surface sits on top of its RAW support beam, but the next
+ * vertical FRAME must interlock with that beam rather than start above it. Storey zero
+ * still seats directly on its floor surface. Higher storeys therefore subtract exactly
+ * one physical beam radius from the walking surface to recover the structural joint.
+ */
+export const frameSeatYForFloor = floor => {
+  if (Number.isFinite(floor?.frameSeatY)) return floor.frameSeatY;
+  const topY = Number(floor?.topY);
+  if (!Number.isFinite(topY)) return 0;
+  return (floor?.storey ?? 0) > 0 ? topY - PHYSICAL_LOG.radius : topY;
+};
+
 const floorsTouch = (left, right, frameBasis) => {
   const dx = right.x - left.x;
   const dz = right.z - left.z;
@@ -89,6 +102,7 @@ function floorCorners(floor, frameBasis) {
 function mergedCornerNodes(component, frameBasis) {
   const nodes = [];
   for (const floor of component) {
+    const frameSeatY = frameSeatYForFloor(floor);
     for (const corner of floorCorners(floor, frameBasis)) {
       let node = nodes.find(existing =>
         Math.hypot(existing.x - corner.x, existing.z - corner.z) <= CORNER_MERGE_TOLERANCE
@@ -98,6 +112,7 @@ function mergedCornerNodes(component, frameBasis) {
           x: corner.x,
           z: corner.z,
           topY: floor.topY,
+          frameSeatY,
           floorIds: [floor.id]
         };
         nodes.push(node);
@@ -106,6 +121,7 @@ function mergedCornerNodes(component, frameBasis) {
       node.x = (node.x + corner.x) * 0.5;
       node.z = (node.z + corner.z) * 0.5;
       node.topY = Math.max(node.topY, floor.topY);
+      node.frameSeatY = Math.max(node.frameSeatY, frameSeatY);
       if (!node.floorIds.includes(floor.id)) node.floorIds.push(floor.id);
     }
   }
@@ -251,7 +267,7 @@ export function collectOuterStructuralFloorCorners(floors) {
       result.push({
         x: node.x,
         z: node.z,
-        baseY: node.topY,
+        baseY: node.frameSeatY,
         floorIds: [...node.floorIds]
       });
     }
