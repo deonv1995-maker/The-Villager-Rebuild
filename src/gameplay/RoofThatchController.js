@@ -34,6 +34,10 @@ export class RoofThatchController {
   }
 
   update() {
+    // A completed higher storey may inherit an already-built roof. Reflow must run
+    // before normal thatch validation so existing panels migrate upward instead of
+    // being interpreted as demolished and refunded for one frame.
+    this.game.stackedRoofReflow?.sync();
     this.system.sync();
 
     const carryingLog = this.game.physicalLogs?.isCarrying() ?? false;
