@@ -351,7 +351,7 @@ for (const requirement of [
   "mode === 'wall'",
   "mode === 'angle'",
   "mode === 'roof'",
-  "snapKind: snapped ? 'floor-edge-level' : null",
+  "snapKind: candidate.snapKind ?? (snapped ? 'floor-edge-level' : null)",
   'baseY: floor.baseY',
   'this.floorSupports.createForFloor',
   'collectLocalRoofFramePairs',

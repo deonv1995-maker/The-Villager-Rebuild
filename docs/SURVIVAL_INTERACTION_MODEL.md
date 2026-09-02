@@ -97,7 +97,8 @@ The green template follows the Ranger-facing placement calculation while preview
 - `PhysicalLogVisual` owns raw/split/roof construction presentations without deciding placement validity.
 - `RangerLogCarryPose` owns the post-mixer upper-body hauling posture only.
 - `FloorSupportVisual` owns automatic floor support/fill presentation only and never mutates island terrain.
-- `PhysicalLogSystem` owns carrying, dropping, construction-mode selection, preview validity, level snapping, committed construction, support lifecycle and demolition conversion back to a physical Log.
+- `PhysicalLogSystem` owns carrying, dropping, construction-mode selection, preview validity, storey-aware level snapping, committed construction, support lifecycle and demolition conversion back to a physical Log.
+- `UpperStoreyFloorRules` projects only occupied lower-floor strips through the shared closed RAW top-beam topology; it does not create terrain foundations or a second structural graph.
 - `WorldCollisionSystem` remains the shared collision authority; its optional clearance ignore callback is caller-scoped and does not create a second construction collision system.
 - `ToolbeltSystem` owns Hand/default state plus craft/select/equip state for the five basic tools.
 - `RangerController` owns the authored right-hand attachment boundary, spear Throw/release timing and production work-action selection/timing.

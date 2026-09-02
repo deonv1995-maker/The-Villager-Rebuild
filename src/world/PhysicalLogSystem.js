@@ -22,6 +22,7 @@ import {
   roofMemberOccupied,
   roofRaftersComplete
 } from './RoofMemberRules.js';
+import { collectUpperStoreyFloorCandidates } from './UpperStoreyFloorRules.js';
 
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
@@ -219,12 +220,13 @@ export class PhysicalLogSystem {
       roofKey: placement.roofKey ?? null,
       roofRegionKey: placement.roofRegionKey ?? null,
       roofRole: placement.roofRole ?? null,
-      roofLength: placement.roofLength ?? null
+      roofLength: placement.roofLength ?? null,
+      storey: placement.storey ?? 0
     };
     this.nextBuiltId += 1;
     this.builtLogs.push(built);
     this.#markStructureChanged();
-    if (built.mode === 'floor') {
+    if (built.mode === 'floor' && built.storey === 0) {
       built.supportRoot = this.floorSupports.createForFloor(placement, built.id);
     }
 
@@ -362,7 +364,10 @@ export class PhysicalLogSystem {
   }
 
   #floorPlacement(base) {
-    const snappedCandidates = this.#floorEdgeCandidates(base);
+    const snappedCandidates = [
+      ...this.#upperStoreyFloorCandidates(base),
+      ...this.#floorEdgeCandidates(base)
+    ];
     const candidates = snappedCandidates.length ? snappedCandidates : [base];
     const evaluated = candidates.map(candidate => this.#evaluateFloorCandidate(candidate, Boolean(snappedCandidates.length)));
     const resolved = evaluated.find(candidate => candidate.valid) ?? evaluated[0];
@@ -378,14 +383,17 @@ export class PhysicalLogSystem {
       ? candidate.baseY
       : sample.center + PHYSICAL_LOG.floorGroundClearance;
     const occupied = this.#activeBuilt('floor').some(floor =>
-      Math.hypot(floor.x - candidate.x, floor.z - candidate.z) < 0.18
+      Math.hypot(floor.x - candidate.x, floor.z - candidate.z) < 0.18 &&
+      Math.abs(floor.baseY - baseY) < PHYSICAL_LOG.frameLevelTolerance
     );
+    const structurallySupported = (candidate.storey ?? 0) > 0;
     const valid = !occupied && this.#floorPlacementValid(
       candidate.x,
       candidate.z,
       candidate.yaw,
       sample,
-      baseY
+      baseY,
+      { structurallySupported }
     );
     return {
       ...candidate,
@@ -394,7 +402,7 @@ export class PhysicalLogSystem {
       y: baseY + FLOOR_CENTER_LIFT,
       topY: baseY + FLOOR_TOP_LIFT,
       supportDepth: Math.max(0, baseY - PHYSICAL_LOG.floorUndersideDepth - sample.min),
-      snapKind: snapped ? 'floor-edge-level' : null,
+      snapKind: candidate.snapKind ?? (snapped ? 'floor-edge-level' : null),
       valid
     };
   }
@@ -543,31 +551,7 @@ export class PhysicalLogSystem {
       return this.roofQueryCache;
     }
 
-    const pairs = collectLocalRoofFramePairs(this.#activeBuilt('frame'), base, {
-      length: PHYSICAL_LOG.length,
-      spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
-      topTolerance: PHYSICAL_LOG.frameLevelTolerance,
-      yawStep: PHYSICAL_LOG.yawStep,
-      searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
-      frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
-      pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
-      occupiedBeamKeys: new Set(
-        this.#activeBuilt('raw')
-          .filter(raw => raw.snapKind === 'frame-pair-top' && raw.rawKey)
-          .map(raw => raw.rawKey)
-      )
-    });
-    const regions = collectRoofRegions(pairs, {
-      yawTolerance: 0.16,
-      topTolerance: 0.34,
-      maxAlong: 0.4,
-      minWidth: PHYSICAL_LOG.roofRegionMinWidth,
-      maxWidth: PHYSICAL_LOG.roofRegionMaxWidth,
-      roofPitch: PHYSICAL_LOG.roofPitch,
-      minRise: PHYSICAL_LOG.roofMinRise,
-      maxRise: PHYSICAL_LOG.roofMaxRise,
-      eaveSeatLift: ROOF_SEAT_LIFT
-    });
+    const regions = this.#roofRegions(base);
     const activeMembers = this.#activeBuilt();
     const candidates = [];
 
@@ -585,6 +569,50 @@ export class PhysicalLogSystem {
     this.roofQueryCacheRevision = this.structureRevision;
     this.roofQueryCacheKey = queryKey;
     return candidates;
+  }
+
+  #upperStoreyFloorCandidates(base) {
+    const regions = this.#roofRegions(base);
+    return collectUpperStoreyFloorCandidates(regions, this.#activeBuilt('floor'), {
+      floorTopLift: FLOOR_TOP_LIFT,
+      beamRadius: PHYSICAL_LOG.radius,
+      levelTolerance: PHYSICAL_LOG.frameLevelTolerance
+    })
+      .map(candidate => ({
+        ...candidate,
+        distance: Math.hypot(candidate.x - base.x, candidate.z - base.z)
+      }))
+      .filter(candidate => candidate.distance < PHYSICAL_LOG.floorSnapRange)
+      .sort((left, right) => left.distance - right.distance || left.sourceFloorId - right.sourceFloorId)
+      .map(({ distance, ...candidate }) => candidate);
+  }
+
+  #roofRegions(base) {
+    const pairs = collectLocalRoofFramePairs(this.#activeBuilt('frame'), base, {
+      length: PHYSICAL_LOG.length,
+      spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
+      topTolerance: PHYSICAL_LOG.frameLevelTolerance,
+      yawStep: PHYSICAL_LOG.yawStep,
+      searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
+      frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
+      pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
+      occupiedBeamKeys: new Set(
+        this.#activeBuilt('raw')
+          .filter(raw => raw.snapKind === 'frame-pair-top' && raw.rawKey)
+          .map(raw => raw.rawKey)
+      )
+    });
+    return collectRoofRegions(pairs, {
+      yawTolerance: 0.16,
+      topTolerance: 0.34,
+      maxAlong: 0.4,
+      minWidth: PHYSICAL_LOG.roofRegionMinWidth,
+      maxWidth: PHYSICAL_LOG.roofRegionMaxWidth,
+      roofPitch: PHYSICAL_LOG.roofPitch,
+      minRise: PHYSICAL_LOG.roofMinRise,
+      maxRise: PHYSICAL_LOG.roofMaxRise,
+      eaveSeatLift: ROOF_SEAT_LIFT
+    });
   }
 
   #roofAxisCandidate(region, member) {
@@ -630,7 +658,7 @@ export class PhysicalLogSystem {
         const z = floor.z + oz;
         const distance = Math.hypot(x - base.x, z - base.z);
         if (distance >= PHYSICAL_LOG.floorSnapRange) continue;
-        const key = `${Math.round(x * 1000)}:${Math.round(z * 1000)}:${Math.round(floor.yaw * 1000)}`;
+        const key = `${Math.round(x * 1000)}:${Math.round(z * 1000)}:${Math.round(floor.yaw * 1000)}:${Math.round(floor.baseY * 1000)}`;
         const existing = candidates.get(key);
         if (existing && existing.distance <= distance) continue;
         candidates.set(key, {
@@ -639,6 +667,7 @@ export class PhysicalLogSystem {
           yaw: floor.yaw,
           baseY: floor.baseY,
           topY: floor.topY,
+          storey: floor.storey ?? 0,
           distance
         });
       }
@@ -748,10 +777,10 @@ export class PhysicalLogSystem {
     return { center, min: Math.min(...heights), max: Math.max(...heights) };
   }
 
-  #floorPlacementValid(x, z, yaw, sample, baseY) {
+  #floorPlacementValid(x, z, yaw, sample, baseY, { structurallySupported = false } = {}) {
     if (!this.terrain.isPlayable(x, z, PHYSICAL_LOG.halfLength + 0.12)) return false;
-    if (sample.max > baseY + PHYSICAL_LOG.floorTerrainEmbedTolerance) return false;
-    if (baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
+    if (!structurallySupported && sample.max > baseY + PHYSICAL_LOG.floorTerrainEmbedTolerance) return false;
+    if (!structurallySupported && baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
     return this.collision.isCircleClear(x, z, 0.62, {
       ignore: obstacle => this.#floorMayMeetObstacle(obstacle, x, z, yaw, baseY)
     });
@@ -760,6 +789,7 @@ export class PhysicalLogSystem {
   #floorMayMeetObstacle(obstacle, x, z, yaw, baseY) {
     if (obstacle.type !== 'placed-log') return false;
     if (/-floor$/.test(obstacle.label ?? '')) return true;
+    if (Number.isFinite(obstacle.topY) && obstacle.topY <= baseY + FLOOR_TOP_LIFT + 0.04) return true;
     if (Number.isFinite(obstacle.bottomY) && obstacle.bottomY > baseY + 0.18) return true;
 
     const built = this.builtLogs.find(entry =>
@@ -982,7 +1012,7 @@ export class PhysicalLogSystem {
       type: 'placed-log',
       label,
       bottomY: placement.snapKind ? placement.y - PHYSICAL_LOG.radius : placement.ground,
-      topY: placement.y + PHYSICAL_LOG.radius * 2,
+      topY: placement.y + PHYSICAL_LOG.radius,
       standable: !overheadFrameBeam,
       supportHalfX: overheadFrameBeam ? 0 : PHYSICAL_LOG.halfLength - 0.14,
       supportHalfZ: overheadFrameBeam ? 0 : PHYSICAL_LOG.radius * 0.7,

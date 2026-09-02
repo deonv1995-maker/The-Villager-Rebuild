@@ -66,6 +66,10 @@ assert.ok(
   PHYSICAL_LOG.frameSpacingTolerance < Math.hypot(PHYSICAL_LOG.length, PHYSICAL_LOG.floorWidth) - PHYSICAL_LOG.length,
   'Pair recognition must remain tighter than the known one-floor-strip near-diagonal offset'
 );
+assert.ok(
+  PHYSICAL_LOG.roofSnapRange >= PHYSICAL_LOG.length + PHYSICAL_LOG.placeDistance,
+  'Ordered ROOF placement must reach across one full bay from the normal exterior placement point'
+);
 
 const frames = [
   makeFrame(10, -PHYSICAL_LOG.length, 0),
