@@ -2,6 +2,7 @@ const DEFAULT_PLAYER_RADIUS = 0.42;
 const DEFAULT_PLAYER_HEIGHT = 2.2;
 const DEFAULT_SUPPORT_STEP_HEIGHT = 0.58;
 const AIRBORNE_SUPPORT_TOLERANCE = 0.16;
+const SUPPORT_ENTRY_RADIUS_FACTOR = 0.85;
 
 export class WorldCollisionSystem {
   constructor({
@@ -359,7 +360,10 @@ export class WorldCollisionSystem {
       }
 
       if (standableSurface) {
-        if (this.#withinSupport(obstacle, x, z, radius * 0.25)) {
+        // Enter a low platform as soon as the Ranger's physical footprint reaches the
+        // standable surface. Requiring the actor centre to cross deep inside the floor
+        // makes the floor's own side collider block the transition before it can happen.
+        if (this.#withinSupport(obstacle, x, z, radius * SUPPORT_ENTRY_RADIUS_FACTOR)) {
           const step = obstacle.supportY - fromGround;
           const alreadySupported = Math.abs(feetY - obstacle.supportY) <= 0.28;
           if (alreadySupported || (!airborne && step <= obstacle.stepHeight)) continue;
