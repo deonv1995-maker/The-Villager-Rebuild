@@ -4,15 +4,22 @@ import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 import { TreeHitShakeSystem } from './TreeHitShakeSystem.js';
 
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
+const MAX_REGROW_STEP_SECONDS = 0.25;
+const PLAYER_REGROW_CLEARANCE = 1.15;
+const BUILT_REGROW_BLOCKERS = new Set(['placed-log', 'campfire']);
 
 export class TreeHarvestSystem {
-  constructor({ group, terrain, collision, gatherables, treeRenderRegistry = null }) {
+  constructor({ group, terrain, collision, gatherables, treeRenderRegistry = null, now = null }) {
     this.group = group;
     this.terrain = terrain;
     this.collision = collision;
     this.gatherables = gatherables;
     this.treeRenderRegistry = treeRenderRegistry ?? terrain?.chunks ?? null;
     this.definition = HARVESTABLE_DEFINITIONS.forestTree;
+    this.now = typeof now === 'function'
+      ? now
+      : () => globalThis.performance?.now?.() ?? Date.now();
+    this.lastRegrowthUpdateAt = this.now();
     this.target = null;
     this.choppedCount = 0;
     this.treeBatches = this.treeRenderRegistry ? new Map() : this.#collectTreeBatches();
@@ -27,7 +34,35 @@ export class TreeHarvestSystem {
     return this.choppedCount > 0;
   }
 
+  captureRegrowthState() {
+    return this.trees
+      .filter(tree => !tree.active)
+      .map(tree => ({
+        treeId: tree.treeId,
+        remainingSeconds: Math.max(0, Number(tree.regrowRemaining) || 0)
+      }));
+  }
+
+  restoreRegrowthState(state) {
+    const savedById = new Map(
+      (Array.isArray(state) ? state : [])
+        .filter(entry => Number.isInteger(entry?.treeId))
+        .map(entry => [entry.treeId, entry])
+    );
+
+    for (const tree of this.trees) {
+      if (tree.active) continue;
+      const saved = savedById.get(tree.treeId);
+      const remaining = Number(saved?.remainingSeconds);
+      tree.regrowRemaining = Number.isFinite(remaining)
+        ? Math.max(0, remaining)
+        : this.definition.regrowSeconds;
+    }
+    this.lastRegrowthUpdateAt = this.now();
+  }
+
   update(playerPosition, enabled = true) {
+    this.#advanceRegrowth(playerPosition);
     this.hitFeedback.update();
     this.treeShake.update();
     if (!enabled) {
@@ -101,9 +136,10 @@ export class TreeHarvestSystem {
     }
 
     tree.active = false;
+    tree.regrowRemaining = this.definition.regrowSeconds;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
-    this.#createStump(tree);
+    tree.stump = this.#createStump(tree);
     this.#spawnDrops(tree);
     this.choppedCount += 1;
     this.target = null;
@@ -117,6 +153,47 @@ export class TreeHarvestSystem {
       dropResourceId: this.definition.dropResourceId,
       dropCount: this.definition.dropCount
     };
+  }
+
+  #advanceRegrowth(playerPosition) {
+    const now = this.now();
+    const elapsed = Math.min(
+      MAX_REGROW_STEP_SECONDS,
+      Math.max(0, (now - this.lastRegrowthUpdateAt) / 1000)
+    );
+    this.lastRegrowthUpdateAt = now;
+    if (elapsed <= 0) return;
+
+    for (const tree of this.trees) {
+      if (tree.active) continue;
+      tree.regrowRemaining = Math.max(0, tree.regrowRemaining - elapsed);
+      if (tree.regrowRemaining > 0) continue;
+      if (!this.#canRegrow(tree, playerPosition)) continue;
+      this.#regrowTree(tree);
+    }
+  }
+
+  #canRegrow(tree, playerPosition) {
+    const template = tree.collisionTemplate;
+    if (playerPosition) {
+      const dx = template.x - playerPosition.x;
+      const dz = template.z - playerPosition.z;
+      const clearance = Math.max(PLAYER_REGROW_CLEARANCE, template.radius + 0.45);
+      if (dx * dx + dz * dz < clearance * clearance) return false;
+    }
+
+    return this.collision.isCircleClear(template.x, template.z, template.radius, {
+      ignore: obstacle => !BUILT_REGROW_BLOCKERS.has(obstacle.type)
+    });
+  }
+
+  #regrowTree(tree) {
+    this.#removeStump(tree);
+    this.#restoreTreeInstance(tree);
+    tree.obstacle = this.collision.addObstacle({ ...tree.collisionTemplate });
+    tree.hits = 0;
+    tree.active = true;
+    tree.regrowRemaining = 0;
   }
 
   #collectTreeBatches() {
@@ -139,17 +216,58 @@ export class TreeHarvestSystem {
         const match = TREE_LABEL_PATTERN.exec(obstacle.label ?? '');
         if (!match) return null;
         const treeId = Number(match[1]);
-        return {
+        const tree = {
           treeId,
           variantIndex: treeId % this.treeVariantCount,
           instanceIndex: Math.floor(treeId / this.treeVariantCount),
           obstacle,
+          collisionTemplate: {
+            x: obstacle.x,
+            z: obstacle.z,
+            radius: obstacle.radius,
+            type: obstacle.type,
+            label: obstacle.label,
+            bottomY: obstacle.bottomY,
+            topY: obstacle.topY,
+            standable: obstacle.standable,
+            supportRadius: obstacle.supportRadius,
+            supportY: obstacle.supportY,
+            supportOverridesBase: obstacle.supportOverridesBase,
+            supportOverrideTolerance: obstacle.supportOverrideTolerance,
+            stepHeight: obstacle.stepHeight
+          },
+          renderState: [],
           hits: 0,
-          active: true
+          active: true,
+          regrowRemaining: 0,
+          stump: null
         };
+        tree.renderState = this.#captureTreeRenderState(tree);
+        return tree;
       })
       .filter(Boolean)
       .sort((left, right) => left.treeId - right.treeId);
+  }
+
+  #captureTreeRenderState(tree) {
+    const entries = [];
+    if (this.treeRenderRegistry?.getTreeRenderHandles) {
+      for (const handle of this.treeRenderRegistry.getTreeRenderHandles(tree.treeId)) {
+        const matrix = new THREE.Matrix4();
+        handle.mesh.getMatrixAt(handle.index, matrix);
+        entries.push({ mesh: handle.mesh, index: handle.index, matrix });
+      }
+      return entries;
+    }
+
+    const batches = this.treeBatches.get(tree.variantIndex) ?? [];
+    for (const batch of batches) {
+      if (tree.instanceIndex < 0 || tree.instanceIndex >= batch.count) continue;
+      const matrix = new THREE.Matrix4();
+      batch.getMatrixAt(tree.instanceIndex, matrix);
+      entries.push({ mesh: batch, index: tree.instanceIndex, matrix });
+    }
+    return entries;
   }
 
   #hideTreeInstance(tree) {
@@ -160,19 +278,16 @@ export class TreeHarvestSystem {
       new THREE.Vector3(0.0001, 0.0001, 0.0001)
     );
 
-    if (this.treeRenderRegistry) {
-      for (const handle of this.treeRenderRegistry.getTreeRenderHandles(tree.treeId)) {
-        handle.mesh.setMatrixAt(handle.index, hiddenMatrix);
-        handle.mesh.instanceMatrix.needsUpdate = true;
-      }
-      return;
+    for (const entry of tree.renderState) {
+      entry.mesh.setMatrixAt(entry.index, hiddenMatrix);
+      entry.mesh.instanceMatrix.needsUpdate = true;
     }
+  }
 
-    const batches = this.treeBatches.get(tree.variantIndex) ?? [];
-    for (const batch of batches) {
-      if (tree.instanceIndex < 0 || tree.instanceIndex >= batch.count) continue;
-      batch.setMatrixAt(tree.instanceIndex, hiddenMatrix);
-      batch.instanceMatrix.needsUpdate = true;
+  #restoreTreeInstance(tree) {
+    for (const entry of tree.renderState) {
+      entry.mesh.setMatrixAt(entry.index, entry.matrix);
+      entry.mesh.instanceMatrix.needsUpdate = true;
     }
   }
 
@@ -195,6 +310,15 @@ export class TreeHarvestSystem {
     } else {
       this.group.add(stump);
     }
+    return stump;
+  }
+
+  #removeStump(tree) {
+    if (!tree.stump) return;
+    tree.stump.parent?.remove(tree.stump);
+    tree.stump.geometry?.dispose?.();
+    tree.stump.material?.dispose?.();
+    tree.stump = null;
   }
 
   #spawnDrops(tree) {

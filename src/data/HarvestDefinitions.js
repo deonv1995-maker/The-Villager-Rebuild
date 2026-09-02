@@ -5,6 +5,7 @@ export const HARVESTABLE_DEFINITIONS = Object.freeze({
     interactionRadius: 2.7,
     hitsRequired: 3,
     dropResourceId: 'log',
-    dropCount: 3
+    dropCount: 3,
+    regrowSeconds: 180
   })
 });
