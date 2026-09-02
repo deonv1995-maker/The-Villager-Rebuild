@@ -81,6 +81,24 @@ for (const requirement of [
   assert(treeSource.includes(requirement), `Tree harvest system is missing contract: ${requirement}`);
 }
 
+assert(
+  treeSource.includes('const radius = Math.max(0.22, tree.obstacle.radius);'),
+  'Chopped-tree stump must use the source tree radius directly instead of shrinking the footprint'
+);
+assert(
+  treeSource.includes('new THREE.CylinderGeometry(radius, radius, 0.34, 7)'),
+  'Stump top and bottom must retain the source tree footprint radius'
+);
+assert(
+  !treeSource.includes('tree.obstacle.radius * 0.7'),
+  'Stump presentation must not restore the old 0.7 radius shrink factor'
+);
+assert(
+  !treeSource.includes('FelledTreeLogPresentation') &&
+  !treeSource.includes('attachFelledTreeLogGroundPresentation'),
+  'Tree harvesting must not replace or wrap canonical physical Log visuals'
+);
+
 for (const requirement of [
   "definition.storage !== 'inventory'",
   'takePhysical(playerPosition',
@@ -192,4 +210,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Physical tree harvesting, coherent floor foundation support, bounded roof construction, carry posture and unified mobile action contracts verified');
+console.log('Physical tree harvesting, source-sized stump footprint, canonical Log visuals, coherent floor foundation support, bounded roof construction, carry posture and unified mobile action contracts verified');
