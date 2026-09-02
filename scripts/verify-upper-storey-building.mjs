@@ -47,24 +47,48 @@ const region = {
   frameTopY,
   ridgeYaw: 0
 };
-const mirrored = collectUpperStoreyFloorCandidates([region], [floors[0], floors[2]], {
+const perimeterSlots = collectUpperStoreyFloorCandidates([region], [], {
   floorTopLift: 0.028,
   beamRadius: PHYSICAL_LOG.radius,
   levelTolerance: PHYSICAL_LOG.frameLevelTolerance
 });
-assert.equal(mirrored.length, 2, 'Upper floors must mirror only occupied floor strips below');
-assert.ok(mirrored.every(candidate => candidate.storey === 1));
+assert.equal(
+  perimeterSlots.length,
+  3,
+  'A closed one-Log square perimeter must expose all three split-log upper-floor slots without matching floor strips below'
+);
+assert.deepEqual(
+  perimeterSlots.map(candidate => Number(candidate.z.toFixed(6))),
+  [
+    Number((PHYSICAL_LOG.floorWidth * 0.5).toFixed(6)),
+    Number((PHYSICAL_LOG.floorWidth * 1.5).toFixed(6)),
+    Number((PHYSICAL_LOG.floorWidth * 2.5).toFixed(6))
+  ],
+  'Upper-floor slots must follow the canonical one-third-Log floor lattice inside the support ring'
+);
+assert.ok(perimeterSlots.every(candidate => candidate.storey === 1));
 assert.ok(
-  mirrored.every(candidate => Math.abs(candidate.topY - (frameTopY + PHYSICAL_LOG.radius)) < 1e-8),
+  perimeterSlots.every(candidate => Math.abs(candidate.topY - (frameTopY + PHYSICAL_LOG.radius)) < 1e-8),
   'Upper walking surfaces must sit exactly on the physical RAW top-beam surface'
 );
 assert.ok(
-  mirrored.every(candidate => Math.abs(candidate.baseY - (frameTopY + PHYSICAL_LOG.radius - 0.028)) < 1e-8),
+  perimeterSlots.every(candidate => Math.abs(candidate.baseY - (frameTopY + PHYSICAL_LOG.radius - 0.028)) < 1e-8),
   'Upper split-log floor bodies must embed downward from the walking surface'
 );
 assert.ok(
-  mirrored.every(candidate => Math.abs(frameSeatYForFloor(candidate) - frameTopY) < 1e-8),
+  perimeterSlots.every(candidate => Math.abs(frameSeatYForFloor(candidate) - frameTopY) < 1e-8),
   'Upper structural FRAME seats must interlock at the supporting RAW beam centreline'
+);
+
+const sparseSupportSlots = collectUpperStoreyFloorCandidates([region], [floors[0]], {
+  floorTopLift: 0.028,
+  beamRadius: PHYSICAL_LOG.radius,
+  levelTolerance: PHYSICAL_LOG.frameLevelTolerance
+});
+assert.equal(
+  sparseSupportSlots.length,
+  3,
+  'Missing floor strips below must not force an interior FRAME/RAW support lattice for the upper floor'
 );
 
 const terrain = {
@@ -89,7 +113,9 @@ const system = new PhysicalLogSystem({
   player: { root: new THREE.Group(), model: null },
   terrain, collision, gatherables
 });
-system.builtLogs = [...floors, ...frames, ...beams];
+// The closed perimeter is the structural authority. Keep only one lower floor strip in
+// runtime state to prove the upper level no longer needs a matching filled footprint.
+system.builtLogs = [floors[0], ...frames, ...beams];
 system.nextBuiltId = 30;
 system.structureRevision += 1;
 
@@ -132,4 +158,4 @@ assert.ok(
   'Committed upper floors must recover the same structural interlock seat after save-compatible reconstruction'
 );
 
-console.log('Closed-perimeter upper-floor support, beam-interlocked FRAME seating and storey ownership verified.');
+console.log('Closed-perimeter upper-floor slots, beam-interlocked FRAME seating and storey ownership verified.');

@@ -7,13 +7,25 @@ upright `FRAME` posts are not sufficient by themselves: the physical `RAW` top b
 must close the supported perimeter. This remains the single structural source of truth
 for simple rooms, rectangular multi-bay buildings and stepped/L-shaped footprints.
 
+A completed perimeter is deliberately a **ring**, not an interior support lattice. The
+player should never have to fill the room below with extra FRAME posts or RAW cross-beams
+just to unlock the storey above. Interior members may still be built for appearance or
+later gameplay, but they are not a prerequisite for the upper floor.
+
 ## Upper floors and seamless structural joints
 
-Once a perimeter is closed, `FLOOR` may project the occupied floor strips below onto
-the top surface of the RAW beams. Projection is footprint-preserving: an intentionally
-open strip or absent bay below is not silently filled above. The first upper strip uses
-the closed-perimeter support; subsequent strips continue through normal same-level
-floor-edge snapping.
+Once a perimeter is closed, `FLOOR` exposes the canonical split-log floor slots inside
+that supported region directly from the FRAME + RAW ring geometry. One physical Log bay
+is subdivided into the same three one-third-Log floor strips used on the ground level.
+The lower storey's occupied floor strips are not copied and do not gate upstairs
+placement.
+
+This means the structural ring defines **where an upper floor may exist**, while the
+player still decides **which of those slots to build**. A stairwell, ladder opening or
+other deliberate hole is preserved simply by leaving that upstairs slot unbuilt; the
+system does not auto-fill the floor. Multi-bay and stepped footprints remain bounded by
+the same closed-perimeter regions, so no separate upstairs building system or interior
+post grid is introduced.
 
 An upper storey has two intentionally different vertical references:
 
@@ -53,6 +65,13 @@ reaches that level through valid movement. `RangerGrounding` uses this walkable 
 its footprint samples while generic placement/world queries keep their existing highest-
 support semantics. The collision move resolver uses the same level-aware support rule so
 movement and visual grounding cannot disagree.
+
+A low split-log platform must also behave like a walking surface rather than a vertical
+wall at its outer edge. Horizontal collision therefore allows a grounded actor to enter a
+standable collider as soon as the actor footprint reaches a support that is within that
+collider's configured step height. This aligns movement with Ranger footprint grounding:
+normal foundation floors can be walked onto without pressing Jump, while genuinely high
+platforms remain blocking and still require another traversal solution.
 
 ## Roof targeting and reflow
 
@@ -97,11 +116,19 @@ topology limits prevent selection from searching unrelated distant buildings.
 `scripts/verify-upper-storey-building.mjs` locks:
 
 - upper floors require a physically closed RAW top-beam perimeter;
-- projected floors mirror occupied strips below and preserve openings;
+- one closed Log bay exposes its full three-strip upstairs floor lattice even when matching lower strips are absent;
+- interior FRAME posts or RAW cross-beams are not required to unlock those floor slots;
+- unbuilt upstairs slots remain under player control rather than being auto-filled;
 - the upstairs walking surface remains on the RAW beam top;
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;
 - reconstructed storey metadata recovers the same structural FRAME seat.
+
+`scripts/verify-platform-traversal.mjs` locks:
+
+- the Ranger can walk from natural terrain onto a normal low split-log platform without Jump;
+- movement and Ranger footprint grounding agree at the platform edge;
+- a platform above its configured step height still blocks ordinary grounded movement.
 
 `scripts/verify-ranger-grounding.mjs` locks:
 
