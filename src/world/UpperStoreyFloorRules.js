@@ -29,6 +29,10 @@ const pointInsideRegion = (point, region, tolerance = 0.18) => {
  * Project only the floor strips that already exist inside a closed top-beam region.
  * This makes upper storeys follow the supported footprint below, including stepped
  * footprints and deliberate interior openings, without inventing centre posts.
+ *
+ * The walking surface is seated exactly on the physical top of the RAW perimeter beam.
+ * The split-log floor body therefore embeds downward into the beam instead of lifting
+ * the next FRAME posts above it, eliminating the visible seam between stacked storeys.
  */
 export function collectUpperStoreyFloorCandidates(regions, floors, {
   floorTopLift,
@@ -44,14 +48,15 @@ export function collectUpperStoreyFloorCandidates(regions, floors, {
       if (Math.abs(floor.topY - region.frameBaseY) > levelTolerance) continue;
       if (!pointInsideRegion(floor, region)) continue;
 
-      const baseY = region.frameTopY + beamRadius;
-      const key = `${floor.id}:${Math.round(baseY * 1000)}`;
+      const topY = region.frameTopY + beamRadius;
+      const baseY = topY - floorTopLift;
+      const key = `${floor.id}:${Math.round(topY * 1000)}`;
       candidates.set(key, {
         x: floor.x,
         z: floor.z,
         yaw: floor.yaw ?? region.ridgeYaw ?? 0,
         baseY,
-        topY: baseY + floorTopLift,
+        topY,
         supportRegionKey: region.key,
         sourceFloorId: floor.id,
         storey: (floor.storey ?? 0) + 1,
