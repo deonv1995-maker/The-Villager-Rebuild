@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import { frameSeatYForFloor } from '../src/world/FloorFrameTopology.js';
 import {
   orderedRoofBuildCandidates,
   roofMemberCandidates,
@@ -17,7 +18,7 @@ import {
 
 const FLOOR_TOP_LIFT = 0.028;
 
-const makeRegion = ({ key, frameBaseY, frameTopY, offsetX = 0 }) => ({
+const makeRegion = ({ key, frameBaseY, frameTopY, offsetX = 0, topology = 'closed-loop' }) => ({
   key,
   a: { x: offsetX - PHYSICAL_LOG.halfLength, z: 0 },
   b: { x: offsetX + PHYSICAL_LOG.halfLength, z: 0 },
@@ -28,7 +29,7 @@ const makeRegion = ({ key, frameBaseY, frameTopY, offsetX = 0 }) => ({
   eaveY: frameTopY + 0.08,
   ridgeY: frameTopY + 1.12,
   ridgeYaw: 0,
-  topology: 'test'
+  topology
 });
 
 const makeBuiltMember = (candidate, id) => {
@@ -72,7 +73,8 @@ const groundFloorTop = 0.108;
 const lowerFrameTop = groundFloorTop + PHYSICAL_LOG.length;
 const upperFloorBase = lowerFrameTop + PHYSICAL_LOG.radius - FLOOR_TOP_LIFT;
 const upperFloorTop = lowerFrameTop + PHYSICAL_LOG.radius;
-const upperFrameTop = upperFloorTop + PHYSICAL_LOG.length;
+const upperFrameBase = lowerFrameTop;
+const upperFrameTop = upperFrameBase + PHYSICAL_LOG.length;
 const lower = makeRegion({
   key: 'roof:lower',
   frameBaseY: groundFloorTop,
@@ -80,7 +82,7 @@ const lower = makeRegion({
 });
 const upper = makeRegion({
   key: 'roof:upper',
-  frameBaseY: upperFloorTop,
+  frameBaseY: upperFrameBase,
   frameTopY: upperFrameTop
 });
 
@@ -88,15 +90,25 @@ assert.equal(roofPlanKey(lower), roofPlanKey(upper), 'Stacked regions must share
 
 const lowerRafters = roofMemberCandidates(lower).filter(candidate => candidate.roofRole === 'rafter');
 const upperRafters = roofMemberCandidates(upper).filter(candidate => candidate.roofRole === 'rafter');
-const orderedCoincidentRafters = orderedRoofBuildCandidates([...lowerRafters, ...upperRafters]);
+const orderedCoincidentRafters = orderedRoofBuildCandidates([...upperRafters, ...lowerRafters]);
 assert.equal(
   orderedCoincidentRafters[0].roofRegionKey,
-  upper.key,
-  'ROOF placement must prefer the higher stacked-storey candidate when X/Z footprints coincide'
+  lower.key,
+  'Coincident stacked ROOF targets must stay on the established lower support instead of jumping upward merely because upper FRAMEs exist'
 );
 assert.ok(
-  orderedCoincidentRafters.slice(0, upperRafters.length).every(candidate => candidate.roofRegionKey === upper.key),
-  'All upper-storey rafters must sort ahead of coincident lower-storey rafters'
+  orderedCoincidentRafters.slice(0, lowerRafters.length).every(candidate => candidate.roofRegionKey === lower.key),
+  'All lower-storey candidates must win exact stacked-plan ties until that roof is occupied/completed'
+);
+
+const lowerRidge = roofMemberCandidates(lower)
+  .find(candidate => candidate.roofRole === 'ridge');
+lowerRidge.raftersComplete = true;
+const unrelatedUpperRafter = { ...upperRafters[0], raftersComplete: false };
+const regionLocalSequence = orderedRoofBuildCandidates([unrelatedUpperRafter, lowerRidge]);
+assert.ok(
+  regionLocalSequence.includes(lowerRidge),
+  'Missing rafters on another storey must not globally suppress a valid ridge on the active completed support region'
 );
 
 const builtRoof = roofMemberCandidates(lower).map((candidate, index) => makeBuiltMember(candidate, 100 + index));
@@ -114,8 +126,8 @@ assert.equal(roofRegionComplete(lower, partialRoof), false);
 const partialPlans = collectStackedRoofRelocationPlans([lower, upper], partialRoof);
 assert.equal(
   partialPlans.length,
-  1,
-  'An in-progress lower roof must reflow once its matching completed upper frame becomes available'
+  0,
+  'An in-progress roof must remain where the player is building it until the whole physical assembly is complete'
 );
 
 // Adjacent bays share the two rafters on their common structural station. Raising only
@@ -129,7 +141,7 @@ const rightLower = makeRegion({
 });
 const rightUpper = makeRegion({
   key: 'roof:right-upper',
-  frameBaseY: upperFloorTop,
+  frameBaseY: upperFrameBase,
   frameTopY: upperFrameTop,
   offsetX: PHYSICAL_LOG.length
 });
@@ -162,11 +174,12 @@ const floors = [
     yaw: 0, baseY: upperFloorBase, topY: upperFloorTop, storey: 1
   }
 ];
+assert.equal(frameSeatYForFloor(floors[1]), upperFrameBase);
 const frames = [
   { id: 10, mode: 'frame', active: true, x: -PHYSICAL_LOG.halfLength, z: 0, baseY: groundFloorTop, topY: lowerFrameTop, storey: 0 },
   { id: 11, mode: 'frame', active: true, x: PHYSICAL_LOG.halfLength, z: 0, baseY: groundFloorTop, topY: lowerFrameTop, storey: 0 },
-  { id: 20, mode: 'frame', active: true, x: -PHYSICAL_LOG.halfLength, z: 0, baseY: upperFloorTop, topY: upperFrameTop, storey: 0 },
-  { id: 21, mode: 'frame', active: true, x: PHYSICAL_LOG.halfLength, z: 0, baseY: upperFloorTop, topY: upperFrameTop, storey: 0 }
+  { id: 20, mode: 'frame', active: true, x: -PHYSICAL_LOG.halfLength, z: 0, baseY: upperFrameBase, topY: upperFrameTop, storey: 0 },
+  { id: 21, mode: 'frame', active: true, x: PHYSICAL_LOG.halfLength, z: 0, baseY: upperFrameBase, topY: upperFrameTop, storey: 0 }
 ];
 const physicalLogs = {
   builtLogs: [...floors, ...frames, ...builtRoof],
@@ -204,7 +217,7 @@ assert.equal(roofQuery.cacheRevision, -1);
 assert.equal(roofRegionComplete(lower, builtRoof), false, 'Moved members must no longer satisfy the lower roof level');
 assert.equal(roofRegionComplete(upper, builtRoof), true, 'Moved members must satisfy the new highest supported roof level');
 assert.ok(builtRoof.every(member => member.storey === 1), 'Relocated roof members must inherit the upper storey identity');
-assert.equal(frames.find(frame => frame.id === 20)?.storey, 1, 'Upper FRAME metadata must inherit its supporting floor storey');
+assert.equal(frames.find(frame => frame.id === 20)?.storey, 1, 'Upper FRAME metadata must inherit its beam-interlocked supporting floor storey');
 
 assert.equal(roofThatchSystem.thatched.has(lowerPanel.id), false);
 assert.equal(roofThatchSystem.thatched.has(upperPanel.id), true);
@@ -233,12 +246,12 @@ const partialReflow = new StackedRoofReflowSystem({
   roofQuery: partialRoofQuery
 });
 const partialResult = partialReflow.sync();
-assert.equal(partialResult.moved, true);
-assert.equal(partialResult.members, 2, 'Only the already-built partial roof members should relocate');
-assert.equal(roofRegionHasMembers(lower, partialRoof), false);
-assert.equal(roofRegionHasMembers(upper, partialRoof), true);
+assert.equal(partialResult.moved, false, 'Partial roofs must not be repositioned mid-build');
+assert.equal(partialResult.members, 0);
+assert.equal(roofRegionHasMembers(lower, partialRoof), true);
+assert.equal(roofRegionHasMembers(upper, partialRoof), false);
 
 const stable = reflow.sync();
 assert.equal(stable.moved, false, 'Reflow must be idempotent until the structure changes again');
 
-console.log('Flush stacked frames, upper roof priority, partial roof reflow and shared-rafter safety verified.');
+console.log('Interlocked stacked frames, stable lower roof targeting, complete roof reflow and shared-rafter safety verified.');
