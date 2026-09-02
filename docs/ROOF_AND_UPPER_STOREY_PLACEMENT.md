@@ -37,10 +37,17 @@ the roof instead of being deleted, refunded or requiring the player to spend Gra
 
 Reflow is footprint-scoped and height-independent. Matching lower and upper roof regions
 must describe the same X/Z plan geometry and compatible roof-member lengths/orientation.
-This lets individual bays of stepped or multi-bay structures rise independently while
-preventing a roof from jumping to an unrelated nearby frame. The roof does not move while
-a new storey is only partially framed; it waits for the higher closed support ring so the
-result remains structurally readable.
+This lets individual independent roof sections rise while preventing a roof from jumping
+to an unrelated nearby frame. The roof does not move while a new storey is only partially
+framed; it waits for the higher closed support ring so the result remains structurally
+readable.
+
+Adjacent multi-bay roofs can share physical boundary rafters. Those connected bays are
+therefore treated as one roof assembly for elevation changes: a bay cannot rise if doing
+so would steal a shared rafter from a completed lower neighbour. Every completed bay that
+uses a shared member must have a compatible upper destination at the same elevation before
+that connected roof section moves. This preserves one physical member per structural edge
+and avoids duplicate or disappearing rafters on stepped and expanding buildings.
 
 FRAME and RAW support members inherit storey metadata from the floor level that supports
 them. Roof members inherit the target storey when they reflow. Save capture therefore
@@ -69,6 +76,8 @@ searching unrelated distant buildings.
 - stacked roof regions match by plan geometry rather than frame IDs or height;
 - a complete lower roof moves to the highest matching supported storey;
 - all four rafters and the ridge move as one existing physical assembly;
+- a partially raised multi-bay roof cannot steal a shared rafter from a lower neighbour;
+- connected bays with shared members may rise together only to one compatible elevation;
 - migrated roof members inherit the upper storey identity;
 - existing thatch migrates to the new panel IDs without a Grass refund/rebuild cycle;
 - reflow invalidates structure/roof caches and is idempotent until the structure changes.
