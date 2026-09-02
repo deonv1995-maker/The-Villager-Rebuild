@@ -65,6 +65,10 @@ const regions = roofQuery.getRegions({ x: 0, z: 0 });
 assert.equal(regions.length, 1, 'A closed four-frame and RAW-beam structure must resolve one roof region');
 const region = regions[0];
 assert.equal(pointInsideRoofRegion(region, { x: 0, z: 0 }), true, 'Region centre must be recognized as interior');
+assert.ok(
+  roofQuery.findStoreyRegion(new THREE.Vector3(0, 0, 0)),
+  'A Ranger standing on the lower level must resolve the closed structural storey around them'
+);
 
 const members = roofMemberCandidates(region);
 assert.equal(members.length, 5, 'A basic gable roof must require four rafters and one ridge');
@@ -205,6 +209,47 @@ physicalLogs.builtLogs.push({
   centerY: 1.4,
   root: farRoot
 });
+
+const groundFloorRoot = new THREE.Group();
+const groundFloorMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(PHYSICAL_LOG.length, 0.08, PHYSICAL_LOG.length),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+groundFloorRoot.position.set(0, 0.04, 0);
+groundFloorRoot.add(groundFloorMesh);
+physicalLogs.builtLogs.push({
+  id: 32,
+  mode: 'floor',
+  active: true,
+  x: 0,
+  z: 0,
+  baseY: 0,
+  centerY: 0.04,
+  topY: 0.08,
+  storey: 0,
+  root: groundFloorRoot
+});
+
+const upperFloorY = region.frameTopY + PHYSICAL_LOG.radius;
+const upperFloorRoot = new THREE.Group();
+const upperFloorMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(PHYSICAL_LOG.length, 0.08, PHYSICAL_LOG.length),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+upperFloorRoot.position.set(0, upperFloorY, 0);
+upperFloorRoot.add(upperFloorMesh);
+physicalLogs.builtLogs.push({
+  id: 33,
+  mode: 'floor',
+  active: true,
+  x: 0,
+  z: 0,
+  baseY: upperFloorY - 0.04,
+  centerY: upperFloorY,
+  topY: upperFloorY + 0.04,
+  storey: 1,
+  root: upperFloorRoot
+});
 physicalLogs.structureRevision += 1;
 
 const cameraPosition = new THREE.Vector3(0, 3, 6);
@@ -236,9 +281,79 @@ assert.equal(
   'Camera-side structure must become semi-transparent while indoors'
 );
 assert.equal(farMesh.material.opacity, 1, 'Far-side structure must remain fully solid while indoors');
+assert.equal(
+  Math.abs(upperFloorMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
+  true,
+  'An upper floor above the Ranger must fade while the Ranger occupies the lower storey'
+);
+assert.equal(
+  groundFloorMesh.material.opacity,
+  1,
+  'The floor supporting the Ranger must remain solid while the upper floor fades'
+);
 
-occlusion.update(new THREE.Vector3(20, 0, 20), camera);
-assert.equal(nearMesh.material.opacity, 1, 'Leaving the structure must restore camera-side materials to solid');
+const outsidePlayer = new THREE.Vector3(20, 0, 20);
+const exteriorBlockerRoot = new THREE.Group();
+const exteriorBlockerMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 3, 0.4),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+exteriorBlockerRoot.position.set(20, 1.4, 23);
+exteriorBlockerRoot.add(exteriorBlockerMesh);
+physicalLogs.builtLogs.push({
+  id: 34,
+  mode: 'wall',
+  active: true,
+  x: 20,
+  z: 23,
+  baseY: -0.1,
+  centerY: 1.4,
+  topY: 2.9,
+  root: exteriorBlockerRoot
+});
+
+const exteriorSideRoot = new THREE.Group();
+const exteriorSideMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 3, 0.4),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+exteriorSideRoot.position.set(23, 1.4, 23);
+exteriorSideRoot.add(exteriorSideMesh);
+physicalLogs.builtLogs.push({
+  id: 35,
+  mode: 'wall',
+  active: true,
+  x: 23,
+  z: 23,
+  baseY: -0.1,
+  centerY: 1.4,
+  topY: 2.9,
+  root: exteriorSideRoot
+});
+physicalLogs.structureRevision += 1;
+
+camera.position.set(20, 3, 26);
+camera.lookAt(20, 1, 20);
+camera.updateMatrixWorld(true);
+occlusion.update(outsidePlayer, camera);
+assert.equal(nearMesh.material.opacity, 1, 'Leaving the structure must restore interior camera-side materials to solid');
+assert.equal(upperFloorMesh.material.opacity, 1, 'Leaving the lower storey must restore its upper floor to solid');
+assert.equal(
+  Math.abs(exteriorBlockerMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
+  true,
+  'A building part between the camera and an outside Ranger must fade even when the Ranger is not indoors'
+);
+assert.equal(
+  exteriorSideMesh.material.opacity,
+  1,
+  'Nearby building parts that do not cover the outside Ranger must remain solid'
+);
+
+camera.position.set(40, 3, 46);
+camera.lookAt(40, 1, 40);
+camera.updateMatrixWorld(true);
+occlusion.update(new THREE.Vector3(40, 0, 40), camera);
+assert.equal(exteriorBlockerMesh.material.opacity, 1, 'Moving away from an exterior blocker must restore its original material');
 
 const removedRoof = physicalLogs.builtLogs.find(entry => entry.mode === 'roof');
 removedRoof.active = false;
@@ -247,4 +362,4 @@ thatch.sync();
 assert.equal(thatch.getVisualEntries().length, 0, 'Removing required roof framing must remove dependent thatch panels');
 assert.equal(inventory.get('grass'), 8, 'Invalidated thatch panels must refund their four-Grass costs');
 
-console.log('Thatch roof cost, panel targeting, structural dependency and interior camera-side fading verified');
+console.log('Thatch roof cost, storey-aware upper-floor fading, exterior structure occlusion and material restoration verified');
