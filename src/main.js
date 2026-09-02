@@ -9,6 +9,7 @@ import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
+import { StackedRoofReflowSystem } from './world/StackedRoofReflowSystem.js';
 import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
 const canvas = document.getElementById('game-canvas');
@@ -38,9 +39,15 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
 
     const roofQuery = new StructureRoofQuery({ physicalLogs: game.physicalLogs });
     const roofThatch = new RoofThatchController({ game, roofQuery });
-    roofThatch.start();
+    const stackedRoofReflow = new StackedRoofReflowSystem({
+      physicalLogs: game.physicalLogs,
+      roofQuery,
+      roofThatchSystem: roofThatch.system
+    });
     game.roofQuery = roofQuery;
     game.roofThatch = roofThatch;
+    game.stackedRoofReflow = stackedRoofReflow;
+    roofThatch.start();
 
     const structureInteriorOcclusion = new StructureInteriorOcclusionController({
       game,
