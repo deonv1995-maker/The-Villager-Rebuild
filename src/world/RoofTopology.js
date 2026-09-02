@@ -135,6 +135,7 @@ function closedLoop(component, topTolerance) {
   };
 
   const averageTop = component.reduce((sum, pair) => sum + pair.topY, 0) / component.length;
+  const averageBase = component.reduce((sum, pair) => sum + pair.baseY, 0) / component.length;
   if (component.some(pair => Math.abs(pair.topY - averageTop) > topTolerance)) return null;
 
   for (const pair of component) {
@@ -164,7 +165,7 @@ function closedLoop(component, topTolerance) {
   }
 
   if (current !== start || ordered.length !== ids.length) return null;
-  return { ordered, averageTop };
+  return { ordered, averageBase, averageTop };
 }
 
 function boundaryPathExists(component, projectedById, startId, endId, axisKey, boundaryValue, tolerance) {
@@ -261,6 +262,7 @@ function frameBoundsRegions(component, {
   if (frameList.length < 4) return [];
 
   const averageTop = frameList.reduce((sum, frame) => sum + frame.topY, 0) / frameList.length;
+  const averageBase = frameList.reduce((sum, frame) => sum + frame.baseY, 0) / frameList.length;
   if (frameList.some(frame => Math.abs(frame.topY - averageTop) > topTolerance)) return [];
 
   const center = frameList.reduce(
@@ -397,6 +399,8 @@ function frameBoundsRegions(component, {
       key: `roof:bounds:${anchorIds.join('-')}`,
       anchorIds,
       sourceBeamKeys,
+      frameBaseY: averageBase,
+      frameTopY: averageTop,
       a: worldPoint(center, best.frameBasis, start.u, best.minV),
       b: worldPoint(center, best.frameBasis, end.u, best.minV),
       c: worldPoint(center, best.frameBasis, start.u, best.maxV),
@@ -483,6 +487,7 @@ function frameCellRegions(component, {
 
         const cellFrames = anchorIds.map(id => frames.get(id));
         const averageTop = cellFrames.reduce((sum, frame) => sum + frame.topY, 0) / cellFrames.length;
+        const averageBase = cellFrames.reduce((sum, frame) => sum + frame.baseY, 0) / cellFrames.length;
         if (cellFrames.some(frame => Math.abs(frame.topY - averageTop) > topTolerance)) continue;
         const center = cellFrames.reduce(
           (sum, frame) => ({ x: sum.x + frame.x, z: sum.z + frame.z }),
@@ -520,6 +525,8 @@ function frameCellRegions(component, {
           key: `roof:cell:${identity}`,
           anchorIds,
           sourceBeamKeys,
+          frameBaseY: averageBase,
+          frameTopY: averageTop,
           a: worldPoint(center, frameBasis, minU, minV),
           b: worldPoint(center, frameBasis, maxU, minV),
           c: worldPoint(center, frameBasis, minU, maxV),
@@ -646,6 +653,8 @@ export function collectRoofRegions(pairs, {
       key: `roof:${beamKeys.join('|')}`,
       anchorIds,
       sourceBeamKeys: beamKeys,
+      frameBaseY: loop.averageBase,
+      frameTopY: loop.averageTop,
       a: worldPoint(center, best.frameBasis, best.minU, best.minV),
       b: worldPoint(center, best.frameBasis, best.maxU, best.minV),
       c: worldPoint(center, best.frameBasis, best.minU, best.maxV),

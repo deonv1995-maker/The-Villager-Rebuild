@@ -293,6 +293,7 @@ const captureConstruction = game => ({
       baseY: entry.baseY,
       centerY: entry.centerY,
       topY: entry.topY,
+      storey: entry.storey ?? 0,
       rawKey: entry.rawKey,
       snapKind: entry.snapKind,
       roofKey: entry.roofKey,
@@ -379,7 +380,7 @@ const registerPersistedLogCollision = (game, mode, placement, root) => {
     type: 'placed-log',
     label,
     bottomY: placement.snapKind ? placement.y - PHYSICAL_LOG.radius : placement.ground,
-    topY: placement.y + PHYSICAL_LOG.radius * 2,
+    topY: placement.y + PHYSICAL_LOG.radius,
     standable: !overheadFrameBeam,
     supportHalfX: overheadFrameBeam ? 0 : PHYSICAL_LOG.halfLength - 0.14,
     supportHalfZ: overheadFrameBeam ? 0 : PHYSICAL_LOG.radius * 0.7,
@@ -423,7 +424,8 @@ const restoreConstruction = (game, state) => {
       roofKey: saved.roofKey ?? null,
       roofRegionKey: saved.roofRegionKey ?? null,
       roofRole: saved.roofRole ?? null,
-      roofLength: Number.isFinite(saved.roofLength) ? saved.roofLength : null
+      roofLength: Number.isFinite(saved.roofLength) ? saved.roofLength : null,
+      storey: clampInteger(saved.storey)
     };
     const collisionHandle = registerPersistedLogCollision(game, saved.mode, placement, root);
     const built = {
@@ -444,10 +446,11 @@ const restoreConstruction = (game, state) => {
       roofKey: placement.roofKey,
       roofRegionKey: placement.roofRegionKey,
       roofRole: placement.roofRole,
-      roofLength: placement.roofLength
+      roofLength: placement.roofLength,
+      storey: placement.storey
     };
     physicalLogs.builtLogs.push(built);
-    if (built.mode === 'floor') {
+    if (built.mode === 'floor' && built.storey === 0) {
       built.supportRoot = physicalLogs.floorSupports.createForFloor(placement, id);
     }
   }

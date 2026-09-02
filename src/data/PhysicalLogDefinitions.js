@@ -7,13 +7,14 @@ const FRAME_PAIR_SPACING_TOLERANCE = CONSTRUCTION_GRID_STEP * 0.6;
 const FRAME_SNAP_RANGE = LOG_LENGTH + FRAME_PAIR_SPACING_TOLERANCE;
 const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
+const PLACEMENT_REACH = 1.9;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
   halfLength: LOG_LENGTH * 0.5,
   radius: 0.27,
   pickupRange: 2.8,
-  placeDistance: 1.9,
+  placeDistance: PLACEMENT_REACH,
   dropDistance: 1.62,
   gridStep: CONSTRUCTION_GRID_STEP,
   yawStep: Math.PI / 4,
@@ -26,7 +27,10 @@ export const PHYSICAL_LOG = Object.freeze({
   floorSnapRange: 1.45,
   wallSnapRange: 1.7,
   angleSnapRange: 1.85,
-  roofSnapRange: 3.15,
+  // From outside a full bay, the ordered ROOF workflow must still reach the far
+  // rafter after nearer members have been placed. Keep topology local, but allow
+  // interaction to span one physical Log plus the normal forward placement reach.
+  roofSnapRange: LOG_LENGTH + PLACEMENT_REACH,
   // FRAME placement is deliberately stricter than recognition of an already-valid
   // frame pair. This prevents floor-strip seams becoming structural posts while
   // allowing a closed bay to absorb the small accumulated drift of snapped floors.
