@@ -316,4 +316,31 @@ assert.ok(
   'The open middle must not create interior FRAME stations around the hole'
 );
 
-console.log('Archived full-Log FRAME grid, exact floor squares, outer-only open footprints and Ranger clearance verified.');
+// A stepped L footprint is open to the outside at its recess, so the concave
+// corner is a real structural station. It must survive while enclosed holes above
+// remain suppressed.
+const steppedFloors = [];
+let steppedId = 200;
+for (const [bayX, bayZ] of [[0, 0], [1, 0], [0, 1]]) {
+  for (let strip = 0; strip < 3; strip += 1) {
+    steppedFloors.push({
+      ...makeFloor(steppedId++, bayZ * length + strip * width),
+      x: bayX * length
+    });
+  }
+}
+const steppedCorners = collectOuterStructuralFloorCorners(steppedFloors);
+assert.equal(
+  steppedCorners.length,
+  8,
+  'Three full floor bays in an L footprint must expose all eight exterior FRAME stations'
+);
+assert.ok(
+  steppedCorners.some(corner =>
+    Math.abs(corner.x - half) < 0.000001 &&
+    Math.abs(corner.z - (length - width * 0.5)) < 0.000001
+  ),
+  'The recessed corner behind an extrusion must remain available for the next FRAME layer'
+);
+
+console.log('Archived full-Log FRAME grid, exact floor squares, stepped exteriors, open footprints and Ranger clearance verified.');

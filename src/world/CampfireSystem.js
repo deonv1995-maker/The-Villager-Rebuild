@@ -124,9 +124,16 @@ export class CampfireSystem {
     if (distance > DEMOLITION_RADIUS) return null;
     return {
       type: 'campfire',
+      id: 'campfire',
       label: this.definition.label,
       icon: 'hammer',
-      actionLabel: 'Demolish campfire'
+      actionLabel: 'Demolish campfire',
+      root: this.root,
+      position: {
+        x: this.root.position.x,
+        y: this.root.position.y,
+        z: this.root.position.z
+      }
     };
   }
 

@@ -193,6 +193,58 @@ assert.deepEqual(
   'Per-bay multi-frame roof identities must remain deterministic when frame-pair iteration reverses'
 );
 
+// A stepped L structure is not one rectangular envelope. Once each extension bay
+// has its four physical RAW top beams, recover three local roof cells and never
+// bridge the missing fourth bay with an invented roof.
+const steppedRoofFrames = [
+  makeFrame(40, 0, 0),
+  makeFrame(41, PHYSICAL_LOG.length, 0),
+  makeFrame(42, PHYSICAL_LOG.length * 2, 0),
+  makeFrame(43, 0, PHYSICAL_LOG.length),
+  makeFrame(44, PHYSICAL_LOG.length, PHYSICAL_LOG.length),
+  makeFrame(45, PHYSICAL_LOG.length * 2, PHYSICAL_LOG.length),
+  makeFrame(46, 0, PHYSICAL_LOG.length * 2),
+  makeFrame(47, PHYSICAL_LOG.length, PHYSICAL_LOG.length * 2)
+];
+const steppedRoofBeamKeys = new Set([
+  'beam:40-41',
+  'beam:41-42',
+  'beam:43-44',
+  'beam:44-45',
+  'beam:46-47',
+  'beam:40-43',
+  'beam:43-46',
+  'beam:41-44',
+  'beam:44-47',
+  'beam:42-45'
+]);
+const steppedRoofPairs = collectLocalRoofFramePairs(
+  steppedRoofFrames,
+  { x: PHYSICAL_LOG.length, z: PHYSICAL_LOG.length },
+  { ...pairOptions, occupiedBeamKeys: steppedRoofBeamKeys }
+);
+const steppedRoofRegions = collectRoofRegions(steppedRoofPairs, regionOptions);
+assert.equal(
+  steppedRoofRegions.length,
+  3,
+  'A fully top-beamed L footprint must resolve exactly its three occupied roof bays'
+);
+assert.ok(
+  steppedRoofRegions.every(region => region.topology === 'frame-cell'),
+  'Branched stepped roofing must use local framed cells instead of a rectangular bounding roof'
+);
+assert.deepEqual(
+  steppedRoofRegions.map(region => region.anchorIds),
+  [[40, 41, 43, 44], [41, 42, 44, 45], [43, 44, 46, 47]],
+  'Each stepped roof bay must stay anchored to its own four posts'
+);
+assert.ok(
+  steppedRoofRegions.every(region =>
+    region.sourceBeamKeys.length === 4 && roofMemberCandidates(region).length === 5
+  ),
+  'Every stepped roof bay must retain the physical four-beam support and ordered five-member roof sequence'
+);
+
 const denseFrames = Array.from({ length: 240 }, (_, index) => {
   const column = index % 20;
   const row = Math.floor(index / 20);
@@ -234,7 +286,9 @@ for (const requirement of [
   'ids.some(id => adjacency.get(id)?.length !== 2)',
   'collectBoundaryStations',
   'frameBoundsRegions',
+  'frameCellRegions',
   "topology: 'frame-bounds'",
+  "topology: 'frame-cell'",
   'regions.push(...bounded)',
   'sourceBeamKeys',
   'candidate.spanU > best.spanU + 0.01',

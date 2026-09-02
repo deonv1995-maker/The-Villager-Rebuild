@@ -353,7 +353,7 @@ for (const requirement of [
   "'roof-ridge'",
   "type: 'placed-log'",
   'getDemolitionTarget(playerPosition)',
-  'demolish(playerPosition)'
+  'demolish(playerPosition, targetId = null)'
 ]) {
   assert.ok(logSource.includes(requirement), `Physical log system is missing contract: ${requirement}`);
 }
