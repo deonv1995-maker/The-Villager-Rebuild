@@ -11,6 +11,8 @@ import { WorldChunkSystem } from './WorldChunkSystem.js';
 import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
 import { WaterVisualSystem } from './WaterVisualSystem.js';
 
+const UNBOUNDED_SUPPORT_REFERENCE = Number.MAX_SAFE_INTEGER;
+
 export class TestIslandSystem {
   constructor(scene) {
     this.scene = scene;
@@ -100,8 +102,8 @@ export class TestIslandSystem {
   heightAt(x, z) {
     const base = this.constructionHeightAt(x, z);
     return this.collision.supportHeightAt(x, z, base, {
-      referenceY: Number.POSITIVE_INFINITY,
-      maxStepUp: Number.POSITIVE_INFINITY
+      referenceY: UNBOUNDED_SUPPORT_REFERENCE,
+      maxStepUp: UNBOUNDED_SUPPORT_REFERENCE
     });
   }
 
@@ -171,6 +173,7 @@ export class TestIslandSystem {
     shrubs.geometry?.dispose?.();
     if (Array.isArray(shrubs.material)) shrubs.material.forEach(material => material?.dispose?.());
     else shrubs.material?.dispose?.();
+    this.foundationRoot = null;
   }
 
   update(dt, playerPosition, camera = null) {
