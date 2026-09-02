@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
-import { RoofThatchSystem, THATCH_GRASS_COST } from '../src/world/RoofThatchSystem.js';
+import {
+  RoofThatchSystem,
+  THATCH_GRASS_COST,
+  roofPanelEdgeHasNeighbour
+} from '../src/world/RoofThatchSystem.js';
 import {
   StructureRoofQuery,
   pointInsideRoofRegion,
@@ -84,6 +88,25 @@ physicalLogs.structureRevision += 1;
 const panels = roofQuery.getCompletedPanels({ x: 0, z: 0 });
 assert.equal(panels.length, 2, 'A completed gable roof must expose two thatch panels, one per slope');
 assert.notEqual(panels[0].id, panels[1].id, 'Each roof slope needs a stable unique panel identity');
+const adjoiningPanel = {
+  id: 'adjoining-roof-bay',
+  corners: [
+    panels[0].corners[1],
+    { x: panels[0].corners[1].x + PHYSICAL_LOG.length, y: panels[0].corners[1].y, z: panels[0].corners[1].z },
+    { x: panels[0].corners[2].x + PHYSICAL_LOG.length, y: panels[0].corners[2].y, z: panels[0].corners[2].z },
+    panels[0].corners[2]
+  ]
+};
+assert.equal(
+  roofPanelEdgeHasNeighbour(panels[0], [...panels, adjoiningPanel], 1, 2),
+  true,
+  'A shared multi-bay slope edge must be recognized so internal gable trim can be suppressed'
+);
+assert.equal(
+  roofPanelEdgeHasNeighbour(panels[0], [...panels, adjoiningPanel], 0, 3),
+  false,
+  'An exposed outer slope edge must retain its gable trim'
+);
 
 const inventory = new InventorySystem();
 inventory.add('grass', THATCH_GRASS_COST * 2);
@@ -98,12 +121,51 @@ const firstBuild = thatch.thatch(firstTarget.id, playerPosition);
 assert.equal(firstBuild?.built, true, 'First roof panel must accept thatch when four Grass are available');
 assert.equal(inventory.get('grass'), 4, 'Thatching one panel must consume exactly four Grass');
 assert.equal(thatch.getVisualEntries().length, 1, 'A thatched panel must create one structure-owned visual entry');
+const firstVisual = thatch.thatched.get(firstTarget.id)?.root;
+assert.ok(firstVisual, 'A thatched panel must retain its finished visual root');
+const firstVisualNames = new Set();
+firstVisual.traverse(object => firstVisualNames.add(object.name));
+assert.ok(firstVisualNames.has('thatch-underlay'), 'Finished thatch needs a darker depth underlay');
+for (let index = 0; index < 4; index += 1) {
+  assert.ok(firstVisualNames.has(`thatch-course-${index}`), `Finished thatch is missing overlapping course ${index}`);
+  assert.ok(firstVisualNames.has(`thatch-course-fringe-${index}`), `Finished thatch is missing straw fringe ${index}`);
+}
+const eaveFringe = firstVisual.getObjectByName('thatch-course-fringe-0');
+const fringePositions = eaveFringe?.geometry?.getAttribute('position');
+assert.ok(fringePositions && fringePositions.count >= 18, 'The eave fringe needs multiple visible straw tufts');
+const firstTuftBase = new THREE.Vector3(
+  (fringePositions.getX(0) + fringePositions.getX(1)) * 0.5,
+  (fringePositions.getY(0) + fringePositions.getY(1)) * 0.5,
+  (fringePositions.getZ(0) + fringePositions.getZ(1)) * 0.5
+);
+const firstTuftTip = new THREE.Vector3(
+  fringePositions.getX(2),
+  fringePositions.getY(2),
+  fringePositions.getZ(2)
+);
+assert.ok(firstTuftTip.distanceTo(firstTuftBase) > 0.09, 'The lowest straw fringe must project beyond the eave');
+assert.ok(firstVisualNames.has('thatch-eave-fascia'), 'Finished thatch needs a timber eave fascia');
+assert.ok(firstVisualNames.has('thatch-gable-trim-left'), 'Finished thatch needs left gable rake trim');
+assert.ok(firstVisualNames.has('thatch-gable-trim-right'), 'Finished thatch needs right gable rake trim');
+assert.ok(firstVisualNames.has('thatch-ridge-cap'), 'The canonical first roof side must own one shared ridge cap');
+assert.equal(
+  [...firstVisualNames].filter(name => name.startsWith('thatch-ridge-tie-')).length,
+  3,
+  'The finished ridge cap must be secured by three visible rope ties'
+);
 
 const secondTarget = thatch.getTarget(playerPosition);
 assert.ok(secondTarget && secondTarget.id !== firstTarget.id, 'After one side is covered, targeting must advance to the remaining roof panel');
 assert.equal(thatch.thatch(secondTarget.id, playerPosition)?.built, true);
 assert.equal(inventory.get('grass'), 0, 'Two basic roof panels must consume eight Grass total');
 assert.equal(thatch.getTarget(playerPosition), null, 'Fully thatched basic roof must have no open thatch target');
+const secondVisualNames = new Set();
+thatch.thatched.get(secondTarget.id)?.root.traverse(object => secondVisualNames.add(object.name));
+assert.equal(
+  secondVisualNames.has('thatch-ridge-cap'),
+  false,
+  'The opposite roof side must not duplicate the shared ridge cap'
+);
 
 const nearRoot = new THREE.Group();
 const nearMesh = new THREE.Mesh(
