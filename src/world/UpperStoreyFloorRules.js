@@ -1,6 +1,12 @@
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { frameSeatYForFloor } from './FloorFrameTopology.js';
 
-const pointInsideRegion = (point, region, tolerance = 0.18) => {
+const finitePoint = point => (
+  Number.isFinite(point?.x) && Number.isFinite(point?.z)
+);
+
+const regionAxes = region => {
+  if (!finitePoint(region?.a) || !finitePoint(region?.b) || !finitePoint(region?.c)) return null;
   const along = {
     x: region.b.x - region.a.x,
     z: region.b.z - region.a.z
@@ -9,33 +15,38 @@ const pointInsideRegion = (point, region, tolerance = 0.18) => {
     x: region.c.x - region.a.x,
     z: region.c.z - region.a.z
   };
-  const alongLengthSq = along.x * along.x + along.z * along.z;
-  const acrossLengthSq = across.x * across.x + across.z * across.z;
-  if (alongLengthSq <= 0.001 || acrossLengthSq <= 0.001) return false;
+  const alongLength = Math.hypot(along.x, along.z);
+  const acrossLength = Math.hypot(across.x, across.z);
+  if (alongLength <= 0.001 || acrossLength <= 0.001) return null;
+  return { along, across, alongLength, acrossLength };
+};
 
-  const offset = {
-    x: point.x - region.a.x,
-    z: point.z - region.a.z
-  };
-  const u = (offset.x * along.x + offset.z * along.z) / alongLengthSq;
-  const v = (offset.x * across.x + offset.z * across.z) / acrossLengthSq;
-  const uTolerance = tolerance / Math.sqrt(alongLengthSq);
-  const vTolerance = tolerance / Math.sqrt(acrossLengthSq);
-  return (
-    u >= -uTolerance && u <= 1 + uTolerance &&
-    v >= -vTolerance && v <= 1 + vTolerance
-  );
+const gridCount = (span, cellSize) => Math.max(1, Math.round(span / cellSize));
+
+const supportStoreyForRegion = (region, floors, levelTolerance) => {
+  if (Number.isFinite(region?.storey)) return Math.max(0, Math.round(region.storey));
+
+  let storey = null;
+  for (const floor of floors ?? []) {
+    if (floor?.active === false || floor?.mode !== 'floor') continue;
+    if (Math.abs(frameSeatYForFloor(floor) - region.frameBaseY) > levelTolerance) continue;
+    const floorStorey = Number.isFinite(floor.storey) ? Math.max(0, Math.round(floor.storey)) : 0;
+    storey = storey === null ? floorStorey : Math.max(storey, floorStorey);
+  }
+  return storey ?? 0;
 };
 
 /**
- * Project only the floor strips that already exist inside a closed top-beam region.
- * This makes upper storeys follow the supported footprint below, including stepped
- * footprints and deliberate interior openings, without inventing centre posts.
+ * Fillable upper-floor slots are owned by the physically closed FRAME + RAW perimeter,
+ * not by a duplicate lattice of floor strips or interior support beams below it.
  *
- * The walking surface is seated on top of the RAW perimeter beam while structural
- * FRAME placement recovers the beam centreline through frameSeatYForFloor. Keeping
- * those two heights distinct removes the visible stacked-post gap without lowering
- * the actual upstairs walking surface into the support beam.
+ * Each closed structural region is subdivided into the canonical split-log floor grid:
+ * one physical Log length along the bay and one-third of a Log across it. This keeps
+ * simple rooms, multi-bay buildings and stepped footprints on the same structural
+ * authority while letting the player deliberately leave any upstairs slot unbuilt.
+ *
+ * Existing floors are consulted only to recover the supporting storey identity when
+ * older runtime/save data does not expose storey metadata on the region itself.
  */
 export function collectUpperStoreyFloorCandidates(regions, floors, {
   floorTopLift,
@@ -46,25 +57,37 @@ export function collectUpperStoreyFloorCandidates(regions, floors, {
 
   for (const region of regions ?? []) {
     if (!Number.isFinite(region.frameBaseY) || !Number.isFinite(region.frameTopY)) continue;
-    for (const floor of floors ?? []) {
-      if (floor?.active === false || floor?.mode !== 'floor') continue;
-      if (Math.abs(frameSeatYForFloor(floor) - region.frameBaseY) > levelTolerance) continue;
-      if (!pointInsideRegion(floor, region)) continue;
+    const axes = regionAxes(region);
+    if (!axes) continue;
 
-      const topY = region.frameTopY + beamRadius;
-      const baseY = topY - floorTopLift;
-      const key = `${floor.id}:${Math.round(topY * 1000)}`;
-      candidates.set(key, {
-        x: floor.x,
-        z: floor.z,
-        yaw: floor.yaw ?? region.ridgeYaw ?? 0,
-        baseY,
-        topY,
-        supportRegionKey: region.key,
-        sourceFloorId: floor.id,
-        storey: (floor.storey ?? 0) + 1,
-        snapKind: 'closed-frame-upper-floor'
-      });
+    const alongCount = gridCount(axes.alongLength, PHYSICAL_LOG.length);
+    const acrossCount = gridCount(axes.acrossLength, PHYSICAL_LOG.floorWidth);
+    const topY = region.frameTopY + beamRadius;
+    const baseY = topY - floorTopLift;
+    const storey = supportStoreyForRegion(region, floors, levelTolerance) + 1;
+    const yaw = Number.isFinite(region.ridgeYaw)
+      ? region.ridgeYaw
+      : Math.atan2(-axes.along.z, axes.along.x);
+
+    for (let alongIndex = 0; alongIndex < alongCount; alongIndex += 1) {
+      const alongT = (alongIndex + 0.5) / alongCount;
+      for (let acrossIndex = 0; acrossIndex < acrossCount; acrossIndex += 1) {
+        const acrossT = (acrossIndex + 0.5) / acrossCount;
+        const x = region.a.x + axes.along.x * alongT + axes.across.x * acrossT;
+        const z = region.a.z + axes.along.z * alongT + axes.across.z * acrossT;
+        const key = `${Math.round(x * 1000)}:${Math.round(z * 1000)}:${Math.round(topY * 1000)}`;
+        if (candidates.has(key)) continue;
+        candidates.set(key, {
+          x,
+          z,
+          yaw,
+          baseY,
+          topY,
+          supportRegionKey: region.key,
+          storey,
+          snapKind: 'closed-frame-upper-floor'
+        });
+      }
     }
   }
 
