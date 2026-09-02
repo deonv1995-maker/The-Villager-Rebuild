@@ -3,6 +3,7 @@ import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 
 const HEIGHT_EPSILON = 0.002;
 const TERRAIN_CHUNK_PREFIX = 'terrain-chunk-';
+const RENDER_CELL_PADDING_FACTOR = 0.6;
 
 export class ConstructionTerrainAdaptationSystem {
   constructor({ group, terrain, chunks = null }) {
@@ -15,6 +16,7 @@ export class ConstructionTerrainAdaptationSystem {
     this.floors = new Map();
     this.floorSignature = '';
     this.meshRecords = [];
+    this.renderSamplingPadding = 0;
     this.revision = 0;
     this.soilColor = new THREE.Color(0x72593d);
     this.tempWorldPosition = new THREE.Vector3();
@@ -22,6 +24,7 @@ export class ConstructionTerrainAdaptationSystem {
 
   captureTerrainMeshes() {
     this.meshRecords.length = 0;
+    this.renderSamplingPadding = 0;
     this.group.updateWorldMatrix(true, true);
 
     this.group.traverse(object => {
@@ -32,6 +35,8 @@ export class ConstructionTerrainAdaptationSystem {
       object.geometry.computeBoundingBox();
       const bounds = object.geometry.boundingBox;
       object.getWorldPosition(this.tempWorldPosition);
+      const renderSamplingPadding = this.#renderSamplingPadding(bounds, position);
+      this.renderSamplingPadding = Math.max(this.renderSamplingPadding, renderSamplingPadding);
 
       this.meshRecords.push({
         mesh: object,
@@ -41,6 +46,7 @@ export class ConstructionTerrainAdaptationSystem {
         naturalColors: color ? new Float32Array(color.array) : null,
         originX: this.tempWorldPosition.x,
         originZ: this.tempWorldPosition.z,
+        renderSamplingPadding,
         horizontalRadius: bounds
           ? Math.hypot((bounds.max.x - bounds.min.x) * 0.5, (bounds.max.z - bounds.min.z) * 0.5)
           : (this.chunks?.chunkSize ?? 72) * Math.SQRT1_2
@@ -100,6 +106,7 @@ export class ConstructionTerrainAdaptationSystem {
     const halfX = PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorTerrainCorePadding;
     const halfZ = PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorTerrainCorePadding;
     const blendDistance = PHYSICAL_LOG.floorTerrainBlendDistance;
+    const renderPadding = this.renderSamplingPadding;
     return {
       id: floor.id,
       x: floor.x,
@@ -111,7 +118,11 @@ export class ConstructionTerrainAdaptationSystem {
       halfX,
       halfZ,
       blendDistance,
-      influenceRadius: Math.hypot(halfX + blendDistance, halfZ + blendDistance)
+      renderPadding,
+      influenceRadius: Math.hypot(
+        halfX + blendDistance + renderPadding,
+        halfZ + blendDistance + renderPadding
+      )
     };
   }
 
@@ -174,7 +185,15 @@ export class ConstructionTerrainAdaptationSystem {
     let result = naturalY;
     for (const floor of floors) {
       if (naturalY <= floor.cutY + HEIGHT_EPSILON) continue;
-      const distance = this.#outsideDistance(floor, x, z);
+      // The world terrain is deliberately low-poly on mobile. If the logical cut is
+      // narrower than one render cell, an untouched triangle can bridge across the
+      // whole split-log floor even though heightAt() says the terrain was lowered.
+      // Expanding only the cut footprint by the captured render-cell radius keeps the
+      // rendered mesh, collision ground and vegetation projection on one shared surface.
+      const distance = Math.max(
+        0,
+        this.#outsideDistance(floor, x, z) - (floor.renderPadding ?? 0)
+      );
       if (distance > floor.blendDistance) continue;
       const t = this.#smoothstep01(distance / floor.blendDistance);
       const candidate = THREE.MathUtils.lerp(floor.cutY, naturalY, t);
@@ -193,6 +212,20 @@ export class ConstructionTerrainAdaptationSystem {
     const outsideX = Math.max(Math.abs(u) - floor.halfX, 0);
     const outsideZ = Math.max(Math.abs(v) - floor.halfZ, 0);
     return Math.hypot(outsideX, outsideZ);
+  }
+
+  #renderSamplingPadding(bounds, position) {
+    if (!bounds || !position?.count) return 0;
+    const side = Math.round(Math.sqrt(position.count));
+    if (side <= 1 || side * side !== position.count) return 0;
+
+    const spanX = Math.max(0, bounds.max.x - bounds.min.x);
+    const spanZ = Math.max(0, bounds.max.z - bounds.min.z);
+    const stepX = spanX / (side - 1);
+    const stepZ = spanZ / (side - 1);
+    if (!Number.isFinite(stepX) || !Number.isFinite(stepZ)) return 0;
+
+    return Math.hypot(stepX, stepZ) * RENDER_CELL_PADDING_FACTOR;
   }
 
   #smoothstep01(value) {
