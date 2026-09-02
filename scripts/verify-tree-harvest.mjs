@@ -118,7 +118,11 @@ for (const requirement of [
 ]) {
   assert(logSource.includes(requirement), `Physical log building path is missing contract: ${requirement}`);
 }
-assert(logSource.includes("ignore: obstacle => obstacle.type === 'placed-log'"), 'Level floor snapping must ignore only existing floor construction during clearance');
+assert(
+  logSource.includes('ignore: obstacle => this.#floorMayMeetObstacle(') &&
+  logSource.includes("if (!built || (built.mode !== 'frame' && built.mode !== 'wall')) return false;"),
+  'Level floor snapping may meet boundary frames/walls but must keep arbitrary placed Logs blocking clearance'
+);
 assert(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
 assert(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
 

@@ -5,7 +5,7 @@ const FLOOR_LEVEL_TOLERANCE = 0.38;
 const FLOOR_COMPONENT_GAP = 0.16;
 const PERPENDICULAR_DOT_TOLERANCE = 0.12;
 const STRUCTURAL_SPACING_TOLERANCE = 0.1;
-const OUTER_ENVELOPE_TOLERANCE = PHYSICAL_LOG.framePlacementSpacingTolerance;
+const STRUCTURAL_LATTICE_TOLERANCE = PHYSICAL_LOG.framePlacementSpacingTolerance;
 
 const axisYawDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -150,27 +150,92 @@ function componentEnvelope(component, frameBasis) {
   return { minX, maxX, minZ, maxZ };
 }
 
-function isOuterLatticeNode(node, frameBasis, envelope) {
+function isStructuralLatticeNode(node, frameBasis, envelope) {
   const local = project(node, frameBasis);
-  const onOuterEnvelope =
-    Math.abs(local.x - envelope.minX) <= OUTER_ENVELOPE_TOLERANCE ||
-    Math.abs(local.x - envelope.maxX) <= OUTER_ENVELOPE_TOLERANCE ||
-    Math.abs(local.z - envelope.minZ) <= OUTER_ENVELOPE_TOLERANCE ||
-    Math.abs(local.z - envelope.maxZ) <= OUTER_ENVELOPE_TOLERANCE;
-  if (!onOuterEnvelope) return false;
-
   const xStep = (local.x - envelope.minX) / PHYSICAL_LOG.length;
   const zStep = (local.z - envelope.minZ) / PHYSICAL_LOG.length;
   return (
-    Math.abs(xStep - Math.round(xStep)) * PHYSICAL_LOG.length <= OUTER_ENVELOPE_TOLERANCE &&
-    Math.abs(zStep - Math.round(zStep)) * PHYSICAL_LOG.length <= OUTER_ENVELOPE_TOLERANCE
+    Math.abs(xStep - Math.round(xStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE &&
+    Math.abs(zStep - Math.round(zStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE
   );
+}
+
+const airKey = (x, z) => `${x}:${z}`;
+
+function exteriorAirCells(component, frameBasis, envelope) {
+  const cellSize = PHYSICAL_LOG.floorWidth;
+  const columns = Math.max(1, Math.round((envelope.maxX - envelope.minX) / cellSize));
+  const rows = Math.max(1, Math.round((envelope.maxZ - envelope.minZ) / cellSize));
+  const projectedFloors = component.map(floor => ({
+    ...project(floor, frameBasis),
+    halfX: PHYSICAL_LOG.halfLength,
+    halfZ: PHYSICAL_LOG.floorWidth * 0.5
+  }));
+  const occupied = (column, row) => {
+    const x = envelope.minX + (column + 0.5) * cellSize;
+    const z = envelope.minZ + (row + 0.5) * cellSize;
+    return projectedFloors.some(floor =>
+      Math.abs(x - floor.x) <= floor.halfX - 0.001 &&
+      Math.abs(z - floor.z) <= floor.halfZ - 0.001
+    );
+  };
+
+  const exterior = new Set();
+  const pending = [];
+  for (let column = -1; column <= columns; column += 1) {
+    pending.push([column, -1], [column, rows]);
+  }
+  for (let row = 0; row < rows; row += 1) {
+    pending.push([-1, row], [columns, row]);
+  }
+
+  while (pending.length > 0) {
+    const [column, row] = pending.pop();
+    if (column < -1 || column > columns || row < -1 || row > rows) continue;
+    const key = airKey(column, row);
+    if (exterior.has(key) || occupied(column, row)) continue;
+    exterior.add(key);
+    pending.push(
+      [column - 1, row],
+      [column + 1, row],
+      [column, row - 1],
+      [column, row + 1]
+    );
+  }
+
+  return {
+    cellSize,
+    isExteriorAt(localX, localZ) {
+      const column = Math.floor((localX - envelope.minX) / cellSize);
+      const row = Math.floor((localZ - envelope.minZ) / cellSize);
+      return exterior.has(airKey(column, row));
+    },
+    isOccupiedAt(localX, localZ) {
+      const column = Math.floor((localX - envelope.minX) / cellSize);
+      const row = Math.floor((localZ - envelope.minZ) / cellSize);
+      return occupied(column, row);
+    }
+  };
+}
+
+function isExteriorBoundaryNode(node, frameBasis, air) {
+  const local = project(node, frameBasis);
+  const inset = air.cellSize * 0.22;
+  let touchesFloor = false;
+  let touchesExterior = false;
+  for (const offsetX of [-inset, inset]) {
+    for (const offsetZ of [-inset, inset]) {
+      touchesFloor ||= air.isOccupiedAt(local.x + offsetX, local.z + offsetZ);
+      touchesExterior ||= air.isExteriorAt(local.x + offsetX, local.z + offsetZ);
+    }
+  }
+  return touchesFloor && touchesExterior;
 }
 
 /**
  * Recover the archived full-Log FRAME grid from exact floor geometry, then keep
- * only the outer envelope. A complete three-strip square is the smallest valid
- * footprint; narrow strip seams and open interior holes never become FRAME stations.
+ * only stations touching exterior air. A complete three-strip square is the
+ * smallest cell; concave steps survive while enclosed holes and strip seams do not.
  */
 export function collectOuterStructuralFloorCorners(floors) {
   const result = [];
@@ -178,9 +243,11 @@ export function collectOuterStructuralFloorCorners(floors) {
     const frameBasis = basis(component[0].yaw ?? 0);
     const nodes = mergedCornerNodes(component, frameBasis);
     const envelope = componentEnvelope(component, frameBasis);
+    const air = exteriorAirCells(component, frameBasis, envelope);
     for (const node of nodes) {
       if (!hasPerpendicularLogArms(node, nodes)) continue;
-      if (!isOuterLatticeNode(node, frameBasis, envelope)) continue;
+      if (!isStructuralLatticeNode(node, frameBasis, envelope)) continue;
+      if (!isExteriorBoundaryNode(node, frameBasis, air)) continue;
       result.push({
         x: node.x,
         z: node.z,

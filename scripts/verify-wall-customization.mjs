@@ -265,6 +265,9 @@ assert.ok(
   gameSource.includes("toolId === 'hammer' && (target.type === 'placed-log' || target.type === 'campfire')"),
   'Hammer customization must not replace the existing placed-log/campfire demolition action'
 );
-assert.ok(gameSource.includes('this.physicalLogs?.demolish(this.playerPosition)'), 'Hammer must still call PhysicalLogSystem demolition for placed Logs');
+assert.ok(
+  gameSource.includes('this.physicalLogs?.demolish(this.playerPosition, target.id)'),
+  'Hammer must call PhysicalLogSystem demolition with the exact highlighted placed-Log ID'
+);
 
 console.log('Frame-fitted SOLID/DOOR/WINDOW geometry, inward faces, door traversal and Hammer demolition verified');

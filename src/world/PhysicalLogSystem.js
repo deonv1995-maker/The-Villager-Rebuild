@@ -255,15 +255,45 @@ export class PhysicalLogSystem {
       id: best.id,
       label: LOG_BUILD_LABELS[best.mode],
       icon: 'hammer',
-      actionLabel: `Demolish ${LOG_BUILD_LABELS[best.mode].toLowerCase()}`
+      actionLabel: `Demolish ${LOG_BUILD_LABELS[best.mode].toLowerCase()}`,
+      root: best.root,
+      position: {
+        x: best.root.position.x,
+        y: best.root.position.y,
+        z: best.root.position.z
+      }
     };
   }
 
-  demolish(playerPosition) {
-    const target = this.getDemolitionTarget(playerPosition);
+  demolish(playerPosition, targetId = null) {
+    const target = targetId === null
+      ? this.getDemolitionTarget(playerPosition)
+      : this.builtLogs.find(entry => entry.id === targetId && entry.active);
     if (!target) return null;
-    const built = this.builtLogs.find(entry => entry.id === target.id && entry.active);
+    const built = targetId === null
+      ? this.builtLogs.find(entry => entry.id === target.id && entry.active)
+      : target;
     if (!built) return null;
+    if (
+      Math.hypot(built.root.position.x - playerPosition.x, built.root.position.z - playerPosition.z) >
+      INTERACTION_RADIUS
+    ) return null;
+
+    const result = targetId === null
+      ? target
+      : {
+          type: 'placed-log',
+          id: built.id,
+          label: LOG_BUILD_LABELS[built.mode],
+          icon: 'hammer',
+          actionLabel: `Demolish ${LOG_BUILD_LABELS[built.mode].toLowerCase()}`,
+          root: built.root,
+          position: {
+            x: built.root.position.x,
+            y: built.root.position.y,
+            z: built.root.position.z
+          }
+        };
 
     built.active = false;
     this.#markStructureChanged();
@@ -275,7 +305,7 @@ export class PhysicalLogSystem {
       z: built.root.position.z,
       yaw: built.yaw
     });
-    return target;
+    return result;
   }
 
   #resolvePlacement(mode, playerPosition, facingDirection) {
@@ -332,16 +362,32 @@ export class PhysicalLogSystem {
   }
 
   #floorPlacement(base) {
-    const snapped = this.#nearestFloorEdge(base);
-    const candidate = snapped ?? base;
+    const snappedCandidates = this.#floorEdgeCandidates(base);
+    const candidates = snappedCandidates.length ? snappedCandidates : [base];
+    const evaluated = candidates.map(candidate => this.#evaluateFloorCandidate(candidate, Boolean(snappedCandidates.length)));
+    const resolved = evaluated.find(candidate => candidate.valid) ?? evaluated[0];
+    return {
+      ...base,
+      ...resolved
+    };
+  }
+
+  #evaluateFloorCandidate(candidate, snapped) {
     const sample = this.#sampleFloorTerrain(candidate.x, candidate.z, candidate.yaw);
-    const baseY = snapped?.baseY ?? sample.center + PHYSICAL_LOG.floorGroundClearance;
+    const baseY = snapped
+      ? candidate.baseY
+      : sample.center + PHYSICAL_LOG.floorGroundClearance;
     const occupied = this.#activeBuilt('floor').some(floor =>
       Math.hypot(floor.x - candidate.x, floor.z - candidate.z) < 0.18
     );
-    const valid = !occupied && this.#floorPlacementValid(candidate.x, candidate.z, sample, baseY);
+    const valid = !occupied && this.#floorPlacementValid(
+      candidate.x,
+      candidate.z,
+      candidate.yaw,
+      sample,
+      baseY
+    );
     return {
-      ...base,
       ...candidate,
       ground: sample.min,
       baseY,
@@ -566,9 +612,8 @@ export class PhysicalLogSystem {
     return roofMemberOccupied(candidate, activeMembers);
   }
 
-  #nearestFloorEdge(base) {
-    let best = null;
-    let bestDistance = PHYSICAL_LOG.floorSnapRange;
+  #floorEdgeCandidates(base) {
+    const candidates = new Map();
     for (const floor of this.#activeBuilt('floor')) {
       const basis = this.#basis(floor.yaw);
       const offsets = [
@@ -584,18 +629,23 @@ export class PhysicalLogSystem {
         const x = floor.x + ox;
         const z = floor.z + oz;
         const distance = Math.hypot(x - base.x, z - base.z);
-        if (distance >= bestDistance) continue;
-        bestDistance = distance;
-        best = {
+        if (distance >= PHYSICAL_LOG.floorSnapRange) continue;
+        const key = `${Math.round(x * 1000)}:${Math.round(z * 1000)}:${Math.round(floor.yaw * 1000)}`;
+        const existing = candidates.get(key);
+        if (existing && existing.distance <= distance) continue;
+        candidates.set(key, {
           x,
           z,
           yaw: floor.yaw,
           baseY: floor.baseY,
-          topY: floor.topY
-        };
+          topY: floor.topY,
+          distance
+        });
       }
     }
-    return best;
+    return [...candidates.values()]
+      .sort((left, right) => left.distance - right.distance || left.x - right.x || left.z - right.z)
+      .map(({ distance, ...candidate }) => candidate);
   }
 
   #nearestFloorCorner(base, {
@@ -698,13 +748,38 @@ export class PhysicalLogSystem {
     return { center, min: Math.min(...heights), max: Math.max(...heights) };
   }
 
-  #floorPlacementValid(x, z, sample, baseY) {
+  #floorPlacementValid(x, z, yaw, sample, baseY) {
     if (!this.terrain.isPlayable(x, z, PHYSICAL_LOG.halfLength + 0.12)) return false;
     if (sample.max > baseY + PHYSICAL_LOG.floorTerrainEmbedTolerance) return false;
     if (baseY - sample.min > PHYSICAL_LOG.floorMaxSupportDepth) return false;
     return this.collision.isCircleClear(x, z, 0.62, {
-      ignore: obstacle => obstacle.type === 'placed-log' && /-floor$/.test(obstacle.label ?? '')
+      ignore: obstacle => this.#floorMayMeetObstacle(obstacle, x, z, yaw, baseY)
     });
+  }
+
+  #floorMayMeetObstacle(obstacle, x, z, yaw, baseY) {
+    if (obstacle.type !== 'placed-log') return false;
+    if (/-floor$/.test(obstacle.label ?? '')) return true;
+    if (Number.isFinite(obstacle.bottomY) && obstacle.bottomY > baseY + 0.18) return true;
+
+    const built = this.builtLogs.find(entry =>
+      entry.active && entry.collisionHandle === obstacle
+    );
+    if (!built || (built.mode !== 'frame' && built.mode !== 'wall')) return false;
+    if (Math.abs((built.baseY ?? baseY) - baseY) > 0.24) return false;
+
+    const frameBasis = this.#basis(yaw);
+    const dx = obstacle.x - x;
+    const dz = obstacle.z - z;
+    const u = dx * frameBasis.xX + dz * frameBasis.xZ;
+    const v = dx * frameBasis.zX + dz * frameBasis.zZ;
+    const halfLength = PHYSICAL_LOG.halfLength;
+    const halfWidth = PHYSICAL_LOG.floorWidth * 0.5;
+    const tolerance = built.mode === 'wall' ? 0.36 : 0.24;
+    return (
+      (Math.abs(Math.abs(u) - halfLength) <= tolerance && Math.abs(v) <= halfWidth + tolerance) ||
+      (Math.abs(Math.abs(v) - halfWidth) <= tolerance && Math.abs(u) <= halfLength + tolerance)
+    );
   }
 
   #activeBuilt(mode = null) {

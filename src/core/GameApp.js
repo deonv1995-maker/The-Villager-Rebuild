@@ -7,6 +7,7 @@ import { TreeHarvestSystem } from '../world/TreeHarvestSystem.js';
 import { RockHarvestSystem } from '../world/RockHarvestSystem.js';
 import { PhysicalLogSystem } from '../world/PhysicalLogSystem.js';
 import { CampfireSystem } from '../world/CampfireSystem.js';
+import { DemolitionPreviewSystem } from '../world/DemolitionPreviewSystem.js';
 import { SpearProjectileSystem } from '../world/SpearProjectileSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
@@ -83,6 +84,7 @@ export class GameApp {
       collision: this.island.collision,
       gatherables: this.gatherables
     });
+    this.demolitionPreview = new DemolitionPreviewSystem({ group: this.island.group });
     this.spearProjectiles = new SpearProjectileSystem({ scene: this.sceneSystem.scene });
     this.toolPresentation = new RangerToolPresentation({ player: this.player });
     this.#bindGameplayInput();
@@ -114,6 +116,7 @@ export class GameApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.player?.update(dt);
     this.toolPresentation?.update(dt);
+    this.demolitionPreview?.update(dt);
     this.campfire?.update(dt);
 
     const projectileEvent = this.spearProjectiles?.update(dt);
@@ -158,6 +161,7 @@ export class GameApp {
     if (wildlifeAttack) this.#handleWildlifeAttack(wildlifeAttack);
 
     if (carryingLog) {
+      this.demolitionPreview?.clear();
       this.treeHarvest?.update(this.playerPosition, false);
       this.rockHarvest?.update(this.playerPosition, false);
       this.gatherables?.update(this.playerPosition, () => false);
@@ -191,6 +195,16 @@ export class GameApp {
       ?? rockTarget
       ?? demolitionTarget
       ?? resourceTarget;
+
+    const highlightedDemolition = this.currentInteractionTarget === demolitionTarget
+      ? demolitionTarget
+      : null;
+    this.demolitionPreview?.setTarget(
+      highlightedDemolition?.root ?? null,
+      highlightedDemolition
+        ? `${highlightedDemolition.type}:${highlightedDemolition.id}`
+        : null
+    );
 
     this.hud?.setInteractionTarget(this.currentInteractionTarget);
     this.hud?.setAttackTarget(this.currentHuntTarget, toolId);
@@ -269,9 +283,10 @@ export class GameApp {
 
     if (toolId === 'hammer' && (target.type === 'placed-log' || target.type === 'campfire')) {
       if (this.toolPresentation?.isBusy()) return;
+      if (target.position) this.player.faceWorldPoint(target.position);
       if (!this.toolPresentation?.playSwing('hammer')) return;
       const demolished = target.type === 'placed-log'
-        ? this.physicalLogs?.demolish(this.playerPosition)
+        ? this.physicalLogs?.demolish(this.playerPosition, target.id)
         : this.campfire?.demolish(this.playerPosition);
       if (!demolished) return;
       this.#refreshTargets(0);
