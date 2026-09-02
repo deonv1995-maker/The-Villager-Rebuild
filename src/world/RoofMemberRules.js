@@ -78,17 +78,26 @@ export function roofMemberCandidates(region) {
 }
 
 /**
- * ROOF sequencing is local to each support region. A ridge is eligible only after the
- * rafters for its own region are complete; missing rafters on another room or storey do
- * not hijack the current roof workflow. When stacked candidates occupy the exact same
- * plan position, the established lower/outer closed support wins the tie. A completed
- * roof may then relocate as one assembly when the next storey is structurally complete.
+ * Static topology callers receive the original unified two-stage contract: any
+ * available rafter keeps all ridges hidden until the rafter stage is complete.
+ * Runtime placement enriches candidates with a per-region `raftersComplete` flag;
+ * there, a ridge is gated only by its own support region so another room/storey cannot
+ * hijack the workflow. Exact stacked-plan ties stay on the established lower/outer
+ * closed support, after which a complete roof may reflow as one physical assembly.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
+  const hasRuntimeRegionState = available.some(candidate => typeof candidate.raftersComplete === 'boolean');
+
+  if (!hasRuntimeRegionState) {
+    const rafters = available.filter(candidate => candidate.roofRole === 'rafter');
+    if (rafters.length) return structuralTieOrder(rafters);
+    return structuralTieOrder(available.filter(candidate => candidate.roofRole === 'ridge'));
+  }
+
   const eligible = available.filter(candidate => (
     candidate.roofRole === 'rafter' ||
-    (candidate.roofRole === 'ridge' && candidate.raftersComplete !== false)
+    (candidate.roofRole === 'ridge' && candidate.raftersComplete === true)
   ));
   return structuralTieOrder(eligible);
 }
