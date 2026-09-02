@@ -2,11 +2,13 @@ import * as THREE from 'three';
 import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
 import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 import { TreeHitShakeSystem } from './TreeHitShakeSystem.js';
+import { TreeRegrowthPresentation } from './TreeRegrowthPresentation.js';
 
 const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 const MAX_REGROW_STEP_SECONDS = 0.25;
 const PLAYER_REGROW_CLEARANCE = 1.15;
 const BUILT_REGROW_BLOCKERS = new Set(['placed-log', 'campfire']);
+const BLOCKED_COMPLETION_EPSILON_SECONDS = 0.05;
 
 export class TreeHarvestSystem {
   constructor({ group, terrain, collision, gatherables, treeRenderRegistry = null, now = null }) {
@@ -27,6 +29,12 @@ export class TreeHarvestSystem {
     this.trees = this.#collectTrees();
     this.hitFeedback = new HarvestHitFeedback({ group });
     this.treeShake = new TreeHitShakeSystem({ treeRenderRegistry: this.treeRenderRegistry });
+    this.regrowthPresentation = new TreeRegrowthPresentation({
+      group,
+      terrain,
+      treeRenderRegistry: this.treeRenderRegistry,
+      timing: this.definition.regrowth
+    });
     this.#createIndicator();
   }
 
@@ -55,8 +63,10 @@ export class TreeHarvestSystem {
       const saved = savedById.get(tree.treeId);
       const remaining = Number(saved?.remainingSeconds);
       tree.regrowRemaining = Number.isFinite(remaining)
-        ? Math.max(0, remaining)
+        ? Math.min(this.definition.regrowSeconds, Math.max(0, remaining))
         : this.definition.regrowSeconds;
+      if (!tree.regrowthVisual) this.regrowthPresentation.begin(tree);
+      this.regrowthPresentation.update(tree, this.#regrowthAge(tree));
     }
     this.lastRegrowthUpdateAt = this.now();
   }
@@ -140,6 +150,7 @@ export class TreeHarvestSystem {
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
     tree.stump = this.#createStump(tree);
+    this.regrowthPresentation.begin(tree);
     this.#spawnDrops(tree);
     this.choppedCount += 1;
     this.target = null;
@@ -167,10 +178,25 @@ export class TreeHarvestSystem {
     for (const tree of this.trees) {
       if (tree.active) continue;
       tree.regrowRemaining = Math.max(0, tree.regrowRemaining - elapsed);
-      if (tree.regrowRemaining > 0) continue;
-      if (!this.#canRegrow(tree, playerPosition)) continue;
+
+      const ready = tree.regrowRemaining <= 0;
+      const canComplete = !ready || this.#canRegrow(tree, playerPosition);
+      const visualAge = ready && !canComplete
+        ? Math.max(0, this.definition.regrowSeconds - BLOCKED_COMPLETION_EPSILON_SECONDS)
+        : this.#regrowthAge(tree);
+      this.regrowthPresentation.update(tree, visualAge);
+
+      if (!ready || !canComplete) continue;
       this.#regrowTree(tree);
     }
+  }
+
+  #regrowthAge(tree) {
+    return THREE.MathUtils.clamp(
+      this.definition.regrowSeconds - tree.regrowRemaining,
+      0,
+      this.definition.regrowSeconds
+    );
   }
 
   #canRegrow(tree, playerPosition) {
@@ -190,6 +216,7 @@ export class TreeHarvestSystem {
   #regrowTree(tree) {
     this.#removeStump(tree);
     this.#restoreTreeInstance(tree);
+    this.regrowthPresentation.removeSprout(tree);
     tree.obstacle = this.collision.addObstacle({ ...tree.collisionTemplate });
     tree.hits = 0;
     tree.active = true;
@@ -240,7 +267,8 @@ export class TreeHarvestSystem {
           hits: 0,
           active: true,
           regrowRemaining: 0,
-          stump: null
+          stump: null,
+          regrowthVisual: null
         };
         tree.renderState = this.#captureTreeRenderState(tree);
         return tree;
@@ -272,23 +300,11 @@ export class TreeHarvestSystem {
 
   #hideTreeInstance(tree) {
     this.treeShake.clear(tree.treeId);
-    const hiddenMatrix = new THREE.Matrix4().compose(
-      new THREE.Vector3(tree.obstacle.x, -1000, tree.obstacle.z),
-      new THREE.Quaternion(),
-      new THREE.Vector3(0.0001, 0.0001, 0.0001)
-    );
-
-    for (const entry of tree.renderState) {
-      entry.mesh.setMatrixAt(entry.index, hiddenMatrix);
-      entry.mesh.instanceMatrix.needsUpdate = true;
-    }
+    this.regrowthPresentation.hideTree(tree);
   }
 
   #restoreTreeInstance(tree) {
-    for (const entry of tree.renderState) {
-      entry.mesh.setMatrixAt(entry.index, entry.matrix);
-      entry.mesh.instanceMatrix.needsUpdate = true;
-    }
+    this.regrowthPresentation.restoreFullTree(tree);
   }
 
   #createStump(tree) {
