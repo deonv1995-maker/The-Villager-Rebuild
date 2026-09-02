@@ -173,7 +173,6 @@ export class TestIslandSystem {
     shrubs.geometry?.dispose?.();
     if (Array.isArray(shrubs.material)) shrubs.material.forEach(material => material?.dispose?.());
     else shrubs.material?.dispose?.();
-    this.foundationRoot = null;
   }
 
   update(dt, playerPosition, camera = null) {
