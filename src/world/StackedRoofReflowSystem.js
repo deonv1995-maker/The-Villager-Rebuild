@@ -2,7 +2,8 @@ import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import {
   roofMemberCandidates,
   roofMemberOccupied,
-  roofRegionComplete
+  roofRegionComplete,
+  roofRegionHasMembers
 } from './RoofMemberRules.js';
 import { roofPanelDescriptors } from './StructureRoofQuery.js';
 
@@ -78,21 +79,21 @@ const targetForSharedMember = (plan, member) => {
 /**
  * Adjacent roof bays may share physical rafters. A partial stacked extension must not
  * steal one of those members from a neighbouring lower bay. A relocation plan is safe
- * only when every completed region that currently uses any moved member has a matching
+ * only when every occupied region that currently uses any moved member has a matching
  * relocation to the same elevation and the shared member resolves to the same target.
  */
 export function filterSharedRoofRelocationPlans(plans, regions, members) {
   const availablePlans = (plans ?? []).filter(Boolean);
   if (!availablePlans.length) return [];
   const planBySource = new Map(availablePlans.map(plan => [plan.source.key, plan]));
-  const completed = (regions ?? []).filter(region => roofRegionComplete(region, members));
+  const occupiedRegions = (regions ?? []).filter(region => roofRegionHasMembers(region, members));
 
   return availablePlans.filter(plan => {
     for (const sourceCandidate of roofMemberCandidates(plan.source)) {
       const member = (members ?? []).find(entry => roofMemberOccupied(sourceCandidate, [entry]));
-      if (!member) return false;
+      if (!member) continue;
 
-      for (const region of completed) {
+      for (const region of occupiedRegions) {
         if (region.key === plan.source.key) continue;
         const sharesMember = roofMemberCandidates(region)
           .some(candidate => roofMemberOccupied(candidate, [member]));
@@ -130,7 +131,7 @@ export function collectStackedRoofRelocationPlans(regions, members) {
 
     let sourceIndex = -1;
     for (let index = levels.length - 1; index >= 0; index -= 1) {
-      if (!roofRegionComplete(levels[index], members)) continue;
+      if (!roofRegionHasMembers(levels[index], members)) continue;
       sourceIndex = index;
       break;
     }
@@ -147,6 +148,24 @@ export function collectStackedRoofRelocationPlans(regions, members) {
       sourceMembers.length !== targetMembers.length ||
       sourceMembers.some((candidate, index) => !memberPlansMatch(candidate, targetMembers[index]))
     ) continue;
+
+    let hasMovableMember = false;
+    let targetConflict = false;
+    for (let index = 0; index < sourceMembers.length; index += 1) {
+      const sourceCandidate = sourceMembers[index];
+      const targetCandidate = targetMembers[index];
+      const sourceMember = (members ?? []).find(entry => roofMemberOccupied(sourceCandidate, [entry]));
+      if (!sourceMember) continue;
+      hasMovableMember = true;
+      const occupiedTarget = (members ?? []).find(entry =>
+        entry?.id !== sourceMember.id && roofMemberOccupied(targetCandidate, [entry])
+      );
+      if (occupiedTarget) {
+        targetConflict = true;
+        break;
+      }
+    }
+    if (!hasMovableMember || targetConflict) continue;
 
     candidates.push({
       planKey,

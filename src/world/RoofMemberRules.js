@@ -30,6 +30,18 @@ const descriptor = (region, suffix, start, end, roofRole, snapKind) => {
   };
 };
 
+const candidateHeight = candidate => Math.max(
+  candidate?.y ?? -Infinity,
+  candidate?.start?.y ?? -Infinity,
+  candidate?.end?.y ?? -Infinity
+);
+
+const highestFirst = candidates => [...candidates].sort((left, right) => (
+  candidateHeight(right) - candidateHeight(left) ||
+  String(left?.roofRegionKey ?? '').localeCompare(String(right?.roofRegionKey ?? '')) ||
+  String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
+));
+
 /**
  * One shared five-member gable definition used by placement, thatch completion,
  * interior detection and regression checks. Adjacent roof bays may geometrically
@@ -64,14 +76,16 @@ export function roofMemberCandidates(region) {
 /**
  * The unified ROOF option is an ordered coordinator over the canonical member roles.
  * Every currently available angled rafter is completed before any raw ridge segment
- * may be selected. Thatch remains a separate inventory-backed panel action after the
- * physical member query reports the roof complete.
+ * may be selected. Within the same role, higher stacked-storey candidates are ordered
+ * first so coincident lower and upper footprints cannot win merely by enumeration.
+ * Thatch remains a separate inventory-backed panel action after the physical member
+ * query reports the roof complete.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
   const rafters = available.filter(candidate => candidate.roofRole === 'rafter');
-  if (rafters.length) return rafters;
-  return available.filter(candidate => candidate.roofRole === 'ridge');
+  if (rafters.length) return highestFirst(rafters);
+  return highestFirst(available.filter(candidate => candidate.roofRole === 'ridge'));
 }
 
 export function roofMemberModeMatches(candidate, member) {
@@ -98,6 +112,10 @@ export function roofMemberOccupied(candidate, members) {
     return true;
   }
   return false;
+}
+
+export function roofRegionHasMembers(region, members) {
+  return roofMemberCandidates(region).some(candidate => roofMemberOccupied(candidate, members));
 }
 
 export function roofRaftersComplete(region, members) {
