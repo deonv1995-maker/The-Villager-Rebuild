@@ -54,8 +54,12 @@ const mirrored = collectUpperStoreyFloorCandidates([region], [floors[0], floors[
 assert.equal(mirrored.length, 2, 'Upper floors must mirror only occupied floor strips below');
 assert.ok(mirrored.every(candidate => candidate.storey === 1));
 assert.ok(
-  mirrored.every(candidate => Math.abs(candidate.baseY - (frameTopY + PHYSICAL_LOG.radius)) < 1e-8),
-  'Upper floors must seat on the physical RAW top-beam surface'
+  mirrored.every(candidate => Math.abs(candidate.topY - (frameTopY + PHYSICAL_LOG.radius)) < 1e-8),
+  'Upper walking surfaces must sit exactly on the physical RAW top-beam surface'
+);
+assert.ok(
+  mirrored.every(candidate => Math.abs(candidate.baseY - (frameTopY + PHYSICAL_LOG.radius - 0.028)) < 1e-8),
+  'Upper split-log floor bodies must embed downward instead of lifting the next FRAME level'
 );
 
 const terrain = {
@@ -97,7 +101,8 @@ const upperFloor = system.builtLogs.find(entry => entry.id === 30);
 assert.equal(upperFloor?.storey, 1, 'Committed upper floors must retain their storey identity');
 assert.equal(upperFloor?.supportRoot, null, 'Upper floors must not grow terrain-to-storey foundation posts');
 
-const upperBaseY = frameTopY + PHYSICAL_LOG.radius;
+const upperBaseY = frameTopY + PHYSICAL_LOG.radius - 0.028;
+const upperTopY = frameTopY + PHYSICAL_LOG.radius;
 for (const targetZ of [PHYSICAL_LOG.floorWidth * 1.5, PHYSICAL_LOG.floorWidth * 2.5]) {
   const nextPlayerPosition = new THREE.Vector3(0, 0, targetZ - PHYSICAL_LOG.placeDistance);
   assert.ok(system.pickup(nextPlayerPosition));
@@ -111,8 +116,12 @@ assert.equal(system.setBuildMode('frame'), true);
 system.update(playerPosition, facing);
 assert.equal(system.previewValid, true, 'A completed upper floor must expose its next-storey perimeter corners');
 assert.ok(
-  Math.abs(system.previewPlacement.baseY - (upperBaseY + 0.028)) < 1e-8,
-  'Upper FRAME posts must start on the upper walking surface instead of terrain level'
+  Math.abs(system.previewPlacement.baseY - upperTopY) < 1e-8,
+  'Upper FRAME posts must begin directly on the lower top-beam surface with no vertical seam'
+);
+assert.ok(
+  Math.abs(upperFloor.baseY - upperBaseY) < 1e-8,
+  'Committed upper-floor body must retain the embedded support height'
 );
 
-console.log('Closed-perimeter upper-floor support, footprint mirroring and storey ownership verified.');
+console.log('Closed-perimeter upper-floor support, flush frame seating and storey ownership verified.');
