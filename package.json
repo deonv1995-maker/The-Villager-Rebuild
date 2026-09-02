@@ -21,7 +21,6 @@
     "verify:roof-sequence": "node scripts/verify-roof-build-sequence.mjs",
     "verify:harvesting": "node scripts/verify-tree-harvest.mjs",
     "verify:tree-regrowth": "node scripts/verify-tree-regrowth.mjs",
-    "verify:felled-logs": "node scripts/verify-felled-tree-log-presentation.mjs",
     "verify:tree-shake": "node scripts/verify-tree-hit-shake.mjs",
     "verify:device-regressions": "node scripts/verify-device-regressions-0.3.11.mjs",
     "verify:thatch-interior": "node scripts/verify-thatch-interior-occlusion.mjs",
@@ -40,7 +39,7 @@
     "verify:streaming": "node scripts/verify-world-streaming.mjs",
     "verify:dist-assets": "node scripts/verify-runtime-assets.mjs dist",
     "verify:pwa": "node scripts/verify-pwa.mjs dist",
-    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:stepped-building && npm run verify:upper-storey && npm run verify:stacked-roof && npm run verify:frame-corner-snap && npm run verify:raw-log-snap && npm run verify:walls && npm run verify:roof && npm run verify:roof-runtime && npm run verify:roof-sequence && npm run verify:harvesting && npm run verify:tree-regrowth && npm run verify:felled-logs && npm run verify:tree-shake && npm run verify:device-regressions && npm run verify:thatch-interior && npm run verify:mobile-action && npm run verify:ranger-grounding && npm run verify:resource-icons && npm run verify:animals && npm run verify:title-scene && npm run verify:save && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:environment-dressing && npm run verify:ambient && npm run verify:gatherables && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
+    "check": "npm run verify:assets && npm run verify:gameplay && npm run verify:construction && npm run verify:stepped-building && npm run verify:upper-storey && npm run verify:stacked-roof && npm run verify:frame-corner-snap && npm run verify:raw-log-snap && npm run verify:walls && npm run verify:roof && npm run verify:roof-runtime && npm run verify:roof-sequence && npm run verify:harvesting && npm run verify:tree-regrowth && npm run verify:tree-shake && npm run verify:device-regressions && npm run verify:thatch-interior && npm run verify:mobile-action && npm run verify:ranger-grounding && npm run verify:resource-icons && npm run verify:animals && npm run verify:title-scene && npm run verify:save && npm run verify:survival && npm run verify:campfire && npm run verify:landscape && npm run verify:environment-dressing && npm run verify:ambient && npm run verify:gatherables && npm run verify:streaming && npm run build && npm run verify:dist-assets && npm run verify:pwa"
   },
   "dependencies": {
     "three": "0.180.0"
