@@ -43,7 +43,7 @@ Build three floor strips side by side into one square floor, including a rotated
 
 Connected floor placement inherits the supporting panel's exact local basis. Only the first free floor is quantized to the world construction grid. This guarantees that three adjacent split-log strips form an exact physical-Log square at every supported rotation.
 
-FRAME stations are derived from the exterior envelope of each connected, co-planar floor component and remain aligned to the full physical-Log lattice. Narrow one-third floor seams are never structural stations. Larger rectangular footprints may expose full-Log stations along their outer edges, while missing floor panels inside the footprint do not create inner FRAME stations or require the center to be covered.
+FRAME stations restore the archived full-Log corner rule before applying the rebuild's outer-envelope rule. A candidate needs perpendicular full-Log arms in the completed floor geometry, so one or two narrow strips cannot start a frame. Three adjacent strips form the smallest valid square and expose exactly four stations. Larger rectangular footprints expose full-Log stations along their outer edges, while missing floor panels inside the footprint do not create inner FRAME stations or require the center to be covered.
 
 A FRAME candidate within Ranger collision clearance is skipped before it can become a valid placement. This prevents a newly materialized upright from trapping the Ranger; the resolver may select another reachable legal exterior station, otherwise the preview remains invalid until the Ranger moves clear.
 

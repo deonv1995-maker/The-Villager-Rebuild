@@ -109,6 +109,16 @@ export class StructureRoofQuery {
     if (cached) return cached;
 
     const frames = this.physicalLogs.builtLogs.filter(entry => entry.active && entry.mode === 'frame');
+    const occupiedBeamKeys = new Set(
+      this.physicalLogs.builtLogs
+        .filter(entry =>
+          entry.active &&
+          entry.mode === 'raw' &&
+          entry.snapKind === 'frame-pair-top' &&
+          entry.rawKey
+        )
+        .map(entry => entry.rawKey)
+    );
     const pairs = collectLocalRoofFramePairs(frames, point, {
       length: PHYSICAL_LOG.length,
       spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
@@ -116,7 +126,8 @@ export class StructureRoofQuery {
       yawStep: PHYSICAL_LOG.yawStep,
       searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
       frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
-      pairLimit: PHYSICAL_LOG.roofLocalPairLimit
+      pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
+      occupiedBeamKeys
     });
     const regions = collectRoofRegions(pairs, {
       yawTolerance: 0.16,

@@ -59,6 +59,7 @@ const makeOccupiedRaw = (id, leftId, rightId) => ({
   mode: 'raw',
   active: true,
   rawKey: `beam:${[leftId, rightId].sort((a, b) => a - b).join('-')}`,
+  snapKind: 'frame-pair-top',
   x: 0,
   z: 0,
   yaw: 0,

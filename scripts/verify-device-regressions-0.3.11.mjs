@@ -117,10 +117,36 @@ const facingDirection = new THREE.Vector3(0, 0, 1);
 assert.ok(roofSystem.pickup(playerPosition), 'Roof regression needs a first physical Log');
 assert.equal(roofSystem.setBuildMode('roof'), true);
 roofSystem.update(playerPosition, facingDirection);
-assert.equal(roofSystem.previewValid, true, 'Complete frame perimeter must expose a valid first roof slot');
+assert.equal(
+  roofSystem.previewValid,
+  false,
+  'Upright posts without the archived RAW top-beam perimeter must not expose a roof slot'
+);
+
+const perimeterBeamKeys = ['beam:0-1', 'beam:0-2', 'beam:1-3', 'beam:2-3'];
+roofSystem.builtLogs.push(...perimeterBeamKeys.map((rawKey, index) => ({
+  id: framePoints.length + index,
+  mode: 'raw',
+  active: true,
+  x: 0,
+  z: 0,
+  yaw: 0,
+  baseY: PHYSICAL_LOG.length,
+  centerY: PHYSICAL_LOG.length,
+  topY: PHYSICAL_LOG.length + PHYSICAL_LOG.radius,
+  rawKey,
+  snapKind: 'frame-pair-top',
+  root: new THREE.Group(),
+  collisionHandle: null
+})));
+roofSystem.nextBuiltId = roofSystem.builtLogs.length;
+roofSystem.structureRevision += 1;
+roofSystem.update(playerPosition, facingDirection);
+assert.equal(roofSystem.previewValid, true, 'Closed RAW top-beam perimeter must expose a valid first roof slot');
 const firstPreview = { ...roofSystem.previewPlacement };
 assert.ok(roofSystem.build(null, playerPosition, facingDirection), 'First roof member must build');
-const firstRoof = roofSystem.builtLogs.find(entry => entry.active && entry.id === framePoints.length);
+const firstRoofId = framePoints.length + perimeterBeamKeys.length;
+const firstRoof = roofSystem.builtLogs.find(entry => entry.active && entry.id === firstRoofId);
 assert.ok(firstRoof, 'First roof member must be recorded');
 assert.equal(
   firstRoof.mode,
@@ -186,6 +212,7 @@ for (const contract of [
   'standable: !overheadFrameBeam',
   'supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding',
   'supportOverridesBase: true',
+  'occupiedBeamKeys: new Set(',
   '#roofSlotOccupied(candidate, activeMembers)',
   'if (this.#roofSlotOccupied(member, activeMembers)) continue'
 ]) {

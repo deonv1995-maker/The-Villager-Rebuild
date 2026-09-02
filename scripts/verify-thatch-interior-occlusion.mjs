@@ -36,10 +36,29 @@ const physicalLogs = {
   })),
   structureRevision: 1
 };
+physicalLogs.builtLogs.push(...[
+  'beam:0-1',
+  'beam:1-2',
+  'beam:2-3',
+  'beam:0-3'
+].map((rawKey, index) => ({
+  id: 4 + index,
+  mode: 'raw',
+  active: true,
+  rawKey,
+  snapKind: 'frame-pair-top',
+  x: 0,
+  z: 0,
+  yaw: 0,
+  baseY: PHYSICAL_LOG.length,
+  centerY: PHYSICAL_LOG.length,
+  topY: PHYSICAL_LOG.length + PHYSICAL_LOG.radius,
+  root: new THREE.Group()
+})));
 
 const roofQuery = new StructureRoofQuery({ physicalLogs });
 const regions = roofQuery.getRegions({ x: 0, z: 0 });
-assert.equal(regions.length, 1, 'A closed four-frame structure must resolve one roof region');
+assert.equal(regions.length, 1, 'A closed four-frame and RAW-beam structure must resolve one roof region');
 const region = regions[0];
 assert.equal(pointInsideRoofRegion(region, { x: 0, z: 0 }), true, 'Region centre must be recognized as interior');
 

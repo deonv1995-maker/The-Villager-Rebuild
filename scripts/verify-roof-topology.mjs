@@ -6,6 +6,7 @@ import {
   collectRoofRegions
 } from '../src/world/RoofTopology.js';
 import {
+  StructureRoofQuery,
   roofMemberCandidates,
   roofPanelDescriptors
 } from '../src/world/StructureRoofQuery.js';
@@ -73,6 +74,30 @@ assert.equal(regions[0].topology, 'closed-loop', 'A simple one-bay frame must re
 assert.ok(Math.abs(regions[0].ridgeYaw) < 1e-8, 'Square roof tie-breaking must choose one deterministic canonical ridge axis');
 assert.ok(regions[0].ridgeY > regions[0].eaveY, 'Roof ridge must rise inward above both eaves');
 
+const runtimeRoofState = {
+  structureRevision: 1,
+  builtLogs: localFrames.map(frame => ({ ...frame, mode: 'frame', active: true }))
+};
+const runtimeRoofQuery = new StructureRoofQuery({ physicalLogs: runtimeRoofState });
+assert.equal(
+  runtimeRoofQuery.getRegions(focus).length,
+  0,
+  'Runtime roof queries must not infer a roof from upright posts without physical RAW top beams'
+);
+runtimeRoofState.builtLogs.push(...[...perimeterBeamKeys].map((rawKey, index) => ({
+  id: 100 + index,
+  mode: 'raw',
+  active: true,
+  rawKey,
+  snapKind: 'frame-pair-top'
+})));
+runtimeRoofState.structureRevision += 1;
+assert.equal(
+  runtimeRoofQuery.getRegions(focus).length,
+  1,
+  'Runtime roof queries must unlock only after the closed RAW top-beam perimeter exists'
+);
+
 const reversedRegions = collectRoofRegions([...localPairs].reverse(), regionOptions);
 assert.equal(reversedRegions.length, 1);
 assert.equal(reversedRegions[0].key, regions[0].key, 'Roof identity must not depend on frame-pair iteration order');
@@ -107,12 +132,24 @@ const multiBayFrames = [
   makeFrame(14, 0, PHYSICAL_LOG.length),
   makeFrame(15, PHYSICAL_LOG.length, PHYSICAL_LOG.length)
 ];
+const multiBayPerimeterBeamKeys = new Set([
+  'beam:10-11',
+  'beam:11-12',
+  'beam:13-14',
+  'beam:14-15',
+  'beam:10-13',
+  'beam:12-15'
+]);
 const multiBayPairs = collectLocalRoofFramePairs(
   multiBayFrames,
   { x: 0, z: PHYSICAL_LOG.halfLength },
-  { ...pairOptions, occupiedBeamKeys: null }
+  { ...pairOptions, occupiedBeamKeys: multiBayPerimeterBeamKeys }
 );
-assert.ok(multiBayPairs.length >= 7, 'A two-bay frame grid must expose its adjoining local frame edges');
+assert.equal(
+  multiBayPairs.length,
+  6,
+  'A two-bay roof must use its six outer RAW beams without requiring the internal cross-beam'
+);
 const multiBayRegions = collectRoofRegions(multiBayPairs, regionOptions);
 assert.equal(
   multiBayRegions.length,
@@ -169,9 +206,10 @@ assert.ok(densePairs.length <= PHYSICAL_LOG.roofLocalPairLimit, 'Dense builds mu
 assert.ok(PHYSICAL_LOG.roofLocalFrameLimit <= 64, 'Roof preview must cap local frame candidates for mobile safety');
 assert.ok(PHYSICAL_LOG.roofLocalPairLimit <= 96, 'Roof preview must cap local frame-pair candidates for mobile safety');
 
-const [physicalLogSource, topologySource] = await Promise.all([
+const [physicalLogSource, topologySource, roofQuerySource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
-  readFile('src/world/RoofTopology.js', 'utf8')
+  readFile('src/world/RoofTopology.js', 'utf8'),
+  readFile('src/world/StructureRoofQuery.js', 'utf8')
 ]);
 for (const requirement of [
   'collectLocalRoofFramePairs',
@@ -180,10 +218,16 @@ for (const requirement of [
   'this.roofQueryCacheKey === queryKey',
   'searchRadius: PHYSICAL_LOG.roofLocalSearchRadius',
   'frameLimit: PHYSICAL_LOG.roofLocalFrameLimit',
-  'pairLimit: PHYSICAL_LOG.roofLocalPairLimit'
+  'pairLimit: PHYSICAL_LOG.roofLocalPairLimit',
+  'occupiedBeamKeys: new Set('
 ]) {
   assert.ok(physicalLogSource.includes(requirement), `Roof preview is missing bounded-query contract: ${requirement}`);
 }
+assert.ok(
+  roofQuerySource.includes("entry.snapKind === 'frame-pair-top'") &&
+  roofQuerySource.includes('occupiedBeamKeys'),
+  'Thatch and interior roof queries must share the same physical RAW top-beam authority as placement'
+);
 for (const requirement of [
   'connectedPairComponents',
   'closedLoop(component, topTolerance)',

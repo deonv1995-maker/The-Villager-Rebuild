@@ -7,6 +7,7 @@ import {
 import { RangerLogCarryPose } from '../player/RangerLogCarryPose.js';
 import { FloorSupportVisual } from './FloorSupportVisual.js';
 import { frameCornerFitsStructure } from './FramePlacementRules.js';
+import { collectOuterStructuralFloorCorners } from './FloorFrameTopology.js';
 import {
   createConstructionLogVisual,
   tintConstructionPreview
@@ -29,8 +30,6 @@ const FLOOR_CENTER_LIFT = 0;
 const FLOOR_TOP_LIFT = 0.028;
 const ROOF_SEAT_LIFT = 0.08;
 const FRAME_PLAYER_CLEARANCE = 0.72;
-const FLOOR_COMPONENT_GAP = 0.16;
-const STRUCTURAL_LATTICE_TOLERANCE = PHYSICAL_LOG.framePlacementSpacingTolerance;
 // The procedural raw-log mesh reads as a large block at shoulder distance on mobile.
 // Keep the physical carry state authoritative, but suppress that placeholder presentation
 // until it can be replaced by a natural dedicated carry asset/animation.
@@ -75,6 +74,8 @@ export class PhysicalLogSystem {
     this.structureRevision = 0;
     this.framePairCacheRevision = -1;
     this.framePairCache = [];
+    this.floorCornerCacheRevision = -1;
+    this.floorCornerCache = [];
     this.roofQueryCacheRevision = -1;
     this.roofQueryCacheKey = '';
     this.roofQueryCache = [];
@@ -503,7 +504,12 @@ export class PhysicalLogSystem {
       yawStep: PHYSICAL_LOG.yawStep,
       searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
       frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
-      pairLimit: PHYSICAL_LOG.roofLocalPairLimit
+      pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
+      occupiedBeamKeys: new Set(
+        this.#activeBuilt('raw')
+          .filter(raw => raw.snapKind === 'frame-pair-top' && raw.rawKey)
+          .map(raw => raw.rawKey)
+      )
     });
     const regions = collectRoofRegions(pairs, {
       yawTolerance: 0.16,
@@ -599,97 +605,27 @@ export class PhysicalLogSystem {
     let best = null;
     let bestDistance = PHYSICAL_LOG.frameSnapRange;
     const frames = requireStructuralFit ? this.#activeBuilt('frame') : null;
-    for (const floor of this.#activeBuilt('floor')) {
-      const basis = this.#basis(floor.yaw);
-      for (const sx of [-1, 1]) {
-        for (const sz of [-1, 1]) {
-          const x = floor.x + basis.xX * PHYSICAL_LOG.halfLength * sx + basis.zX * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
-          const z = floor.z + basis.xZ * PHYSICAL_LOG.halfLength * sx + basis.zZ * (PHYSICAL_LOG.floorWidth * 0.5) * sz;
-          const candidate = { x, z, baseY: floor.topY };
-          if (!this.#isOuterStructuralCorner(floor, candidate)) continue;
-          if (
-            playerPosition &&
-            Math.hypot(x - playerPosition.x, z - playerPosition.z) < FRAME_PLAYER_CLEARANCE
-          ) continue;
-          if (requireStructuralFit && !frameCornerFitsStructure(candidate, frames)) continue;
-          const distance = Math.hypot(x - base.x, z - base.z);
-          if (distance >= bestDistance) continue;
-          bestDistance = distance;
-          best = candidate;
-        }
-      }
+    for (const candidate of this.#structuralFloorCorners()) {
+      if (
+        playerPosition &&
+        Math.hypot(candidate.x - playerPosition.x, candidate.z - playerPosition.z) < FRAME_PLAYER_CLEARANCE
+      ) continue;
+      if (requireStructuralFit && !frameCornerFitsStructure(candidate, frames)) continue;
+      const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = candidate;
     }
     return best;
   }
 
-  #isOuterStructuralCorner(seedFloor, candidate) {
-    const component = this.#connectedFloorComponent(seedFloor);
-    const basis = this.#basis(seedFloor.yaw);
-    const projectX = (x, z) => x * basis.xX + z * basis.xZ;
-    const projectZ = (x, z) => x * basis.zX + z * basis.zZ;
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-
-    for (const floor of component) {
-      const centerX = projectX(floor.x, floor.z);
-      const centerZ = projectZ(floor.x, floor.z);
-      minX = Math.min(minX, centerX - PHYSICAL_LOG.halfLength);
-      maxX = Math.max(maxX, centerX + PHYSICAL_LOG.halfLength);
-      minZ = Math.min(minZ, centerZ - PHYSICAL_LOG.floorWidth * 0.5);
-      maxZ = Math.max(maxZ, centerZ + PHYSICAL_LOG.floorWidth * 0.5);
+  #structuralFloorCorners() {
+    if (this.floorCornerCacheRevision === this.structureRevision) {
+      return this.floorCornerCache;
     }
-
-    const x = projectX(candidate.x, candidate.z);
-    const z = projectZ(candidate.x, candidate.z);
-    const onEnvelope =
-      Math.abs(x - minX) <= STRUCTURAL_LATTICE_TOLERANCE ||
-      Math.abs(x - maxX) <= STRUCTURAL_LATTICE_TOLERANCE ||
-      Math.abs(z - minZ) <= STRUCTURAL_LATTICE_TOLERANCE ||
-      Math.abs(z - maxZ) <= STRUCTURAL_LATTICE_TOLERANCE;
-    if (!onEnvelope) return false;
-
-    const xStep = (x - minX) / PHYSICAL_LOG.length;
-    const zStep = (z - minZ) / PHYSICAL_LOG.length;
-    return (
-      Math.abs(xStep - Math.round(xStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE &&
-      Math.abs(zStep - Math.round(zStep)) * PHYSICAL_LOG.length <= STRUCTURAL_LATTICE_TOLERANCE
-    );
-  }
-
-  #connectedFloorComponent(seedFloor) {
-    const floors = this.#activeBuilt('floor');
-    const component = [];
-    const pending = [seedFloor];
-    const visited = new Set();
-
-    while (pending.length) {
-      const floor = pending.pop();
-      if (!floor || visited.has(floor.id)) continue;
-      visited.add(floor.id);
-      component.push(floor);
-
-      for (const candidate of floors) {
-        if (visited.has(candidate.id)) continue;
-        if (this.#axisYawDelta(candidate.yaw, seedFloor.yaw) > 0.16) continue;
-        if (Math.abs(candidate.baseY - seedFloor.baseY) > PHYSICAL_LOG.frameLevelTolerance) continue;
-        const basis = this.#basis(seedFloor.yaw);
-        const dx = candidate.x - floor.x;
-        const dz = candidate.z - floor.z;
-        const alongX = Math.abs(dx * basis.xX + dz * basis.xZ);
-        const alongZ = Math.abs(dx * basis.zX + dz * basis.zZ);
-        const neighboursAlongLength =
-          alongX <= PHYSICAL_LOG.length + FLOOR_COMPONENT_GAP &&
-          alongZ <= PHYSICAL_LOG.floorWidth + FLOOR_COMPONENT_GAP;
-        const neighboursAcrossWidth =
-          alongX <= PHYSICAL_LOG.floorWidth + FLOOR_COMPONENT_GAP &&
-          alongZ <= PHYSICAL_LOG.length + FLOOR_COMPONENT_GAP;
-        if (neighboursAlongLength || neighboursAcrossWidth) pending.push(candidate);
-      }
-    }
-
-    return component;
+    this.floorCornerCache = collectOuterStructuralFloorCorners(this.#activeBuilt('floor'));
+    this.floorCornerCacheRevision = this.structureRevision;
+    return this.floorCornerCache;
   }
 
   #framePairs() {

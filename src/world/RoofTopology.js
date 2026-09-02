@@ -425,19 +425,27 @@ export function collectRoofRegions(pairs, {
   const regions = [];
 
   for (const component of connectedPairComponents(pairs)) {
+    // A closed outer beam loop may contain intermediate eave stations without an
+    // interior cross-beam. Recover those stations first so a long perimeter is
+    // segmented into physical-Log roof bays instead of one stretched roof.
+    const bounded = frameBoundsRegions(component, {
+      yawTolerance,
+      topTolerance,
+      maxAlong,
+      minWidth,
+      maxWidth,
+      roofPitch,
+      minRise,
+      maxRise,
+      eaveSeatLift
+    });
+    if (bounded.length > 1) {
+      regions.push(...bounded);
+      continue;
+    }
+
     const loop = closedLoop(component, topTolerance);
     if (!loop) {
-      const bounded = frameBoundsRegions(component, {
-        yawTolerance,
-        topTolerance,
-        maxAlong,
-        minWidth,
-        maxWidth,
-        roofPitch,
-        minRise,
-        maxRise,
-        eaveSeatLift
-      });
       if (bounded.length) regions.push(...bounded);
       continue;
     }

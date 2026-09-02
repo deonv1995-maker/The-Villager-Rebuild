@@ -21,6 +21,8 @@ A two-bay gable therefore has **six unique angled rafters**, because the two raf
 
 The **ROOF** build option is the player-facing ordered coordinator over the same shared member descriptors. While ROOF remains selected, each carried physical Log targets an available rafter first and is recorded canonically as an ANGLE member. Only after every available rafter in the local roof footprint is complete does ROOF expose ridge positions, recording those Logs canonically as RAW members. It cannot skip directly to a ridge.
 
+As in the archived original, upright FRAME posts alone do not define a roof. The actual RAW top beams must form a closed outer perimeter before any roof member becomes available. Multi-bay footprints are recovered from intermediate stations on that outer loop, so an open interior does not require cross-beams or centre posts merely to segment the roof into physical-Log bays.
+
 After the final physical roof member is placed, the selected ROOF workflow hands off to the inventory-backed thatch action. If at least 4 Grass is available, the next reachable open roof panel exposes **ROOF · THATCH**; each trigger covers exactly one panel and consumes 4 Grass. If Grass runs out, completed panels remain and the action reports the missing amount.
 
 ## Why
@@ -49,6 +51,8 @@ Thatch remains panel-based and depends on completed roof framing. Because a mult
 - Existing saved legacy ROOF-mode members remain valid against the same geometry descriptors.
 - New ROOF-option placements are stored as canonical ANGLE rafters or RAW ridges.
 - ROOF never offers a ridge while an available rafter remains unfinished.
+- ROOF remains unavailable until the physical RAW top-beam perimeter is closed.
+- Multi-bay roofs need only their outer top beams; no interior cross-beam is invented as a topology requirement.
 - Thatch is applied one panel per action, costs 4 Grass per panel, and never consumes Grass before physical roof completion.
 - Region identity and orientation remain deterministic if frame-pair iteration order changes.
 - Gameplay, terrain, collision, PWA, world generation and deployment systems are not part of this change.
