@@ -7,7 +7,9 @@ Chopped forest trees regrow from their existing stumps so long building sessions
 ## Runtime contract
 
 - `TreeHarvestSystem` remains the single owner of tree harvest and regrowth lifecycle state.
-- A fully chopped tree still produces the existing physical-log drop count and leaves the existing stump visual.
+- A fully chopped tree still produces the existing physical-log drop count and leaves a stump visual at the original tree position.
+- The stump footprint uses the chopped tree's existing trunk/collision radius directly; it must not be reduced by a separate visual scale factor.
+- Physical Logs produced by chopping remain the canonical existing Log objects. Tree harvesting must not rescale, recolor, wrap, or otherwise replace the Log presentation used by pickup, dropping, carrying, or construction.
 - The stump starts a data-driven active-play countdown from `HARVESTABLE_DEFINITIONS.forestTree.regrowSeconds`.
 - The current baseline is 180 seconds of active gameplay.
 - Regrowth pauses safely when the stump footprint is occupied by player-built collision such as placed construction logs or a campfire.
@@ -22,7 +24,7 @@ The remaining stump countdown is included in save data through the tree-harvest 
 
 ## Architecture boundaries
 
-This feature does not introduce a second tree spawner or a separate renewable-resource manager. World generation still owns initial tree placement, `WorldCollisionSystem` remains the collision authority, `TreeHarvestSystem` owns the harvest/regrowth lifecycle, and the existing gatherable/physical-log path remains unchanged.
+This feature does not introduce a second tree spawner or a separate renewable-resource manager. World generation still owns initial tree placement, `WorldCollisionSystem` remains the collision authority, `TreeHarvestSystem` owns the harvest/regrowth lifecycle, and the existing gatherable/physical-log path remains unchanged. Stump presentation may use tree footprint data, but it must not become a second source of truth for physical Log dimensions or construction behavior.
 
 ## Verification
 
@@ -36,3 +38,5 @@ This feature does not introduce a second tree spawner or a separate renewable-re
 - deferral when player-built collision occupies the stump;
 - no duplicate log spawn during regrowth;
 - persistence hooks for save / continue.
+
+`scripts/verify-tree-harvest.mjs` additionally protects the stump/log visual boundary: the stump uses the source tree radius without the previous 0.7 shrink factor, while physical Logs remain on the canonical existing gatherable and construction visual path.
