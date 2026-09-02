@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
+import {
+  attachFelledTreeLogGroundPresentation,
+  FELLED_TREE_BARK_COLOR
+} from './FelledTreeLogPresentation.js';
 import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 import { TreeHitShakeSystem } from './TreeHitShakeSystem.js';
 
@@ -295,7 +299,7 @@ export class TreeHarvestSystem {
     const radius = Math.max(0.22, tree.obstacle.radius * 0.7);
     const stump = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 0.9, radius, 0.34, 7),
-      new THREE.MeshStandardMaterial({ color: 0x6f472a, roughness: 1, flatShading: true })
+      new THREE.MeshStandardMaterial({ color: FELLED_TREE_BARK_COLOR, roughness: 1, flatShading: true })
     );
     stump.name = `chopped-tree-stump-${tree.treeId}`;
     stump.position.set(
@@ -326,12 +330,17 @@ export class TreeHarvestSystem {
     for (let index = 0; index < count; index += 1) {
       const angle = (index / Math.max(1, count)) * Math.PI * 2 + 0.35;
       const distance = 0.68 + (index % 2) * 0.16;
-      this.gatherables.spawn(this.definition.dropResourceId, {
+      const root = this.gatherables.spawn(this.definition.dropResourceId, {
         x: tree.obstacle.x + Math.cos(angle) * distance,
         z: tree.obstacle.z + Math.sin(angle) * distance,
         quantity: 1,
         yaw: angle + Math.PI / 2
       });
+      attachFelledTreeLogGroundPresentation(root, {
+        kind: 'felled-tree',
+        sourceRadius: tree.obstacle.radius,
+        segmentIndex: index
+      }, this.gatherables.group);
     }
   }
 
