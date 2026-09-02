@@ -153,6 +153,25 @@ export class StructureRoofQuery {
     return this.getCompletedRegions(focus).flatMap(roofPanelDescriptors);
   }
 
+  findStoreyRegion(playerPosition) {
+    if (!playerPosition) return null;
+    let best = null;
+    let bestVerticalDistance = Infinity;
+
+    for (const region of this.getRegions(playerPosition)) {
+      if (!pointInsideRoofRegion(region, playerPosition, 0.12)) continue;
+      const baseY = Number.isFinite(region.frameBaseY) ? region.frameBaseY : region.eaveY - PHYSICAL_LOG.length;
+      const topY = Number.isFinite(region.frameTopY) ? region.frameTopY : region.eaveY;
+      if (playerPosition.y < baseY - 0.65 || playerPosition.y > topY + 0.45) continue;
+      const verticalDistance = Math.abs(playerPosition.y - baseY);
+      if (verticalDistance >= bestVerticalDistance) continue;
+      bestVerticalDistance = verticalDistance;
+      best = region;
+    }
+
+    return best;
+  }
+
   findInteriorRegion(playerPosition) {
     if (!playerPosition) return null;
     for (const region of this.getCompletedRegions(playerPosition)) {
