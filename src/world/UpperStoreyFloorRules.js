@@ -1,3 +1,5 @@
+import { frameSeatYForFloor } from './FloorFrameTopology.js';
+
 const pointInsideRegion = (point, region, tolerance = 0.18) => {
   const along = {
     x: region.b.x - region.a.x,
@@ -30,9 +32,10 @@ const pointInsideRegion = (point, region, tolerance = 0.18) => {
  * This makes upper storeys follow the supported footprint below, including stepped
  * footprints and deliberate interior openings, without inventing centre posts.
  *
- * The walking surface is seated exactly on the physical top of the RAW perimeter beam.
- * The split-log floor body therefore embeds downward into the beam instead of lifting
- * the next FRAME posts above it, eliminating the visible seam between stacked storeys.
+ * The walking surface is seated on top of the RAW perimeter beam while structural
+ * FRAME placement recovers the beam centreline through frameSeatYForFloor. Keeping
+ * those two heights distinct removes the visible stacked-post gap without lowering
+ * the actual upstairs walking surface into the support beam.
  */
 export function collectUpperStoreyFloorCandidates(regions, floors, {
   floorTopLift,
@@ -45,7 +48,7 @@ export function collectUpperStoreyFloorCandidates(regions, floors, {
     if (!Number.isFinite(region.frameBaseY) || !Number.isFinite(region.frameTopY)) continue;
     for (const floor of floors ?? []) {
       if (floor?.active === false || floor?.mode !== 'floor') continue;
-      if (Math.abs(floor.topY - region.frameBaseY) > levelTolerance) continue;
+      if (Math.abs(frameSeatYForFloor(floor) - region.frameBaseY) > levelTolerance) continue;
       if (!pointInsideRegion(floor, region)) continue;
 
       const topY = region.frameTopY + beamRadius;
