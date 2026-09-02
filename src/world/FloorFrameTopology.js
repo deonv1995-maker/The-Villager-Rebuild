@@ -98,7 +98,6 @@ function mergedCornerNodes(component, frameBasis) {
           x: corner.x,
           z: corner.z,
           topY: floor.topY,
-          storey: floor.storey ?? 0,
           floorIds: [floor.id]
         };
         nodes.push(node);
@@ -107,7 +106,6 @@ function mergedCornerNodes(component, frameBasis) {
       node.x = (node.x + corner.x) * 0.5;
       node.z = (node.z + corner.z) * 0.5;
       node.topY = Math.max(node.topY, floor.topY);
-      node.storey = Math.max(node.storey ?? 0, floor.storey ?? 0);
       if (!node.floorIds.includes(floor.id)) node.floorIds.push(floor.id);
     }
   }
@@ -254,7 +252,6 @@ export function collectOuterStructuralFloorCorners(floors) {
         x: node.x,
         z: node.z,
         baseY: node.topY,
-        storey: node.storey ?? 0,
         floorIds: [...node.floorIds]
       });
     }
