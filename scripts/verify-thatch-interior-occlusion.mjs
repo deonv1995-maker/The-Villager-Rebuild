@@ -126,10 +126,13 @@ assert.ok(firstVisual, 'A thatched panel must retain its finished visual root');
 const firstVisualNames = new Set();
 firstVisual.traverse(object => firstVisualNames.add(object.name));
 assert.ok(firstVisualNames.has('thatch-underlay'), 'Finished thatch needs a darker depth underlay');
-for (let index = 0; index < 4; index += 1) {
+for (let index = 0; index < 5; index += 1) {
   assert.ok(firstVisualNames.has(`thatch-course-${index}`), `Finished thatch is missing overlapping course ${index}`);
   assert.ok(firstVisualNames.has(`thatch-course-fringe-${index}`), `Finished thatch is missing straw fringe ${index}`);
 }
+const battenBundle = firstVisual.getObjectByName('thatch-course-battens');
+assert.ok(battenBundle?.isInstancedMesh, 'Finished thatch support battens must use one mobile-efficient instanced mesh');
+assert.equal(battenBundle.count, 4, 'Each upper course edge must expose one support batten');
 const eaveFringe = firstVisual.getObjectByName('thatch-course-fringe-0');
 const fringePositions = eaveFringe?.geometry?.getAttribute('position');
 assert.ok(fringePositions && fringePositions.count >= 18, 'The eave fringe needs multiple visible straw tufts');
@@ -143,7 +146,12 @@ const firstTuftTip = new THREE.Vector3(
   fringePositions.getY(2),
   fringePositions.getZ(2)
 );
-assert.ok(firstTuftTip.distanceTo(firstTuftBase) > 0.09, 'The lowest straw fringe must project beyond the eave');
+assert.ok(firstTuftTip.distanceTo(firstTuftBase) > 0.17, 'The lowest straw fringe must project visibly beyond the eave');
+const firstCourse = firstVisual.getObjectByName('thatch-course-0');
+assert.ok(
+  firstCourse?.geometry?.getAttribute('position')?.count === 8,
+  'Each thatch course must be a solid-depth bundle instead of a flat four-corner sheet'
+);
 assert.ok(firstVisualNames.has('thatch-eave-fascia'), 'Finished thatch needs a timber eave fascia');
 assert.ok(firstVisualNames.has('thatch-gable-trim-left'), 'Finished thatch needs left gable rake trim');
 assert.ok(firstVisualNames.has('thatch-gable-trim-right'), 'Finished thatch needs right gable rake trim');
