@@ -32,6 +32,14 @@ const memberPlansMatch = (source, target) => (
   Math.abs((source.roofLength ?? 0) - (target.roofLength ?? 0)) <= 0.22
 );
 
+const memberTargetsMatch = (left, right) => (
+  left?.roofRole === right?.roofRole &&
+  Math.hypot(left.x - right.x, left.z - right.z) <= MEMBER_PLAN_TOLERANCE &&
+  Math.abs((left.y ?? 0) - (right.y ?? 0)) <= LEVEL_TOLERANCE &&
+  axisYawDelta(left.yaw ?? 0, right.yaw ?? 0) <= 0.12 &&
+  Math.abs((left.roofLength ?? 0) - (right.roofLength ?? 0)) <= 0.22
+);
+
 const supportingFloorForFrame = (frame, floors) => {
   let best = null;
   let bestDistance = Infinity;
@@ -60,6 +68,50 @@ const regionStorey = (region, floors) => {
   return matching.length ? Math.max(...matching) : 0;
 };
 
+const targetForSharedMember = (plan, member) => {
+  const sourceMembers = roofMemberCandidates(plan.source);
+  const targetMembers = roofMemberCandidates(plan.target);
+  const index = sourceMembers.findIndex(candidate => roofMemberOccupied(candidate, [member]));
+  return index >= 0 ? targetMembers[index] : null;
+};
+
+/**
+ * Adjacent roof bays may share physical rafters. A partial stacked extension must not
+ * steal one of those members from a neighbouring lower bay. A relocation plan is safe
+ * only when every completed region that currently uses any moved member has a matching
+ * relocation to the same elevation and the shared member resolves to the same target.
+ */
+export function filterSharedRoofRelocationPlans(plans, regions, members) {
+  const availablePlans = (plans ?? []).filter(Boolean);
+  if (!availablePlans.length) return [];
+  const planBySource = new Map(availablePlans.map(plan => [plan.source.key, plan]));
+  const completed = (regions ?? []).filter(region => roofRegionComplete(region, members));
+
+  return availablePlans.filter(plan => {
+    for (const sourceCandidate of roofMemberCandidates(plan.source)) {
+      const member = (members ?? []).find(entry => roofMemberOccupied(sourceCandidate, [entry]));
+      if (!member) return false;
+
+      for (const region of completed) {
+        if (region.key === plan.source.key) continue;
+        const sharesMember = roofMemberCandidates(region)
+          .some(candidate => roofMemberOccupied(candidate, [member]));
+        if (!sharesMember) continue;
+
+        const neighbourPlan = planBySource.get(region.key);
+        if (!neighbourPlan) return false;
+        if (Math.abs((neighbourPlan.target.eaveY ?? 0) - (plan.target.eaveY ?? 0)) > LEVEL_TOLERANCE) {
+          return false;
+        }
+        const leftTarget = targetForSharedMember(plan, member);
+        const rightTarget = targetForSharedMember(neighbourPlan, member);
+        if (!leftTarget || !rightTarget || !memberTargetsMatch(leftTarget, rightTarget)) return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function collectStackedRoofRelocationPlans(regions, members) {
   const groups = new Map();
   for (const region of regions ?? []) {
@@ -70,7 +122,7 @@ export function collectStackedRoofRelocationPlans(regions, members) {
     groups.set(key, bucket);
   }
 
-  const plans = [];
+  const candidates = [];
   for (const [planKey, group] of groups) {
     const levels = [...group]
       .sort((left, right) => (left.frameTopY ?? 0) - (right.frameTopY ?? 0));
@@ -96,14 +148,15 @@ export function collectStackedRoofRelocationPlans(regions, members) {
       sourceMembers.some((candidate, index) => !memberPlansMatch(candidate, targetMembers[index]))
     ) continue;
 
-    plans.push({
+    candidates.push({
       planKey,
       source,
       target,
       verticalDelta: (target.eaveY ?? 0) - (source.eaveY ?? 0)
     });
   }
-  return plans;
+
+  return filterSharedRoofRelocationPlans(candidates, regions, members);
 }
 
 export class StackedRoofReflowSystem {
@@ -151,11 +204,7 @@ export class StackedRoofReflowSystem {
 
         const existing = moves.get(member.id);
         if (existing) {
-          const sameTarget = (
-            Math.hypot(existing.target.x - targetCandidate.x, existing.target.z - targetCandidate.z) <= MEMBER_PLAN_TOLERANCE &&
-            Math.abs(existing.target.y - targetCandidate.y) <= LEVEL_TOLERANCE
-          );
-          if (!sameTarget) continue;
+          if (!memberTargetsMatch(existing.target, targetCandidate)) continue;
         }
         moves.set(member.id, {
           member,
