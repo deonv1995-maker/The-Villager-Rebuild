@@ -23,6 +23,13 @@ function animationNamesFromGlb(buffer) {
   return (json.animations ?? []).map(animation => animation.name).filter(Boolean);
 }
 
+function assertPixelIcon(buffer, label) {
+  const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  assert.ok(buffer.subarray(0, 8).equals(pngSignature), `${label} icon must remain a valid PNG`);
+  assert.equal(buffer.readUInt32BE(16), 32, `${label} icon must remain 32 pixels wide`);
+  assert.equal(buffer.readUInt32BE(20), 32, `${label} icon must remain 32 pixels high`);
+}
+
 assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Craftable tool order must remain stable');
 assert.deepEqual(
   TOOL_DURABILITY,
@@ -187,9 +194,9 @@ const [
   craftingStylesSource,
   indexSource,
   assetSource,
-  hammerSvg,
-  pickaxeSvg,
-  swordSvg
+  hammerPng,
+  pickaxePng,
+  swordPng
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
@@ -213,9 +220,9 @@ const [
   readFile('src/crafting.css', 'utf8'),
   readFile('index.html', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
-  readFile('public/assets/ui/mobile/icon-hammer.svg', 'utf8'),
-  readFile('public/assets/ui/mobile/icon-pickaxe.svg', 'utf8'),
-  readFile('public/assets/ui/mobile/icon-sword.svg', 'utf8')
+  readFile('public/assets/ui/fantasy/icon-hammer.png'),
+  readFile('public/assets/ui/fantasy/icon-pickaxe.png'),
+  readFile('public/assets/ui/fantasy/icon-sword.png')
 ]);
 
 for (const requirement of [
@@ -392,15 +399,13 @@ assert.ok(playerSource.includes('mountRightHandObject(object)'), 'Ranger control
 assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpearThrow(onRelease)'), 'Spear must use the authored Throw animation and a timed release callback');
 assert.ok(playerSource.includes('playToolAction(toolId)') && playerSource.includes('#selectToolAction(toolId)'), 'Ranger controller must own work-action selection and timing');
 
-for (const [name, path, svg] of [
-  ['hammer', "hammer: asset('ui/mobile/icon-hammer.svg')", hammerSvg],
-  ['pickaxe', "pickaxe: asset('ui/mobile/icon-pickaxe.svg')", pickaxeSvg],
-  ['sword', "sword: asset('ui/mobile/icon-sword.svg')", swordSvg]
+for (const [name, path, png] of [
+  ['hammer', "hammer: asset('ui/fantasy/icon-hammer.png')", hammerPng],
+  ['pickaxe', "pickaxe: asset('ui/fantasy/icon-pickaxe.png')", pickaxePng],
+  ['sword', "sword: asset('ui/fantasy/icon-sword.png')", swordPng]
 ]) {
   assert.ok(assetSource.includes(path), `${name} icon must be registered in shared runtime assets`);
-  assert.ok(svg.includes('<svg') && svg.includes('#FFFFFF'), `${name} icon must remain a valid white SVG glyph`);
+  assertPixelIcon(png, name);
 }
-assert.ok(pickaxeSvg.includes('viewBox="0 0 48 48"'), 'Pickaxe toolbelt icon must retain a stable 48x48 view box');
-assert.ok((pickaxeSvg.match(/<path/g) ?? []).length >= 2, 'Pickaxe toolbelt icon must contain a clear head and handle silhouette');
 
 console.log('Foundation 0.3.8 selection-only toolbelt, dedicated crafting, crafting-owned campfire placement, durability, retrievable spear and preserved gameplay contracts verified');

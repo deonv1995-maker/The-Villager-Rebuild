@@ -114,6 +114,15 @@ body.log-carrying #boot-status {
   touch-action: none;
 }
 .tool-slot img { display: block; width: 100%; height: 100%; pointer-events: none; filter: brightness(.82) sepia(.15); }
+.tool-slot img[src*="/ui/fantasy/"],
+.inventory-resource-icon[src*="/ui/fantasy/"],
+.craft-menu-toggle img[src*="/ui/fantasy/"],
+.craft-recipe-icon[src*="/ui/fantasy/"],
+.hud-button .button-icon[src*="/ui/fantasy/"] {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  filter: none;
+}
 .tool-slot.locked { opacity: .42; }
 .tool-slot.craftable { border-color: rgba(238, 194, 93, .72); }
 .tool-slot.owned { opacity: .88; }

@@ -61,7 +61,7 @@ For each pack, record license/provenance, category, formats, art style, intended
 
 | Pack | License | Category / intended role | Mobile | Compatibility | Decision |
 |---|---|---|---|---|---|
-| Shikashi's Fantasy Icons Pack v2 | Commercial use in supplied notes; attribution review required for game-icons.net designs | Pixel UI/icons | Excellent | Different visual language | Reference / optional UI |
+| Shikashi's Fantasy Icons Pack v2 | Commercial use in supplied notes; some designs reference game-icons.net under CC BY 3.0; supplied notice retained in `licenses/` | Pixel UI/icons | Excellent | Strong for compact inventory/tool symbols; custom construction and touch-control glyphs remain Kenney/game-specific | **Supporting UI — curated tools/resources only** |
 | KayKit Fantasy Weapons Bits 1.0 FREE | CC0 | Spear/bows/axes/shields | Strong | Excellent | Primary — weapons |
 | KayKit Halloween Bits 1.0 FREE | CC0 | Dark-region props | Strong | Excellent | Supporting — danger/ruins |
 | KayKit Furniture Bits 1.0 FREE | CC0 | Home interiors/belongings | Strong | Excellent | Primary — interiors |
@@ -101,6 +101,12 @@ For each pack, record license/provenance, category, formats, art style, intended
 - Day 1 hunt presentation — Qiwii Wild Pig under current in-engine style test;
 - farm animals — Quaternius candidate;
 - gameplay touch controls/UI — Kenney stack.
+
+## Foundation 0.3 selected fantasy icon subset
+
+Shikashi's Fantasy Icons Pack v2 is integrated only where the supplied art has an exact, readable match for a current game concept. The selected 32x32 transparent drop-shadow icons cover Axe, Hammer, Pickaxe, Sword, Campfire, Stick/Wood, Stone, Grass/Herb and Raw Meat. They are normalized as individual PNG files under `public/assets/ui/fantasy/`; the source spritesheets and unused variants are not shipped.
+
+The current Hand, Spear, Jump, joystick, action-button frame and custom RAW/FLOOR/FRAME/WALL/ANGLE/ROOF/DROP construction glyphs remain unchanged. Those controls need game-specific silhouettes or established touch semantics that the pack does not match closely enough. Runtime references stay centralized in `AssetPaths.js`, and CSS applies nearest-neighbour pixel rendering only to the selected fantasy assets so their colour and edge treatment remain intact on mobile.
 
 ## Foundation 0.3.1 animal import rule
 

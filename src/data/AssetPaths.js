@@ -34,18 +34,18 @@ export const ASSET_PATHS = Object.freeze({
       joystickNub: asset('ui/mobile/joystick-nub.svg'),
       buttonCircle: asset('ui/mobile/button-circle.svg'),
       hand: asset('ui/mobile/icon-hand.svg'),
-      axe: asset('ui/mobile/icon-axe.svg'),
-      hammer: asset('ui/mobile/icon-hammer.svg'),
-      pickaxe: asset('ui/mobile/icon-pickaxe.svg'),
-      sword: asset('ui/mobile/icon-sword.svg'),
-      campfire: asset('ui/mobile/icon-campfire.svg'),
+      axe: asset('ui/fantasy/icon-axe.png'),
+      hammer: asset('ui/fantasy/icon-hammer.png'),
+      pickaxe: asset('ui/fantasy/icon-pickaxe.png'),
+      sword: asset('ui/fantasy/icon-sword.png'),
+      campfire: asset('ui/fantasy/icon-campfire.png'),
       jump: asset('ui/mobile/icon-jump.svg'),
       spear: asset('ui/mobile/icon-spear.svg'),
       resources: Object.freeze({
-        stick: asset('ui/mobile/icon-resource-stick.svg'),
-        stone: asset('ui/mobile/icon-resource-stone.svg'),
-        grass: asset('ui/mobile/icon-resource-grass.svg'),
-        meat: asset('ui/mobile/icon-resource-meat.svg')
+        stick: asset('ui/fantasy/icon-resource-stick.png'),
+        stone: asset('ui/fantasy/icon-resource-stone.png'),
+        grass: asset('ui/fantasy/icon-resource-grass.png'),
+        meat: asset('ui/fantasy/icon-resource-meat.png')
       }),
       build: Object.freeze({
         raw: asset('ui/mobile/icon-build-raw.svg'),
