@@ -4,10 +4,11 @@ Completed thatch panels use a procedural finish inspired by layered hand-laid ha
 
 Each panel now contains:
 
-- four overlapping thatch courses with alternating warm straw tones;
-- deterministic triangular straw fringe along every course edge;
-- a darker underlay that reads as roof thickness between the layers;
-- timber fascia along the eave and timber rake trim on exposed gable ends;
-- one rounded ridge bundle with three rope ties, owned by the canonical `a` panel so adjoining slopes never duplicate it.
+- five overlapping, solid-depth thatch bundles with alternating warm straw tones;
+- a pronounced eave overhang and deterministic irregular straw fringe along every course edge;
+- a darker solid underlay that remains visible between the stepped layers;
+- slim round timber battens beneath the upper course edges;
+- heavy timber fascia along the eave and enlarged rake trim on exposed gable ends;
+- one full rounded ridge roll with three rope ties, owned by the canonical `a` panel so adjoining slopes never duplicate it.
 
-The finish is generated from each panel's existing four corners. Shared multi-bay edges suppress their internal rake trim and meet at the ridge without overlapping cap extensions. The result follows rotated buildings, terrain-adapted frame heights, and every bay produced by the roof topology without introducing a new placement step or save field.
+The finish is generated from each panel's existing four corners. It extends beyond exposed eaves and gables for a handmade silhouette, while shared multi-bay edges suppress internal overhang and rake trim and meet at the ridge without overlapping cap extensions. The result follows rotated buildings, terrain-adapted frame heights, and every bay produced by the roof topology without introducing a new placement step or save field.

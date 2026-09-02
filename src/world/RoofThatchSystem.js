@@ -4,9 +4,13 @@ export const THATCH_GRASS_COST = 4;
 export const THATCH_INTERACTION_RANGE = 4.6;
 
 const THATCH_SURFACE_LIFT = 0.07;
-const THATCH_COURSE_COUNT = 4;
+const THATCH_COURSE_COUNT = 5;
+const THATCH_COURSE_OVERLAP = 0.075;
+const THATCH_COURSE_DEPTH = 0.105;
+const THATCH_EAVE_OVERHANG = 0.24;
+const THATCH_GABLE_OVERHANG = 0.12;
 const THATCH_UNDERLAY_COLOR = 0x8f7038;
-const THATCH_COURSE_COLORS = [0xd1b160, 0xc39c4f, 0xddbd6b, 0xc9a457];
+const THATCH_COURSE_COLORS = [0xc99d4d, 0xd8b260, 0xc89a48, 0xe0bd69, 0xcfa653];
 const THATCH_FRINGE_COLOR = 0xe0c071;
 const THATCH_WOOD_COLOR = 0x50351f;
 const THATCH_ROPE_COLOR = 0x74502d;
@@ -25,14 +29,22 @@ const panelPoint = (corners, side, amount) => pointBetween(
   amount
 );
 
-const quadGeometry = (points, center) => {
+const thickQuadGeometry = (points, center, normal, depth) => {
   const positions = [];
-  for (const point of points) {
+  const bottom = points.map(point => point.clone().addScaledVector(normal, -depth));
+  for (const point of [...points, ...bottom]) {
     positions.push(point.x - center.x, point.y - center.y, point.z - center.z);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex([0, 1, 2, 0, 2, 3]);
+  geometry.setIndex([
+    0, 1, 2, 0, 2, 3,
+    7, 6, 5, 7, 5, 4,
+    0, 4, 5, 0, 5, 1,
+    1, 5, 6, 1, 6, 2,
+    2, 6, 7, 2, 7, 3,
+    3, 7, 4, 3, 4, 0
+  ]);
   geometry.computeVertexNormals();
   return geometry;
 };
@@ -69,12 +81,62 @@ const beamBetween = (start, end, center, material, name, thickness = 0.13) => {
   return beam;
 };
 
+const roundBeamBundle = (segments, center, material, name, radius = 0.045) => {
+  const valid = segments.map(segment => {
+    const direction = new THREE.Vector3().subVectors(segment.end, segment.start);
+    const length = direction.length();
+    if (length < 0.05) return null;
+    return { ...segment, direction: direction.normalize(), length };
+  }).filter(Boolean);
+  if (!valid.length) return null;
+
+  const geometry = new THREE.CylinderGeometry(radius, radius * 1.05, 1, 7, 1, false);
+  const bundle = new THREE.InstancedMesh(geometry, material, valid.length);
+  bundle.name = name;
+  bundle.castShadow = true;
+  bundle.receiveShadow = true;
+  const matrix = new THREE.Matrix4();
+  const quaternion = new THREE.Quaternion();
+  const midpoint = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const up = new THREE.Vector3(0, 1, 0);
+  for (const [index, segment] of valid.entries()) {
+    midpoint.addVectors(segment.start, segment.end).multiplyScalar(0.5).sub(center);
+    quaternion.setFromUnitVectors(up, segment.direction);
+    scale.set(1, segment.length, 1);
+    matrix.compose(midpoint, quaternion, scale);
+    bundle.setMatrixAt(index, matrix);
+  }
+  bundle.instanceMatrix.needsUpdate = true;
+  return bundle;
+};
+
+const expandFinishedCorners = (corners, hasLeftNeighbour, hasRightNeighbour) => {
+  const expanded = corners.map(point => point.clone());
+  const across = new THREE.Vector3().subVectors(expanded[1], expanded[0]).normalize();
+  if (!hasLeftNeighbour) {
+    expanded[0].addScaledVector(across, -THATCH_GABLE_OVERHANG);
+    expanded[3].addScaledVector(across, -THATCH_GABLE_OVERHANG);
+  }
+  if (!hasRightNeighbour) {
+    expanded[1].addScaledVector(across, THATCH_GABLE_OVERHANG);
+    expanded[2].addScaledVector(across, THATCH_GABLE_OVERHANG);
+  }
+
+  const eaveMidpoint = pointBetween(expanded[0], expanded[1], 0.5);
+  const ridgeMidpoint = pointBetween(expanded[3], expanded[2], 0.5);
+  const downslope = new THREE.Vector3().subVectors(eaveMidpoint, ridgeMidpoint).normalize();
+  expanded[0].addScaledVector(downslope, THATCH_EAVE_OVERHANG);
+  expanded[1].addScaledVector(downslope, THATCH_EAVE_OVERHANG);
+  return expanded;
+};
+
 const fringeGeometry = (corners, center, normal, amount, panelId, courseIndex) => {
   const left = panelPoint(corners, 'left', amount);
   const right = panelPoint(corners, 'right', amount);
   const across = new THREE.Vector3().subVectors(right, left);
   const width = across.length();
-  const tuftCount = Math.max(6, Math.round(width / 0.3));
+  const tuftCount = Math.max(9, Math.round(width / 0.22));
   const positions = [];
   const hashSeed = [...panelId].reduce((sum, character) => sum + character.charCodeAt(0), 0);
 
@@ -88,10 +150,10 @@ const fringeGeometry = (corners, center, normal, amount, panelId, courseIndex) =
     const eaveMiddle = pointBetween(corners[0], corners[1], middleAmount);
     const ridgeMiddle = pointBetween(corners[3], corners[2], middleAmount);
     const downslope = new THREE.Vector3().subVectors(eaveMiddle, ridgeMiddle).normalize();
-    const variation = ((hashSeed + courseIndex * 7 + index * 11) % 5) * 0.018;
+    const variation = ((hashSeed + courseIndex * 7 + index * 11) % 7) * 0.018;
     const tip = baseMiddle
-      .addScaledVector(downslope, 0.105 + variation)
-      .addScaledVector(normal, 0.018);
+      .addScaledVector(downslope, 0.18 + variation)
+      .addScaledVector(normal, 0.025 + (index % 3) * 0.008);
     for (const point of [baseStart, baseEnd, tip]) {
       positions.push(point.x - center.x, point.y - center.y, point.z - center.z);
     }
@@ -256,77 +318,104 @@ export class RoofThatchSystem {
     const completedPanels = this.roofQuery.getCompletedPanels(panel.center);
     const hasLeftNeighbour = roofPanelEdgeHasNeighbour(panel, completedPanels, 0, 3);
     const hasRightNeighbour = roofPanelEdgeHasNeighbour(panel, completedPanels, 1, 2);
+    const finishedCorners = expandFinishedCorners(
+      worldCorners,
+      hasLeftNeighbour,
+      hasRightNeighbour
+    );
 
     root.add(shadowMesh(
-      quadGeometry(worldCorners, center),
+      thickQuadGeometry(finishedCorners, center, normal, 0.075),
       underlayMaterial,
       'thatch-underlay'
     ));
 
+    const courseBattens = [];
     for (let index = 0; index < THATCH_COURSE_COUNT; index += 1) {
-      const lower = Math.max(0, index / THATCH_COURSE_COUNT - (index === 0 ? 0 : 0.045));
-      const upper = (index + 1) / THATCH_COURSE_COUNT;
-      const layerLift = 0.022 + index * 0.008;
+      const lower = Math.max(0, index / THATCH_COURSE_COUNT - (index === 0 ? 0 : THATCH_COURSE_OVERLAP));
+      const upper = Math.min(1, (index + 1) / THATCH_COURSE_COUNT + 0.025);
+      const layerLift = 0.045 + index * 0.012;
       const courseCorners = [
-        panelPoint(worldCorners, 'left', lower),
-        panelPoint(worldCorners, 'right', lower),
-        panelPoint(worldCorners, 'right', upper),
-        panelPoint(worldCorners, 'left', upper)
+        panelPoint(finishedCorners, 'left', lower),
+        panelPoint(finishedCorners, 'right', lower),
+        panelPoint(finishedCorners, 'right', upper),
+        panelPoint(finishedCorners, 'left', upper)
       ].map(point => point.addScaledVector(normal, layerLift));
       root.add(shadowMesh(
-        quadGeometry(courseCorners, center),
+        thickQuadGeometry(
+          courseCorners,
+          center,
+          normal,
+          THATCH_COURSE_DEPTH + (index === 0 ? 0.035 : 0)
+        ),
         courseMaterials[index % courseMaterials.length],
         `thatch-course-${index}`
       ));
 
-      const fringeAmount = index === 0 ? 0 : index / THATCH_COURSE_COUNT - 0.018;
+      const fringeAmount = index === 0 ? 0 : index / THATCH_COURSE_COUNT - 0.028;
       root.add(shadowMesh(
-        fringeGeometry(worldCorners, center, normal, fringeAmount, panel.id, index),
+        fringeGeometry(finishedCorners, center, normal, fringeAmount, panel.id, index),
         fringeMaterial,
         `thatch-course-fringe-${index}`
       ));
-    }
 
-    const eaveStart = new THREE.Vector3(panel.eave[0].x, panel.eave[0].y, panel.eave[0].z)
-      .addScaledVector(normal, THATCH_SURFACE_LIFT * 0.7);
-    const eaveEnd = new THREE.Vector3(panel.eave[1].x, panel.eave[1].y, panel.eave[1].z)
-      .addScaledVector(normal, THATCH_SURFACE_LIFT * 0.7);
+      if (index > 0) {
+        const battenStart = panelPoint(finishedCorners, 'left', fringeAmount)
+          .addScaledVector(normal, layerLift - THATCH_COURSE_DEPTH * 0.58);
+        const battenEnd = panelPoint(finishedCorners, 'right', fringeAmount)
+          .addScaledVector(normal, layerLift - THATCH_COURSE_DEPTH * 0.58);
+        courseBattens.push({ start: battenStart, end: battenEnd });
+      }
+    }
+    const battenBundle = roundBeamBundle(
+      courseBattens,
+      new THREE.Vector3(center.x, center.y, center.z),
+      woodMaterial,
+      'thatch-course-battens',
+      0.042
+    );
+    if (battenBundle) root.add(battenBundle);
+
+    const eaveStart = finishedCorners[0].clone().addScaledVector(normal, -0.035);
+    const eaveEnd = finishedCorners[1].clone().addScaledVector(normal, -0.035);
     const eaveDirection = new THREE.Vector3().subVectors(eaveEnd, eaveStart);
     const eaveLength = eaveDirection.length();
     if (eaveLength > 0.1) {
       eaveDirection.normalize();
       const edge = shadowMesh(
-        new THREE.BoxGeometry(eaveLength, 0.14, 0.16),
+        new THREE.BoxGeometry(eaveLength, 0.18, 0.19),
         woodMaterial,
         'thatch-eave-fascia'
       );
       const midpoint = new THREE.Vector3().addVectors(eaveStart, eaveEnd).multiplyScalar(0.5);
-      edge.position.set(midpoint.x - center.x, midpoint.y - center.y - 0.085, midpoint.z - center.z);
+      edge.position.set(midpoint.x - center.x, midpoint.y - center.y - 0.1, midpoint.z - center.z);
       edge.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), eaveDirection);
       root.add(edge);
     }
 
-    const trimLift = normal.clone().multiplyScalar(0.075);
+    const trimLift = normal.clone().multiplyScalar(0.095);
     const leftTrim = beamBetween(
-      worldCorners[0].clone().add(trimLift),
-      worldCorners[3].clone().add(trimLift),
+      finishedCorners[0].clone().add(trimLift),
+      finishedCorners[3].clone().add(trimLift),
       center,
       woodMaterial,
-      'thatch-gable-trim-left'
+      'thatch-gable-trim-left',
+      0.18
     );
     const rightTrim = beamBetween(
-      worldCorners[1].clone().add(trimLift),
-      worldCorners[2].clone().add(trimLift),
+      finishedCorners[1].clone().add(trimLift),
+      finishedCorners[2].clone().add(trimLift),
       center,
       woodMaterial,
-      'thatch-gable-trim-right'
+      'thatch-gable-trim-right',
+      0.18
     );
     if (leftTrim && !hasLeftNeighbour) root.add(leftTrim);
     if (rightTrim && !hasRightNeighbour) root.add(rightTrim);
 
     if (panel.side === 'a') {
-      const ridgeStart = worldCorners[3].clone();
-      const ridgeEnd = worldCorners[2].clone();
+      const ridgeStart = finishedCorners[3].clone();
+      const ridgeEnd = finishedCorners[2].clone();
       const ridgeDirection = new THREE.Vector3().subVectors(ridgeEnd, ridgeStart);
       const ridgeLength = ridgeDirection.length();
       if (ridgeLength > 0.1) {
@@ -335,14 +424,14 @@ export class RoofThatchSystem {
         const capEnd = ridgeEnd.clone().addScaledVector(ridgeDirection, hasRightNeighbour ? 0 : 0.09);
         const capLength = capStart.distanceTo(capEnd);
         const ridge = shadowMesh(
-          new THREE.CylinderGeometry(0.16, 0.19, capLength, 8, 1, false),
+          new THREE.CylinderGeometry(0.24, 0.28, capLength, 10, 1, false),
           courseMaterials[2],
           'thatch-ridge-cap'
         );
         const ridgeMidpoint = new THREE.Vector3().addVectors(capStart, capEnd).multiplyScalar(0.5);
         ridge.position.set(
           ridgeMidpoint.x - center.x,
-          ridgeMidpoint.y - center.y + 0.13,
+          ridgeMidpoint.y - center.y + 0.19,
           ridgeMidpoint.z - center.z
         );
         ridge.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ridgeDirection);
@@ -351,11 +440,11 @@ export class RoofThatchSystem {
         for (const [index, amount] of [0.2, 0.5, 0.8].entries()) {
           const tiePoint = pointBetween(ridgeStart, ridgeEnd, amount);
           const tie = shadowMesh(
-            new THREE.TorusGeometry(0.185, 0.018, 5, 10),
+            new THREE.TorusGeometry(0.275, 0.022, 6, 12),
             ropeMaterial,
             `thatch-ridge-tie-${index}`
           );
-          tie.position.set(tiePoint.x - center.x, tiePoint.y - center.y + 0.13, tiePoint.z - center.z);
+          tie.position.set(tiePoint.x - center.x, tiePoint.y - center.y + 0.19, tiePoint.z - center.z);
           tie.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), ridgeDirection);
           root.add(tie);
         }
