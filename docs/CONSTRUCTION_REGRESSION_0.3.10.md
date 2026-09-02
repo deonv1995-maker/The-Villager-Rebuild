@@ -38,6 +38,14 @@ Grass is hidden only when its blade volume intersects a floor footprint. Elevate
 
 Ferns and other world vegetation are unchanged by this scoped pass.
 
+## Split-log floors on slopes
+
+The first ground-floor strip establishes the construction level for its connected floor run. On the uphill side, terrain above that datum retreats to just below the split-log walking face and blends back into the immutable natural terrain. On the downhill side, terrain is never raised to meet the floor; the floor may remain exposed as a deck and use the existing foundation supports.
+
+Production terrain chunks are intentionally low-poly for mobile performance. Their render cells can be wider than one split-log floor strip, so an untouched terrain triangle can otherwise bridge across a logically lowered footprint and visually bury the floor. `ConstructionTerrainAdaptationSystem` therefore derives a bounded sampling radius from the captured terrain grid and applies that same render-cell-aware cut to the terrain mesh, Ranger/collision construction height, and vegetation projection. This keeps one shaped terrain surface instead of allowing render geometry and gameplay height to disagree.
+
+The compensation remains cut-only, local, reversible, and construction-owned. It does not increase global terrain tessellation, regenerate the island, or permanently modify the natural terrain baseline. Removing the floor restores the original terrain vertices and colors.
+
 ## Regression coverage
 
 The construction and roof verification suites now cover:
@@ -45,6 +53,10 @@ The construction and roof verification suites now cover:
 - walking from natural terrain onto a floor beneath an overhead RAW top beam;
 - collision revision changes on add/remove;
 - grass hiding after floor placement and restoration after demolition;
+- uphill terrain grading around split-log floors even when a low-poly render cell is wider than the floor strip;
+- downhill terrain remaining unfilled so a slope floor can still form a deck edge;
+- rendered terrain and construction collision height sharing the same shaped slope surface;
+- terrain restoration after floor demolition;
 - simple closed-loop roof topology;
 - multi-bay rectangular roof recovery with internal frame connections;
 - existing bounded mobile roof workload constraints.
