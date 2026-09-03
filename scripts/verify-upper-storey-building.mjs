@@ -195,4 +195,82 @@ assert.ok(
   'Committed upper floors must recover the same structural interlock seat after save-compatible reconstruction'
 );
 
-console.log('Closed-perimeter upper-floor slots, seam-safe targeting, beam-interlocked FRAME seating and storey ownership verified.');
+// A large completed outer perimeter must remain a structural whole even when the
+// opposite corner is outside the roof-preview locality radius. Upper floors are a
+// property of the completed FRAME + RAW ring, not of how much of that ring happens to
+// fit inside the current interaction-radius query.
+const largeSystem = new PhysicalLogSystem({
+  group: new THREE.Group(),
+  player: { root: new THREE.Group(), model: null },
+  terrain, collision, gatherables
+});
+const largeFrameByGrid = new Map();
+let largeFrameId = 100;
+const addLargeFrame = (column, row) => {
+  const frame = {
+    id: largeFrameId++,
+    mode: 'frame',
+    active: true,
+    x: column * PHYSICAL_LOG.length,
+    z: row * PHYSICAL_LOG.length,
+    yaw: 0,
+    baseY: floorTopY,
+    topY: frameTopY,
+    root: new THREE.Group(),
+    collisionHandle: null,
+    supportRoot: null
+  };
+  largeFrameByGrid.set(`${column}:${row}`, frame);
+  return frame;
+};
+const largeFrames = [];
+for (let column = 0; column <= 3; column += 1) {
+  largeFrames.push(addLargeFrame(column, 0));
+  largeFrames.push(addLargeFrame(column, 2));
+}
+largeFrames.push(addLargeFrame(0, 1), addLargeFrame(3, 1));
+const largeBeamConnections = [];
+for (let column = 0; column < 3; column += 1) {
+  largeBeamConnections.push([[column, 0], [column + 1, 0]]);
+  largeBeamConnections.push([[column, 2], [column + 1, 2]]);
+}
+for (let row = 0; row < 2; row += 1) {
+  largeBeamConnections.push([[0, row], [0, row + 1]]);
+  largeBeamConnections.push([[3, row], [3, row + 1]]);
+}
+const largeBeams = largeBeamConnections.map(([[aColumn, aRow], [bColumn, bRow]], index) => {
+  const a = largeFrameByGrid.get(`${aColumn}:${aRow}`);
+  const b = largeFrameByGrid.get(`${bColumn}:${bRow}`);
+  const anchorIds = [a.id, b.id].sort((left, right) => left - right);
+  return {
+    id: 200 + index,
+    mode: 'raw',
+    active: true,
+    x: (a.x + b.x) * 0.5,
+    z: (a.z + b.z) * 0.5,
+    yaw: 0,
+    baseY: floorTopY,
+    centerY: frameTopY,
+    topY: frameTopY + PHYSICAL_LOG.radius,
+    rawKey: `beam:${anchorIds.join('-')}`,
+    snapKind: 'frame-pair-top',
+    root: new THREE.Group(),
+    collisionHandle: null,
+    supportRoot: null
+  };
+});
+largeSystem.builtLogs = [...largeFrames, ...largeBeams];
+largeSystem.nextBuiltId = 300;
+largeSystem.structureRevision += 1;
+const largePlayerPosition = new THREE.Vector3(0, 0, -1.4);
+assert.ok(largeSystem.pickup(largePlayerPosition));
+assert.equal(largeSystem.setBuildMode('floor'), true);
+largeSystem.update(largePlayerPosition, facing);
+assert.equal(
+  largeSystem.previewPlacement.snapKind,
+  'closed-frame-upper-floor',
+  'A completed three-by-two outer perimeter must unlock upper-floor placement from its near edge without interior supports'
+);
+assert.equal(largeSystem.previewPlacement.storey, 1);
+
+console.log('Closed-perimeter upper-floor slots, seam-safe targeting, large-ring support, beam-interlocked FRAME seating and storey ownership verified.');
