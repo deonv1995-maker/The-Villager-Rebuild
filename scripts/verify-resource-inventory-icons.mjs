@@ -66,8 +66,13 @@ assert.match(
 );
 assert.match(
   mobileHudSource,
-  /data-build="stairs"[^>]+aria-label="Split-log stairs"[^>]+this\.buildIcons\.stairs/,
+  /data-build="stairs"[^>]*aria-label="Split-log stairs"/,
   'Mobile HUD must expose the player-facing split-log Stairs build mode'
+);
+assert.match(
+  mobileHudSource,
+  /data-build="stairs"[\s\S]*?<img src="\$\{this\.buildIcons\.stairs\}"/,
+  'Player-facing Stairs must render the dedicated stairs icon'
 );
 assert.doesNotMatch(
   mobileHudSource,
