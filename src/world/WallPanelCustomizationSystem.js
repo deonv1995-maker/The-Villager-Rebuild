@@ -294,7 +294,8 @@ export class WallPanelCustomizationSystem {
 
     for (const wall of walls) {
       const axis = canonicalWallAxisYaw(wall.yaw ?? 0);
-      const key = `${Math.round(wall.x * 20)}:${Math.round(wall.z * 20)}:${Math.round(axis * 1000)}`;
+      const structuralLevel = Number.isFinite(wall.baseY) ? wall.baseY : 0;
+      const key = `${Math.round(wall.x * 20)}:${Math.round(wall.z * 20)}:${Math.round(axis * 1000)}:${Math.round(structuralLevel * 20)}`;
       let group = groups.get(key);
       if (!group) {
         group = [];
