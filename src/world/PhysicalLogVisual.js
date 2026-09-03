@@ -89,6 +89,7 @@ export function createConstructionLogVisual(mode) {
   if (mode === 'frame') return createPhysicalLogVisual('UprightLogFrame');
   if (mode === 'angle') return createPhysicalLogVisual('AngledLog');
   if (mode === 'roof') return createPhysicalLogVisual('RoofLog');
+  if (mode === 'stairs') return createSplitHalfLogVisual('SplitLogStairTread');
   if (mode === 'floor') {
     const group = new THREE.Group();
     group.name = 'SplitLogFloor';
