@@ -44,7 +44,7 @@ export const ASSET_PATHS = Object.freeze({
       resources: Object.freeze({
         stick: asset('ui/fantasy/icon-resource-stick.png'),
         stone: asset('ui/fantasy/icon-resource-stone.png'),
-        grass: asset('ui/fantasy/icon-resource-grass.png'),
+        grass: asset('ui/mobile/icon-resource-grass.svg'),
         meat: asset('ui/fantasy/icon-resource-meat.png')
       }),
       build: Object.freeze({
