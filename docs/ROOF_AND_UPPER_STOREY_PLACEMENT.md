@@ -69,6 +69,20 @@ small construction-grid allowance. This removes dead aiming seams at bay/strip b
 when the placement point is still inside a completed support ring, `FLOOR` stays attached
 to an upstairs slot instead of silently falling back to a ground-level placement.
 
+## Stacked wall selection
+
+A multi-storey building can have lower and upper FRAME pairs at the same X/Z footprint.
+`WALL` therefore resolves all nearby compatible frame pairs instead of treating horizontal
+proximity as the complete identity of a wall bay. Existing wall rows are matched to a
+specific pair by plan position, yaw and structural base height.
+
+An unfinished wall bay retains priority so repeated wall placement finishes the storey the
+player has already started. Once that bay has no room for another wall row, it is removed
+from the valid placement choices and the coincident upper FRAME pair becomes eligible. If
+both coincident levels are empty, the lower bay starts first. This preserves normal
+first-storey construction while allowing a completed lower wall to hand placement cleanly
+to the upper storey instead of producing a red fourth-row preview.
+
 ## Multistorey walkable support
 
 World geometry may contain several standable surfaces at the same X/Z. Generic world
@@ -99,12 +113,14 @@ alone never create a roof region. Roof build sequencing is local to each support
 a ridge becomes eligible after the rafters for **that region** are complete, and missing
 rafters on a different room or storey do not suppress it.
 
-When lower and upper candidates occupy the same plan position, the established lower/
-outer closed support wins the exact tie instead of automatically jumping to the highest
-FRAME level. This keeps the player's current roof build anchored to the completed structure
-being worked on. Outer closed-loop/bounded support also wins an exact topology tie over a
-smaller frame-cell candidate. Normal player-to-candidate distance still selects distinct
-nearby roof wings.
+When untouched lower and upper roof candidates occupy the same plan position, runtime
+`ROOF` placement starts on the **highest completed support ring**. This is the natural
+continuation after the player has built an upper floor, upper FRAME posts and the upper RAW
+perimeter. Once any rafter work has started on a lower coincident roof, that region's build
+progress takes priority so the remaining members stay on the active storey instead of
+jumping upward mid-build. Outer closed-loop/bounded support still wins topology ties over
+a smaller frame-cell candidate. Static topology ordering remains deterministic and lower-
+first for callers that are not resolving live placement state.
 
 An existing **complete** roof is treated as a reusable physical assembly. When a matching
 higher storey reaches a closed RAW top-beam support state, `StackedRoofReflowSystem` may
@@ -147,6 +163,13 @@ topology limits prevent selection from searching unrelated distant buildings.
 - upper floors do not create terrain foundation posts;
 - reconstructed storey metadata recovers the same structural FRAME seat.
 
+`scripts/verify-stacked-storey-placement.mjs` locks:
+
+- an untouched coincident roof stack starts on the highest completed FRAME + RAW support ring;
+- a partially built lower roof keeps receiving its remaining roof members on that active storey;
+- a completed lower wall bay yields to the coincident upper FRAME pair;
+- an unfinished lower wall remains active until that bay is complete.
+
 `scripts/verify-platform-traversal.mjs` locks:
 
 - the Ranger can walk from natural terrain onto a normal low split-log platform without Jump;
@@ -164,7 +187,7 @@ topology limits prevent selection from searching unrelated distant buildings.
 `scripts/verify-stacked-roof-reflow.mjs` locks:
 
 - stacked roof regions match by plan geometry rather than frame IDs or height;
-- exact stacked-plan ties remain on the established lower closed support;
+- static exact stacked-plan topology ordering remains deterministic on the established lower closed support;
 - roof sequence eligibility is region-local rather than global across nearby roofs;
 - partial roofs do not relocate mid-build;
 - complete roofs move to a matching completed higher support as one assembly;
