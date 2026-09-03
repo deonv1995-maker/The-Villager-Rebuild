@@ -22,6 +22,20 @@
   backdrop-filter: blur(6px);
 }
 
+.mobile-hud:has(.camera-view-toggle.first-person)::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 2px rgba(0, 0, 0, .85);
+  pointer-events: none;
+}
+
 .camera-view-toggle [data-role="camera-mode-label"] {
   font-size: 15px;
   letter-spacing: .03em;
