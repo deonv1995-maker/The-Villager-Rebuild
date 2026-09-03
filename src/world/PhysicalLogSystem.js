@@ -440,29 +440,46 @@ export class PhysicalLogSystem {
   }
 
   #wallPlacement(base) {
-    const pair = this.#nearestFramePair(base, PHYSICAL_LOG.wallSnapRange);
-    if (!pair) return { ...base, y: base.ground + 0.26, valid: false };
+    const candidates = [];
+    for (const pair of this.#framePairs()) {
+      const distance = Math.hypot(pair.x - base.x, pair.z - base.z);
+      if (distance >= PHYSICAL_LOG.wallSnapRange) continue;
 
-    const stacked = this.#activeBuilt('wall')
-      .filter(wall =>
-        Math.hypot(wall.x - pair.x, wall.z - pair.z) < 0.38 &&
-        this.#axisYawDelta(wall.yaw, pair.yaw) < 0.16
-      )
-      .sort((a, b) => b.topY - a.topY)[0];
-    const centerY = stacked ? stacked.topY + 0.02 : pair.baseY + 0.26;
-    const topY = centerY + 0.76;
-    return {
-      ...base,
-      x: pair.x,
-      z: pair.z,
-      yaw: pair.yaw,
-      ground: pair.baseY,
-      baseY: pair.baseY,
-      y: centerY,
-      topY,
-      snapKind: 'between-frames',
-      valid: topY <= pair.topY + 0.08
-    };
+      const bayWalls = this.#activeBuilt('wall')
+        .filter(wall =>
+          Math.hypot(wall.x - pair.x, wall.z - pair.z) < 0.38 &&
+          this.#axisYawDelta(wall.yaw, pair.yaw) < 0.16 &&
+          Math.abs((wall.baseY ?? pair.baseY) - pair.baseY) < PHYSICAL_LOG.frameLevelTolerance
+        );
+      const stacked = [...bayWalls].sort((a, b) => b.topY - a.topY)[0];
+      const centerY = stacked ? stacked.topY + 0.02 : pair.baseY + 0.26;
+      const topY = centerY + 0.76;
+      candidates.push({
+        ...base,
+        x: pair.x,
+        z: pair.z,
+        yaw: pair.yaw,
+        ground: pair.baseY,
+        baseY: pair.baseY,
+        y: centerY,
+        topY,
+        snapKind: 'between-frames',
+        valid: topY <= pair.topY + 0.08,
+        distance,
+        hasWallProgress: bayWalls.length > 0
+      });
+    }
+
+    if (!candidates.length) return { ...base, y: base.ground + 0.26, valid: false };
+    const validCandidates = candidates.filter(candidate => candidate.valid);
+    const pool = validCandidates.length ? validCandidates : candidates;
+    pool.sort((left, right) => (
+      left.distance - right.distance ||
+      Number(right.hasWallProgress) - Number(left.hasWallProgress) ||
+      left.baseY - right.baseY
+    ));
+    const { distance, hasWallProgress, ...placement } = pool[0];
+    return placement;
   }
 
   #anglePlacement(base) {

@@ -4,6 +4,7 @@ const ROOF_CENTER_TOLERANCE = 0.18;
 const ROOF_HEIGHT_TOLERANCE = 0.18;
 const ROOF_AXIS_TOLERANCE = 0.12;
 const ROOF_LENGTH_TOLERANCE = 0.22;
+const RAFTERS_PER_REGION = 4;
 
 const axisYawDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -46,6 +47,33 @@ const structuralTieOrder = candidates => [...candidates].sort((left, right) => (
   String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
 ));
 
+const runtimeRegionProgress = candidates => {
+  const remainingRafters = new Map();
+  for (const candidate of candidates ?? []) {
+    const key = String(candidate?.roofRegionKey ?? '');
+    if (!key) continue;
+    if (!remainingRafters.has(key)) remainingRafters.set(key, 0);
+    if (candidate.roofRole === 'rafter') {
+      remainingRafters.set(key, remainingRafters.get(key) + 1);
+    }
+  }
+  return new Map(
+    [...remainingRafters.entries()].map(([key, remaining]) => [
+      key,
+      Math.max(0, RAFTERS_PER_REGION - remaining)
+    ])
+  );
+};
+
+const runtimeStructuralTieOrder = (candidates, progressByRegion) => [...candidates].sort((left, right) => (
+  topologyPriority(left?.supportTopology) - topologyPriority(right?.supportTopology) ||
+  (progressByRegion.get(String(right?.roofRegionKey ?? '')) ?? 0) -
+    (progressByRegion.get(String(left?.roofRegionKey ?? '')) ?? 0) ||
+  (right?.supportFrameTopY ?? 0) - (left?.supportFrameTopY ?? 0) ||
+  String(left?.roofRegionKey ?? '').localeCompare(String(right?.roofRegionKey ?? '')) ||
+  String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
+));
+
 /**
  * One shared five-member gable definition used by placement, thatch completion,
  * interior detection and regression checks. Adjacent roof bays may geometrically
@@ -80,10 +108,10 @@ export function roofMemberCandidates(region) {
 /**
  * Static topology callers receive the original unified two-stage contract: any
  * available rafter keeps all ridges hidden until the rafter stage is complete.
- * Runtime placement enriches candidates with a per-region `raftersComplete` flag;
- * there, a ridge is gated only by its own support region so another room/storey cannot
- * hijack the workflow. Exact stacked-plan ties stay on the established lower/outer
- * closed support, after which a complete roof may reflow as one physical assembly.
+ * Runtime placement sees only unoccupied candidates, so the number of missing rafters
+ * is also the progress signal for that support region. A partially built roof therefore
+ * stays on its active storey, while an untouched coincident stack starts on the highest
+ * completed FRAME + RAW ring.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
@@ -95,11 +123,12 @@ export function orderedRoofBuildCandidates(candidates) {
     return structuralTieOrder(available.filter(candidate => candidate.roofRole === 'ridge'));
   }
 
+  const progressByRegion = runtimeRegionProgress(available);
   const eligible = available.filter(candidate => (
     candidate.roofRole === 'rafter' ||
     (candidate.roofRole === 'ridge' && candidate.raftersComplete === true)
   ));
-  return structuralTieOrder(eligible);
+  return runtimeStructuralTieOrder(eligible, progressByRegion);
 }
 
 export function roofMemberModeMatches(candidate, member) {
