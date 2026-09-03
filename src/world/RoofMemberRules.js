@@ -46,6 +46,14 @@ const structuralTieOrder = candidates => [...candidates].sort((left, right) => (
   String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
 ));
 
+const runtimeStructuralTieOrder = candidates => [...candidates].sort((left, right) => (
+  topologyPriority(left?.supportTopology) - topologyPriority(right?.supportTopology) ||
+  Number(Boolean(right?.regionHasMembers)) - Number(Boolean(left?.regionHasMembers)) ||
+  (right?.supportFrameTopY ?? 0) - (left?.supportFrameTopY ?? 0) ||
+  String(left?.roofRegionKey ?? '').localeCompare(String(right?.roofRegionKey ?? '')) ||
+  String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
+));
+
 /**
  * One shared five-member gable definition used by placement, thatch completion,
  * interior detection and regression checks. Adjacent roof bays may geometrically
@@ -80,10 +88,10 @@ export function roofMemberCandidates(region) {
 /**
  * Static topology callers receive the original unified two-stage contract: any
  * available rafter keeps all ridges hidden until the rafter stage is complete.
- * Runtime placement enriches candidates with a per-region `raftersComplete` flag;
- * there, a ridge is gated only by its own support region so another room/storey cannot
- * hijack the workflow. Exact stacked-plan ties stay on the established lower/outer
- * closed support, after which a complete roof may reflow as one physical assembly.
+ * Runtime placement enriches candidates with per-region build state. A partially
+ * built roof remains on its active support, while an untouched coincident stack starts
+ * on the highest completed FRAME + RAW ring. This lets a newly completed upper storey
+ * receive its roof directly without making an in-progress lower roof jump levels.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
@@ -99,7 +107,7 @@ export function orderedRoofBuildCandidates(candidates) {
     candidate.roofRole === 'rafter' ||
     (candidate.roofRole === 'ridge' && candidate.raftersComplete === true)
   ));
-  return structuralTieOrder(eligible);
+  return runtimeStructuralTieOrder(eligible);
 }
 
 export function roofMemberModeMatches(candidate, member) {
