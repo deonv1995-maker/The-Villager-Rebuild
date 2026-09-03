@@ -8,6 +8,10 @@ const FRAME_SNAP_RANGE = LOG_LENGTH + FRAME_PAIR_SPACING_TOLERANCE;
 const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
 const PLACEMENT_REACH = 1.9;
+// A floor target is a full Log by one-third Log rectangle. Cover the half-cell diagonal
+// plus half a construction-grid step so aiming near a bay/strip seam still reaches one
+// canonical floor slot instead of falling through to an unrelated ground placement.
+const FLOOR_SNAP_RANGE = Math.hypot(LOG_LENGTH * 0.5, FLOOR_WIDTH * 0.5) + CONSTRUCTION_GRID_STEP * 0.5;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
@@ -24,7 +28,7 @@ export const PHYSICAL_LOG = Object.freeze({
   // when the mobile placement point is currently sitting on an occupied/invalid seam.
   // Spacing validity remains governed separately by framePlacementSpacingTolerance.
   frameSnapRange: FRAME_SNAP_RANGE,
-  floorSnapRange: 1.45,
+  floorSnapRange: FLOOR_SNAP_RANGE,
   wallSnapRange: 1.7,
   angleSnapRange: 1.85,
   // From outside a full bay, the ordered ROOF workflow must still reach the far

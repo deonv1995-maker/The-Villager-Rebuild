@@ -79,6 +79,10 @@ assert.ok(
   perimeterSlots.every(candidate => Math.abs(frameSeatYForFloor(candidate) - frameTopY) < 1e-8),
   'Upper structural FRAME seats must interlock at the supporting RAW beam centreline'
 );
+assert.ok(
+  PHYSICAL_LOG.floorSnapRange > Math.hypot(PHYSICAL_LOG.halfLength, PHYSICAL_LOG.floorWidth * 0.5),
+  'Floor targeting must cover the diagonal midpoint between canonical split-log slots without an aiming dead zone'
+);
 
 const sparseSupportSlots = collectUpperStoreyFloorCandidates([region], [floors[0]], {
   floorTopLift: 0.028,
@@ -123,6 +127,39 @@ const playerPosition = new THREE.Vector3(0, 0, -1.4);
 const facing = new THREE.Vector3(0, 0, 1);
 assert.ok(system.pickup(playerPosition));
 assert.equal(system.setBuildMode('floor'), true);
+
+// Aim at the diagonal midpoint between the first two upper strips and the end of the
+// full-Log bay. The old half-Log snap radius left this valid part of a completed frame
+// with no upper-storey candidate, causing FLOOR to fall back to ground-level placement.
+const seamTarget = {
+  x: PHYSICAL_LOG.halfLength,
+  z: PHYSICAL_LOG.floorWidth
+};
+const seamPlayerPosition = new THREE.Vector3(
+  seamTarget.x,
+  0,
+  seamTarget.z - PHYSICAL_LOG.placeDistance
+);
+system.update(seamPlayerPosition, facing);
+assert.equal(system.previewValid, true, 'A completed outer frame must remain targetable at floor-slot seams');
+assert.equal(
+  system.previewPlacement.snapKind,
+  'closed-frame-upper-floor',
+  'Aiming anywhere inside the supported bay must stay on the upper floor instead of falling back to ground placement'
+);
+const seamCandidateDistance = Math.hypot(
+  system.previewPlacement.x - seamTarget.x,
+  system.previewPlacement.z - seamTarget.z
+);
+assert.ok(
+  seamCandidateDistance > PHYSICAL_LOG.halfLength,
+  'Regression setup must exercise the diagonal aiming gap beyond the old half-Log snap radius'
+);
+assert.ok(
+  seamCandidateDistance < PHYSICAL_LOG.floorSnapRange,
+  'The canonical floor snap range must cover that diagonal seam target'
+);
+
 system.update(playerPosition, facing);
 assert.equal(system.previewValid, true, 'A closed RAW top-beam perimeter must unlock its first upper floor');
 assert.equal(system.previewPlacement.snapKind, 'closed-frame-upper-floor');
@@ -158,4 +195,4 @@ assert.ok(
   'Committed upper floors must recover the same structural interlock seat after save-compatible reconstruction'
 );
 
-console.log('Closed-perimeter upper-floor slots, beam-interlocked FRAME seating and storey ownership verified.');
+console.log('Closed-perimeter upper-floor slots, seam-safe targeting, beam-interlocked FRAME seating and storey ownership verified.');
