@@ -1,5 +1,9 @@
 import * as THREE from 'three';
-import { LOG_BUILD_MODES, PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
+import {
+  LOG_BUILD_MODES,
+  LOG_CONSTRUCTION_MODES,
+  PHYSICAL_LOG
+} from '../data/PhysicalLogDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_DURABILITY } from '../data/ToolDefinitions.js';
 import { createConstructionLogVisual } from '../world/PhysicalLogVisual.js';
 import { THATCH_GRASS_COST } from '../world/RoofThatchSystem.js';
@@ -300,6 +304,12 @@ const captureConstruction = game => ({
       roofRegionKey: entry.roofRegionKey,
       roofRole: entry.roofRole,
       roofLength: entry.roofLength,
+      supportRegionKey: entry.supportRegionKey,
+      stairKey: entry.stairKey,
+      stairOpeningKey: entry.stairOpeningKey,
+      stairOpeningRegionKeys: entry.stairOpeningRegionKeys,
+      stairStepIndex: entry.stairStepIndex,
+      stairStepCount: entry.stairStepCount,
       transform: captureTransform(entry.root)
     }))
 });
@@ -344,6 +354,27 @@ const registerPersistedLogCollision = (game, mode, placement, root) => {
       label,
       bottomY: placement.baseY,
       topY: placement.topY
+    });
+  }
+
+  if (mode === 'stairs') {
+    return collision.addBox({
+      x: placement.x,
+      z: placement.z,
+      halfX: PHYSICAL_LOG.halfLength,
+      halfZ: PHYSICAL_LOG.radius,
+      yaw: placement.yaw,
+      type: 'placed-log',
+      label,
+      bottomY: placement.topY - PHYSICAL_LOG.radius * 2,
+      topY: placement.topY,
+      standable: true,
+      supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding,
+      supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
+      supportY: placement.topY,
+      supportOverridesBase: true,
+      supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
+      stepHeight: PHYSICAL_LOG.stairMaxStepRise + 0.02
     });
   }
 
@@ -401,10 +432,11 @@ const restoreConstruction = (game, state) => {
   physicalLogs.builtLogs = [];
   physicalLogs.nextBuiltId = 0;
   physicalLogs.carriedItem = null;
-  physicalLogs.buildMode = LOG_BUILD_MODES.includes(state?.buildMode) ? state.buildMode : 'raw';
+  const savedBuildMode = state?.buildMode === 'angle' ? 'stairs' : state?.buildMode;
+  physicalLogs.buildMode = LOG_BUILD_MODES.includes(savedBuildMode) ? savedBuildMode : 'raw';
 
   for (const saved of builtLogs.sort((left, right) => left.id - right.id)) {
-    if (!LOG_BUILD_MODES.includes(saved.mode)) continue;
+    if (!LOG_CONSTRUCTION_MODES.includes(saved.mode)) continue;
     const id = clampInteger(saved.id);
     const root = createConstructionLogVisual(saved.mode);
     root.name = `built-log-${id}-${saved.mode}`;
@@ -425,6 +457,12 @@ const restoreConstruction = (game, state) => {
       roofRegionKey: saved.roofRegionKey ?? null,
       roofRole: saved.roofRole ?? null,
       roofLength: Number.isFinite(saved.roofLength) ? saved.roofLength : null,
+      supportRegionKey: saved.supportRegionKey ?? null,
+      stairKey: saved.stairKey ?? null,
+      stairOpeningKey: saved.stairOpeningKey ?? null,
+      stairOpeningRegionKeys: Array.isArray(saved.stairOpeningRegionKeys) ? saved.stairOpeningRegionKeys : null,
+      stairStepIndex: Number.isFinite(saved.stairStepIndex) ? saved.stairStepIndex : null,
+      stairStepCount: Number.isFinite(saved.stairStepCount) ? saved.stairStepCount : null,
       storey: clampInteger(saved.storey)
     };
     const collisionHandle = registerPersistedLogCollision(game, saved.mode, placement, root);
@@ -447,6 +485,12 @@ const restoreConstruction = (game, state) => {
       roofRegionKey: placement.roofRegionKey,
       roofRole: placement.roofRole,
       roofLength: placement.roofLength,
+      supportRegionKey: placement.supportRegionKey,
+      stairKey: placement.stairKey,
+      stairOpeningKey: placement.stairOpeningKey,
+      stairOpeningRegionKeys: placement.stairOpeningRegionKeys,
+      stairStepIndex: placement.stairStepIndex,
+      stairStepCount: placement.stairStepCount,
       storey: placement.storey
     };
     physicalLogs.builtLogs.push(built);
@@ -459,8 +503,12 @@ const restoreConstruction = (game, state) => {
   physicalLogs.nextBuiltId = Math.max(highestId, clampInteger(state?.nextBuiltId));
   physicalLogs.structureRevision += 1;
   physicalLogs.framePairCacheRevision = -1;
+  physicalLogs.floorCornerCacheRevision = -1;
+  physicalLogs.upperFloorRegionCacheRevision = -1;
   physicalLogs.roofQueryCacheRevision = -1;
   physicalLogs.framePairCache = [];
+  physicalLogs.floorCornerCache = [];
+  physicalLogs.upperFloorRegionCache = [];
   physicalLogs.roofQueryCache = [];
   physicalLogs.roofQueryCacheKey = '';
 
