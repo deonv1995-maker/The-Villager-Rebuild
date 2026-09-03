@@ -22,7 +22,10 @@ import {
   roofMemberOccupied,
   roofRaftersComplete
 } from './RoofMemberRules.js';
-import { collectUpperStoreyFloorCandidates } from './UpperStoreyFloorRules.js';
+import {
+  collectUpperStoreyFloorCandidates,
+  collectUpperStoreySupportRegions
+} from './UpperStoreyFloorRules.js';
 
 const INTERACTION_RADIUS = 2.8;
 const PREVIEW_VALID = 0x65d879;
@@ -600,7 +603,9 @@ export class PhysicalLogSystem {
         .map(raw => raw.rawKey)
     );
     const pairs = this.#framePairs().filter(pair => occupiedBeamKeys.has(pair.rawKey));
-    this.upperFloorRegionCache = this.#regionsFromPairs(pairs);
+    this.upperFloorRegionCache = collectUpperStoreySupportRegions(pairs, {
+      levelTolerance: PHYSICAL_LOG.frameLevelTolerance
+    });
     this.upperFloorRegionCacheRevision = this.structureRevision;
     return this.upperFloorRegionCache;
   }
