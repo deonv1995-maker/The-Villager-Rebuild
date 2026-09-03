@@ -50,6 +50,12 @@ top-beam ring. With `FLOOR` selected, that completed support becomes the upper-f
 target. The resulting floor can carry the next perimeter of FRAME posts and RAW top beams
 using the same rules again.
 
+Floor targeting must cover the entire physical split-log slot, not only the long-axis
+half-length. The shared floor snap range therefore covers the half-cell diagonal plus a
+small construction-grid allowance. This removes dead aiming seams at bay/strip boundaries:
+when the placement point is still inside a completed support ring, `FLOOR` stays attached
+to an upstairs slot instead of silently falling back to a ground-level placement.
+
 ## Multistorey walkable support
 
 World geometry may contain several standable surfaces at the same X/Z. Generic world
@@ -119,6 +125,7 @@ topology limits prevent selection from searching unrelated distant buildings.
 - one closed Log bay exposes its full three-strip upstairs floor lattice even when matching lower strips are absent;
 - interior FRAME posts or RAW cross-beams are not required to unlock those floor slots;
 - unbuilt upstairs slots remain under player control rather than being auto-filled;
+- targeting at the diagonal seam between canonical floor slots still resolves to the supported upper storey;
 - the upstairs walking surface remains on the RAW beam top;
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;
