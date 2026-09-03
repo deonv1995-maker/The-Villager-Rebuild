@@ -18,14 +18,22 @@ Rectangular and isolated square roofs keep the existing deterministic rules. A `
 
 This prevents an extension roof from using an arbitrary world-axis direction when the building footprint provides an unambiguous direction.
 
+## Upper-storey wall direction
+
+A lower `frame-cell` roof beside the next storey's completed FRAME + RAW structural edge treats that nearest upper edge as the stronger gable-direction hint. The lower ridge therefore points toward the upper-storey wall line instead of leaving the side roof facing across it.
+
+The physical upper FRAME pair and its RAW top beam remain the source of truth. Roof orientation does not depend on whether the wall bay is currently rendered as `SOLID`, `DOOR` or `WINDOW`, so wall customization cannot create competing roof geometry. Only the nearest upper edge at the immediately supported structural level is considered. A balanced upper ring directly over the same cell remains ambiguous and preserves the existing deterministic direction, while unrelated upper structure outside the local cell span is ignored.
+
+This rule is applied by `RoofTopology`, so the same corrected orientation is consumed by live ROOF placement, completed-roof queries, thatching and interior detection without a second roof-snapping system.
+
 ## Existing completed roofs
 
-`StackedRoofReflowSystem` also canonicalizes an already-completed, non-shared `frame-cell` roof whose persisted member keys belong to the same structural region but whose geometry was built under the former square-cell tie-break. All four rafters and the ridge move together to the corrected targets. Existing thatch for that region moves and rotates with the roof instead of being treated as demolition/refunded grass.
+`StackedRoofReflowSystem` also canonicalizes an already-completed, non-shared `frame-cell` roof whose persisted member keys belong to the same structural region but whose geometry was built under an earlier direction rule. All four rafters and the ridge move together to the corrected targets. Existing thatch for that region moves and rotates with the roof instead of being treated as demolition/refunded grass.
 
 The reflow deliberately skips incomplete assemblies and members currently satisfying another roof region, preserving the existing shared-rafter safety contract.
 
 ## Regression coverage
 
 - `verify:stacked-walls` proves a downstairs window conversion cannot hide or remove collision from a directly stacked upstairs wall.
-- `verify:roof-orientation` proves a stepped L footprint rotates the unambiguous wing cell, preserves the stable L-corner, and reflows a completed stale roof plus thatch onto the corrected orientation.
+- `verify:roof-orientation` proves a stepped L footprint rotates the unambiguous wing cell, preserves the stable L-corner, turns a side roof toward the nearest completed upper-storey structural wall edge, ignores unrelated upper edges, and reflows a completed stale roof plus thatch onto the corrected orientation.
 - The existing wall, roof, stacked-roof, save, traversal, construction and PWA checks remain part of the full CI gate.
