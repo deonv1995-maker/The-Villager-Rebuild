@@ -610,7 +610,7 @@ export class GameApp {
       } else if (event.code === 'KeyG') {
         event.preventDefault();
         this.#tryLogBuildOption('drop');
-      } else if (/^Digit[1-6]$/.test(event.code)) {
+      } else if (/^Digit[1-7]$/.test(event.code)) {
         event.preventDefault();
         const index = Number(event.code.slice(-1)) - 1;
         this.#trySelectTool(TOOLBELT_INPUT_ORDER[index]);

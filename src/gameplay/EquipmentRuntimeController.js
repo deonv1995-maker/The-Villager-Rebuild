@@ -3,6 +3,7 @@ import { TOOL_DEFINITIONS } from '../data/ToolDefinitions.js';
 import { ToolDurabilitySystem } from './ToolDurabilitySystem.js';
 
 const RETRIEVAL_ACTION_ID = 'spear-retrieve';
+const STUMP_ACTION_ID = 'shovel-stump';
 const CAMPFIRE_RECIPE_ID = 'campfire';
 
 export class EquipmentRuntimeController {
@@ -19,6 +20,7 @@ export class EquipmentRuntimeController {
     this.started = false;
     this.boundCraft = recipeId => this.craft(recipeId);
     this.boundRetrieve = () => this.retrieveSpear();
+    this.boundDigStump = () => this.digStump();
   }
 
   start() {
@@ -28,6 +30,7 @@ export class EquipmentRuntimeController {
     this.game.toolbelt.durability = this.durability;
     this.#wrapInventoryMutations();
     this.#wrapToolUse(this.game.treeHarvest, 'chop', 'axe');
+    this.#wrapToolUse(this.game.treeHarvest, 'removeStump', 'shovel');
     this.#wrapToolUse(this.game.rockHarvest, 'mine', 'pickaxe');
     this.#wrapToolUse(this.game.physicalLogs, 'demolish', 'hammer');
     this.#wrapToolUse(this.game.campfire, 'demolish', 'hammer');
@@ -40,6 +43,7 @@ export class EquipmentRuntimeController {
   dispose() {
     while (this.restorers.length > 0) this.restorers.pop()?.();
     this.game.hud?.setExternalAction(RETRIEVAL_ACTION_ID, null);
+    this.game.hud?.setExternalAction(STUMP_ACTION_ID, null);
     this.started = false;
   }
 
@@ -83,6 +87,31 @@ export class EquipmentRuntimeController {
       this.game.setStatus('BROKEN SPEAR REMOVED');
     }
     return restored;
+  }
+
+  digStump() {
+    if (
+      this.game.toolbelt.getEquippedToolId() !== 'shovel' ||
+      this.game.physicalLogs?.isCarrying() ||
+      this.game.toolPresentation?.isBusy()
+    ) return null;
+
+    this.game.player?.getPosition(this.position);
+    const target = this.game.treeHarvest?.getStumpTarget(this.position);
+    if (!target) {
+      this.#updateStumpAction();
+      return null;
+    }
+
+    this.game.player?.faceWorldPoint(target.position);
+    if (!this.game.toolPresentation?.playSwing('shovel')) return null;
+    const result = this.game.treeHarvest?.removeStump(this.position);
+    if (!result) return null;
+
+    this.#syncHud();
+    this.game.setStatus('STUMP REMOVED · +1 LOG FOR BUILDING');
+    this.game.hud?.setObjective('Physical Log dropped · lift it with the hand action when ready to build');
+    return result;
   }
 
   recordUse(toolId) {
@@ -185,6 +214,7 @@ export class EquipmentRuntimeController {
       const event = original(dt);
       this.#ensureHud();
       this.#updateRetrievalAction();
+      this.#updateStumpAction();
       if (event) this.#scheduleSync();
       return event;
     };
@@ -226,6 +256,7 @@ export class EquipmentRuntimeController {
     hud.setToolbelt(this.game.toolbelt.snapshot());
     hud.setCrafting(this.#craftingSnapshot());
     this.#updateRetrievalAction();
+    this.#updateStumpAction();
 
     const equippedToolId = this.game.toolbelt.getEquippedToolId();
     if (!this.game.physicalLogs?.isCarrying()) {
@@ -278,6 +309,35 @@ export class EquipmentRuntimeController {
       label: target.actionLabel,
       caption: 'RETRIEVE',
       onTrigger: this.boundRetrieve
+    });
+  }
+
+  #updateStumpAction() {
+    const hud = this.game.hud;
+    const treeHarvest = this.game.treeHarvest;
+    if (!hud || !treeHarvest || !this.game.player) return;
+    if (
+      this.game.physicalLogs?.isCarrying() ||
+      this.game.toolbelt.getEquippedToolId() !== 'shovel'
+    ) {
+      hud.setExternalAction(STUMP_ACTION_ID, null);
+      return;
+    }
+
+    this.game.player.getPosition(this.position);
+    const target = treeHarvest.getStumpTarget(this.position);
+    if (!target) {
+      hud.setExternalAction(STUMP_ACTION_ID, null);
+      return;
+    }
+
+    hud.setExternalAction(STUMP_ACTION_ID, {
+      available: true,
+      priority: 900,
+      icon: 'shovel',
+      label: target.actionLabel,
+      caption: 'DIG',
+      onTrigger: this.boundDigStump
     });
   }
 }

@@ -2,7 +2,7 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { TOOL_ORDER } from '../data/ToolDefinitions.js';
 import { resolveContextAction } from './ContextActionPolicy.js';
 
-const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe', 'shovel']);
 const MOVE_SIDE_RATIO = 0.5;
 const MOVE_RADIUS_PX = 76;
 const MOVE_DEADZONE_PX = 7;
@@ -52,6 +52,7 @@ export class MobileHud {
       axe: ui.axe,
       hammer: ui.hammer,
       pickaxe: ui.pickaxe,
+      shovel: ui.shovel,
       sword: ui.sword,
       campfire: ui.campfire
     });
@@ -144,7 +145,7 @@ export class MobileHud {
     const alwaysVisible = new Set(['stick', 'stone', 'grass']);
     const visible = entries
       .filter(entry => entry.quantity > 0 || alwaysVisible.has(entry.id))
-      .filter(entry => !['spear', 'axe', 'hammer', 'pickaxe', 'sword'].includes(entry.id));
+      .filter(entry => !TOOL_ORDER.includes(entry.id));
 
     this.inventoryElement.replaceChildren(...visible.map(entry => {
       const row = document.createElement('div');

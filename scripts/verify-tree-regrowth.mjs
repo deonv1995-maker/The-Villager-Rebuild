@@ -97,6 +97,7 @@ assert(hiddenMatrix.elements[13] < -900, 'Authored tree instance must remain hid
 const captured = regrowth.captureRegrowthState();
 assert(captured.length === 1 && captured[0].treeId === 0, 'Inactive stump must expose persistent regrowth state');
 assert(Math.abs(captured[0].remainingSeconds - definition.regrowSeconds) < 0.001, 'New stump must begin at the configured regrowth duration');
+assert(captured[0].stumpRemoved === false, 'Freshly chopped tree must persist that its stump is still present');
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 150 }]);
 assert(sprout.visible, 'Leaves must appear from the stump at 30 seconds');
@@ -172,6 +173,62 @@ assert(matricesEqual(restoredMatrix, originalMatrix), 'Three-minute completion m
 const nearbyTarget = regrowth.update(treePosition, true);
 assert(nearbyTarget?.type === 'tree', 'Fully regrown tree must become choppable again after completion');
 
+const shovelGroup = new THREE.Group();
+const shovelTreeMesh = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(0.8, 3.2, 0.8),
+  new THREE.MeshBasicMaterial(),
+  1
+);
+shovelTreeMesh.name = 'forest-tree-batch-0-0';
+shovelTreeMesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(4, 1.6, -2));
+shovelTreeMesh.instanceMatrix.needsUpdate = true;
+shovelGroup.add(shovelTreeMesh);
+const shovelCollision = new WorldCollisionSystem({ heightAt: () => 0, isPlayable: () => true });
+shovelCollision.addObstacle({
+  x: 4,
+  z: -2,
+  radius: 0.72,
+  type: 'tree',
+  label: 'forest-tree-0'
+});
+const shovelDrops = [];
+const shovelGatherables = {
+  spawn(resourceId, options) {
+    shovelDrops.push({ resourceId, ...options });
+  }
+};
+let shovelNow = 0;
+const shovelRegrowth = new TreeHarvestSystem({
+  group: shovelGroup,
+  terrain,
+  collision: shovelCollision,
+  gatherables: shovelGatherables,
+  now: () => shovelNow
+});
+const shovelPosition = new THREE.Vector3(4, 0, -2);
+for (let hit = 0; hit < definition.hitsRequired; hit += 1) shovelRegrowth.chop(shovelPosition);
+assert(shovelDrops.length === definition.dropCount, 'Shovel scenario must begin with the normal chop yield only');
+const stumpTarget = shovelRegrowth.getStumpTarget(shovelPosition);
+assert(stumpTarget?.type === 'stump' && stumpTarget.icon === 'shovel', 'A nearby chopped stump must expose the dedicated shovel target');
+const removedStump = shovelRegrowth.removeStump(shovelPosition);
+assert(removedStump?.removed === true && removedStump.dropCount === 1, 'Shovel must remove one stump and award exactly one additional Log');
+assert(!shovelGroup.getObjectByName('chopped-tree-stump-0'), 'Shovel removal must clear the visible stump immediately');
+assert(shovelDrops.length === definition.dropCount + 1, 'Removing the stump must add exactly one physical world Log');
+assert(shovelDrops.at(-1)?.resourceId === 'log' && shovelDrops.at(-1)?.quantity === 1, 'Stump reward must use the canonical physical Log resource');
+assert(shovelRegrowth.removeStump(shovelPosition) === null, 'The same stump must never grant a second bonus Log');
+assert(shovelDrops.length === definition.dropCount + 1, 'Repeated shovel input must not duplicate the stump Log');
+const groundedSprout = shovelGroup.getObjectByName('tree-regrowth-sprout-0');
+assert(groundedSprout && Math.abs(groundedSprout.position.y) < 0.000001, 'Regrowth presentation must return to ground level after the stump is removed');
+const shovelSaved = shovelRegrowth.captureRegrowthState();
+assert(shovelSaved[0]?.stumpRemoved === true, 'Save state must preserve that the stump was already removed');
+shovelRegrowth.restoreRegrowthState([{ ...shovelSaved[0], remainingSeconds: 0.1 }]);
+assert(!shovelGroup.getObjectByName('chopped-tree-stump-0'), 'Restoring a removed-stump state must not recreate the stump');
+shovelNow += 250;
+shovelRegrowth.update(farPlayer, false);
+assert(shovelRegrowth.trees[0].active, 'Removing the stump must not cancel or consume the original tree regrowth lifecycle');
+assert(shovelCollision.getObstaclesByType('tree').length === 1, 'A shovel-cleared tree site must restore normal tree collision after regrowth');
+assert(shovelDrops.length === definition.dropCount + 1, 'Tree regrowth after shovel use must not create any additional Logs');
+
 const saveControllerSource = await readFile('src/persistence/SaveGameController.js', 'utf8');
 for (const requirement of [
   'captureRegrowthState',
@@ -181,4 +238,4 @@ for (const requirement of [
   assert(saveControllerSource.includes(requirement), `Save/continue must preserve staged regrowth progress: ${requirement}`);
 }
 
-console.log('Three-minute staged stump, sprout, sapling and authored-tree regrowth with harvest lockout and save persistence verified');
+console.log('Three-minute staged tree regrowth, persistent shovel-cleared stumps, canonical bonus Log yield and harvest lockout verified');
