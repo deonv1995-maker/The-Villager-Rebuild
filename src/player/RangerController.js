@@ -16,6 +16,8 @@ const CAMERA_RETURN_RESPONSE = 0.5;
 const CAMERA_PITCH_RESPONSE = 0.7;
 const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
+const FIRST_PERSON_EYE_HEIGHT = 1.72;
+const CAMERA_MODES = Object.freeze(['third-person', 'first-person']);
 const TOOL_ACTION_TARGET_DURATION = Object.freeze({
   axe: 0.66,
   hammer: 0.62,
@@ -37,6 +39,8 @@ export class RangerController {
     this.keys = new Set();
     this.yaw = Math.PI;
     this.pitch = CAMERA_DEFAULT_PITCH;
+    this.cameraMode = 'third-person';
+    this.cameraModeListeners = new Set();
     this.manualLookActive = false;
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
@@ -65,6 +69,8 @@ export class RangerController {
     this.tempHandLocal = new THREE.Vector3();
     this.tempHandQuaternion = new THREE.Quaternion();
     this.tempRootQuaternion = new THREE.Quaternion();
+    this.tempFirstPersonDirection = new THREE.Vector3();
+    this.tempFirstPersonTarget = new THREE.Vector3();
     this.cinematicDriver = null;
     this.#bindKeyboard();
   }
@@ -79,6 +85,7 @@ export class RangerController {
       this.root.add(this.model);
       this.assetMode = 'placeholder';
     }
+    this.#syncCameraPresentation();
     this.#updateCamera(true);
   }
 
@@ -183,6 +190,7 @@ export class RangerController {
 
   beginCinematic(driver) {
     if (!driver || this.cinematicDriver) return false;
+    if (this.isFirstPerson()) this.setCameraMode('third-person');
     this.cinematicDriver = driver;
     this.input.x = 0;
     this.input.y = 0;
@@ -212,6 +220,7 @@ export class RangerController {
     this.pitch = CAMERA_DEFAULT_PITCH;
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
+    this.#syncCameraPresentation();
     return true;
   }
 
@@ -280,7 +289,42 @@ export class RangerController {
     return target.copy(this.root.position);
   }
 
+  getCameraMode() {
+    return this.cameraMode;
+  }
+
+  isFirstPerson() {
+    return this.cameraMode === 'first-person';
+  }
+
+  onCameraModeChange(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.cameraModeListeners.add(listener);
+    listener(this.cameraMode);
+    return () => this.cameraModeListeners.delete(listener);
+  }
+
+  setCameraMode(mode) {
+    if (!CAMERA_MODES.includes(mode) || this.cinematicDriver) return this.cameraMode;
+    if (this.cameraMode === mode) return this.cameraMode;
+    this.cameraMode = mode;
+    this.manualLookActive = false;
+    this.cameraReturnDelay = 0;
+    this.cameraRecovering = mode === 'third-person';
+    this.#syncCameraPresentation();
+    this.#updateCamera(true);
+    for (const listener of this.cameraModeListeners) listener(this.cameraMode);
+    return this.cameraMode;
+  }
+
+  toggleCameraMode() {
+    return this.setCameraMode(this.isFirstPerson() ? 'third-person' : 'first-person');
+  }
+
   getFacingDirection(target = new THREE.Vector3()) {
+    if (this.isFirstPerson()) {
+      return target.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)).normalize();
+    }
     return target.set(Math.sin(this.root.rotation.y), 0, Math.cos(this.root.rotation.y)).normalize();
   }
 
@@ -290,6 +334,7 @@ export class RangerController {
     const dz = point.z - this.root.position.z;
     if (Math.hypot(dx, dz) < 0.001) return;
     this.root.rotation.y = Math.atan2(dx, dz);
+    if (this.isFirstPerson()) this.yaw = this.root.rotation.y + Math.PI;
   }
 
   receiveWildlifeImpact(sourcePosition, { distance = 1.2 } = {}) {
@@ -339,7 +384,9 @@ export class RangerController {
       this.#updateSpearAnchor();
     }
     if (this.spearEquipped && !this.isSpearThrowing()) this.spearThrowReleased = false;
-    if (this.spearMount) this.spearMount.visible = this.spearEquipped && !this.spearThrowReleased;
+    if (this.spearMount) {
+      this.spearMount.visible = this.spearEquipped && !this.spearThrowReleased && !this.isFirstPerson();
+    }
   }
 
   isSpearThrowing() {
@@ -355,7 +402,7 @@ export class RangerController {
     this.spearThrowRemaining = this.spearThrowDuration;
     this.spearThrowReleased = false;
     this.spearReleaseCallback = typeof onRelease === 'function' ? onRelease : null;
-    if (this.spearMount) this.spearMount.visible = true;
+    if (this.spearMount) this.spearMount.visible = !this.isFirstPerson();
     if (this.throwAnimation) this.#setAnimation(this.throwAnimation, true);
     return true;
   }
@@ -392,6 +439,11 @@ export class RangerController {
   endCameraLook() {
     if (this.cinematicDriver || !this.manualLookActive) return;
     this.manualLookActive = false;
+    if (this.isFirstPerson()) {
+      this.cameraRecovering = false;
+      this.cameraReturnDelay = 0;
+      return;
+    }
     this.cameraRecovering = true;
     this.cameraReturnDelay = CAMERA_RETURN_DELAY;
   }
@@ -563,7 +615,7 @@ export class RangerController {
       const launched = release?.();
       if (launched === false) {
         this.spearThrowReleased = false;
-        if (this.spearMount) this.spearMount.visible = this.spearEquipped;
+        if (this.spearMount) this.spearMount.visible = this.spearEquipped && !this.isFirstPerson();
       }
     }
 
@@ -677,7 +729,32 @@ export class RangerController {
     return current + delta * (1 - Math.exp(-response * dt));
   }
 
+  #syncCameraPresentation() {
+    const firstPerson = this.isFirstPerson();
+    if (this.model) this.model.visible = !firstPerson;
+    if (this.spearMount) {
+      this.spearMount.visible = !firstPerson && this.spearEquipped && !this.spearThrowReleased;
+    }
+  }
+
   #updateCamera(immediate = false, dt = 1 / 60) {
+    if (this.isFirstPerson() && !this.cinematicDriver) {
+      const eye = this.tempFirstPersonTarget.set(
+        this.root.position.x,
+        this.root.position.y + FIRST_PERSON_EYE_HEIGHT,
+        this.root.position.z
+      );
+      const horizontal = Math.cos(this.pitch);
+      this.tempFirstPersonDirection.set(
+        -Math.sin(this.yaw) * horizontal,
+        Math.sin(this.pitch),
+        -Math.cos(this.yaw) * horizontal
+      ).normalize();
+      this.camera.position.copy(eye);
+      this.camera.lookAt(this.tempFirstPersonDirection.clone().add(eye));
+      return;
+    }
+
     if (!immediate && !this.manualLookActive) {
       if (this.cameraReturnDelay > 0) {
         this.cameraReturnDelay = Math.max(0, this.cameraReturnDelay - dt);
@@ -714,13 +791,16 @@ export class RangerController {
   #bindKeyboard() {
     window.addEventListener('keydown', event => {
       if (this.cinematicDriver) {
-        if (event.code === 'Space') event.preventDefault();
+        if (event.code === 'Space' || event.code === 'KeyP') event.preventDefault();
         return;
       }
       this.keys.add(event.code);
       if (event.code === 'Space') {
         event.preventDefault();
         this.jump();
+      } else if (event.code === 'KeyP' && !event.repeat) {
+        event.preventDefault();
+        this.toggleCameraMode();
       }
     });
     window.addEventListener('keyup', event => this.keys.delete(event.code));
