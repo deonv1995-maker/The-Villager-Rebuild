@@ -25,6 +25,7 @@ export class SaveGameController {
     if (!record) return { restored: false, savedAt: null };
     restoreGameState(this.game, record.state);
     this.game.treeHarvest?.restoreRegrowthState?.(record.state.treeRegrowth);
+    this.game.resourceRenewal?.restoreState?.(record.state.resourceRenewal);
     this.lastFingerprint = JSON.stringify(record.state);
     this.lastSavedAt = record.savedAt;
     return { restored: true, savedAt: record.savedAt };
@@ -47,6 +48,7 @@ export class SaveGameController {
     try {
       const state = captureGameState(this.game);
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];
+      state.resourceRenewal = this.game.resourceRenewal?.captureState?.() ?? null;
       const fingerprint = JSON.stringify(state);
       if (fingerprint === this.lastFingerprint) {
         return {
