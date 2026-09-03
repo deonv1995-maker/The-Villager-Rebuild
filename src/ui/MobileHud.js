@@ -100,6 +100,10 @@ export class MobileHud {
           <button class="build-mode-button drop-log" type="button" data-build="drop" aria-label="Drop log" title="Drop log"><img src="${this.buildIcons.drop}" alt="" aria-hidden="true"></button>
         </div>
       </div>
+      <button class="camera-view-toggle" type="button" data-role="camera-toggle" aria-label="Switch to first-person view">
+        <span data-role="camera-mode-label" aria-hidden="true">3P</span>
+        <small aria-hidden="true">VIEW</small>
+      </button>
       <div class="hud-button sprint contextual-sprint" data-role="sprint-target" aria-hidden="true" hidden>
         <img class="button-bg" src="${ui.buttonCircle}" alt="">
         <span class="button-glyph">RUN</span>
@@ -129,6 +133,8 @@ export class MobileHud {
     this.buildTrayToggle = this.root.querySelector('[data-role="build-toggle"]');
     this.buildTrayToggleIcon = this.root.querySelector('[data-role="build-toggle-icon"]');
     this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
+    this.cameraToggle = this.root.querySelector('[data-role="camera-toggle"]');
+    this.cameraModeLabel = this.root.querySelector('[data-role="camera-mode-label"]');
     this.sprintTarget = this.root.querySelector('[data-role="sprint-target"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
@@ -138,6 +144,7 @@ export class MobileHud {
     this.#bindMovement();
     this.#bindButtons();
     this.#bindLook();
+    this.cameraModeUnsubscribe = this.player.onCameraModeChange?.(mode => this.setCameraMode(mode)) ?? null;
     this.#renderAction();
   }
 
@@ -168,6 +175,19 @@ export class MobileHud {
 
   setObjective(message) {
     this.objectiveElement.textContent = message;
+  }
+
+  setCameraMode(mode) {
+    const firstPerson = mode === 'first-person';
+    if (this.cameraModeLabel) this.cameraModeLabel.textContent = firstPerson ? '1P' : '3P';
+    if (this.cameraToggle) {
+      this.cameraToggle.classList.toggle('first-person', firstPerson);
+      this.cameraToggle.setAttribute(
+        'aria-label',
+        firstPerson ? 'Switch to third-person view' : 'Switch to first-person view'
+      );
+      this.cameraToggle.title = firstPerson ? 'Third-person view (P)' : 'First-person view (P)';
+    }
   }
 
   setToolbelt(entries) {
@@ -471,6 +491,11 @@ export class MobileHud {
     this.actionButton.addEventListener('pointerdown', event => {
       event.preventDefault();
       this.#triggerAction();
+    });
+
+    this.cameraToggle?.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      this.player.toggleCameraMode?.();
     });
 
     this.craftToggle.addEventListener('pointerdown', event => {
