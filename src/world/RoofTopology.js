@@ -443,6 +443,26 @@ const ridgeAlignmentScore = (region, neighbours, yaw) => {
   return score;
 };
 
+const pairAlignmentScore = (region, pairs, yaw) => {
+  const center = frameCellCenter(region);
+  const axisX = Math.cos(yaw);
+  const axisZ = -Math.sin(yaw);
+  let score = 0;
+  for (const pair of pairs) {
+    const dx = pair.x - center.x;
+    const dz = pair.z - center.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0.001) continue;
+    score += Math.abs((dx * axisX + dz * axisZ) / length);
+  }
+  return score;
+};
+
+const frameCellSpan = region => Math.max(
+  Math.hypot(region.b.x - region.a.x, region.b.z - region.a.z),
+  Math.hypot(region.c.x - region.a.x, region.c.z - region.a.z)
+);
+
 const quarterTurnFrameCell = region => ({
   ...region,
   a: { ...region.a },
@@ -475,6 +495,57 @@ export function orientConnectedFrameCellRegions(regions) {
     const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
     const currentScore = ridgeAlignmentScore(region, neighbours, currentYaw);
     const alternateScore = ridgeAlignmentScore(region, neighbours, alternateYaw);
+    return alternateScore > currentScore + 0.05
+      ? quarterTurnFrameCell(region)
+      : region;
+  });
+}
+
+/**
+ * A lower square roof beside the next storey's completed FRAME + RAW edge should
+ * present its gable toward that upper wall line. The physical upper frame pair is the
+ * structural source of truth, so SOLID / DOOR / WINDOW visual variants do not create
+ * competing roof rules. Only the nearest upper edge is considered; a balanced upper
+ * ring directly over the cell remains ambiguous and keeps the existing direction.
+ */
+export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
+  levelTolerance = 0.42,
+  nearestBand = 0.24
+} = {}) {
+  const source = regions ?? [];
+  const supports = pairs ?? [];
+  if (!source.length || !supports.length) return source;
+
+  return source.map(region => {
+    if (region?.topology !== 'frame-cell') return region;
+    if (!Number.isFinite(region.frameTopY)) return region;
+
+    const center = frameCellCenter(region);
+    const span = frameCellSpan(region);
+    if (!Number.isFinite(span) || span <= 0.01) return region;
+    const maxDistance = span * 0.78;
+    const upper = [];
+
+    for (const pair of supports) {
+      if (!Number.isFinite(pair?.baseY)) continue;
+      if (Math.abs(pair.baseY - region.frameTopY) > levelTolerance) continue;
+      const distance = Math.hypot(pair.x - center.x, pair.z - center.z);
+      if (distance <= 0.08 || distance > maxDistance) continue;
+      upper.push({ pair, distance });
+    }
+    if (!upper.length) return region;
+
+    upper.sort((left, right) => left.distance - right.distance || left.pair.rawKey.localeCompare(right.pair.rawKey));
+    const nearestDistance = upper[0].distance;
+    const targetBand = Math.max(nearestBand, span * 0.08);
+    const targets = upper
+      .filter(entry => entry.distance <= nearestDistance + targetBand)
+      .map(entry => entry.pair);
+
+    const currentYaw = axisHeading(region.ridgeYaw ?? 0);
+    const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
+    const currentScore = pairAlignmentScore(region, targets, currentYaw);
+    const alternateScore = pairAlignmentScore(region, targets, alternateYaw);
     return alternateScore > currentScore + 0.05
       ? quarterTurnFrameCell(region)
       : region;
@@ -732,5 +803,9 @@ export function collectRoofRegions(pairs, {
     });
   }
 
-  return regions.sort((left, right) => left.key.localeCompare(right.key));
+  const ordered = regions.sort((left, right) => left.key.localeCompare(right.key));
+  return orientFrameCellRegionsTowardUpperPairs(ordered, pairs, {
+    levelTolerance: Math.max(0.42, topTolerance + 0.08),
+    nearestBand: Math.max(0.18, maxAlong * 0.6)
+  });
 }
