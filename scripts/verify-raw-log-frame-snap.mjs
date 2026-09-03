@@ -230,12 +230,12 @@ const closingBuild = cabinSystem.build(null, cabinPlayer, facingDirection);
 assert.equal(closingBuild?.snapKind, 'frame-pair-top', 'The fourth top beam must build successfully');
 
 assert.ok(cabinSystem.pickup(cabinPlayer), 'Roof handoff regression needs another physical Log');
-assert.equal(cabinSystem.setBuildMode('angle'), true);
+assert.equal(cabinSystem.setBuildMode('roof'), true);
 cabinSystem.update(cabinPlayer, facingDirection);
 assert.equal(
   cabinSystem.previewPlacement?.snapKind,
   'roof-rafter',
-  'A closed one-room frame must immediately feed the established ANGLE roof-rafter sequence'
+  'A closed one-room frame must immediately feed the unified ROOF rafter sequence'
 );
 
 const roofQuerySource = await readFile('src/world/StructureRoofQuery.js', 'utf8');
