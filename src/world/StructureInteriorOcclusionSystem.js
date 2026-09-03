@@ -5,6 +5,8 @@ export const STRUCTURE_INTERIOR_FADE_OPACITY = 0.28;
 const UPPER_FLOOR_CLEARANCE = 0.42;
 const UPPER_FLOOR_REGION_MARGIN = 0.45;
 const EXTERIOR_STRUCTURE_SEARCH_RADIUS = 8;
+const STRUCTURE_REGION_CONNECT_TOLERANCE = 0.18;
+const STRUCTURE_ENTRY_REGION_MARGIN = 0.22;
 const OCCLUSION_RAY_END_MARGIN = 0.12;
 const OCCLUSION_VERTICAL_CLEARANCE = 0.18;
 const RANGER_VISIBILITY_TARGET_LIFTS = [0.38, 0.92, 1.42];
@@ -20,6 +22,51 @@ const regionRadius = (region, center) => Math.max(
   Math.hypot(region.c.x - center.x, region.c.z - center.z),
   Math.hypot(region.d.x - center.x, region.d.z - center.z)
 );
+
+const regionPolygon = region => [region.a, region.b, region.d, region.c];
+
+const pointSegmentDistance = (point, a, b) => {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared <= 0.000001) return Math.hypot(point.x - a.x, point.z - a.z);
+  const t = THREE.MathUtils.clamp(
+    ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSquared,
+    0,
+    1
+  );
+  return Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t));
+};
+
+const pointInsideRegionFootprint = (region, point, margin = 0) => {
+  if (!region || !point) return false;
+  const polygon = regionPolygon(region);
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i];
+    const b = polygon[j];
+    const crosses = ((a.z > point.z) !== (b.z > point.z)) &&
+      (point.x < (b.x - a.x) * (point.z - a.z) / ((b.z - a.z) || 0.000001) + a.x);
+    if (crosses) inside = !inside;
+  }
+  if (inside) return true;
+  if (margin <= 0) return false;
+
+  for (let index = 0; index < polygon.length; index += 1) {
+    const a = polygon[index];
+    const b = polygon[(index + 1) % polygon.length];
+    if (pointSegmentDistance(point, a, b) <= margin) return true;
+  }
+  return false;
+};
+
+const regionsConnected = (left, right) => {
+  if (!left || !right) return false;
+  const leftPolygon = regionPolygon(left);
+  const rightPolygon = regionPolygon(right);
+  return leftPolygon.some(point => pointInsideRegionFootprint(right, point, STRUCTURE_REGION_CONNECT_TOLERANCE)) ||
+    rightPolygon.some(point => pointInsideRegionFootprint(left, point, STRUCTURE_REGION_CONNECT_TOLERANCE));
+};
 
 export function isCameraSideStructurePart(playerPosition, cameraPosition, partPosition) {
   if (!playerPosition || !cameraPosition || !partPosition) return false;
@@ -64,29 +111,47 @@ export class StructureInteriorOcclusionSystem {
     const storeyRegion = this.roofQuery.findStoreyRegion?.(playerPosition) ?? null;
 
     camera.getWorldPosition(this.cameraPosition);
-    const entries = this.#collectEntriesForUpdate(playerPosition, interiorRegion, storeyRegion);
+    const regionGroups = this.#collectRegionGroups(playerPosition);
+    const groupStates = regionGroups.map(regions => ({
+      regions,
+      entries: this.#collectVisualEntriesForRegions(regions)
+    }));
+    const groupedRoots = new Set(groupStates.flatMap(state => state.entries.map(entry => entry.root)));
     const nextFaded = new Set();
 
-    for (const entry of entries) {
-      if (!entry.root?.visible) continue;
-
-      const upperFloor = this.#isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion);
-      const interiorCameraSide = Boolean(
-        interiorRegion &&
-        entry.mode !== 'floor' &&
-        isCameraSideStructurePart(playerPosition, this.cameraPosition, entry)
-      );
-      const exteriorBlocker = Boolean(
-        !interiorRegion &&
-        this.#entryOccludesRanger(entry, playerPosition)
-      );
-      if (!upperFloor && !interiorCameraSide && !exteriorBlocker) continue;
-
-      entry.root.traverse(object => {
-        if (!object.isMesh || !object.visible) return;
-        this.#setMeshFaded(object, true);
-        nextFaded.add(object);
+    if (interiorRegion) {
+      const interiorGroup = this.#findGroupState(groupStates, interiorRegion);
+      const entries = interiorGroup?.entries ?? this.#collectVisualEntries(interiorRegion);
+      this.#fadeBuildingEntries(entries, nextFaded, {
+        playerPosition,
+        storeyRegion,
+        preserveCurrentFloor: true
       });
+    } else {
+      if (storeyRegion) {
+        const storeyGroup = this.#findGroupState(groupStates, storeyRegion);
+        const entries = storeyGroup?.entries ?? this.#collectVisualEntries(storeyRegion);
+        this.#fadeUpperFloors(entries, playerPosition, storeyRegion, nextFaded);
+      }
+
+      for (const state of groupStates) {
+        if (!state.entries.some(entry => entry.root?.visible && this.#entryOccludesRanger(entry, playerPosition))) {
+          continue;
+        }
+        this.#fadeBuildingEntries(state.entries, nextFaded, {
+          playerPosition,
+          storeyRegion,
+          preserveCurrentFloor: false
+        });
+      }
+
+      // Incomplete or standalone construction may not define a closed FRAME + RAW region yet.
+      // Preserve the old per-root blocker behavior only for those ungrouped visual entries.
+      for (const entry of this.#collectVisualEntriesAround(playerPosition, EXTERIOR_STRUCTURE_SEARCH_RADIUS)) {
+        if (!entry.root?.visible || groupedRoots.has(entry.root)) continue;
+        if (!this.#entryOccludesRanger(entry, playerPosition)) continue;
+        this.#fadeEntry(entry, nextFaded);
+      }
     }
 
     for (const mesh of this.fadedMeshes) {
@@ -101,28 +166,59 @@ export class StructureInteriorOcclusionSystem {
     this.#restoreAll();
   }
 
-  #collectEntriesForUpdate(playerPosition, interiorRegion, storeyRegion) {
-    const entriesByRoot = new Map();
-    const append = entries => {
-      for (const entry of entries) {
-        if (!entry.root) continue;
-        entriesByRoot.set(entry.root, entry);
-      }
-    };
+  #collectRegionGroups(focus) {
+    const regions = this.roofQuery.getRegions?.(focus) ?? [];
+    const groups = [];
 
-    if (interiorRegion) append(this.#collectVisualEntries(interiorRegion));
-    if (storeyRegion) append(this.#collectVisualEntries(storeyRegion));
-    if (!interiorRegion) {
-      append(this.#collectVisualEntriesAround(playerPosition, EXTERIOR_STRUCTURE_SEARCH_RADIUS));
+    for (const region of regions) {
+      const touching = [];
+      for (let index = 0; index < groups.length; index += 1) {
+        if (groups[index].some(existing => regionsConnected(existing, region))) touching.push(index);
+      }
+
+      if (!touching.length) {
+        groups.push([region]);
+        continue;
+      }
+
+      const primary = groups[touching[0]];
+      primary.push(region);
+      for (let index = touching.length - 1; index >= 1; index -= 1) {
+        const groupIndex = touching[index];
+        primary.push(...groups[groupIndex]);
+        groups.splice(groupIndex, 1);
+      }
     }
 
-    return [...entriesByRoot.values()];
+    return groups;
+  }
+
+  #findGroupState(groupStates, region) {
+    if (!region) return null;
+    return groupStates.find(state => state.regions.some(candidate => (
+      candidate === region ||
+      (candidate.key && region.key && candidate.key === region.key)
+    ))) ?? groupStates.find(state => state.regions.some(candidate => regionsConnected(candidate, region))) ?? null;
   }
 
   #collectVisualEntries(region) {
     const center = regionCenter(region);
     const radius = regionRadius(region, center) + 1.15;
     return this.#collectVisualEntriesAround(center, radius);
+  }
+
+  #collectVisualEntriesForRegions(regions) {
+    const entriesByRoot = new Map();
+    for (const region of regions) {
+      for (const entry of this.#collectVisualEntries(region)) {
+        if (!entry.root) continue;
+        if (!regions.some(candidate => pointInsideRegionFootprint(candidate, entry, STRUCTURE_ENTRY_REGION_MARGIN))) {
+          continue;
+        }
+        entriesByRoot.set(entry.root, entry);
+      }
+    }
+    return [...entriesByRoot.values()];
   }
 
   #collectVisualEntriesAround(center, radius) {
@@ -166,6 +262,31 @@ export class StructureInteriorOcclusionSystem {
     }
 
     return entries;
+  }
+
+  #fadeBuildingEntries(entries, nextFaded, { playerPosition, storeyRegion, preserveCurrentFloor }) {
+    for (const entry of entries) {
+      if (!entry.root?.visible) continue;
+      if (preserveCurrentFloor && entry.mode === 'floor') {
+        if (!this.#isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion)) continue;
+      }
+      this.#fadeEntry(entry, nextFaded);
+    }
+  }
+
+  #fadeUpperFloors(entries, playerPosition, storeyRegion, nextFaded) {
+    for (const entry of entries) {
+      if (!entry.root?.visible || !this.#isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion)) continue;
+      this.#fadeEntry(entry, nextFaded);
+    }
+  }
+
+  #fadeEntry(entry, nextFaded) {
+    entry.root.traverse(object => {
+      if (!object.isMesh || !object.visible) return;
+      this.#setMeshFaded(object, true);
+      nextFaded.add(object);
+    });
   }
 
   #isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion) {
