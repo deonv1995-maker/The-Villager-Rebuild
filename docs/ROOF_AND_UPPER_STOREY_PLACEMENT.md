@@ -1,40 +1,44 @@
 # Roof and upper-storey placement
 
-## Shared structural authority
+## Shared physical structure, separate topology interpretation
 
-Roofing and upper floors use the same physical FRAME + RAW top-beam topology as their
-structural authority. Four compatible upright `FRAME` posts are not sufficient by
-themselves: the physical `RAW` top beams must close the supported perimeter. This remains
-the single structural source of truth for simple rooms, rectangular multi-bay buildings
-and stepped/L-shaped footprints.
+Roofing and upper floors read the same physical FRAME + RAW top-beam construction state,
+but they intentionally do **not** interpret that state through the same topology query.
+Four compatible upright `FRAME` posts are not sufficient by themselves: the physical
+`RAW` top beams must close the supported perimeter.
 
 A completed perimeter is deliberately a **ring**, not an interior support lattice. The
 player should never have to fill the room below with extra FRAME posts or RAW cross-beams
 just to unlock the storey above. Interior members may still be built for appearance or
 later gameplay, but they are not a prerequisite for the upper floor.
 
-Upper-floor support and live roof interaction intentionally have different query scopes.
-The upper-floor structural query resolves all completed physical top-beam pairs and caches
-the resulting regions by construction revision, so a large valid perimeter cannot become
-invalid merely because its far side lies outside the mobile roof-preview radius. ROOF
-interaction remains bounded around the player for mobile responsiveness. Both paths still
-feed the same `collectRoofRegions()` topology authority, so this is a query-scope split,
-not a second building graph.
+Upper-floor support is a construction-enclosure problem. Completed FRAME-pair RAW beams
+are projected onto the canonical physical-Log grid. The beam edges block movement between
+one-third-Log construction cells, exterior air is flood-filled around the structure, and
+each full-Log cell sealed from that exterior becomes a supported upper-floor bay. This
+works for a single room, large rectangles, and concave/stepped or L-shaped footprints
+without inventing an interior support grid.
+
+Roofing remains a roof-shape problem. `collectRoofRegions()` continues to identify the
+bounded rectangular/cell regions needed for rafters, ridges and roof reflow, and live ROOF
+interaction remains locally bounded around the player for mobile responsiveness. The two
+queries therefore share one physical construction source of truth while keeping their
+separate gameplay responsibilities. Upper-floor enclosure results are cached by
+construction revision so the flood-fill is not recomputed every preview frame.
 
 ## Upper floors and seamless structural joints
 
-Once a perimeter is closed, `FLOOR` exposes the canonical split-log floor slots inside
-that supported region directly from the FRAME + RAW ring geometry. One physical Log bay
-is subdivided into the same three one-third-Log floor strips used on the ground level.
-The lower storey's occupied floor strips are not copied and do not gate upstairs
-placement.
+Once a FRAME + RAW beam perimeter is closed, `FLOOR` exposes the canonical split-log floor
+slots inside the enclosed structural cells. One physical Log bay is subdivided into the
+same three one-third-Log floor strips used on the ground level. The lower storey's occupied
+floor strips are not copied and do not gate upstairs placement.
 
 This means the structural ring defines **where an upper floor may exist**, while the
 player still decides **which of those slots to build**. A stairwell, ladder opening or
 other deliberate hole is preserved simply by leaving that upstairs slot unbuilt; the
-system does not auto-fill the floor. Multi-bay and stepped footprints remain bounded by
-the same closed-perimeter regions, so no separate upstairs building system or interior
-post grid is introduced.
+system does not auto-fill the floor. Concave and stepped footprints preserve their actual
+outline because cells connected to exterior air are not exposed as supported upstairs
+floor space. No duplicate upstairs building system or interior post grid is introduced.
 
 An upper storey has two intentionally different vertical references:
 
@@ -55,9 +59,9 @@ corners for the next FRAME level. No centre post or duplicate upstairs building 
 introduced.
 
 In player terms, a "fully built frame" means the upright perimeter plus its closed RAW
-top-beam ring. With `FLOOR` selected, that completed support becomes the upper-floor snap
-target. The resulting floor can carry the next perimeter of FRAME posts and RAW top beams
-using the same rules again.
+top-beam ring. With `FLOOR` selected, that completed enclosure becomes the upper-floor
+snap target. The resulting floor can carry the next perimeter of FRAME posts and RAW top
+beams using the same rules again.
 
 Floor targeting must cover the entire physical split-log slot, not only the long-axis
 half-length. The shared floor snap range therefore covers the half-cell diagonal plus a
@@ -136,6 +140,8 @@ topology limits prevent selection from searching unrelated distant buildings.
 - unbuilt upstairs slots remain under player control rather than being auto-filled;
 - targeting at the diagonal seam between canonical floor slots still resolves to the supported upper storey;
 - a completed multi-bay outer ring remains valid even when its far side lies beyond the live roof-preview locality radius;
+- a closed concave/stepped outer ring unlocks its enclosed upper-floor space without interior support beams;
+- upper-floor support is derived independently from roof-region shape recognition;
 - the upstairs walking surface remains on the RAW beam top;
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;
