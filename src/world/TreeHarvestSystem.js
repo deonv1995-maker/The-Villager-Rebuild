@@ -50,7 +50,8 @@ export class TreeHarvestSystem {
       .map(tree => ({
         treeId: tree.treeId,
         remainingSeconds: Math.max(0, Number(tree.regrowRemaining) || 0),
-        stumpRemoved: Boolean(tree.stumpRemoved)
+        stumpRemoved: Boolean(tree.stumpRemoved),
+        cleared: Boolean(tree.cleared)
       }));
   }
 
@@ -64,12 +65,20 @@ export class TreeHarvestSystem {
     for (const tree of this.trees) {
       if (tree.active) continue;
       const saved = savedById.get(tree.treeId);
+      tree.cleared = Boolean(saved?.cleared ?? saved?.stumpRemoved);
+      tree.stumpRemoved = tree.cleared || Boolean(saved?.stumpRemoved);
+
+      if (tree.cleared) {
+        tree.regrowRemaining = 0;
+        this.#removeStump(tree);
+        this.regrowthPresentation.removeSprout(tree);
+        continue;
+      }
+
       const remaining = Number(saved?.remainingSeconds);
       tree.regrowRemaining = Number.isFinite(remaining)
         ? Math.min(this.definition.regrowSeconds, Math.max(0, remaining))
         : this.definition.regrowSeconds;
-      tree.stumpRemoved = Boolean(saved?.stumpRemoved);
-      if (tree.stumpRemoved) this.#removeStump(tree);
       if (!tree.regrowthVisual) this.regrowthPresentation.begin(tree);
       this.#syncRegrowthGrounding(tree);
       this.regrowthPresentation.update(tree, this.#regrowthAge(tree));
@@ -154,8 +163,10 @@ export class TreeHarvestSystem {
       tree.collisionTemplate.z
     );
     tree.stumpRemoved = true;
+    tree.cleared = true;
+    tree.regrowRemaining = 0;
     this.#removeStump(tree);
-    this.#syncRegrowthGrounding(tree);
+    this.regrowthPresentation.removeSprout(tree);
 
     const angle = (tree.treeId * STUMP_LOG_ANGLE_STEP + 0.65) % (Math.PI * 2);
     this.gatherables.spawn(this.definition.dropResourceId, {
@@ -202,6 +213,7 @@ export class TreeHarvestSystem {
     tree.active = false;
     tree.regrowRemaining = this.definition.regrowSeconds;
     tree.stumpRemoved = false;
+    tree.cleared = false;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
     tree.stump = this.#createStump(tree);
@@ -232,7 +244,7 @@ export class TreeHarvestSystem {
     if (elapsed <= 0) return;
 
     for (const tree of this.trees) {
-      if (tree.active) continue;
+      if (tree.active || tree.cleared) continue;
       tree.regrowRemaining = Math.max(0, tree.regrowRemaining - elapsed);
 
       const ready = tree.regrowRemaining <= 0;
@@ -278,6 +290,7 @@ export class TreeHarvestSystem {
     tree.active = true;
     tree.regrowRemaining = 0;
     tree.stumpRemoved = false;
+    tree.cleared = false;
   }
 
   #nearestStump(playerPosition) {
@@ -285,7 +298,7 @@ export class TreeHarvestSystem {
     let nearest = null;
     let nearestDistanceSq = this.definition.interactionRadius ** 2;
     for (const tree of this.trees) {
-      if (tree.active || tree.stumpRemoved || !tree.stump) continue;
+      if (tree.active || tree.cleared || tree.stumpRemoved || !tree.stump) continue;
       const dx = tree.collisionTemplate.x - playerPosition.x;
       const dz = tree.collisionTemplate.z - playerPosition.z;
       const distanceSq = dx * dx + dz * dz;
@@ -301,7 +314,7 @@ export class TreeHarvestSystem {
     if (!root) return;
     const x = tree.collisionTemplate.x;
     const z = tree.collisionTemplate.z;
-    root.position.y = this.terrain.heightAt(x, z) + (tree.stumpRemoved ? 0 : 0.34);
+    root.position.y = this.terrain.heightAt(x, z) + 0.34;
   }
 
   #collectTreeBatches() {
@@ -350,6 +363,7 @@ export class TreeHarvestSystem {
           regrowRemaining: 0,
           stump: null,
           stumpRemoved: false,
+          cleared: false,
           regrowthVisual: null
         };
         tree.renderState = this.#captureTreeRenderState(tree);
