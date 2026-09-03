@@ -14,5 +14,18 @@ export const WORLD_RESOURCE_DISTRIBUTION = Object.freeze({
       maxSlope: 0.6,
       scatterClearance: 0.24
     })
+  }),
+  renewal: Object.freeze({
+    grass: Object.freeze({
+      regrowSeconds: 120
+    }),
+    stick: Object.freeze({
+      seed: 0x51c8d3,
+      minDropIntervalSeconds: 45,
+      maxDropIntervalSeconds: 90,
+      playerTreeRadius: 42,
+      minDropDistance: 0.9,
+      maxDropDistance: 1.35
+    })
   })
 });

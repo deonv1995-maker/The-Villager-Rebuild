@@ -4,6 +4,7 @@ import { TestIslandSystem } from '../world/TestIslandSystem.js';
 import { GatherableSystem } from '../world/GatherableSystem.js';
 import { DayOneHuntSystem } from '../world/DayOneHuntSystem.js';
 import { TreeHarvestSystem } from '../world/TreeHarvestSystem.js';
+import { ResourceRenewalSystem } from '../world/ResourceRenewalSystem.js';
 import { RockHarvestSystem } from '../world/RockHarvestSystem.js';
 import { PhysicalLogSystem } from '../world/PhysicalLogSystem.js';
 import { CampfireSystem } from '../world/CampfireSystem.js';
@@ -64,6 +65,10 @@ export class GameApp {
       collision: this.island.collision,
       gatherables: this.gatherables,
       treeRenderRegistry: this.island.chunks
+    });
+    this.resourceRenewal = new ResourceRenewalSystem({
+      gatherables: this.gatherables,
+      treeHarvest: this.treeHarvest
     });
     this.rockHarvest = new RockHarvestSystem({
       group: this.island.group,
@@ -143,6 +148,7 @@ export class GameApp {
   };
 
   #refreshTargets(dt = 0) {
+    this.resourceRenewal?.update(dt, this.playerPosition);
     const toolId = this.toolbelt?.getEquippedToolId() ?? null;
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
     const spearBusy = (this.spearProjectiles?.isActive() ?? false) || (this.player?.isSpearThrowing() ?? false);
