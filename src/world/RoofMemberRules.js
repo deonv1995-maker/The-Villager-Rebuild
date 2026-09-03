@@ -66,10 +66,10 @@ const runtimeRegionProgress = candidates => {
 };
 
 const runtimeStructuralTieOrder = (candidates, progressByRegion) => [...candidates].sort((left, right) => (
-  topologyPriority(left?.supportTopology) - topologyPriority(right?.supportTopology) ||
   (progressByRegion.get(String(right?.roofRegionKey ?? '')) ?? 0) -
     (progressByRegion.get(String(left?.roofRegionKey ?? '')) ?? 0) ||
   (right?.supportFrameTopY ?? 0) - (left?.supportFrameTopY ?? 0) ||
+  topologyPriority(left?.supportTopology) - topologyPriority(right?.supportTopology) ||
   String(left?.roofRegionKey ?? '').localeCompare(String(right?.roofRegionKey ?? '')) ||
   String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
 ));
@@ -109,9 +109,11 @@ export function roofMemberCandidates(region) {
  * Static topology callers receive the original unified two-stage contract: any
  * available rafter keeps all ridges hidden until the rafter stage is complete.
  * Runtime placement sees only unoccupied candidates, so the number of missing rafters
- * is also the progress signal for that support region. A partially built roof therefore
- * stays on its active storey, while an untouched coincident stack starts on the highest
- * completed FRAME + RAW ring.
+ * is also the progress signal for that support region. Runtime priority therefore keeps
+ * an in-progress roof on its active support first; when no coincident roof has progress,
+ * it starts on the highest completed FRAME + RAW ring regardless of which valid topology
+ * shape recognized that ring. Topology priority is only the tie-break inside an otherwise
+ * equivalent runtime support choice.
  */
 export function orderedRoofBuildCandidates(candidates) {
   const available = (candidates ?? []).filter(Boolean);
