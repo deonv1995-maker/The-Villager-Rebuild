@@ -273,4 +273,64 @@ assert.equal(
 );
 assert.equal(largeSystem.previewPlacement.storey, 1);
 
-console.log('Closed-perimeter upper-floor slots, seam-safe targeting, large-ring support, beam-interlocked FRAME seating and storey ownership verified.');
+// A concave/stepped outer ring is still a physically closed support perimeter. It must
+// unlock every enclosed upstairs bay without requiring RAW cross-beams through the rooms
+// below. This reproduces the device layout where the visible outer frame is complete but
+// FLOOR still falls back to the lower level with a red preview.
+const steppedSystem = new PhysicalLogSystem({
+  group: new THREE.Group(),
+  player: { root: new THREE.Group(), model: null },
+  terrain, collision, gatherables
+});
+const steppedCoordinates = [
+  [0, 0], [1, 0], [2, 0], [2, 1],
+  [1, 1], [1, 2], [0, 2], [0, 1]
+];
+const steppedFrames = steppedCoordinates.map(([column, row], index) => ({
+  id: 400 + index,
+  mode: 'frame',
+  active: true,
+  x: column * PHYSICAL_LOG.length,
+  z: row * PHYSICAL_LOG.length,
+  yaw: 0,
+  baseY: floorTopY,
+  topY: frameTopY,
+  root: new THREE.Group(),
+  collisionHandle: null,
+  supportRoot: null
+}));
+const steppedBeams = steppedFrames.map((frame, index) => {
+  const next = steppedFrames[(index + 1) % steppedFrames.length];
+  const anchorIds = [frame.id, next.id].sort((left, right) => left - right);
+  return {
+    id: 500 + index,
+    mode: 'raw',
+    active: true,
+    x: (frame.x + next.x) * 0.5,
+    z: (frame.z + next.z) * 0.5,
+    yaw: 0,
+    baseY: floorTopY,
+    centerY: frameTopY,
+    topY: frameTopY + PHYSICAL_LOG.radius,
+    rawKey: `beam:${anchorIds.join('-')}`,
+    snapKind: 'frame-pair-top',
+    root: new THREE.Group(),
+    collisionHandle: null,
+    supportRoot: null
+  };
+});
+steppedSystem.builtLogs = [...steppedFrames, ...steppedBeams];
+steppedSystem.nextBuiltId = 600;
+steppedSystem.structureRevision += 1;
+const steppedPlayerPosition = new THREE.Vector3(PHYSICAL_LOG.halfLength, 0, -1.4);
+assert.ok(steppedSystem.pickup(steppedPlayerPosition));
+assert.equal(steppedSystem.setBuildMode('floor'), true);
+steppedSystem.update(steppedPlayerPosition, facing);
+assert.equal(
+  steppedSystem.previewPlacement.snapKind,
+  'closed-frame-upper-floor',
+  'A closed stepped outer perimeter must unlock the upper floor without interior support beams'
+);
+assert.equal(steppedSystem.previewPlacement.storey, 1);
+
+console.log('Closed-perimeter upper-floor slots, seam-safe targeting, large/stepped ring support, beam-interlocked FRAME seating and storey ownership verified.');
