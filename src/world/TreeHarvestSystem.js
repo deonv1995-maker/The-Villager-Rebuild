@@ -9,6 +9,8 @@ const MAX_REGROW_STEP_SECONDS = 0.25;
 const PLAYER_REGROW_CLEARANCE = 1.15;
 const BUILT_REGROW_BLOCKERS = new Set(['placed-log', 'campfire']);
 const BLOCKED_COMPLETION_EPSILON_SECONDS = 0.05;
+const STUMP_LOG_DISTANCE = 0.82;
+const STUMP_LOG_ANGLE_STEP = Math.PI * (3 - Math.sqrt(5));
 
 export class TreeHarvestSystem {
   constructor({ group, terrain, collision, gatherables, treeRenderRegistry = null, now = null }) {
@@ -47,7 +49,8 @@ export class TreeHarvestSystem {
       .filter(tree => !tree.active)
       .map(tree => ({
         treeId: tree.treeId,
-        remainingSeconds: Math.max(0, Number(tree.regrowRemaining) || 0)
+        remainingSeconds: Math.max(0, Number(tree.regrowRemaining) || 0),
+        stumpRemoved: Boolean(tree.stumpRemoved)
       }));
   }
 
@@ -65,7 +68,10 @@ export class TreeHarvestSystem {
       tree.regrowRemaining = Number.isFinite(remaining)
         ? Math.min(this.definition.regrowSeconds, Math.max(0, remaining))
         : this.definition.regrowSeconds;
+      tree.stumpRemoved = Boolean(saved?.stumpRemoved);
+      if (tree.stumpRemoved) this.#removeStump(tree);
       if (!tree.regrowthVisual) this.regrowthPresentation.begin(tree);
+      this.#syncRegrowthGrounding(tree);
       this.regrowthPresentation.update(tree, this.#regrowthAge(tree));
     }
     this.lastRegrowthUpdateAt = this.now();
@@ -121,6 +127,54 @@ export class TreeHarvestSystem {
     };
   }
 
+  getStumpTarget(playerPosition) {
+    const tree = this.#nearestStump(playerPosition);
+    if (!tree) return null;
+    return {
+      type: 'stump',
+      treeId: tree.treeId,
+      label: 'Stump',
+      icon: 'shovel',
+      actionLabel: 'Dig out stump',
+      position: new THREE.Vector3(
+        tree.collisionTemplate.x,
+        this.terrain.heightAt(tree.collisionTemplate.x, tree.collisionTemplate.z),
+        tree.collisionTemplate.z
+      )
+    };
+  }
+
+  removeStump(playerPosition) {
+    const tree = this.#nearestStump(playerPosition);
+    if (!tree) return null;
+
+    const position = new THREE.Vector3(
+      tree.collisionTemplate.x,
+      this.terrain.heightAt(tree.collisionTemplate.x, tree.collisionTemplate.z),
+      tree.collisionTemplate.z
+    );
+    tree.stumpRemoved = true;
+    this.#removeStump(tree);
+    this.#syncRegrowthGrounding(tree);
+
+    const angle = (tree.treeId * STUMP_LOG_ANGLE_STEP + 0.65) % (Math.PI * 2);
+    this.gatherables.spawn(this.definition.dropResourceId, {
+      x: tree.collisionTemplate.x + Math.cos(angle) * STUMP_LOG_DISTANCE,
+      z: tree.collisionTemplate.z + Math.sin(angle) * STUMP_LOG_DISTANCE,
+      quantity: 1,
+      yaw: angle + Math.PI / 2
+    });
+
+    return {
+      removed: true,
+      treeId: tree.treeId,
+      label: 'Stump',
+      position,
+      dropResourceId: this.definition.dropResourceId,
+      dropCount: 1
+    };
+  }
+
   chop(playerPosition) {
     this.update(playerPosition, true);
     if (!this.target) return null;
@@ -147,10 +201,12 @@ export class TreeHarvestSystem {
 
     tree.active = false;
     tree.regrowRemaining = this.definition.regrowSeconds;
+    tree.stumpRemoved = false;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
     tree.stump = this.#createStump(tree);
     this.regrowthPresentation.begin(tree);
+    this.#syncRegrowthGrounding(tree);
     this.#spawnDrops(tree);
     this.choppedCount += 1;
     this.target = null;
@@ -221,6 +277,31 @@ export class TreeHarvestSystem {
     tree.hits = 0;
     tree.active = true;
     tree.regrowRemaining = 0;
+    tree.stumpRemoved = false;
+  }
+
+  #nearestStump(playerPosition) {
+    if (!playerPosition) return null;
+    let nearest = null;
+    let nearestDistanceSq = this.definition.interactionRadius ** 2;
+    for (const tree of this.trees) {
+      if (tree.active || tree.stumpRemoved || !tree.stump) continue;
+      const dx = tree.collisionTemplate.x - playerPosition.x;
+      const dz = tree.collisionTemplate.z - playerPosition.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearest = tree;
+      nearestDistanceSq = distanceSq;
+    }
+    return nearest;
+  }
+
+  #syncRegrowthGrounding(tree) {
+    const root = tree.regrowthVisual?.root;
+    if (!root) return;
+    const x = tree.collisionTemplate.x;
+    const z = tree.collisionTemplate.z;
+    root.position.y = this.terrain.heightAt(x, z) + (tree.stumpRemoved ? 0 : 0.34);
   }
 
   #collectTreeBatches() {
@@ -268,6 +349,7 @@ export class TreeHarvestSystem {
           active: true,
           regrowRemaining: 0,
           stump: null,
+          stumpRemoved: false,
           regrowthVisual: null
         };
         tree.renderState = this.#captureTreeRenderState(tree);

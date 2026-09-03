@@ -134,6 +134,7 @@ export class RangerToolPresentation {
     if (toolId === 'axe') return this.#createAxe();
     if (toolId === 'hammer') return this.#createHammer();
     if (toolId === 'pickaxe') return this.#createPickaxe();
+    if (toolId === 'shovel') return this.#createShovel();
     if (toolId === 'sword') return this.#createSword();
     throw new Error(`No Ranger tool presentation for ${toolId}`);
   }
@@ -191,6 +192,29 @@ export class RangerToolPresentation {
     head.scale.z = 0.7;
     head.castShadow = true;
     group.add(head);
+    return group;
+  }
+
+  #createShovel() {
+    const group = new THREE.Group();
+    const { wood, stone, wrap } = this.#materials();
+    this.#handle(group, wood, 1.08);
+
+    const blade = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.24, 0.38, 6), stone);
+    blade.position.y = 0.67;
+    blade.scale.z = 0.32;
+    blade.castShadow = true;
+    group.add(blade);
+
+    const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.18, 7), wrap);
+    socket.position.y = 0.47;
+    socket.castShadow = true;
+    group.add(socket);
+
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.065, 0.09), wood);
+    grip.position.y = -0.48;
+    grip.castShadow = true;
+    group.add(grip);
     return group;
   }
 

@@ -12,6 +12,7 @@ const GENERIC_INTERACTION_TARGETS = Object.freeze(new Set([
   'thrown-spear'
 ]));
 const RETRIEVAL_ACTION_ID = 'spear-retrieve';
+const STUMP_ACTION_ID = 'shovel-stump';
 
 const iconForTool = toolId => toolId ?? 'hand';
 const resolveExternalAction = action => ({
@@ -56,6 +57,8 @@ export function resolveContextAction({
     .sort((left, right) => (right.priority ?? 0) - (left.priority ?? 0));
   const spearRetrieval = sortedExternal.find(action => action.id === RETRIEVAL_ACTION_ID);
   if (spearRetrieval) return resolveExternalAction(spearRetrieval);
+  const stumpRemoval = sortedExternal.find(action => action.id === STUMP_ACTION_ID);
+  if (stumpRemoval) return resolveExternalAction(stumpRemoval);
 
   const workTargets = WORK_TARGETS[toolId];
   if (workTargets?.has(interactionTarget?.type)) {

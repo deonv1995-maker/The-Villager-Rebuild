@@ -34,6 +34,13 @@ export const TOOL_DEFINITIONS = Object.freeze({
     role: 'rock-harvest',
     actionLabel: 'Mine rock'
   }),
+  shovel: Object.freeze({
+    id: 'shovel',
+    label: 'Shovel',
+    icon: 'shovel',
+    role: 'stump-removal',
+    actionLabel: 'Dig out stump'
+  }),
   sword: Object.freeze({
     id: 'sword',
     label: 'Sword',
@@ -45,4 +52,4 @@ export const TOOL_DEFINITIONS = Object.freeze({
   })
 });
 
-export const TOOL_ORDER = Object.freeze(['spear', 'axe', 'hammer', 'pickaxe', 'sword']);
+export const TOOL_ORDER = Object.freeze(['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword']);

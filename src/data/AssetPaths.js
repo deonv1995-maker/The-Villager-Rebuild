@@ -37,6 +37,7 @@ export const ASSET_PATHS = Object.freeze({
       axe: asset('ui/fantasy/icon-axe.png'),
       hammer: asset('ui/fantasy/icon-hammer.png'),
       pickaxe: asset('ui/fantasy/icon-pickaxe.png'),
+      shovel: asset('ui/mobile/icon-shovel.svg'),
       sword: asset('ui/fantasy/icon-sword.png'),
       campfire: asset('ui/fantasy/icon-campfire.png'),
       jump: asset('ui/mobile/icon-jump.svg'),
