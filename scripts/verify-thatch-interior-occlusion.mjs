@@ -278,9 +278,13 @@ assert.ok(activeRegion, 'Ranger under a completed roof must activate interior st
 assert.equal(
   Math.abs(nearMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
   true,
-  'Camera-side structure must become semi-transparent while indoors'
+  'The connected building shell must become semi-transparent while the Ranger is indoors'
 );
-assert.equal(farMesh.material.opacity, 1, 'Far-side structure must remain fully solid while indoors');
+assert.equal(
+  Math.abs(farMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
+  true,
+  'Far-side panels in the same connected building must share the indoor fade state instead of fading panel by panel'
+);
 assert.equal(
   Math.abs(upperFloorMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
   true,
@@ -336,17 +340,94 @@ camera.position.set(20, 3, 26);
 camera.lookAt(20, 1, 20);
 camera.updateMatrixWorld(true);
 occlusion.update(outsidePlayer, camera);
-assert.equal(nearMesh.material.opacity, 1, 'Leaving the structure must restore interior camera-side materials to solid');
+assert.equal(nearMesh.material.opacity, 1, 'Leaving the structure must restore the connected indoor shell to solid');
 assert.equal(upperFloorMesh.material.opacity, 1, 'Leaving the lower storey must restore its upper floor to solid');
 assert.equal(
   Math.abs(exteriorBlockerMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
   true,
-  'A building part between the camera and an outside Ranger must fade even when the Ranger is not indoors'
+  'An ungrouped incomplete building part between the camera and an outside Ranger must still fade'
 );
 assert.equal(
   exteriorSideMesh.material.opacity,
   1,
-  'Nearby building parts that do not cover the outside Ranger must remain solid'
+  'Ungrouped nearby construction that does not cover the outside Ranger must remain solid'
+);
+
+// A completed/recognized building is one presentation unit. If one member of a connected
+// multi-bay structure blocks the outside Ranger, every visual member in that connected
+// building must share the fade state while a separate nearby structure remains solid.
+const groupedBlockerRoot = new THREE.Group();
+const groupedBlockerMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 3, 0.4),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+groupedBlockerRoot.position.set(20, 1.4, 24);
+groupedBlockerRoot.add(groupedBlockerMesh);
+const groupedSideRoot = new THREE.Group();
+const groupedSideMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.6, 3, 0.4),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+groupedSideRoot.position.set(24, 1.4, 24);
+groupedSideRoot.add(groupedSideMesh);
+const unrelatedRoot = new THREE.Group();
+const unrelatedMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1.2, 3, 0.4),
+  new THREE.MeshBasicMaterial({ opacity: 1, transparent: false })
+);
+unrelatedRoot.position.set(26.5, 1.4, 23.5);
+unrelatedRoot.add(unrelatedMesh);
+const groupedPhysicalLogs = {
+  structureRevision: 1,
+  builtLogs: [
+    { id: 100, mode: 'wall', active: true, x: 20, z: 24, baseY: -0.1, centerY: 1.4, topY: 2.9, root: groupedBlockerRoot },
+    { id: 101, mode: 'wall', active: true, x: 24, z: 24, baseY: -0.1, centerY: 1.4, topY: 2.9, root: groupedSideRoot },
+    { id: 102, mode: 'wall', active: true, x: 26.5, z: 23.5, baseY: -0.1, centerY: 1.4, topY: 2.9, root: unrelatedRoot }
+  ]
+};
+const groupedRegions = [
+  {
+    key: 'grouped-left',
+    a: { x: 19, z: 23 },
+    b: { x: 22, z: 23 },
+    c: { x: 19, z: 25 },
+    d: { x: 22, z: 25 }
+  },
+  {
+    key: 'grouped-right',
+    a: { x: 22, z: 23 },
+    b: { x: 25, z: 23 },
+    c: { x: 22, z: 25 },
+    d: { x: 25, z: 25 }
+  }
+];
+const groupedRoofQuery = {
+  getRegions: () => groupedRegions,
+  findInteriorRegion: () => null,
+  findStoreyRegion: () => null
+};
+const groupedOcclusion = new StructureInteriorOcclusionSystem({
+  physicalLogs: groupedPhysicalLogs,
+  roofQuery: groupedRoofQuery
+});
+camera.position.set(20, 3, 28);
+camera.lookAt(20, 1, 20);
+camera.updateMatrixWorld(true);
+groupedOcclusion.update(outsidePlayer, camera);
+assert.equal(
+  Math.abs(groupedBlockerMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
+  true,
+  'The blocking member of a connected exterior building must fade'
+);
+assert.equal(
+  Math.abs(groupedSideMesh.material.opacity - STRUCTURE_INTERIOR_FADE_OPACITY) < 0.000001,
+  true,
+  'An adjoining bay in the same connected building must fade with the blocker as one unit'
+);
+assert.equal(
+  unrelatedMesh.material.opacity,
+  1,
+  'A separate nearby structure outside the connected building footprint must remain solid'
 );
 
 camera.position.set(40, 3, 46);
@@ -362,4 +443,4 @@ thatch.sync();
 assert.equal(thatch.getVisualEntries().length, 0, 'Removing required roof framing must remove dependent thatch panels');
 assert.equal(inventory.get('grass'), 8, 'Invalidated thatch panels must refund their four-Grass costs');
 
-console.log('Thatch roof cost, storey-aware upper-floor fading, exterior structure occlusion and material restoration verified');
+console.log('Thatch roof cost, whole-building interior/exterior occlusion, storey-aware floor fading and material restoration verified');
