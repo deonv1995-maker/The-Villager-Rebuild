@@ -3,7 +3,10 @@ import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { PhysicalLogSystem } from '../src/world/PhysicalLogSystem.js';
 import { createPhysicalLogVisual } from '../src/world/PhysicalLogVisual.js';
-import { roofMemberCandidates } from '../src/world/RoofMemberRules.js';
+import {
+  orderedRoofBuildCandidates,
+  roofMemberCandidates
+} from '../src/world/RoofMemberRules.js';
 
 const FLOOR_TOP_LIFT = 0.028;
 const ROOF_SEAT_LIFT = 0.08;
@@ -109,6 +112,42 @@ assert.equal(roofSystem.previewPlacement.roofRole, 'rafter');
 assert.ok(
   Math.abs(roofSystem.previewPlacement.supportFrameTopY - upperFrameTopY) < 1e-8,
   'An untouched stacked roof footprint must start on the highest completed support ring'
+);
+
+// The same storey priority must hold when valid lower and upper support rings are
+// recognized through different roof topologies. Topology is a shape tie-break, not a
+// reason to force an untouched lower roof ahead of the completed top-floor frame.
+const lowerMixedTopologyRegion = {
+  key: 'test:mixed-topology-lower',
+  a: { x: -PHYSICAL_LOG.halfLength, z: 0 },
+  b: { x: PHYSICAL_LOG.halfLength, z: 0 },
+  c: { x: -PHYSICAL_LOG.halfLength, z: PHYSICAL_LOG.length },
+  d: { x: PHYSICAL_LOG.halfLength, z: PHYSICAL_LOG.length },
+  frameBaseY: lowerFrameBaseY,
+  frameTopY: lowerFrameTopY,
+  eaveY: lowerFrameTopY + ROOF_SEAT_LIFT,
+  ridgeY: lowerFrameTopY + ROOF_SEAT_LIFT + 1,
+  ridgeYaw: 0,
+  topology: 'closed-loop'
+};
+const upperMixedTopologyRegion = {
+  ...lowerMixedTopologyRegion,
+  key: 'test:mixed-topology-upper',
+  frameBaseY: upperFrameBaseY,
+  frameTopY: upperFrameTopY,
+  eaveY: upperFrameTopY + ROOF_SEAT_LIFT,
+  ridgeY: upperFrameTopY + ROOF_SEAT_LIFT + 1,
+  topology: 'frame-cell'
+};
+const mixedTopologyCandidates = [
+  ...roofMemberCandidates(lowerMixedTopologyRegion),
+  ...roofMemberCandidates(upperMixedTopologyRegion)
+].map(candidate => ({ ...candidate, raftersComplete: false }));
+const [mixedTopologyTarget] = orderedRoofBuildCandidates(mixedTopologyCandidates);
+assert.ok(mixedTopologyTarget, 'Mixed-topology stacked supports must expose a roof target');
+assert.ok(
+  Math.abs(mixedTopologyTarget.supportFrameTopY - upperFrameTopY) < 1e-8,
+  'An untouched top-floor roof must outrank a lower roof even when the lower support has a stronger topology type'
 );
 
 // If a lower roof is already in progress, it remains the active construction job and
