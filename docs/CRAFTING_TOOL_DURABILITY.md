@@ -16,7 +16,15 @@ The Campfire is the first placeable structure recipe. Its Stick/Stone cost is de
 - minimum wear per successful use: 3%
 - maximum wear per successful use: 6%
 
-The wear amount is randomly sampled between those constants for each successful tool use. Axe chopping, Pickaxe mining, Hammer demolition/customization, Sword strikes and Spear throws all route through the same durability system.
+The wear amount is randomly sampled between those constants for each successful tool use. Axe chopping, Pickaxe mining, Hammer demolition/customization, Shovel stump removal, Sword strikes and Spear throws all route through the same durability system.
+
+## Shovel lifecycle
+
+The Shovel is a normal crafted inventory tool. Its recipe is defined once in `CraftingDefinitions.js` as 1 Stick + 1 Stone + 1 Grass, and its equipment identity lives in `ToolDefinitions.js` with the rest of the toolbelt.
+
+When the Shovel is equipped and a chopped stump is within the existing tree interaction radius, the unified Action button becomes `DIG`. A successful dig removes that stump once and spawns exactly one additional canonical physical `log` through the existing gatherable/physical-log path. The reward is therefore lifted, shoulder-carried and placed through the same construction system as Logs produced by chopping trees.
+
+Stump removal does not own or replace tree regrowth. `TreeHarvestSystem` remains authoritative for the original tree site, keeps its existing 180-second active-play regrowth timer, persists whether the stump was already removed, and restores the authored tree normally when the site is clear. This prevents save/Continue or repeated input from granting duplicate stump Logs.
 
 ## Spear lifecycle
 
@@ -39,7 +47,7 @@ The Spear selection slot shows the number currently available for throwing. Embe
 
 ## Integration
 
-`EquipmentRuntimeController` is the scoped integration boundary for this pass. It attaches durability to the existing authoritative harvest/combat/build systems without replacing their gameplay logic, synchronizes the dedicated crafting UI, transfers Spears between inventory and the world, and publishes nearby Spear retrieval through the existing unified Action system. It also supplies placeable crafting recipes to the same crafting menu while delegating final world placement to the existing world-system handler.
+`EquipmentRuntimeController` is the scoped integration boundary for this pass. It attaches durability to the existing authoritative harvest/combat/build systems without replacing their gameplay logic, synchronizes the dedicated crafting UI, transfers Spears between inventory and the world, publishes nearby Spear retrieval through the existing unified Action system, and publishes Shovel stump removal through that same contextual Action surface. It also supplies placeable crafting recipes to the same crafting menu while delegating final world placement to the existing world-system handler.
 
 The following stable systems remain authoritative and are not duplicated:
 
