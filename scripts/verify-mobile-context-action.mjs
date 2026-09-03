@@ -42,6 +42,23 @@ const demolish = resolveContextAction({
 assert.equal(demolish.source, 'interaction');
 assert.equal(demolish.icon, 'hammer');
 
+const shovel = resolveContextAction({
+  toolId: 'shovel',
+  interactionTarget: { type: 'resource', label: 'Log', actionLabel: 'Pick up Log' },
+  externalActions: [{
+    id: 'shovel-stump',
+    priority: 900,
+    available: true,
+    icon: 'shovel',
+    label: 'Dig out stump',
+    caption: 'DIG'
+  }]
+});
+assert.equal(shovel.source, 'external', 'Shovel stump action must beat incidental physical Logs dropped around the same tree');
+assert.equal(shovel.externalId, 'shovel-stump');
+assert.equal(shovel.icon, 'shovel');
+assert.equal(shovel.caption, 'DIG');
+
 const spear = resolveContextAction({
   toolId: 'spear',
   huntTarget: { label: 'Wild Pig' },
@@ -86,6 +103,7 @@ const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import
 const contextActionSource = fs.readFileSync(new URL('../src/ui/ContextActionPolicy.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
+const equipmentRuntimeSource = fs.readFileSync(new URL('../src/gameplay/EquipmentRuntimeController.js', import.meta.url), 'utf8');
 const thatchControllerSource = fs.readFileSync(new URL('../src/gameplay/RoofThatchController.js', import.meta.url), 'utf8');
 const rangerControllerSource = fs.readFileSync(new URL('../src/player/RangerController.js', import.meta.url), 'utf8');
 
@@ -100,6 +118,13 @@ assert.match(mobileHudSource, /data-role="craft-toggle-label"/, 'Craft control m
 assert.match(mobileHudSource, /currentCraftPlacementAction\?\.previewing/, 'Active crafted placement must be confirmed from the crafting control');
 assert.doesNotMatch(mobileHudSource, /if \(action\.source === 'campfire'\)/, 'Unified Action trigger must not contain a campfire construction branch');
 assert.doesNotMatch(contextActionSource, /source: 'campfire'/, 'Context action policy must not expose campfire construction');
+assert.match(contextActionSource, /STUMP_ACTION_ID = 'shovel-stump'/, 'Context action policy must reserve the shovel stump action ahead of incidental pickups');
+assert.match(equipmentRuntimeSource, /#wrapToolUse\(this\.game\.treeHarvest, 'removeStump', 'shovel'\)/, 'Shovel stump removal must consume standard tool durability');
+assert.match(equipmentRuntimeSource, /caption: 'DIG'/, 'Shovel must route through the unified Action button as DIG');
+assert.match(mobileHudSource, /shovel: ui\.shovel/, 'Mobile HUD must render a dedicated shovel icon');
+assert.match(assetPathsSource, /shovel: asset\('ui\/mobile\/icon-shovel\.svg'\)/, 'Shovel icon path must remain centralized');
+assert.ok(fs.existsSync(new URL('../public/assets/ui/mobile/icon-shovel.svg', import.meta.url)), 'Shovel icon asset must exist in public assets');
+assert.match(mobileHudSource, /!TOOL_ORDER\.includes\(entry\.id\)/, 'Resource strip must exclude all current and future toolbelt tools from the shared tool order');
 assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
@@ -175,4 +200,4 @@ assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 0\.5/, 'Manual ca
 assert.match(rangerControllerSource, /CAMERA_PITCH_RESPONSE = 0\.7/, 'Manual camera pitch recovery must remain relaxed rather than snapping back');
 assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, crafting-owned campfire placement, icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
+console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
