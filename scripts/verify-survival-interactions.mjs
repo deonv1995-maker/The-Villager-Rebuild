@@ -30,7 +30,7 @@ function assertPixelIcon(buffer, label) {
   assert.equal(buffer.readUInt32BE(20), 32, `${label} icon must remain 32 pixels high`);
 }
 
-assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'sword'], 'Craftable tool order must remain stable');
+assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword'], 'Craftable tool order must remain stable');
 assert.deepEqual(
   TOOL_DURABILITY,
   { maxPercent: 100, wearMinPercent: 3, wearMaxPercent: 6 },
@@ -40,7 +40,13 @@ assert.equal(TOOL_DEFINITIONS.spear.role, 'projectile');
 assert.equal(TOOL_DEFINITIONS.axe.role, 'tree-harvest');
 assert.equal(TOOL_DEFINITIONS.hammer.role, 'demolition');
 assert.equal(TOOL_DEFINITIONS.pickaxe.role, 'rock-harvest');
+assert.equal(TOOL_DEFINITIONS.shovel.role, 'stump-removal');
 assert.equal(TOOL_DEFINITIONS.sword.role, 'melee');
+assert.deepEqual(
+  CRAFTING_RECIPES.shovel.ingredients.map(({ itemId, quantity }) => [itemId, quantity]),
+  [['stick', 1], ['stone', 1], ['grass', 1]],
+  'Shovel recipe must stay data-driven at one Stick, one Stone and one Grass'
+);
 assert.ok(TOOL_DEFINITIONS.spear.lockRange >= 8, 'Spear must auto-lock at a meaningful projectile range');
 
 assert.equal(RESOURCE_DEFINITIONS.stick.storage, 'inventory');
@@ -67,7 +73,7 @@ for (const ingredient of STRUCTURE_DEFINITIONS.campfire.ingredients) {
 for (const [resourceId, quantity] of Object.entries(requiredInventoryResources)) {
   assert.ok(
     (initialResourceCounts[resourceId] ?? 0) >= quantity,
-    `Opening world must contain enough ${resourceId} to craft the five basic tools plus the campfire in any order`
+    `Opening world must contain enough ${resourceId} to craft the six basic tools plus the campfire in any order`
   );
 }
 
@@ -80,7 +86,7 @@ const crafting = new CraftingSystem({ inventory });
 const durability = new ToolDurabilitySystem({ inventory, random: () => 0.5 });
 const toolbelt = new ToolbeltSystem({ inventory, crafting, durability });
 let belt = toolbelt.snapshot();
-assert.equal(belt.length, 6, 'Bottom toolbelt must contain default Hand plus five selection slots');
+assert.equal(belt.length, 7, 'Bottom toolbelt must contain default Hand plus six selection slots');
 assert.equal(belt[0].id, 'hand');
 assert.equal(belt[0].equipped, true);
 assert.equal(toolbelt.select('spear').equipped, false, 'Selecting an unowned tool must never auto-craft it');
@@ -244,6 +250,7 @@ for (const requirement of [
 ]) {
   assert.ok(appSource.includes(requirement), `GameApp is missing survival interaction contract: ${requirement}`);
 }
+assert.ok(appSource.includes('/^Digit[1-7]$/'), 'Desktop toolbelt hotkeys must expose Hand plus all six tool slots');
 assert.ok(!appSource.includes('playSpearAttack()'), 'Active spear combat must not use the old stabbing/thrust attack path');
 assert.ok(!appSource.includes("inventory.add('log'"), 'GameApp must never store logs in inventory');
 assert.ok(mainSource.includes('new EquipmentRuntimeController({ game })'), 'Equipment runtime must be installed explicitly at gameplay startup');
@@ -274,7 +281,7 @@ for (const requirement of [
   '#setBuildTrayCollapsed(collapsed)',
   'class="hud-button action"',
   'setExternalAction(id, action = null)',
-  "const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])",
+  "const WORK_ACTION_TOOLS = new Set(['axe', 'hammer', 'pickaxe', 'shovel'])",
   'this.attackButton = this.actionButton',
   'this.attackIcon = this.actionIcon',
   'this.attackButton.hidden = !available && !action.externalId',
@@ -296,6 +303,7 @@ assert.ok(contextActionSource.includes("pickaxe: Object.freeze(new Set(['rock'])
 assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'campfire']))"), 'Unified Action policy must preserve Hammer demolition routing');
 assert.ok(contextActionSource.includes("const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']))"), 'Unified Action policy must preserve Spear and Sword combat routing');
 assert.ok(contextActionSource.includes("const RETRIEVAL_ACTION_ID = 'spear-retrieve'"), 'Nearby spear retrieval must have priority through the unified Action policy');
+assert.ok(contextActionSource.includes("const STUMP_ACTION_ID = 'shovel-stump'"), 'Nearby stump digging must use the unified Action policy without replacing normal tree harvesting');
 assert.ok(
   stylesSource.includes('.log-build-tray {') &&
   stylesSource.includes('right: max(8px') &&
@@ -324,16 +332,19 @@ assert.ok(!toolbeltSource.includes('this.crafting.craft(toolId)'), 'Toolbelt sel
 assert.ok(toolbeltSource.includes('craftingSnapshot()'), 'Toolbelt must expose recipe state without crafting from selection');
 for (const requirement of [
   "this.#wrapToolUse(this.game.treeHarvest, 'chop', 'axe')",
+  "this.#wrapToolUse(this.game.treeHarvest, 'removeStump', 'shovel')",
   "this.#wrapToolUse(this.game.rockHarvest, 'mine', 'pickaxe')",
   "this.#wrapToolUse(this.game.physicalLogs, 'demolish', 'hammer')",
   "this.#wrapToolUse(this.game.hunt, 'meleeAttack', 'sword')",
   "this.durability.takeForUse('spear')",
   "this.game.toolbelt.clearIfUnavailable()",
   "const CAMPFIRE_RECIPE_ID = 'campfire'",
+  "const STUMP_ACTION_ID = 'shovel-stump'",
   '#craftCampfirePlacement()',
   'hud.onCampfire();',
   'hud.setCrafting(this.#craftingSnapshot())',
-  "hud.setExternalAction(RETRIEVAL_ACTION_ID"
+  "hud.setExternalAction(RETRIEVAL_ACTION_ID",
+  "hud.setExternalAction(STUMP_ACTION_ID"
 ]) {
   assert.ok(equipmentRuntimeSource.includes(requirement), `Equipment runtime is missing contract: ${requirement}`);
 }
@@ -371,6 +382,7 @@ assert.ok(carrySource.includes('class RangerLogCarryPose') && carrySource.includ
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"), 'Uneven floors must generate automatic supports/fill without terrain mutation');
 assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'), 'The archived terrain cutting system must not be restored into the rebuild');
 assert.ok(treeSource.includes("this.hitFeedback.emit(position, 'wood')"), 'Tree hits must emit visual feedback');
+assert.ok(treeSource.includes('removeStump(playerPosition)'), 'Tree harvest authority must own one-time stump removal');
 assert.ok(rockSource.includes("this.hitFeedback.emit(position, 'stone')"), 'Rock hits must emit visual feedback');
 assert.ok(feedbackSource.includes('class HarvestHitFeedback') && feedbackSource.includes('RingGeometry'), 'Tree/rock impact feedback must stay in the shared feedback renderer');
 
@@ -392,6 +404,7 @@ assert.ok(projectileSource.includes('retrieve(playerPosition'), 'Projectile syst
 assert.ok(gatherSource.includes("resourceId === 'grass'"), 'Grass must have a world pickup presentation for inventory crafting');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'), 'Non-spear tools must mount through the Ranger right-hand attachment boundary');
 assert.ok(toolSource.includes("const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe'])"), 'Axe, Hammer and Pickaxe must share the skeleton-driven work-action path');
+assert.ok(toolSource.includes("if (toolId === 'shovel') return this.#createShovel()"), 'Shovel must have a dedicated held-tool presentation without changing skeletal work-tool authority');
 assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Work tools must request a Ranger skeleton action');
 assert.ok(toolSource.includes('#applySkeletalAccent(progress)'), 'Work-tool swings must keep the stronger visible strike accent');
 assert.ok(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must use a lateral slash rather than the generic work swing');
@@ -407,5 +420,6 @@ for (const [name, path, png] of [
   assert.ok(assetSource.includes(path), `${name} icon must be registered in shared runtime assets`);
   assertPixelIcon(png, name);
 }
+assert.ok(assetSource.includes("shovel: asset('ui/mobile/icon-shovel.svg')"), 'Shovel icon must be registered in shared runtime assets');
 
-console.log('Foundation 0.3.8 selection-only toolbelt, dedicated crafting, crafting-owned campfire placement, durability, retrievable spear and preserved gameplay contracts verified');
+console.log('Foundation 0.3.8 selection-only toolbelt, six crafted tools, dedicated crafting, shovel stump conversion, durability, retrievable spear and preserved gameplay contracts verified');
