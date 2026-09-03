@@ -7,14 +7,21 @@ const inventoryStyles = fs.readFileSync(new URL('../src/resource-inventory.css',
 const hudStyles = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
-for (const resourceId of ['stick', 'stone', 'grass', 'meat']) {
+const resourceIconPaths = Object.freeze({
+  stick: 'ui/fantasy/icon-resource-stick.png',
+  stone: 'ui/fantasy/icon-resource-stone.png',
+  grass: 'ui/mobile/icon-resource-grass.svg',
+  meat: 'ui/fantasy/icon-resource-meat.png'
+});
+
+for (const [resourceId, iconPath] of Object.entries(resourceIconPaths)) {
   assert.match(
     assetPathsSource,
-    new RegExp(`${resourceId}: asset\\('ui/fantasy/icon-resource-${resourceId}\\.png'\\)`),
-    `${resourceId} must use its selected fantasy resource icon asset`
+    new RegExp(`${resourceId}: asset\\('${iconPath.replaceAll('.', '\\.')}'\\)`),
+    `${resourceId} must use its selected resource icon asset`
   );
   assert.ok(
-    fs.existsSync(new URL(`../public/assets/ui/fantasy/icon-resource-${resourceId}.png`, import.meta.url)),
+    fs.existsSync(new URL(`../public/assets/${iconPath}`, import.meta.url)),
     `${resourceId} resource icon must exist in public assets`
   );
 }
@@ -31,6 +38,16 @@ for (const iconId of ['axe', 'hammer', 'pickaxe', 'sword', 'campfire']) {
   );
 }
 
+assert.match(
+  assetPathsSource,
+  /spear: asset\('ui\/mobile\/icon-spear\.svg'\)/,
+  'Spear must use the approved mobile spear icon'
+);
+assert.ok(
+  fs.existsSync(new URL('../public/assets/ui/mobile/icon-spear.svg', import.meta.url)),
+  'Approved spear icon must exist in public assets'
+);
+
 assert.match(mobileHudSource, /this\.resourceIcons = ui\.resources;/, 'Mobile HUD must use the shared resource icon map');
 assert.match(mobileHudSource, /row\.dataset\.resource = entry\.id;/, 'Inventory rows must expose their resource id');
 assert.match(mobileHudSource, /icon\.className = 'inventory-resource-icon';/, 'Inventory resources must render as images');
@@ -44,4 +61,4 @@ assert.match(inventoryStyles, /\.inventory-resource-icon\s*\{[\s\S]*?width: 24px
 assert.match(inventoryStyles, /\.inventory-row strong\s*\{[\s\S]*?position: absolute;/, 'Resource quantities must remain visible as compact badges');
 assert.match(hudStyles, /img\[src\*="\/ui\/fantasy\/"\][\s\S]*?image-rendering: pixelated;[\s\S]*?filter: none;/, 'Fantasy icons must retain crisp pixels and original colour');
 
-console.log('Curated fantasy tool and resource icons verified');
+console.log('Curated tool and resource icons verified');
