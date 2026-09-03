@@ -28,7 +28,7 @@ player.model.name = 'camera-mode-test-ranger';
 player.root.add(player.model);
 player.assetMode = 'kaykit';
 
-player.update(1 / 60);
+for (let frame = 0; frame < 120; frame += 1) player.update(1 / 60);
 assert.equal(player.getCameraMode(), 'third-person', 'Third-person must remain the default camera mode');
 assert.equal(player.isFirstPerson(), false);
 assert.equal(player.model.visible, true, 'Ranger model must be visible in third person');
