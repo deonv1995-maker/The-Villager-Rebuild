@@ -14,6 +14,7 @@ export class RangerToolPresentation {
     this.root.visible = false;
     this.handMounted = this.player.mountRightHandObject?.(this.root) ?? false;
     if (!this.handMounted && !this.root.parent) this.player.root.add(this.root);
+    this.cameraModeUnsubscribe = this.player.onCameraModeChange?.(() => this.#syncVisibility()) ?? null;
   }
 
   isBusy() {
@@ -22,11 +23,14 @@ export class RangerToolPresentation {
 
   setEquippedTool(toolId) {
     if (toolId === 'spear') toolId = null;
-    if (toolId === this.currentToolId) return;
+    if (toolId === this.currentToolId) {
+      this.#syncVisibility();
+      return;
+    }
     this.currentToolId = toolId;
     this.root.clear();
     if (toolId) this.root.add(this.#createTool(toolId));
-    this.root.visible = Boolean(toolId);
+    this.#syncVisibility();
     this.skeletalActionActive = false;
     this.#applyRestPose();
   }
@@ -38,7 +42,7 @@ export class RangerToolPresentation {
   playSwing(toolId = this.currentToolId) {
     if (this.isBusy() || !toolId || toolId === 'spear') return false;
     if (this.currentToolId !== toolId) this.setEquippedTool(toolId);
-    this.root.visible = true;
+    this.#syncVisibility();
 
     if (this.handMounted && SKELETAL_WORK_TOOLS.has(toolId)) {
       const action = this.player.playToolAction?.(toolId);
@@ -76,6 +80,10 @@ export class RangerToolPresentation {
       this.skeletalActionActive = false;
       this.#applyRestPose();
     }
+  }
+
+  #syncVisibility() {
+    this.root.visible = Boolean(this.currentToolId) && !Boolean(this.player.isFirstPerson?.());
   }
 
   #applyRestPose() {
