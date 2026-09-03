@@ -33,30 +33,30 @@ export const ASSET_PATHS = Object.freeze({
       joystickPad: asset('ui/mobile/joystick-pad.svg'),
       joystickNub: asset('ui/mobile/joystick-nub.svg'),
       buttonCircle: asset('ui/mobile/button-circle.svg'),
-      hand: asset('ui/mobile/icon-hand.svg'),
-      axe: asset('ui/fantasy/icon-axe.png'),
-      hammer: asset('ui/fantasy/icon-hammer.png'),
-      pickaxe: asset('ui/fantasy/icon-pickaxe.png'),
-      shovel: asset('ui/mobile/icon-shovel.svg'),
-      sword: asset('ui/fantasy/icon-sword.png'),
-      campfire: asset('ui/fantasy/icon-campfire.png'),
-      jump: asset('ui/mobile/icon-jump.svg'),
-      spear: asset('ui/mobile/icon-spear.svg'),
+      hand: asset('ui/survival/icon-hand.webp'),
+      axe: asset('ui/survival/icon-axe.webp'),
+      hammer: asset('ui/survival/icon-hammer.webp'),
+      pickaxe: asset('ui/survival/icon-pickaxe.webp'),
+      shovel: asset('ui/survival/icon-shovel.webp'),
+      sword: asset('ui/survival/icon-sword.webp'),
+      campfire: asset('ui/survival/icon-campfire.webp'),
+      jump: asset('ui/survival/icon-jump.webp'),
+      spear: asset('ui/survival/icon-spear.webp'),
       resources: Object.freeze({
-        stick: asset('ui/fantasy/icon-resource-stick.png'),
-        stone: asset('ui/fantasy/icon-resource-stone.png'),
-        grass: asset('ui/mobile/icon-resource-grass.svg'),
-        meat: asset('ui/fantasy/icon-resource-meat.png')
+        stick: asset('ui/survival/icon-resource-stick.webp'),
+        stone: asset('ui/survival/icon-resource-stone.webp'),
+        grass: asset('ui/survival/icon-resource-grass.webp'),
+        meat: asset('ui/survival/icon-resource-meat.webp')
       }),
       build: Object.freeze({
-        raw: asset('ui/mobile/icon-build-raw.svg'),
-        floor: asset('ui/mobile/icon-build-floor.svg'),
-        frame: asset('ui/mobile/icon-build-frame.svg'),
-        wall: asset('ui/mobile/icon-build-wall.svg'),
+        raw: asset('ui/survival/icon-build-raw.webp'),
+        floor: asset('ui/survival/icon-build-floor.webp'),
+        frame: asset('ui/survival/icon-build-frame.webp'),
+        wall: asset('ui/survival/icon-build-wall.webp'),
         angle: asset('ui/mobile/icon-build-angle.svg'),
-        stairs: asset('ui/mobile/icon-build-stairs.svg'),
-        roof: asset('ui/mobile/icon-build-roof.svg'),
-        drop: asset('ui/mobile/icon-build-drop.svg')
+        stairs: asset('ui/survival/icon-build-stairs.webp'),
+        roof: asset('ui/survival/icon-build-roof.webp'),
+        drop: asset('ui/survival/icon-build-drop.webp')
       })
     })
   })
