@@ -417,6 +417,70 @@ function frameBoundsRegions(component, {
 
 const frameEdgeKey = (left, right) => [left, right].sort((a, b) => a - b).join(':');
 
+const frameCellCenter = region => ({
+  x: (region.a.x + region.b.x + region.c.x + region.d.x) * 0.25,
+  z: (region.a.z + region.b.z + region.c.z + region.d.z) * 0.25
+});
+
+const sharedFrameCount = (left, right) => {
+  const rightIds = new Set(right.anchorIds ?? []);
+  return (left.anchorIds ?? []).reduce((count, id) => count + Number(rightIds.has(id)), 0);
+};
+
+const ridgeAlignmentScore = (region, neighbours, yaw) => {
+  const center = frameCellCenter(region);
+  const axisX = Math.cos(yaw);
+  const axisZ = -Math.sin(yaw);
+  let score = 0;
+  for (const neighbour of neighbours) {
+    const target = frameCellCenter(neighbour);
+    const dx = target.x - center.x;
+    const dz = target.z - center.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0.001) continue;
+    score += Math.abs((dx * axisX + dz * axisZ) / length);
+  }
+  return score;
+};
+
+const quarterTurnFrameCell = region => ({
+  ...region,
+  a: { ...region.a },
+  b: { ...region.c },
+  c: { ...region.b },
+  d: { ...region.d },
+  ridgeYaw: axisHeading((region.ridgeYaw ?? 0) + Math.PI / 2)
+});
+
+/**
+ * A square roof cell has two mathematically valid gable directions. In a stepped or
+ * L-shaped footprint the connected wing is the structural tie-break: endpoint cells
+ * point their ridge toward the neighbouring occupied cell and straight runs keep the
+ * ridge along the run. Corner cells with equal perpendicular neighbours retain the
+ * deterministic canonical direction. This keeps an isolated square stable while
+ * making extensions automatically turn with the building footprint.
+ */
+export function orientConnectedFrameCellRegions(regions) {
+  const cells = (regions ?? []).filter(region => region?.topology === 'frame-cell');
+  if (cells.length < 2) return regions ?? [];
+
+  return (regions ?? []).map(region => {
+    if (region?.topology !== 'frame-cell') return region;
+    const neighbours = cells.filter(candidate =>
+      candidate.key !== region.key && sharedFrameCount(region, candidate) === 2
+    );
+    if (!neighbours.length) return region;
+
+    const currentYaw = axisHeading(region.ridgeYaw ?? 0);
+    const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
+    const currentScore = ridgeAlignmentScore(region, neighbours, currentYaw);
+    const alternateScore = ridgeAlignmentScore(region, neighbours, alternateYaw);
+    return alternateScore > currentScore + 0.05
+      ? quarterTurnFrameCell(region)
+      : region;
+  });
+}
+
 function frameCellRegions(component, {
   yawTolerance,
   topTolerance,
@@ -540,7 +604,9 @@ function frameCellRegions(component, {
     }
   }
 
-  return [...regions.values()].sort((left, right) => left.key.localeCompare(right.key));
+  return orientConnectedFrameCellRegions(
+    [...regions.values()].sort((left, right) => left.key.localeCompare(right.key))
+  );
 }
 
 export function collectRoofRegions(pairs, {

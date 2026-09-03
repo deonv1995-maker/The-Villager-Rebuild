@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { frameSeatYForFloor } from './FloorFrameTopology.js';
 import {
@@ -25,6 +26,11 @@ const axisYawDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
   return Math.min(delta, Math.abs(Math.PI - delta));
 };
+
+const signedYawDelta = (from, to) => Math.atan2(
+  Math.sin((to ?? 0) - (from ?? 0)),
+  Math.cos((to ?? 0) - (from ?? 0))
+);
 
 const memberPlansMatch = (source, target) => (
   source?.roofRole === target?.roofRole &&
@@ -69,11 +75,46 @@ const regionStorey = (region, floors) => {
   return matching.length ? Math.max(...matching) : 0;
 };
 
+const regionCenter = region => ({
+  x: (region.a.x + region.b.x + region.c.x + region.d.x) * 0.25,
+  z: (region.a.z + region.b.z + region.c.z + region.d.z) * 0.25
+});
+
 const targetForSharedMember = (plan, member) => {
   const sourceMembers = roofMemberCandidates(plan.source);
   const targetMembers = roofMemberCandidates(plan.target);
   const index = sourceMembers.findIndex(candidate => roofMemberOccupied(candidate, [member]));
   return index >= 0 ? targetMembers[index] : null;
+};
+
+const applyRoofMemberTarget = (member, target, storey) => {
+  if (member.root) {
+    const direction = new THREE.Vector3(
+      target.end.x - target.start.x,
+      target.end.y - target.start.y,
+      target.end.z - target.start.z
+    ).normalize();
+    member.root.position.set(target.x, target.y, target.z);
+    member.root.scale.setScalar(1);
+    member.root.scale.x = THREE.MathUtils.clamp(
+      (target.roofLength ?? PHYSICAL_LOG.length) / PHYSICAL_LOG.length,
+      0.35,
+      1.08
+    );
+    member.root.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
+  }
+  member.x = target.x;
+  member.z = target.z;
+  member.yaw = target.yaw;
+  member.baseY = Math.min(target.start.y, target.end.y);
+  member.centerY = target.y;
+  member.topY = Math.max(target.start.y, target.end.y) + PHYSICAL_LOG.radius;
+  member.roofKey = target.roofKey;
+  member.roofRegionKey = target.roofRegionKey;
+  member.roofRole = target.roofRole;
+  member.roofLength = target.roofLength;
+  member.snapKind = target.snapKind;
+  member.storey = storey;
 };
 
 /**
@@ -196,9 +237,11 @@ export class StackedRoofReflowSystem {
     this.#inheritStoreyMetadata(active, floors, frames);
 
     const regions = this.#collectRegions(frames);
-    const plans = collectStackedRoofRelocationPlans(regions, active);
-    if (!plans.length) return { moved: false, members: 0, panels: 0 };
+    const orientationRefresh = this.#refreshCanonicalRegionGeometry(regions, active);
+    let movedMembers = orientationRefresh.members;
+    let movedPanels = orientationRefresh.panels;
 
+    const plans = collectStackedRoofRelocationPlans(regions, active);
     const moves = new Map();
     for (const plan of plans) {
       const sourceCandidates = roofMemberCandidates(plan.source);
@@ -224,27 +267,12 @@ export class StackedRoofReflowSystem {
       }
     }
 
-    let movedMembers = 0;
     for (const move of moves.values()) {
-      const { member, target, storey } = move;
-      member.root.position.set(target.x, target.y, target.z);
-      member.x = target.x;
-      member.z = target.z;
-      member.yaw = target.yaw;
-      member.baseY = Math.min(target.start.y, target.end.y);
-      member.centerY = target.y;
-      member.topY = Math.max(target.start.y, target.end.y) + PHYSICAL_LOG.radius;
-      member.roofKey = target.roofKey;
-      member.roofRegionKey = target.roofRegionKey;
-      member.roofRole = target.roofRole;
-      member.roofLength = target.roofLength;
-      member.snapKind = target.snapKind;
-      member.storey = storey;
+      applyRoofMemberTarget(move.member, move.target, move.storey);
       movedMembers += 1;
     }
 
-    let movedPanels = 0;
-    if (movedMembers > 0 && this.roofThatchSystem?.thatched instanceof Map) {
+    if (moves.size > 0 && this.roofThatchSystem?.thatched instanceof Map) {
       for (const plan of plans) movedPanels += this.#moveThatch(plan);
     }
 
@@ -277,6 +305,41 @@ export class StackedRoofReflowSystem {
     return [...regions.values()];
   }
 
+  #refreshCanonicalRegionGeometry(regions, active) {
+    let movedMembers = 0;
+    let movedPanels = 0;
+
+    for (const region of regions) {
+      if (region?.topology !== 'frame-cell') continue;
+      const targets = roofMemberCandidates(region);
+      const ownedMembers = targets.map(target => active.find(member =>
+        member?.active &&
+        member.roofRegionKey === region.key &&
+        member.roofKey === target.roofKey &&
+        member.roofRole === target.roofRole
+      ));
+      if (ownedMembers.some(member => !member)) continue;
+      if (new Set(ownedMembers.map(member => member.id)).size !== targets.length) continue;
+      if (targets.every((target, index) => roofMemberOccupied(target, [ownedMembers[index]]))) continue;
+
+      const sharesCurrentTarget = ownedMembers.some(member => regions.some(other =>
+        other.key !== region.key &&
+        roofMemberCandidates(other).some(candidate => roofMemberOccupied(candidate, [member]))
+      ));
+      if (sharesCurrentTarget) continue;
+
+      for (let index = 0; index < targets.length; index += 1) {
+        applyRoofMemberTarget(ownedMembers[index], targets[index], ownedMembers[index].storey ?? 0);
+        movedMembers += 1;
+      }
+      if (this.roofThatchSystem?.thatched instanceof Map) {
+        movedPanels += this.#reorientThatch(region);
+      }
+    }
+
+    return { members: movedMembers, panels: movedPanels };
+  }
+
   #inheritStoreyMetadata(active, floors, frames) {
     const frameById = new Map(frames.map(frame => [frame.id, frame]));
     for (const frame of frames) {
@@ -292,6 +355,39 @@ export class StackedRoofReflowSystem {
       if (!anchors.length) continue;
       entry.storey = Math.max(...anchors.map(frame => frame.storey ?? 0));
     }
+  }
+
+  #reorientThatch(region) {
+    const targetBySide = new Map(roofPanelDescriptors(region).map(panel => [panel.side, panel]));
+    const center = regionCenter(region);
+    const matching = [...this.roofThatchSystem.thatched.entries()].filter(([, state]) =>
+      state?.panel?.regionKey === region.key
+    );
+    let moved = 0;
+
+    for (const [currentKey, state] of matching) {
+      const targetPanel = targetBySide.get(state.panel?.side);
+      if (!targetPanel) continue;
+      if (this.roofThatchSystem.thatched.has(targetPanel.id) && currentKey !== targetPanel.id) continue;
+
+      const previousCenter = state.panel.center;
+      if (state.root?.position) {
+        const previousYaw = Math.atan2(-(previousCenter.z - center.z), previousCenter.x - center.x);
+        const targetYaw = Math.atan2(-(targetPanel.center.z - center.z), targetPanel.center.x - center.x);
+        state.root.position.x += targetPanel.center.x - previousCenter.x;
+        state.root.position.y += targetPanel.center.y - previousCenter.y;
+        state.root.position.z += targetPanel.center.z - previousCenter.z;
+        state.root.rotation.y += signedYawDelta(previousYaw, targetYaw);
+        state.root.name = `roof-thatch-${targetPanel.id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+        state.root.userData ??= {};
+        state.root.userData.thatchPanelId = targetPanel.id;
+      }
+      state.panel = targetPanel;
+      this.roofThatchSystem.thatched.delete(currentKey);
+      this.roofThatchSystem.thatched.set(targetPanel.id, state);
+      moved += 1;
+    }
+    return moved;
   }
 
   #moveThatch(plan) {
