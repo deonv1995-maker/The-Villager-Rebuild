@@ -1,0 +1,53 @@
+.camera-view-toggle {
+  position: absolute;
+  right: max(112px, calc(env(safe-area-inset-right) + 108px));
+  top: max(8px, calc(env(safe-area-inset-top) + 4px));
+  width: 48px;
+  height: 40px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  gap: 0;
+  padding: 3px 4px 2px;
+  border: 1px solid rgba(240, 207, 118, .58);
+  border-radius: 10px;
+  background: rgba(50, 64, 46, .94);
+  color: #f7dfa0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .22);
+  font-family: inherit;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: auto;
+  touch-action: none;
+  backdrop-filter: blur(6px);
+}
+
+.camera-view-toggle [data-role="camera-mode-label"] {
+  font-size: 15px;
+  letter-spacing: .03em;
+}
+
+.camera-view-toggle small {
+  font-size: 6px;
+  letter-spacing: .08em;
+  opacity: .78;
+}
+
+.camera-view-toggle.first-person {
+  border-color: #72dc86;
+  background: rgba(55, 94, 61, .96);
+  color: #e9ffeb;
+}
+
+.camera-view-toggle:active {
+  transform: scale(.95);
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .camera-view-toggle {
+    right: max(108px, calc(env(safe-area-inset-right) + 104px));
+    top: max(7px, calc(env(safe-area-inset-top) + 4px));
+    width: 46px;
+    height: 38px;
+  }
+}
