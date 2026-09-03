@@ -23,6 +23,11 @@ import {
   roofRaftersComplete
 } from './RoofMemberRules.js';
 import {
+  collectStairBuildCandidates,
+  floorCandidateBlockedByStairs,
+  stairOpeningContainsFloor
+} from './StairPlacementRules.js';
+import {
   collectUpperStoreyFloorCandidates,
   collectUpperStoreySupportRegions
 } from './UpperStoreyFloorRules.js';
@@ -204,6 +209,8 @@ export class PhysicalLogSystem {
       return null;
     }
 
+    if (placedMode === 'stairs') this.#clearStairOpening(placement);
+
     root.name = `built-log-${this.nextBuiltId}-${placedMode}`;
     this.group.add(root);
     const collisionHandle = this.#registerCollision(placedMode, placement, root);
@@ -226,6 +233,12 @@ export class PhysicalLogSystem {
       roofRegionKey: placement.roofRegionKey ?? null,
       roofRole: placement.roofRole ?? null,
       roofLength: placement.roofLength ?? null,
+      supportRegionKey: placement.supportRegionKey ?? null,
+      stairKey: placement.stairKey ?? null,
+      stairOpeningKey: placement.stairOpeningKey ?? null,
+      stairOpeningRegionKeys: placement.stairOpeningRegionKeys ?? null,
+      stairStepIndex: Number.isFinite(placement.stairStepIndex) ? placement.stairStepIndex : null,
+      stairStepCount: Number.isFinite(placement.stairStepCount) ? placement.stairStepCount : null,
       storey: placement.storey ?? 0
     };
     this.nextBuiltId += 1;
@@ -326,7 +339,7 @@ export class PhysicalLogSystem {
     if (mode === 'floor') return this.#floorPlacement(base);
     if (mode === 'frame') return this.#framePlacement(base, playerPosition);
     if (mode === 'wall') return this.#wallPlacement(base);
-    if (mode === 'angle') return this.#anglePlacement(base);
+    if (mode === 'stairs') return this.#stairsPlacement(base);
     if (mode === 'roof') return this.#roofPlacement(base);
     return base;
   }
@@ -392,7 +405,13 @@ export class PhysicalLogSystem {
       Math.abs(floor.baseY - baseY) < PHYSICAL_LOG.frameLevelTolerance
     );
     const structurallySupported = (candidate.storey ?? 0) > 0;
-    const valid = !occupied && this.#floorPlacementValid(
+    const stairBlocked = structurallySupported && this.#floorPositionBlockedByStairs(
+      candidate.x,
+      candidate.z,
+      candidate.storey,
+      candidate.supportRegionKey
+    );
+    const valid = !occupied && !stairBlocked && this.#floorPlacementValid(
       candidate.x,
       candidate.z,
       candidate.yaw,
@@ -515,6 +534,47 @@ export class PhysicalLogSystem {
     return best ? { ...base, ...best } : { ...base, y: base.ground + PHYSICAL_LOG.halfLength, valid: false };
   }
 
+  #stairsPlacement(base) {
+    const regions = this.#upperStoreyRegions();
+    const candidates = collectStairBuildCandidates(
+      regions,
+      this.#activeBuilt('floor'),
+      this.#activeBuilt('stairs'),
+      {
+        floorTopLift: FLOOR_TOP_LIFT,
+        beamRadius: PHYSICAL_LOG.radius,
+        levelTolerance: PHYSICAL_LOG.frameLevelTolerance
+      }
+    )
+      .map(candidate => ({
+        ...candidate,
+        distance: Math.hypot(candidate.x - base.x, candidate.z - base.z)
+      }))
+      .filter(candidate => candidate.distance < PHYSICAL_LOG.stairSnapRange)
+      .sort((left, right) => (
+        Number(right.stairStepIndex > 0) - Number(left.stairStepIndex > 0) ||
+        left.distance - right.distance ||
+        left.stairKey.localeCompare(right.stairKey)
+      ));
+
+    const candidate = candidates[0];
+    if (!candidate) {
+      return {
+        ...base,
+        y: base.ground + PHYSICAL_LOG.radius,
+        topY: base.ground + PHYSICAL_LOG.radius,
+        valid: false
+      };
+    }
+    const { distance, ...placement } = candidate;
+    return {
+      ...base,
+      ...placement,
+      ground: this.#baseTerrainHeightAt(placement.x, placement.z),
+      valid: this.terrain.isPlayable(placement.x, placement.z, PHYSICAL_LOG.halfLength + 0.12)
+    };
+  }
+
   #roofPlacement(base) {
     const staged = orderedRoofBuildCandidates(this.#roofCandidates(base));
     let best = null;
@@ -595,11 +655,13 @@ export class PhysicalLogSystem {
 
   #upperStoreyFloorCandidates(base) {
     const regions = this.#upperStoreyRegions();
+    const stairs = this.#activeBuilt('stairs');
     return collectUpperStoreyFloorCandidates(regions, this.#activeBuilt('floor'), {
       floorTopLift: FLOOR_TOP_LIFT,
       beamRadius: PHYSICAL_LOG.radius,
       levelTolerance: PHYSICAL_LOG.frameLevelTolerance
     })
+      .filter(candidate => !floorCandidateBlockedByStairs(candidate, stairs))
       .map(candidate => ({
         ...candidate,
         distance: Math.hypot(candidate.x - base.x, candidate.z - base.z)
@@ -702,6 +764,7 @@ export class PhysicalLogSystem {
         const z = floor.z + oz;
         const distance = Math.hypot(x - base.x, z - base.z);
         if (distance >= PHYSICAL_LOG.floorSnapRange) continue;
+        if ((floor.storey ?? 0) > 0 && this.#floorPositionBlockedByStairs(x, z, floor.storey)) continue;
         const key = `${Math.round(x * 1000)}:${Math.round(z * 1000)}:${Math.round(floor.yaw * 1000)}:${Math.round(floor.baseY * 1000)}`;
         const existing = candidates.get(key);
         if (existing && existing.distance <= distance) continue;
@@ -719,6 +782,38 @@ export class PhysicalLogSystem {
     return [...candidates.values()]
       .sort((left, right) => left.distance - right.distance || left.x - right.x || left.z - right.z)
       .map(({ distance, ...candidate }) => candidate);
+  }
+
+  #floorPositionBlockedByStairs(x, z, storey, supportRegionKey = null) {
+    const stairs = this.#activeBuilt('stairs').filter(stair => (stair.storey ?? 0) === storey);
+    if (!stairs.length) return false;
+    if (supportRegionKey) {
+      return stairs.some(stair => (stair.stairOpeningRegionKeys ?? []).includes(supportRegionKey));
+    }
+    const regions = this.#upperStoreyRegions();
+    const floor = { mode: 'floor', active: true, x, z, storey, supportRegionKey: null };
+    return stairs.some(stair => stairOpeningContainsFloor(
+      floor,
+      regions,
+      stair.stairOpeningRegionKeys
+    ));
+  }
+
+  #clearStairOpening(placement) {
+    if (!placement?.stairOpeningRegionKeys?.length) return;
+    const regions = this.#upperStoreyRegions();
+    let changed = false;
+    for (const floor of this.#activeBuilt('floor')) {
+      if ((floor.storey ?? 0) !== (placement.storey ?? 0)) continue;
+      if (!stairOpeningContainsFloor(floor, regions, placement.stairOpeningRegionKeys)) continue;
+      floor.active = false;
+      if (floor.collisionHandle) this.collision.removeObstacle(floor.collisionHandle);
+      this.floorSupports.remove(floor.supportRoot);
+      this.group.remove(floor.root);
+      this.gatherables.spawn('log', { x: floor.x, z: floor.z, yaw: floor.yaw });
+      changed = true;
+    }
+    if (changed) this.#markStructureChanged();
   }
 
   #nearestFloorCorner(base, {
@@ -934,7 +1029,7 @@ export class PhysicalLogSystem {
       return;
     }
 
-    if (mode === 'floor') {
+    if (mode === 'floor' || mode === 'stairs') {
       root.position.set(placement.x, placement.y, placement.z);
       root.rotation.y = placement.yaw;
       return;
@@ -1023,6 +1118,27 @@ export class PhysicalLogSystem {
       });
     }
 
+    if (mode === 'stairs') {
+      return this.collision.addBox({
+        x: placement.x,
+        z: placement.z,
+        halfX: PHYSICAL_LOG.halfLength,
+        halfZ: PHYSICAL_LOG.radius,
+        yaw: placement.yaw,
+        type: 'placed-log',
+        label,
+        bottomY: placement.topY - PHYSICAL_LOG.radius * 2,
+        topY: placement.topY,
+        standable: true,
+        supportHalfX: PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorSupportSeamPadding,
+        supportHalfZ: PHYSICAL_LOG.floorWidth * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
+        supportY: placement.topY,
+        supportOverridesBase: true,
+        supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
+        stepHeight: PHYSICAL_LOG.stairMaxStepRise + 0.02
+      });
+    }
+
     if (mode === 'floor') {
       return this.collision.addBox({
         x: placement.x,
@@ -1070,7 +1186,7 @@ export class PhysicalLogSystem {
     if (mode === 'frame') return placement.baseY + PHYSICAL_LOG.length;
     if (mode === 'wall') return root.position.y + 0.76;
     if (mode === 'angle') return placement.baseY + PHYSICAL_LOG.length * Math.SQRT1_2;
-    if (mode === 'floor' || mode === 'roof') return placement.topY;
+    if (mode === 'floor' || mode === 'stairs' || mode === 'roof') return placement.topY;
     return root.position.y + PHYSICAL_LOG.radius;
   }
 

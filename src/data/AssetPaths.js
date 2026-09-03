@@ -54,6 +54,7 @@ export const ASSET_PATHS = Object.freeze({
         frame: asset('ui/mobile/icon-build-frame.svg'),
         wall: asset('ui/mobile/icon-build-wall.svg'),
         angle: asset('ui/mobile/icon-build-angle.svg'),
+        stairs: asset('ui/mobile/icon-build-stairs.svg'),
         roof: asset('ui/mobile/icon-build-roof.svg'),
         drop: asset('ui/mobile/icon-build-drop.svg')
       })

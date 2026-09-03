@@ -508,7 +508,7 @@ export class GameApp {
       this.setStatus(`${logBuildState?.label?.toUpperCase() ?? 'LOG'} · ${valid ? 'READY TO PLACE' : 'INVALID PLACEMENT'}`);
       this.hud?.setObjective(
         valid
-          ? 'Choose RAW / FLOOR / FRAME / WALL / ANGLE / ROOF · green preview · hand action places'
+          ? 'Choose RAW / FLOOR / FRAME / WALL / STAIRS / ROOF · green preview · hand action places'
           : 'Red preview is blocked or unsupported · move or change build mode'
       );
       this.hud?.setAttackTarget(null, toolId);

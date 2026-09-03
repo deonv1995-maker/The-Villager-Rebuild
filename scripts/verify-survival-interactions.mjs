@@ -54,7 +54,7 @@ assert.equal(RESOURCE_DEFINITIONS.stone.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.grass.storage, 'inventory');
 assert.equal(RESOURCE_DEFINITIONS.log.storage, 'physical');
 assert.equal(PHYSICAL_LOG.length, 2.9, 'Physical logs must retain original-reference full length');
-assert.deepEqual(LOG_BUILD_MODES, ['raw', 'floor', 'frame', 'wall', 'angle', 'roof']);
+assert.deepEqual(LOG_BUILD_MODES, ['raw', 'floor', 'frame', 'wall', 'stairs', 'roof']);
 assert.ok(PHYSICAL_LOG.carryPosition[1] > 1.75 && PHYSICAL_LOG.carryPosition[2] < -0.3, 'Shoulder carry anchor must stay above and behind the torso to prevent clipping');
 
 const initialResourceCounts = WORLD_LAYOUT.dayOneResources.reduce((counts, [resourceId]) => {
@@ -274,7 +274,7 @@ for (const requirement of [
   'data-build="floor"',
   'data-build="frame"',
   'data-build="wall"',
-  'data-build="angle"',
+  'data-build="stairs"',
   'data-build="roof"',
   'data-build="drop"',
   'setLogBuildMode(carrying, state = null)',
@@ -361,6 +361,7 @@ for (const requirement of [
   "mode === 'frame'",
   "mode === 'wall'",
   "mode === 'angle'",
+  "mode === 'stairs'",
   "mode === 'roof'",
   "snapKind: candidate.snapKind ?? (snapped ? 'floor-edge-level' : null)",
   'baseY: floor.baseY',

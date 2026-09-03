@@ -129,7 +129,7 @@ assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expos
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
 assert.match(mobileHudSource, /aria-expanded/, 'Build menu collapse control must expose expansion state');
-for (const mode of ['raw', 'floor', 'frame', 'wall', 'angle', 'roof', 'drop']) {
+for (const mode of ['raw', 'floor', 'frame', 'wall', 'stairs', 'roof', 'drop']) {
   assert.match(mobileHudSource, new RegExp(`data-build="${mode}"`), `Build grid must expose ${mode}`);
   assert.match(assetPathsSource, new RegExp(`${mode}: asset\\('ui/mobile/icon-build-${mode}\\.svg'\\)`), `${mode} must use a dedicated build icon asset`);
   assert.ok(

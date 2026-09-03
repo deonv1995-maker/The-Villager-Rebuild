@@ -30,7 +30,14 @@ export const PHYSICAL_LOG = Object.freeze({
   frameSnapRange: FRAME_SNAP_RANGE,
   floorSnapRange: FLOOR_SNAP_RANGE,
   wallSnapRange: 1.7,
+  // Retained for legacy persisted ANGLE pieces. New player-facing construction uses
+  // the dedicated two-cell stair contract below; ROOF still stores rafters as ANGLE.
   angleSnapRange: 1.85,
+  stairStepCount: 6,
+  stairStepRun: FLOOR_WIDTH,
+  stairRunLength: LOG_LENGTH * 2,
+  stairSnapRange: LOG_LENGTH * 2 + PLACEMENT_REACH,
+  stairMaxStepRise: 0.58,
   // From outside a full bay, the ordered ROOF workflow must still reach the far
   // rafter after nearer members have been placed. Keep topology local, but allow
   // interaction to span one physical Log plus the normal forward placement reach.
@@ -83,7 +90,10 @@ export const CONSTRUCTION_DIMENSIONS = Object.freeze({
   windowHeadHeight: 2.12
 });
 
-export const LOG_BUILD_MODES = Object.freeze(['raw', 'floor', 'frame', 'wall', 'angle', 'roof']);
+// Player-selectable modes deliberately exclude ANGLE. ROOF still materializes rafters as
+// the legacy/internal ANGLE mode so existing roof queries and saves remain compatible.
+export const LOG_BUILD_MODES = Object.freeze(['raw', 'floor', 'frame', 'wall', 'stairs', 'roof']);
+export const LOG_CONSTRUCTION_MODES = Object.freeze(['raw', 'floor', 'frame', 'wall', 'angle', 'stairs', 'roof']);
 
 export const LOG_BUILD_LABELS = Object.freeze({
   raw: 'Raw log',
@@ -91,5 +101,6 @@ export const LOG_BUILD_LABELS = Object.freeze({
   frame: 'Log frame',
   wall: 'Split-log wall',
   angle: 'Angled log',
+  stairs: 'Split-log stairs',
   roof: 'Roof log'
 });
