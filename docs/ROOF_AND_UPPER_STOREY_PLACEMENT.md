@@ -2,15 +2,24 @@
 
 ## Shared structural authority
 
-Roofing and upper floors use the same bounded closed-perimeter query. Four compatible
-upright `FRAME` posts are not sufficient by themselves: the physical `RAW` top beams
-must close the supported perimeter. This remains the single structural source of truth
-for simple rooms, rectangular multi-bay buildings and stepped/L-shaped footprints.
+Roofing and upper floors use the same physical FRAME + RAW top-beam topology as their
+structural authority. Four compatible upright `FRAME` posts are not sufficient by
+themselves: the physical `RAW` top beams must close the supported perimeter. This remains
+the single structural source of truth for simple rooms, rectangular multi-bay buildings
+and stepped/L-shaped footprints.
 
 A completed perimeter is deliberately a **ring**, not an interior support lattice. The
 player should never have to fill the room below with extra FRAME posts or RAW cross-beams
 just to unlock the storey above. Interior members may still be built for appearance or
 later gameplay, but they are not a prerequisite for the upper floor.
+
+Upper-floor support and live roof interaction intentionally have different query scopes.
+The upper-floor structural query resolves all completed physical top-beam pairs and caches
+the resulting regions by construction revision, so a large valid perimeter cannot become
+invalid merely because its far side lies outside the mobile roof-preview radius. ROOF
+interaction remains bounded around the player for mobile responsiveness. Both paths still
+feed the same `collectRoofRegions()` topology authority, so this is a query-scope split,
+not a second building graph.
 
 ## Upper floors and seamless structural joints
 
@@ -126,6 +135,7 @@ topology limits prevent selection from searching unrelated distant buildings.
 - interior FRAME posts or RAW cross-beams are not required to unlock those floor slots;
 - unbuilt upstairs slots remain under player control rather than being auto-filled;
 - targeting at the diagonal seam between canonical floor slots still resolves to the supported upper storey;
+- a completed multi-bay outer ring remains valid even when its far side lies beyond the live roof-preview locality radius;
 - the upstairs walking surface remains on the RAW beam top;
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;

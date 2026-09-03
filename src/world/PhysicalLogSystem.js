@@ -77,6 +77,8 @@ export class PhysicalLogSystem {
     this.framePairCache = [];
     this.floorCornerCacheRevision = -1;
     this.floorCornerCache = [];
+    this.upperFloorRegionCacheRevision = -1;
+    this.upperFloorRegionCache = [];
     this.roofQueryCacheRevision = -1;
     this.roofQueryCacheKey = '';
     this.roofQueryCache = [];
@@ -572,7 +574,7 @@ export class PhysicalLogSystem {
   }
 
   #upperStoreyFloorCandidates(base) {
-    const regions = this.#roofRegions(base);
+    const regions = this.#upperStoreyRegions();
     return collectUpperStoreyFloorCandidates(regions, this.#activeBuilt('floor'), {
       floorTopLift: FLOOR_TOP_LIFT,
       beamRadius: PHYSICAL_LOG.radius,
@@ -585,6 +587,22 @@ export class PhysicalLogSystem {
       .filter(candidate => candidate.distance < PHYSICAL_LOG.floorSnapRange)
       .sort((left, right) => left.distance - right.distance || left.sourceFloorId - right.sourceFloorId)
       .map(({ distance, ...candidate }) => candidate);
+  }
+
+  #upperStoreyRegions() {
+    if (this.upperFloorRegionCacheRevision === this.structureRevision) {
+      return this.upperFloorRegionCache;
+    }
+
+    const occupiedBeamKeys = new Set(
+      this.#activeBuilt('raw')
+        .filter(raw => raw.snapKind === 'frame-pair-top' && raw.rawKey)
+        .map(raw => raw.rawKey)
+    );
+    const pairs = this.#framePairs().filter(pair => occupiedBeamKeys.has(pair.rawKey));
+    this.upperFloorRegionCache = this.#regionsFromPairs(pairs);
+    this.upperFloorRegionCacheRevision = this.structureRevision;
+    return this.upperFloorRegionCache;
   }
 
   #roofRegions(base) {
@@ -602,6 +620,10 @@ export class PhysicalLogSystem {
           .map(raw => raw.rawKey)
       )
     });
+    return this.#regionsFromPairs(pairs);
+  }
+
+  #regionsFromPairs(pairs) {
     return collectRoofRegions(pairs, {
       yawTolerance: 0.16,
       topTolerance: 0.34,
