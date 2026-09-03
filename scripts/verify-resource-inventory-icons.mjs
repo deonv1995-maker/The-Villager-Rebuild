@@ -4,48 +4,80 @@ import fs from 'node:fs';
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
 const inventoryStyles = fs.readFileSync(new URL('../src/resource-inventory.css', import.meta.url), 'utf8');
-const hudStyles = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const survivalIconStyles = fs.readFileSync(new URL('../src/survival-icons.css', import.meta.url), 'utf8');
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
-const resourceIconPaths = Object.freeze({
-  stick: 'ui/fantasy/icon-resource-stick.png',
-  stone: 'ui/fantasy/icon-resource-stone.png',
-  grass: 'ui/mobile/icon-resource-grass.svg',
-  meat: 'ui/fantasy/icon-resource-meat.png'
+const survivalToolIcons = Object.freeze({
+  hand: 'icon-hand.webp',
+  axe: 'icon-axe.webp',
+  hammer: 'icon-hammer.webp',
+  pickaxe: 'icon-pickaxe.webp',
+  shovel: 'icon-shovel.webp',
+  sword: 'icon-sword.webp',
+  campfire: 'icon-campfire.webp',
+  jump: 'icon-jump.webp',
+  spear: 'icon-spear.webp'
 });
 
-for (const [resourceId, iconPath] of Object.entries(resourceIconPaths)) {
+const survivalResourceIcons = Object.freeze({
+  stick: 'icon-resource-stick.webp',
+  stone: 'icon-resource-stone.webp',
+  grass: 'icon-resource-grass.webp',
+  meat: 'icon-resource-meat.webp'
+});
+
+const survivalBuildIcons = Object.freeze({
+  raw: 'icon-build-raw.webp',
+  floor: 'icon-build-floor.webp',
+  frame: 'icon-build-frame.webp',
+  wall: 'icon-build-wall.webp',
+  stairs: 'icon-build-stairs.webp',
+  roof: 'icon-build-roof.webp',
+  drop: 'icon-build-drop.webp'
+});
+
+function assertSurvivalIcon(id, fileName, context) {
+  const iconPath = `ui/survival/${fileName}`;
   assert.match(
     assetPathsSource,
-    new RegExp(`${resourceId}: asset\\('${iconPath.replaceAll('.', '\\.')}'\\)`),
-    `${resourceId} must use its selected resource icon asset`
+    new RegExp(`${id}: asset\\('${iconPath.replaceAll('.', '\\.')}'\\)`),
+    `${context} ${id} must use the approved survival icon`
   );
   assert.ok(
     fs.existsSync(new URL(`../public/assets/${iconPath}`, import.meta.url)),
-    `${resourceId} resource icon must exist in public assets`
+    `${context} ${id} icon must exist in public assets`
   );
 }
 
-for (const iconId of ['axe', 'hammer', 'pickaxe', 'sword', 'campfire']) {
-  assert.match(
-    assetPathsSource,
-    new RegExp(`${iconId}: asset\\('ui/fantasy/icon-${iconId}\\.png'\\)`),
-    `${iconId} must use its selected fantasy icon asset`
-  );
-  assert.ok(
-    fs.existsSync(new URL(`../public/assets/ui/fantasy/icon-${iconId}.png`, import.meta.url)),
-    `${iconId} fantasy icon must exist in public assets`
-  );
+for (const [id, fileName] of Object.entries(survivalToolIcons)) {
+  assertSurvivalIcon(id, fileName, 'Tool/action');
+}
+for (const [id, fileName] of Object.entries(survivalResourceIcons)) {
+  assertSurvivalIcon(id, fileName, 'Resource');
+}
+for (const [id, fileName] of Object.entries(survivalBuildIcons)) {
+  assertSurvivalIcon(id, fileName, 'Build');
 }
 
 assert.match(
   assetPathsSource,
-  /spear: asset\('ui\/mobile\/icon-spear\.svg'\)/,
-  'Spear must use the approved mobile spear icon'
+  /angle: asset\('ui\/mobile\/icon-build-angle\.svg'\)/,
+  'Legacy/internal angled-log icon must remain separate from the player-facing Stairs icon'
 );
-assert.ok(
-  fs.existsSync(new URL('../public/assets/ui/mobile/icon-spear.svg', import.meta.url)),
-  'Approved spear icon must exist in public assets'
+assert.match(
+  mobileHudSource,
+  /data-build="stairs"[^>]*aria-label="Split-log stairs"/,
+  'Mobile HUD must expose the player-facing split-log Stairs build mode'
+);
+assert.match(
+  mobileHudSource,
+  /data-build="stairs"[\s\S]*?<img src="\$\{this\.buildIcons\.stairs\}"/,
+  'Player-facing Stairs must render the dedicated stairs icon'
+);
+assert.doesNotMatch(
+  mobileHudSource,
+  /data-build="angle"/,
+  'Mobile HUD must not expose the legacy/internal angled-log mode'
 );
 
 assert.match(mobileHudSource, /this\.resourceIcons = ui\.resources;/, 'Mobile HUD must use the shared resource icon map');
@@ -56,9 +88,14 @@ assert.doesNotMatch(mobileHudSource, /label\.textContent = entry\.label;/, 'Inve
 assert.match(mobileHudSource, /row\.setAttribute\('aria-label'/, 'Icon-only inventory must retain accessible resource labels');
 
 assert.match(indexSource, /resource-inventory\.css/, 'The resource inventory stylesheet must be loaded');
+assert.match(indexSource, /survival-icons\.css/, 'The survival icon stylesheet must be loaded');
 assert.match(inventoryStyles, /\.inventory-strip\s*\{[\s\S]*?width: 52px;/, 'Icon inventory should use a compact mobile footprint');
 assert.match(inventoryStyles, /\.inventory-resource-icon\s*\{[\s\S]*?width: 24px;[\s\S]*?height: 24px;/, 'Resource icons must have a consistent readable size');
 assert.match(inventoryStyles, /\.inventory-row strong\s*\{[\s\S]*?position: absolute;/, 'Resource quantities must remain visible as compact badges');
-assert.match(hudStyles, /img\[src\*="\/ui\/fantasy\/"\][\s\S]*?image-rendering: pixelated;[\s\S]*?filter: none;/, 'Fantasy icons must retain crisp pixels and original colour');
+assert.match(
+  survivalIconStyles,
+  /src\*="\/ui\/survival\/"[\s\S]*?image-rendering: auto;[\s\S]*?filter: none;/,
+  'Survival icons must keep their painted full-colour presentation instead of fantasy pixel filtering'
+);
 
-console.log('Curated tool and resource icons verified');
+console.log('Approved rustic survival icon set verified');

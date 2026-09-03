@@ -65,6 +65,14 @@ async function verifyPng(filePath) {
   if (!data.subarray(0, 8).equals(expected)) throw new Error(`${filePath}: invalid PNG signature`);
 }
 
+async function verifyWebp(filePath) {
+  const data = await readFile(filePath);
+  if (data.length < 16) throw new Error(`${filePath}: WebP is too small`);
+  if (data.toString('ascii', 0, 4) !== 'RIFF' || data.toString('ascii', 8, 12) !== 'WEBP') {
+    throw new Error(`${filePath}: invalid WebP signature`);
+  }
+}
+
 for (const [name, runtimePath] of flattenAssetPaths(ASSET_PATHS)) {
   const filePath = resolveRuntimePath(runtimePath);
   const info = await stat(filePath);
@@ -74,6 +82,7 @@ for (const [name, runtimePath] of flattenAssetPaths(ASSET_PATHS)) {
   else if (filePath.endsWith('.gltf')) await verifyGltf(filePath);
   else if (filePath.endsWith('.fbx')) await verifyFbx(filePath);
   else if (filePath.endsWith('.png')) await verifyPng(filePath);
+  else if (filePath.endsWith('.webp')) await verifyWebp(filePath);
 
   console.log(`verified ${name}: ${filePath}`);
 }

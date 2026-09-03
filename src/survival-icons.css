@@ -1,0 +1,11 @@
+.tool-slot img[src*="/ui/survival/"],
+.inventory-resource-icon[src*="/ui/survival/"],
+.craft-menu-toggle img[src*="/ui/survival/"],
+.craft-recipe-icon[src*="/ui/survival/"],
+.hud-button .button-icon[src*="/ui/survival/"],
+.build-mode-button img[src*="/ui/survival/"],
+.build-tray-current-icon[src*="/ui/survival/"] {
+  image-rendering: auto;
+  object-fit: contain;
+  filter: none;
+}
