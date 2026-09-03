@@ -30,17 +30,21 @@ The current five-member gable resolves two stable panel descriptors from roof ge
 
 Structure fading is presentation-only and is owned by `StructureInteriorOcclusionSystem`.
 
-When the Ranger occupies a lower storey inside a closed structural region, floor pieces above that Ranger level in the same bay become semi-transparent. The floor currently supporting the Ranger remains solid. This keeps multi-storey interiors readable without changing collision, floor support, placement or save ownership.
+Closed FRAME + RAW structural regions are also the visibility grouping authority. Regions that share or overlap a structural footprint are clustered transitively, so adjacent roof bays and stacked storeys belonging to the same physical building receive one presentation state. Height alone does not split one building into separate visibility units.
 
-A completed roof remains the enclosure signal for the existing indoor camera-side rule. While indoors:
+When the Ranger occupies a lower storey inside a closed structural region, floor pieces above that Ranger level in the same connected building become semi-transparent. The floor currently supporting the Ranger remains solid. This keeps multi-storey interiors readable without changing collision, floor support, placement or save ownership.
 
+A completed roof remains the enclosure signal for indoor shell fading. While indoors:
+
+- the connected building shell fades as one unit instead of individual camera-side panels changing independently;
+- FRAME, RAW, WALL, roof members, customized wall roots and thatch visuals in that connected building share the fade state;
 - upper floor pieces above the Ranger's current storey are semi-transparent;
-- the supporting/current floor remains solid;
-- non-floor structure parts on the camera side of the Ranger become semi-transparent;
-- opposite/far structure parts remain fully solid;
-- customized wall roots and thatch panels participate in the same camera-side rule.
+- the supporting/current floor remains solid as the Ranger's visual walking reference;
+- adjacent bays and stacked storeys connected through the same structural footprint remain synchronized.
 
-When the Ranger is outside a completed enclosure, the system performs a bounded nearby visibility check against the Ranger's body line from the camera. Only structure roots whose world bounds actually lie between the camera and the Ranger are faded. Nearby structure that does not cover the Ranger remains solid. This prevents an exterior wall, frame, floor or roof edge from hiding the controlled character while avoiding a blanket transparency effect on the whole building.
+When the Ranger is outside a completed/recognized structure, the system still performs a bounded nearby visibility check against the Ranger's body line from the camera. If any member of a connected structural building lies between the camera and Ranger, that whole connected building is faded together. A separate nearby building outside that connected topology remains solid.
+
+Incomplete or standalone construction that does not yet define a closed FRAME + RAW structural region retains the narrow per-root blocker fallback. This preserves Ranger visibility around partially built work without incorrectly grouping unrelated loose construction into a building.
 
 Leaving a storey or moving clear of an exterior blocker restores the original material opacity, transparency and depth-write settings.
 
@@ -48,6 +52,6 @@ The visibility pass never changes collision, demolition, wall openings, roof pla
 
 ## Verification
 
-`scripts/verify-thatch-interior-occlusion.mjs` verifies roof cost, panel targeting, structural dependency, current-storey detection, upper-floor fading, exterior camera obstruction and material restoration.
+`scripts/verify-thatch-interior-occlusion.mjs` verifies roof cost, panel targeting, structural dependency, current-storey detection, whole-building indoor fading, connected multi-bay exterior fading, unrelated-building isolation, upper-floor fading, incomplete-structure blocker fallback and material restoration.
 
 `scripts/verify-roof-build-sequence.mjs` separately verifies that ANGLE rafters plus RAW ridge segments satisfy the shared completion contract, that multi-bay shared rafters are not duplicated, and that thatch remains locked until the ridge stage is complete.
