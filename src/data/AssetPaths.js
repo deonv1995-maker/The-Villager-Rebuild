@@ -5,6 +5,15 @@ export const ASSET_ROOT = DIRECT_STATIC_SOURCE ? './public/assets' : './assets';
 
 const asset = path => `${ASSET_ROOT}/${path}`;
 
+// Archived source references remain discoverable for regression/migration audits only.
+// Player-facing runtime code must resolve icons exclusively through ASSET_PATHS below.
+export const LEGACY_UI_ICON_SOURCE_AUDIT = Object.freeze({
+  hammer: asset('ui/fantasy/icon-hammer.png'),
+  pickaxe: asset('ui/fantasy/icon-pickaxe.png'),
+  sword: asset('ui/fantasy/icon-sword.png'),
+  shovel: asset('ui/mobile/icon-shovel.svg')
+});
+
 export const ASSET_PATHS = Object.freeze({
   ranger: Object.freeze({
     model: asset('kaykit/adventurers/Ranger.glb'),
