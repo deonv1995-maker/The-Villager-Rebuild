@@ -98,6 +98,7 @@ const captured = regrowth.captureRegrowthState();
 assert(captured.length === 1 && captured[0].treeId === 0, 'Inactive stump must expose persistent regrowth state');
 assert(Math.abs(captured[0].remainingSeconds - definition.regrowSeconds) < 0.001, 'New stump must begin at the configured regrowth duration');
 assert(captured[0].stumpRemoved === false, 'Freshly chopped tree must persist that its stump is still present');
+assert(captured[0].cleared === false, 'Freshly chopped tree site must remain eligible for normal regrowth');
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 150 }]);
 assert(sprout.visible, 'Leaves must appear from the stump at 30 seconds');
@@ -213,21 +214,52 @@ assert(stumpTarget?.type === 'stump' && stumpTarget.icon === 'shovel', 'A nearby
 const removedStump = shovelRegrowth.removeStump(shovelPosition);
 assert(removedStump?.removed === true && removedStump.dropCount === 1, 'Shovel must remove one stump and award exactly one additional Log');
 assert(!shovelGroup.getObjectByName('chopped-tree-stump-0'), 'Shovel removal must clear the visible stump immediately');
+assert(!shovelGroup.getObjectByName('tree-regrowth-sprout-0'), 'Shovel removal must also cancel and clear the sprout/regrowth presentation');
 assert(shovelDrops.length === definition.dropCount + 1, 'Removing the stump must add exactly one physical world Log');
 assert(shovelDrops.at(-1)?.resourceId === 'log' && shovelDrops.at(-1)?.quantity === 1, 'Stump reward must use the canonical physical Log resource');
 assert(shovelRegrowth.removeStump(shovelPosition) === null, 'The same stump must never grant a second bonus Log');
 assert(shovelDrops.length === definition.dropCount + 1, 'Repeated shovel input must not duplicate the stump Log');
-const groundedSprout = shovelGroup.getObjectByName('tree-regrowth-sprout-0');
-assert(groundedSprout && Math.abs(groundedSprout.position.y) < 0.000001, 'Regrowth presentation must return to ground level after the stump is removed');
+assert(shovelRegrowth.trees[0].cleared === true, 'Removing a stump must permanently mark that authored tree site as cleared');
+assert(shovelRegrowth.trees[0].regrowRemaining === 0, 'Clearing a stump must cancel the remaining regrowth countdown immediately');
 const shovelSaved = shovelRegrowth.captureRegrowthState();
 assert(shovelSaved[0]?.stumpRemoved === true, 'Save state must preserve that the stump was already removed');
+assert(shovelSaved[0]?.cleared === true, 'Save state must preserve permanent tree-site clearing');
 shovelRegrowth.restoreRegrowthState([{ ...shovelSaved[0], remainingSeconds: 0.1 }]);
-assert(!shovelGroup.getObjectByName('chopped-tree-stump-0'), 'Restoring a removed-stump state must not recreate the stump');
-shovelNow += 250;
+assert(!shovelGroup.getObjectByName('chopped-tree-stump-0'), 'Restoring a cleared site must not recreate the stump');
+assert(!shovelGroup.getObjectByName('tree-regrowth-sprout-0'), 'Restoring a cleared site must not recreate a sprout');
+shovelNow += (definition.regrowSeconds + 60) * 1000;
 shovelRegrowth.update(farPlayer, false);
-assert(shovelRegrowth.trees[0].active, 'Removing the stump must not cancel or consume the original tree regrowth lifecycle');
-assert(shovelCollision.getObstaclesByType('tree').length === 1, 'A shovel-cleared tree site must restore normal tree collision after regrowth');
-assert(shovelDrops.length === definition.dropCount + 1, 'Tree regrowth after shovel use must not create any additional Logs');
+assert(!shovelRegrowth.trees[0].active, 'A shoveled tree site must remain permanently inactive after the old regrowth duration passes');
+assert(shovelCollision.getObstaclesByType('tree').length === 0, 'A permanently cleared tree site must never restore tree collision');
+const clearedMatrix = new THREE.Matrix4();
+shovelTreeMesh.getMatrixAt(0, clearedMatrix);
+assert(clearedMatrix.elements[13] < -900, 'A permanently cleared tree site must keep the authored tree instance hidden');
+assert(shovelDrops.length === definition.dropCount + 1, 'Permanent clearing must not create any additional Logs after the one stump reward');
+
+const legacyGroup = new THREE.Group();
+const legacyTreeMesh = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(0.8, 3.2, 0.8),
+  new THREE.MeshBasicMaterial(),
+  1
+);
+legacyTreeMesh.name = 'forest-tree-batch-0-0';
+legacyTreeMesh.setMatrixAt(0, new THREE.Matrix4().makeTranslation(-5, 1.6, 1));
+legacyTreeMesh.instanceMatrix.needsUpdate = true;
+legacyGroup.add(legacyTreeMesh);
+const legacyCollision = new WorldCollisionSystem({ heightAt: () => 0, isPlayable: () => true });
+legacyCollision.addObstacle({ x: -5, z: 1, radius: 0.72, type: 'tree', label: 'forest-tree-0' });
+const legacyRegrowth = new TreeHarvestSystem({
+  group: legacyGroup,
+  terrain,
+  collision: legacyCollision,
+  gatherables: { spawn() {} },
+  now: () => 0
+});
+const legacyPosition = new THREE.Vector3(-5, 0, 1);
+for (let hit = 0; hit < definition.hitsRequired; hit += 1) legacyRegrowth.chop(legacyPosition);
+legacyRegrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 80, stumpRemoved: true }]);
+assert(legacyRegrowth.trees[0].cleared === true, 'Older saves with a removed stump must migrate to the new permanently cleared-site rule');
+assert(!legacyGroup.getObjectByName('tree-regrowth-sprout-0'), 'Migrated removed-stump saves must not resume tree regrowth');
 
 const saveControllerSource = await readFile('src/persistence/SaveGameController.js', 'utf8');
 for (const requirement of [
@@ -238,4 +270,4 @@ for (const requirement of [
   assert(saveControllerSource.includes(requirement), `Save/continue must preserve staged regrowth progress: ${requirement}`);
 }
 
-console.log('Three-minute staged tree regrowth, persistent shovel-cleared stumps, canonical bonus Log yield and harvest lockout verified');
+console.log('Three-minute stump-present tree regrowth, permanent shovel-cleared sites, canonical bonus Log yield and save migration verified');
