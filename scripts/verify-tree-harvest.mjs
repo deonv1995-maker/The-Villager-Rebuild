@@ -20,7 +20,7 @@ assert(
   PHYSICAL_LOG.yawStep === Math.PI / 4,
   'Log construction grid must remain proportional to the archived Log length while retaining 45-degree yaw snapping'
 );
-assert(JSON.stringify(LOG_BUILD_MODES) === JSON.stringify(['raw', 'floor', 'frame', 'wall', 'angle', 'roof']), 'Log construction modes must expose RAW/FLOOR/FRAME/WALL/ANGLE/ROOF');
+assert(JSON.stringify(LOG_BUILD_MODES) === JSON.stringify(['raw', 'floor', 'frame', 'wall', 'stairs', 'roof']), 'Log construction modes must expose RAW/FLOOR/FRAME/WALL/STAIRS/ROOF');
 assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
 assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');
 
@@ -123,6 +123,7 @@ for (const requirement of [
   "mode === 'frame'",
   "mode === 'wall'",
   "mode === 'angle'",
+  "mode === 'stairs'",
   "mode === 'roof'",
   "snapKind: candidate.snapKind ?? (snapped ? 'floor-edge-level' : null)",
   'baseY: floor.baseY',
