@@ -95,7 +95,7 @@ export class MobileHud {
           <button class="build-mode-button" type="button" data-build="floor" aria-label="Floor" title="Floor"><img src="${this.buildIcons.floor}" alt="" aria-hidden="true"></button>
           <button class="build-mode-button" type="button" data-build="frame" aria-label="Frame" title="Frame"><img src="${this.buildIcons.frame}" alt="" aria-hidden="true"></button>
           <button class="build-mode-button" type="button" data-build="wall" aria-label="Wall" title="Wall"><img src="${this.buildIcons.wall}" alt="" aria-hidden="true"></button>
-          <button class="build-mode-button" type="button" data-build="angle" aria-label="Angled log" title="Angled log"><img src="${this.buildIcons.angle}" alt="" aria-hidden="true"></button>
+          <button class="build-mode-button" type="button" data-build="stairs" aria-label="Split-log stairs" title="Split-log stairs"><img src="${this.buildIcons.stairs}" alt="" aria-hidden="true"></button>
           <button class="build-mode-button" type="button" data-build="roof" aria-label="Roof" title="Roof"><img src="${this.buildIcons.roof}" alt="" aria-hidden="true"></button>
           <button class="build-mode-button drop-log" type="button" data-build="drop" aria-label="Drop log" title="Drop log"><img src="${this.buildIcons.drop}" alt="" aria-hidden="true"></button>
         </div>
