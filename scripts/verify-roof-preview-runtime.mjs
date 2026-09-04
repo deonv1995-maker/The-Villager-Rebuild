@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { PhysicalLogSystem } from '../src/world/PhysicalLogSystem.js';
 import { createPhysicalLogVisual } from '../src/world/PhysicalLogVisual.js';
+import {
+  collectLocalRoofFramePairs,
+  collectRoofRegions
+} from '../src/world/RoofTopology.js';
+import {
+  orderedRoofBuildCandidates,
+  roofMemberCandidates
+} from '../src/world/RoofMemberRules.js';
 
 const group = new THREE.Group();
 const player = {
@@ -68,4 +77,171 @@ assert.doesNotThrow(() => {
 }, 'Confirming an invalid ROOF preview must fail safely instead of throwing');
 assert.equal(buildResult, null, 'Unsupported ROOF placement must not materialize a Log');
 
-console.log('ROOF invalid-preview runtime path remains responsive and fails safely');
+const makeFrame = (id, x, z) => {
+  const root = new THREE.Group();
+  root.position.set(x, PHYSICAL_LOG.halfLength, z);
+  return {
+    id,
+    mode: 'frame',
+    active: true,
+    x,
+    z,
+    yaw: 0,
+    baseY: 0,
+    centerY: PHYSICAL_LOG.halfLength,
+    topY: PHYSICAL_LOG.length,
+    storey: 0,
+    root,
+    collisionHandle: null,
+    supportRoot: null
+  };
+};
+
+const frames = [
+  makeFrame(10, -PHYSICAL_LOG.length, 0),
+  makeFrame(11, 0, 0),
+  makeFrame(12, PHYSICAL_LOG.length, 0),
+  makeFrame(13, -PHYSICAL_LOG.length, PHYSICAL_LOG.length),
+  makeFrame(14, 0, PHYSICAL_LOG.length),
+  makeFrame(15, PHYSICAL_LOG.length, PHYSICAL_LOG.length)
+];
+const frameById = new Map(frames.map(frame => [frame.id, frame]));
+const beamIds = [
+  [10, 11],
+  [11, 12],
+  [13, 14],
+  [14, 15],
+  [10, 13],
+  [12, 15]
+];
+const beams = beamIds.map(([leftId, rightId], index) => {
+  const left = frameById.get(leftId);
+  const right = frameById.get(rightId);
+  const anchorIds = [leftId, rightId].sort((a, b) => a - b);
+  const root = new THREE.Group();
+  const x = (left.x + right.x) * 0.5;
+  const z = (left.z + right.z) * 0.5;
+  const yaw = Math.atan2(-(right.z - left.z), right.x - left.x);
+  root.position.set(x, PHYSICAL_LOG.length, z);
+  return {
+    id: 30 + index,
+    mode: 'raw',
+    active: true,
+    x,
+    z,
+    yaw,
+    baseY: 0,
+    centerY: PHYSICAL_LOG.length,
+    topY: PHYSICAL_LOG.length + PHYSICAL_LOG.radius,
+    storey: 0,
+    rawKey: `beam:${anchorIds.join('-')}`,
+    snapKind: 'frame-pair-top',
+    root,
+    collisionHandle: null,
+    supportRoot: null
+  };
+});
+const occupiedBeamKeys = new Set(beams.map(beam => beam.rawKey));
+const pairOptions = {
+  length: PHYSICAL_LOG.length,
+  spacingTolerance: PHYSICAL_LOG.frameSpacingTolerance,
+  topTolerance: PHYSICAL_LOG.frameLevelTolerance,
+  yawStep: PHYSICAL_LOG.yawStep,
+  searchRadius: PHYSICAL_LOG.roofLocalSearchRadius,
+  frameLimit: PHYSICAL_LOG.roofLocalFrameLimit,
+  pairLimit: PHYSICAL_LOG.roofLocalPairLimit,
+  occupiedBeamKeys
+};
+const regionOptions = {
+  yawTolerance: 0.16,
+  topTolerance: 0.34,
+  maxAlong: 0.4,
+  minWidth: PHYSICAL_LOG.roofRegionMinWidth,
+  maxWidth: PHYSICAL_LOG.roofRegionMaxWidth,
+  roofPitch: PHYSICAL_LOG.roofPitch,
+  minRise: PHYSICAL_LOG.roofMinRise,
+  maxRise: PHYSICAL_LOG.roofMaxRise,
+  eaveSeatLift: 0.08
+};
+const roofBase = { x: 0, z: 0 };
+const roofPairs = collectLocalRoofFramePairs(frames, roofBase, pairOptions);
+const roofRegions = collectRoofRegions(roofPairs, regionOptions);
+const roofCandidates = orderedRoofBuildCandidates(roofRegions.flatMap(roofMemberCandidates));
+assert.ok(roofCandidates.length > 1, 'Reticle regression needs multiple legal roof targets');
+
+let precisionTaken = false;
+const precisionGatherables = {
+  takePhysical: () => {
+    if (precisionTaken) return null;
+    precisionTaken = true;
+    return {
+      id: 'runtime-roof-reticle-log',
+      root: createPhysicalLogVisual('RuntimeRoofReticleLog')
+    };
+  },
+  returnPhysical: () => {},
+  spawn: () => {}
+};
+const precisionSystem = new PhysicalLogSystem({
+  group: new THREE.Group(),
+  player: { root: new THREE.Group(), model: null },
+  terrain,
+  collision,
+  gatherables: precisionGatherables
+});
+precisionSystem.builtLogs = [...frames, ...beams];
+precisionSystem.nextBuiltId = 100;
+precisionSystem.structureRevision += 1;
+const roofPlayer = new THREE.Vector3(0, 0, -PHYSICAL_LOG.placeDistance);
+assert.ok(precisionSystem.pickup(roofPlayer));
+assert.equal(precisionSystem.setBuildMode('roof'), true);
+precisionSystem.update(roofPlayer, facingDirection);
+assert.equal(precisionSystem.previewValid, true, 'Third-person ROOF proximity targeting must remain valid');
+const proximityKey = precisionSystem.previewPlacement.roofKey;
+
+const reachableAlternative = roofCandidates.find(candidate =>
+  candidate.roofKey !== proximityKey &&
+  Math.hypot(candidate.x - roofBase.x, candidate.z - roofBase.z) < PHYSICAL_LOG.roofSnapRange
+);
+assert.ok(reachableAlternative, 'Reticle regression needs a reachable roof member distinct from proximity selection');
+const aimOrigin = new THREE.Vector3(0, 1.72, -PHYSICAL_LOG.placeDistance - 0.5);
+const aimDirection = new THREE.Vector3(
+  reachableAlternative.x - aimOrigin.x,
+  reachableAlternative.y - aimOrigin.y,
+  reachableAlternative.z - aimOrigin.z
+).normalize();
+const preciseAim = {
+  origin: { x: aimOrigin.x, y: aimOrigin.y, z: aimOrigin.z },
+  direction: { x: aimDirection.x, y: aimDirection.y, z: aimDirection.z }
+};
+precisionSystem.update(roofPlayer, facingDirection, preciseAim);
+assert.equal(precisionSystem.previewValid, true, 'A reticle ray through a legal roof Log must keep the preview valid');
+assert.equal(
+  precisionSystem.previewPlacement.roofKey,
+  reachableAlternative.roofKey,
+  'First-person ROOF must select the legal member under the centre reticle instead of the nearest broad snap target'
+);
+
+precisionSystem.update(roofPlayer, facingDirection, {
+  origin: preciseAim.origin,
+  direction: { x: 0, y: 1, z: 0 }
+});
+assert.equal(
+  precisionSystem.previewValid,
+  false,
+  'Moving the first-person reticle off every reachable roof member must release the structural snap'
+);
+
+precisionSystem.update(roofPlayer, facingDirection);
+assert.equal(
+  precisionSystem.previewValid,
+  true,
+  'Removing explicit first-person aim must restore the established third-person proximity behavior'
+);
+assert.equal(
+  precisionSystem.previewPlacement.roofKey,
+  proximityKey,
+  'Third-person ROOF ordering must remain unchanged by first-person reticle targeting'
+);
+
+console.log('ROOF runtime safety plus precise first-person reticle acquisition and release verified');
