@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { COASTAL_ROCK_FORMATIONS } from '../data/CoastalRockDefinitions.js';
+import {
+  COASTAL_ROCK_FORMATIONS,
+  COASTAL_ROCK_PRESENTATION
+} from '../data/CoastalRockDefinitions.js';
 
 const WATER_SEARCH_STEP = 5;
 const WATER_SEARCH_STEPS = 14;
@@ -14,12 +17,12 @@ const prepareTemplate = template => {
   });
 };
 
-const resolveWaterPoint = (terrain, definition) => {
+const resolveWaterPoint = (terrain, definition, coastOffsetScale) => {
   const angle = definition.angle;
   const directionX = Math.cos(angle);
   const directionZ = Math.sin(angle);
   const coastRadius = terrain.coastRadiusAt(angle);
-  let radius = coastRadius + definition.coastOffset;
+  let radius = coastRadius + definition.coastOffset * coastOffsetScale;
   let x = directionX * radius;
   let z = terrain.centerZ + directionZ * radius;
 
@@ -45,6 +48,8 @@ export function addCoastalRockFormations({
   template,
   horizontalScale = 1,
   verticalScale = 1,
+  coastOffsetScale = 1,
+  footprintScale = COASTAL_ROCK_PRESENTATION.footprintScale,
   localizeTerrainCenterZ = false,
   namePrefix = 'coastal-rock'
 }) {
@@ -56,7 +61,7 @@ export function addCoastalRockFormations({
   const zOrigin = localizeTerrainCenterZ ? terrain.centerZ : 0;
 
   for (const definition of COASTAL_ROCK_FORMATIONS) {
-    const point = resolveWaterPoint(terrain, definition);
+    const point = resolveWaterPoint(terrain, definition, coastOffsetScale);
     const rock = template.clone(true);
     rock.name = `${namePrefix}-${definition.id}`;
     rock.position.set(
@@ -65,9 +70,9 @@ export function addCoastalRockFormations({
       (point.z - zOrigin) * horizontalScale
     );
     rock.scale.set(
-      definition.scaleX * horizontalScale,
+      definition.scaleX * horizontalScale * footprintScale,
       definition.scaleY * verticalScale,
-      definition.scaleZ * horizontalScale
+      definition.scaleZ * horizontalScale * footprintScale
     );
     rock.rotation.set(definition.pitch, definition.yaw, definition.roll);
     rock.userData.coastalRockFormationId = definition.id;
