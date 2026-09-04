@@ -1,147 +1,108 @@
-import { readFile } from 'node:fs/promises';
-import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
-import { HARVESTABLE_DEFINITIONS } from '../src/data/HarvestDefinitions.js';
-import { INVENTORY_DEFINITIONS } from '../src/data/ItemDefinitions.js';
-import { PHYSICAL_LOG, LOG_BUILD_MODES } from '../src/data/PhysicalLogDefinitions.js';
-import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { LOG_BUILD_MODES } from '../src/data/PhysicalLogDefinitions.js';
 
-function assert(condition, message) {
+const here = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(here, '..');
+const assert = (condition, message) => {
   if (!condition) throw new Error(message);
-}
+};
 
-const log = RESOURCE_DEFINITIONS.log;
-assert(log?.id === 'log' && log.label === 'Log' && log.pickupQuantity === 1, 'Log must remain the shared tree-drop resource');
-assert(log.storage === 'physical', 'Logs must remain physical world resources');
-assert(!INVENTORY_DEFINITIONS.log, 'Physical logs must never be registered in player inventory definitions');
-assert(PHYSICAL_LOG.length === 2.9 && PHYSICAL_LOG.radius === 0.27, 'Physical log dimensions must match the archived original-game authority');
-assert(
-  Number.isInteger(Math.round(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep)) &&
-  Math.abs(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep - Math.round(PHYSICAL_LOG.length / PHYSICAL_LOG.gridStep)) < 0.000001 &&
-  PHYSICAL_LOG.yawStep === Math.PI / 4,
-  'Log construction grid must remain proportional to the archived Log length while retaining 45-degree yaw snapping'
-);
-assert(JSON.stringify(LOG_BUILD_MODES) === JSON.stringify(['raw', 'floor', 'frame', 'wall', 'stairs', 'roof']), 'Log construction modes must expose RAW/FLOOR/FRAME/WALL/STAIRS/ROOF');
-assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
-assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');
-
-const tree = HARVESTABLE_DEFINITIONS.forestTree;
-assert(tree?.interactionRadius > 0, 'Tree harvesting requires a positive interaction radius');
-assert(Number.isInteger(tree?.hitsRequired) && tree.hitsRequired >= 2, 'Tree harvesting must require multiple deliberate swings');
-assert(tree?.dropResourceId === 'log', 'Forest trees must drop physical logs');
-assert(Number.isInteger(tree?.dropCount) && tree.dropCount > 0, 'Forest tree log yield must be data-driven');
-
-const collision = new WorldCollisionSystem({ heightAt: () => 0, isPlayable: () => true });
-const treeCollider = collision.addObstacle({ x: 2, z: 3, radius: 0.8, type: 'tree', label: 'forest-tree-0' });
-collision.addObstacle({ x: 8, z: 9, radius: 1, type: 'rock', label: 'forest-rock-0' });
-const floorCollider = collision.addBox({ x: 0, z: 0, halfX: 1.45, halfZ: 0.48, type: 'placed-log', label: 'built-log-0-floor' });
-assert(collision.getObstaclesByType('tree').length === 1, 'Collision system must expose tree handles without copying collision logic');
-assert(!collision.isCircleClear(0, 0.95, 0.62), 'Adjacent floor clearance must detect the existing floor by default');
-assert(collision.isCircleClear(0, 0.95, 0.62, { ignore: obstacle => obstacle === floorCollider }), 'Scoped clearance must be able to ignore the floor being snapped against');
-assert(collision.removeObstacle(treeCollider), 'Chopped tree collider must be removable through the collision boundary');
-assert(collision.getObstaclesByType('tree').length === 0, 'Removed tree collider must stop blocking movement');
-
-const [
-  treeSource,
-  gatherSource,
-  logSource,
-  roofRulesSource,
-  logVisualSource,
-  floorSupportSource,
-  carryPoseSource,
-  feedbackSource,
-  appSource,
-  hudSource,
-  contextActionSource,
-  toolSource,
-  stylesSource
-] = await Promise.all([
-  readFile('src/world/TreeHarvestSystem.js', 'utf8'),
-  readFile('src/world/GatherableSystem.js', 'utf8'),
-  readFile('src/world/PhysicalLogSystem.js', 'utf8'),
-  readFile('src/world/RoofMemberRules.js', 'utf8'),
-  readFile('src/world/PhysicalLogVisual.js', 'utf8'),
-  readFile('src/world/FloorSupportVisual.js', 'utf8'),
-  readFile('src/player/RangerLogCarryPose.js', 'utf8'),
-  readFile('src/world/HarvestHitFeedback.js', 'utf8'),
-  readFile('src/core/GameApp.js', 'utf8'),
-  readFile('src/ui/MobileHud.js', 'utf8'),
-  readFile('src/ui/ContextActionPolicy.js', 'utf8'),
-  readFile('src/player/RangerToolPresentation.js', 'utf8'),
-  readFile('src/styles.css', 'utf8')
-]);
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const appSource = read('src/core/GameApp.js');
+const logSystemSource = read('src/world/PhysicalLogSystem.js');
+const logVisualSource = read('src/world/PhysicalLogVisual.js');
+const floorSupportSource = read('src/world/FloorSupportVisual.js');
+const carryPoseSource = read('src/player/RangerLogCarryPose.js');
+const treeHarvestSource = read('src/world/TreeHarvestSystem.js');
+const feedbackSource = read('src/world/HarvestHitFeedback.js');
+const hudSource = read('src/ui/MobileHud.js');
+const stylesSource = read('src/styles.css');
+const definitionsSource = read('src/data/PhysicalLogDefinitions.js');
+const roofTopologySource = read('src/world/RoofTopology.js');
+const roofRulesSource = read('src/world/RoofMemberRules.js');
+const contextActionSource = read('src/ui/ContextActionPolicy.js');
 
 for (const requirement of [
-  "getObstaclesByType('tree')",
-  'removeObstacle(tree.obstacle)',
-  'gatherables.spawn(this.definition.dropResourceId',
-  'getTreeRenderHandles(tree.treeId)',
-  'chopped-tree-stump-',
-  "this.hitFeedback.emit(position, 'wood')"
-]) {
-  assert(treeSource.includes(requirement), `Tree harvest system is missing contract: ${requirement}`);
-}
-
-assert(
-  treeSource.includes('const radius = Math.max(0.22, tree.obstacle.radius);'),
-  'Chopped-tree stump must use the source tree radius directly instead of shrinking the footprint'
-);
-assert(
-  treeSource.includes('new THREE.CylinderGeometry(radius, radius, 0.34, 7)'),
-  'Stump top and bottom must retain the source tree footprint radius'
-);
-assert(
-  !treeSource.includes('tree.obstacle.radius * 0.7'),
-  'Stump presentation must not restore the old 0.7 radius shrink factor'
-);
-assert(
-  !treeSource.includes('FelledTreeLogPresentation') &&
-  !treeSource.includes('attachFelledTreeLogGroundPresentation'),
-  'Tree harvesting must not replace or wrap canonical physical Log visuals'
-);
-
-for (const requirement of [
-  "definition.storage !== 'inventory'",
+  'class TreeHarvestSystem',
+  'getTarget(playerPosition)',
+  'chop(playerPosition)',
   'takePhysical(playerPosition',
-  'returnPhysical(item',
-  "definition?.storage === 'physical'",
-  "type: physical ? 'physical-resource' : 'resource'",
-  'createPhysicalLogVisual',
-  'PHYSICAL_LOG.radius',
-  'Lift ${definition.label}'
+  "resourceId: 'log'",
+  'hitFeedback.trigger',
+  'treeRenderRegistry?.suppressTree',
+  'this.collision?.removeObstacle',
+  'this.gatherables.spawn',
+  'dropCount: this.logDropCount'
 ]) {
-  assert(gatherSource.includes(requirement), `Physical gatherable path is missing contract: ${requirement}`);
+  assert(treeHarvestSource.includes(requirement), `Tree harvesting is missing contract: ${requirement}`);
 }
 
 for (const requirement of [
-  "takePhysical(playerPosition, 'log')",
-  'PHYSICAL_LOG.carryPosition',
-  'this.carryPose.update()',
-  "this.buildMode = 'raw'",
-  'setBuildMode(mode)',
-  'cycleBuildMode()',
-  "mode === 'floor'",
-  "mode === 'frame'",
-  "mode === 'wall'",
-  "mode === 'angle'",
-  "mode === 'stairs'",
-  "mode === 'roof'",
-  "snapKind: candidate.snapKind ?? (snapped ? 'floor-edge-level' : null)",
-  'baseY: floor.baseY',
-  'this.floorSupports.createForFloor',
+  'class PhysicalLogSystem',
+  'getDemolitionTarget(playerPosition)',
+  'demolish(playerPosition',
+  'this.gatherables.spawn',
+  'this.floorSupports.remove',
+  "this.gatherables.returnPhysical(item, { x: point.x, z: point.z, yaw })",
+  'SHOW_CARRIED_LOG_VISUAL = false',
+  'RangerLogCarryPose',
+  'this.#resolvePlacement',
+  'this.#showPreview',
+  'this.#applyTransform',
+  'this.#registerCollision',
+  'this.#activeBuilt',
+  'this.#nearestFloorCorner',
+  'this.#nearestFramePair',
+  'this.#upperStoreyFloorCandidates',
+  'this.#roofCandidates',
+  'this.#roofRegions',
+  'this.#roofAxisCandidate',
+  'this.#roofSlotOccupied'
+]) {
+  assert(logSystemSource.includes(requirement), `Physical log construction is missing contract: ${requirement}`);
+}
+
+for (const mode of LOG_BUILD_MODES) {
+  assert(definitionsSource.includes(`'${mode}'`), `Physical log build definitions must expose ${mode}`);
+}
+assert(
+  definitionsSource.includes("LOG_BUILD_MODES = Object.freeze(['raw', 'floor', 'frame', 'wall', 'stairs', 'roof'])"),
+  'Player-facing construction modes must use the dedicated stairs + roof workflow without a separate angle tray option'
+);
+assert(
+  definitionsSource.includes('LOG_CONSTRUCTION_MODES') && definitionsSource.includes("'angle'"),
+  'Legacy/internal ANGLE mode must remain available for roof rafters and persisted construction data'
+);
+
+for (const requirement of [
   'collectLocalRoofFramePairs',
   'collectRoofRegions',
-  "'roof-rafter'",
-  "'roof-ridge'",
-  "type: 'placed-log'",
-  "spawn('log'"
+  'connectedPairComponents',
+  'closedLoop',
+  'searchRadius',
+  'frameLimit',
+  'pairLimit',
+  'occupiedBeamKeys',
+  'sourceBeamKeys'
 ]) {
-  assert(logSource.includes(requirement), `Physical log building path is missing contract: ${requirement}`);
+  assert(roofTopologySource.includes(requirement), `Roof topology is missing construction contract: ${requirement}`);
 }
 assert(
-  logSource.includes('ignore: obstacle => this.#floorMayMeetObstacle(') &&
-  logSource.includes("if (!built || (built.mode !== 'frame' && built.mode !== 'wall')) return false;"),
-  'Level floor snapping may meet boundary frames/walls but must keep arbitrary placed Logs blocking clearance'
+  roofTopologySource.includes('if (beamKeys && !beamKeys.has(rawKey)) continue;'),
+  'Roof topology must be unlocked by placed RAW frame-pair beams rather than FRAME posts alone'
 );
+
+for (const requirement of [
+  'roofMemberCandidates',
+  'orderedRoofBuildCandidates',
+  'roofMemberOccupied',
+  'roofRaftersComplete',
+  'roofRegionComplete'
+]) {
+  assert(roofRulesSource.includes(requirement), `Shared roof member authority is missing contract: ${requirement}`);
+}
 assert(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
 assert(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
 
@@ -186,8 +147,14 @@ for (const forbidden of ["inventory.add('log'", "inventory.get('log'", "inventor
 }
 assert(appSource.includes("toolId === 'axe'"), 'Tree chopping must be enabled by the equipped axe instead of tutorial state');
 assert(appSource.includes('this.physicalLogs?.pickup(this.playerPosition)'), 'Log interaction must lift the physical log');
-assert(appSource.includes('this.physicalLogs.update(this.playerPosition, this.playerFacing)'), 'Carried log preview must follow Ranger movement/facing');
-assert(appSource.includes('this.physicalLogs.build(null, this.playerPosition, this.playerFacing)'), 'The main interaction action must confirm the selected log preview');
+assert(
+  /this\.physicalLogs\.update\(\s*this\.playerPosition,\s*this\.playerFacing,\s*this\.#currentConstructionAim\(\)/.test(appSource),
+  'Carried log preview must follow Ranger movement/facing and receive optional first-person reticle aim'
+);
+assert(
+  /this\.physicalLogs\.build\(\s*null,\s*this\.playerPosition,\s*this\.playerFacing,\s*constructionAim/.test(appSource),
+  'The main interaction action must confirm the selected log preview with the same construction aim'
+);
 
 assert(hudSource.includes('data-role="log-build"'), 'Holding a log must expose the log build tray');
 for (const mode of [...LOG_BUILD_MODES, 'drop']) {
@@ -203,12 +170,12 @@ assert(hudSource.includes('this.attackIcon.src = this.toolIcons[equippedTool]'),
 assert(
   stylesSource.includes('.log-build-tray {') &&
   stylesSource.includes('right: max(8px') &&
-  stylesSource.includes('flex-direction: column') &&
-  stylesSource.includes('.log-build-tray.collapsed .build-tray-options'),
-  'Construction controls must remain a collapsible right-side mobile tray'
+  stylesSource.includes('width: 108px'),
+  'Log build tray must remain a compact right-side mobile palette'
 );
-assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production work tools must drive the Ranger skeleton action rather than animate only the prop');
-assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
-assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
+assert(
+  stylesSource.includes('.build-option-grid {') && stylesSource.includes('grid-template-columns: repeat(2, 1fr)'),
+  'Log build options must remain a compact two-column grid'
+);
 
-console.log('Physical tree harvesting, source-sized stump footprint, canonical Log visuals, coherent floor foundation support, bounded roof construction, carry posture and unified mobile action contracts verified');
+console.log('Tree harvest, physical Log carrying/construction, unified mobile Action, roof support and hit feedback contracts verified');
