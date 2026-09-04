@@ -38,9 +38,11 @@ const resolveWaterPoint = (terrain, definition, coastOffsetScale) => {
 
 /**
  * Adds the authored offshore formations using the same rock asset and coast-relative
- * placement for gameplay and the title/shipwreck island. These are environmental
- * silhouette objects only: they intentionally do not register harvest or locomotion
- * collision, so the Day-1 shallow-water arrival route remains authoritative.
+ * placement for gameplay and the title/shipwreck island. Scene-space placement and
+ * rock silhouette scales are intentionally separable so a compressed backdrop can
+ * preserve the same rock identity/proportions without changing authored formations.
+ * These objects do not register harvest or locomotion collision, preserving the
+ * Day-1 shallow-water arrival route.
  */
 export function addCoastalRockFormations({
   group,
@@ -48,6 +50,8 @@ export function addCoastalRockFormations({
   template,
   horizontalScale = 1,
   verticalScale = 1,
+  silhouetteHorizontalScale = horizontalScale,
+  silhouetteVerticalScale = verticalScale,
   coastOffsetScale = 1,
   footprintScale = COASTAL_ROCK_PRESENTATION.footprintScale,
   localizeTerrainCenterZ = false,
@@ -70,9 +74,9 @@ export function addCoastalRockFormations({
       (point.z - zOrigin) * horizontalScale
     );
     rock.scale.set(
-      definition.scaleX * horizontalScale * footprintScale,
-      definition.scaleY * verticalScale,
-      definition.scaleZ * horizontalScale * footprintScale
+      definition.scaleX * silhouetteHorizontalScale * footprintScale,
+      definition.scaleY * silhouetteVerticalScale,
+      definition.scaleZ * silhouetteHorizontalScale * footprintScale
     );
     rock.rotation.set(definition.pitch, definition.yaw, definition.roll);
     rock.userData.coastalRockFormationId = definition.id;
