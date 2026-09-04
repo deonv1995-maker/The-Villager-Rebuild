@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { roofRegionComplete } from './RoofMemberRules.js';
 
 export const THATCH_GRASS_COST = 4;
 export const THATCH_INTERACTION_RANGE = 4.6;
@@ -192,6 +193,30 @@ export const roofPanelEdgeHasNeighbour = (
   });
 };
 
+/**
+ * A finished panel carries enough immutable geometry to re-check its original physical
+ * five-member gable even when a later structure revision temporarily changes the local
+ * topology query. Query identity may churn; physically present rafters and ridge do not.
+ */
+export const roofRegionSnapshotForPanel = panel => {
+  if (!Array.isArray(panel?.footprint) || panel.footprint.length !== 4) return null;
+  const [a, b, d, c] = panel.footprint;
+  if (![a, b, c, d].every(point => Number.isFinite(point?.x) && Number.isFinite(point?.z))) {
+    return null;
+  }
+  if (!Number.isFinite(panel.eaveY) || !Number.isFinite(panel.ridgeY)) return null;
+  return {
+    key: panel.regionKey ?? `roof:panel-snapshot:${panel.id ?? 'unknown'}`,
+    a: { x: a.x, z: a.z },
+    b: { x: b.x, z: b.z },
+    c: { x: c.x, z: c.z },
+    d: { x: d.x, z: d.z },
+    eaveY: panel.eaveY,
+    ridgeY: panel.ridgeY,
+    topology: 'thatched-panel-snapshot'
+  };
+};
+
 export class RoofThatchSystem {
   constructor({ group, physicalLogs, inventory, roofQuery }) {
     if (!group || !physicalLogs || !inventory || !roofQuery) {
@@ -209,6 +234,7 @@ export class RoofThatchSystem {
     const revision = this.physicalLogs.structureRevision ?? this.physicalLogs.builtLogs.length;
     if (revision === this.lastStructureRevision) return;
     this.lastStructureRevision = revision;
+    const activeMembers = this.physicalLogs.builtLogs.filter(entry => entry?.active);
 
     for (const [panelId, state] of [...this.thatched]) {
       const validPanels = this.roofQuery.getCompletedPanels(state.panel.center);
@@ -217,6 +243,10 @@ export class RoofThatchSystem {
         state.panel = current;
         continue;
       }
+
+      const retainedRegion = roofRegionSnapshotForPanel(state.panel);
+      if (retainedRegion && roofRegionComplete(retainedRegion, activeMembers)) continue;
+
       if (state.root?.parent) state.root.parent.remove(state.root);
       this.thatched.delete(panelId);
       this.inventory.add('grass', THATCH_GRASS_COST);
