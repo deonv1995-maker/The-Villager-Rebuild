@@ -81,6 +81,47 @@ export function createSplitHalfLogVisual(name = 'SplitHalfLog') {
   return group;
 }
 
+export function createStairPairVisual({ stepRise } = {}) {
+  const rise = Number.isFinite(stepRise) && stepRise > 0
+    ? stepRise
+    : PHYSICAL_LOG.stairMaxStepRise * 0.9;
+  const group = new THREE.Group();
+  group.name = 'SplitLogStairPair';
+  group.userData.stairPairVisual = true;
+
+  for (let index = 0; index < PHYSICAL_LOG.stairTreadsPerLog; index += 1) {
+    const tread = createSplitHalfLogVisual(`SplitLogStairTread${index + 1}`);
+    tread.position.set(0, rise * index, -PHYSICAL_LOG.stairStepRun * index);
+    group.add(tread);
+  }
+
+  const sideOffset = PHYSICAL_LOG.halfLength - PHYSICAL_LOG.radius * 0.72;
+  const supportRun = PHYSICAL_LOG.stairStepRun * PHYSICAL_LOG.stairTreadsPerLog;
+  const supportRise = rise * PHYSICAL_LOG.stairTreadsPerLog;
+  const direction = new THREE.Vector3(0, supportRise, -supportRun);
+  const supportLength = direction.length();
+  direction.normalize();
+  const supportQuaternion = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(1, 0, 0),
+    direction
+  );
+
+  for (const [side, label] of [[-1, 'Left'], [1, 'Right']]) {
+    const support = createPhysicalLogVisual(`StairSideLog${label}`);
+    support.name = `StairSideLog${label}`;
+    support.scale.x = supportLength / PHYSICAL_LOG.length;
+    support.position.set(
+      side * sideOffset,
+      rise * 0.5 - PHYSICAL_LOG.radius * 0.82,
+      -PHYSICAL_LOG.stairStepRun * 0.5
+    );
+    support.quaternion.copy(supportQuaternion);
+    group.add(support);
+  }
+
+  return group;
+}
+
 export function createConstructionLogVisual(mode) {
   // Orientation belongs to PhysicalLogSystem's resolved placement transform.
   // Keeping the source visual neutral prevents previews and committed pieces from
@@ -89,6 +130,8 @@ export function createConstructionLogVisual(mode) {
   if (mode === 'frame') return createPhysicalLogVisual('UprightLogFrame');
   if (mode === 'angle') return createPhysicalLogVisual('AngledLog');
   if (mode === 'roof') return createPhysicalLogVisual('RoofLog');
+  // The base stairs visual remains one tread for persisted legacy six-log flights.
+  // New two-tread stair bundles are promoted by StairConstructionRuntimeController.
   if (mode === 'stairs') return createSplitHalfLogVisual('SplitLogStairTread');
   if (mode === 'floor') {
     const group = new THREE.Group();
