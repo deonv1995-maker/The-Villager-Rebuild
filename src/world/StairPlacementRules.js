@@ -1,7 +1,8 @@
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { collectUpperStoreyFloorCandidates } from './UpperStoreyFloorRules.js';
 
-const STAIR_STEP_COUNT = 6;
+const STAIR_STEP_COUNT = PHYSICAL_LOG.stairStepCount;
+const STAIR_PAIR_SNAP_KIND = 'upper-floor-stair-pair';
 const POSITION_TOLERANCE = Math.max(PHYSICAL_LOG.gridStep, PHYSICAL_LOG.frameSpacingTolerance * 1.75);
 
 const finitePoint = point => Number.isFinite(point?.x) && Number.isFinite(point?.z);
@@ -74,17 +75,103 @@ const activeOpeningRegions = activeStairs => {
   return keys;
 };
 
+const treadSpanFor = stair => (
+  stair?.snapKind === STAIR_PAIR_SNAP_KIND
+    ? PHYSICAL_LOG.stairTreadsPerLog
+    : 1
+);
+
 const nextMissingStep = stairs => {
-  const occupied = new Set(
-    (stairs ?? [])
-      .filter(stair => stair?.active !== false && Number.isFinite(stair.stairStepIndex))
-      .map(stair => Math.round(stair.stairStepIndex))
-  );
+  const occupied = new Set();
+  for (const stair of stairs ?? []) {
+    if (stair?.active === false || !Number.isFinite(stair.stairStepIndex)) continue;
+    const start = Math.round(stair.stairStepIndex);
+    const span = treadSpanFor(stair);
+    for (let offset = 0; offset < span; offset += 1) {
+      const index = start + offset;
+      if (index >= 0 && index < STAIR_STEP_COUNT) occupied.add(index);
+    }
+  }
   for (let index = 0; index < STAIR_STEP_COUNT; index += 1) {
     if (!occupied.has(index)) return index;
   }
   return null;
 };
+
+const stairStepRiseFor = placement => {
+  const stepIndex = Number.isFinite(placement?.stairStepIndex)
+    ? Math.max(0, Math.round(placement.stairStepIndex))
+    : 0;
+  const rise = (placement?.topY - placement?.baseY) / (stepIndex + 1);
+  return Number.isFinite(rise) && rise > 0 ? rise : null;
+};
+
+const stairRunDirectionForYaw = yaw => ({
+  x: -Math.sin(yaw),
+  z: -Math.cos(yaw)
+});
+
+export function stairTreadPlacementForIndex(placement, stepIndex) {
+  if (
+    !Number.isFinite(placement?.x) ||
+    !Number.isFinite(placement?.z) ||
+    !Number.isFinite(placement?.yaw) ||
+    !Number.isFinite(placement?.topY) ||
+    !Number.isFinite(placement?.baseY) ||
+    !Number.isFinite(placement?.stairStepIndex) ||
+    !Number.isFinite(stepIndex)
+  ) return null;
+
+  const startIndex = Math.round(placement.stairStepIndex);
+  const targetIndex = Math.round(stepIndex);
+  const total = Number.isFinite(placement.stairStepCount)
+    ? Math.max(1, Math.round(placement.stairStepCount))
+    : STAIR_STEP_COUNT;
+  if (targetIndex < 0 || targetIndex >= total) return null;
+
+  const stepRise = stairStepRiseFor(placement);
+  if (!stepRise) return null;
+  const run = stairRunDirectionForYaw(placement.yaw);
+  const delta = targetIndex - startIndex;
+  const topY = placement.topY + delta * stepRise;
+  return {
+    ...placement,
+    x: placement.x + run.x * delta * PHYSICAL_LOG.stairStepRun,
+    z: placement.z + run.z * delta * PHYSICAL_LOG.stairStepRun,
+    y: topY,
+    topY,
+    stairStepIndex: targetIndex
+  };
+}
+
+export function stairBundleTreadPlacements(placement) {
+  if (!Number.isFinite(placement?.stairStepIndex)) return [];
+  const startIndex = Math.round(placement.stairStepIndex);
+  const total = Number.isFinite(placement.stairStepCount)
+    ? Math.max(1, Math.round(placement.stairStepCount))
+    : STAIR_STEP_COUNT;
+  const span = placement.snapKind === STAIR_PAIR_SNAP_KIND
+    ? PHYSICAL_LOG.stairTreadsPerLog
+    : 1;
+  const placements = [];
+  for (let offset = 0; offset < span && startIndex + offset < total; offset += 1) {
+    const tread = stairTreadPlacementForIndex(placement, startIndex + offset);
+    if (tread) placements.push(tread);
+  }
+  return placements;
+}
+
+export function stairFlightTreadPlacements(placement) {
+  const total = Number.isFinite(placement?.stairStepCount)
+    ? Math.max(1, Math.round(placement.stairStepCount))
+    : STAIR_STEP_COUNT;
+  const placements = [];
+  for (let index = 0; index < total; index += 1) {
+    const tread = stairTreadPlacementForIndex(placement, index);
+    if (tread) placements.push(tread);
+  }
+  return placements;
+}
 
 const createFlightStep = ({
   lowRegion,
@@ -109,7 +196,10 @@ const createFlightStep = ({
     x: (lowCenter.x + highCenter.x) * 0.5,
     z: (lowCenter.z + highCenter.z) * 0.5
   };
-  const runOffset = -PHYSICAL_LOG.length + (stepIndex + 0.5) * PHYSICAL_LOG.stairStepRun;
+  const runOffset = (
+    -PHYSICAL_LOG.stairRunLength * 0.5 +
+    (stepIndex + 0.5) * PHYSICAL_LOG.stairStepRun
+  );
   const supportY = lowerSurfaceY + rise * ((stepIndex + 1) / STAIR_STEP_COUNT);
   const stairKey = `${openingKey}:${lowRegion.key}->${highRegion.key}`;
 
@@ -126,16 +216,18 @@ const createFlightStep = ({
     stairOpeningRegionKeys: [lowRegion.key, highRegion.key].sort(),
     stairStepIndex: stepIndex,
     stairStepCount: STAIR_STEP_COUNT,
-    snapKind: 'upper-floor-stair',
+    snapKind: STAIR_PAIR_SNAP_KIND,
     valid: true
   };
 };
 
 /**
- * A stair flight occupies exactly two adjacent enclosed upper-floor cells. Each physical
- * Log square is three split-log floor strips, so the two-cell run is six canonical tread
- * positions. Only the next missing tread is exposed, giving the same piece-by-piece
- * progression contract as roof members without reusing roof topology.
+ * A stair flight still reserves two adjacent enclosed upper-floor cells, but its visible
+ * run is compacted into five canonical split-log floor spaces instead of six. The flight
+ * retains six walkable treads; one physical Log is split lengthwise into two tread halves,
+ * so one committed stair piece advances two consecutive tread positions and a complete
+ * flight consumes three physical Logs. Legacy persisted single-tread stairs keep their
+ * original snap kind and continue to occupy one tread each.
  */
 export function collectStairBuildCandidates(regions, floors, activeStairs, {
   floorTopLift = 0.028,
@@ -224,3 +316,4 @@ export function floorCandidateBlockedByStairs(candidate, activeStairs) {
 }
 
 export const STAIR_BUILD_STEP_COUNT = STAIR_STEP_COUNT;
+export const STAIR_PAIR_SNAP = STAIR_PAIR_SNAP_KIND;

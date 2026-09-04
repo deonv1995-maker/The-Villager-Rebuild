@@ -8,6 +8,11 @@ const FRAME_SNAP_RANGE = LOG_LENGTH + FRAME_PAIR_SPACING_TOLERANCE;
 const FRAME_LEVEL_TOLERANCE = 0.4;
 const FRAME_ISOLATION_RADIUS = LOG_LENGTH + FLOOR_WIDTH * 0.5;
 const PLACEMENT_REACH = 1.9;
+const STAIR_TREAD_COUNT = 6;
+const STAIR_TREADS_PER_LOG = 2;
+const STAIR_RUN_SPACES = 5;
+const STAIR_RUN_LENGTH = FLOOR_WIDTH * STAIR_RUN_SPACES;
+const STAIR_STEP_RUN = STAIR_RUN_LENGTH / STAIR_TREAD_COUNT;
 // A floor target is a full Log by one-third Log rectangle. Cover the half-cell diagonal
 // plus half a construction-grid step so aiming near a bay/strip seam still reaches one
 // canonical floor slot instead of falling through to an unrelated ground placement.
@@ -33,9 +38,11 @@ export const PHYSICAL_LOG = Object.freeze({
   // Retained for legacy persisted ANGLE pieces. New player-facing construction uses
   // the dedicated two-cell stair contract below; ROOF still stores rafters as ANGLE.
   angleSnapRange: 1.85,
-  stairStepCount: 6,
-  stairStepRun: FLOOR_WIDTH,
-  stairRunLength: LOG_LENGTH * 2,
+  stairStepCount: STAIR_TREAD_COUNT,
+  stairTreadsPerLog: STAIR_TREADS_PER_LOG,
+  stairRunSpaces: STAIR_RUN_SPACES,
+  stairStepRun: STAIR_STEP_RUN,
+  stairRunLength: STAIR_RUN_LENGTH,
   stairSnapRange: LOG_LENGTH * 2 + PLACEMENT_REACH,
   stairMaxStepRise: 0.58,
   // From outside a full bay, the ordered ROOF workflow must still reach the far

@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { LOG_BUILD_MODES, LOG_CONSTRUCTION_MODES, PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
+import { createStairPairVisual } from '../src/world/PhysicalLogVisual.js';
 import {
   collectStairBuildCandidates,
   floorCandidateBlockedByStairs,
+  stairBundleTreadPlacements,
+  stairFlightTreadPlacements,
   stairOpeningContainsFloor,
-  STAIR_BUILD_STEP_COUNT
+  STAIR_BUILD_STEP_COUNT,
+  STAIR_PAIR_SNAP
 } from '../src/world/StairPlacementRules.js';
 
 const L = PHYSICAL_LOG.length;
@@ -33,9 +37,17 @@ const lowerFloors = [{
   storey: 0
 }];
 
-assert.equal(STAIR_BUILD_STEP_COUNT, 6, 'two Log squares must resolve to six split-log stair treads');
-assert.equal(PHYSICAL_LOG.stairRunLength, L * 2, 'stair flight must occupy exactly two Log squares');
-assert.equal(PHYSICAL_LOG.stairStepRun, PHYSICAL_LOG.floorWidth, 'each tread advances one canonical split-log strip');
+assert.equal(STAIR_BUILD_STEP_COUNT, 6, 'stair flight must retain six walkable treads');
+assert.equal(PHYSICAL_LOG.stairTreadsPerLog, 2, 'one physical Log must split into two stair treads');
+assert.equal(PHYSICAL_LOG.stairRunSpaces, 5, 'stair flight must use five split-log run spaces');
+assert.ok(
+  Math.abs(PHYSICAL_LOG.stairRunLength - PHYSICAL_LOG.floorWidth * 5) < 0.000001,
+  'compact stair run must equal five canonical split-log floor spaces'
+);
+assert.ok(
+  Math.abs(PHYSICAL_LOG.stairStepRun * STAIR_BUILD_STEP_COUNT - PHYSICAL_LOG.stairRunLength) < 0.000001,
+  'six tread intervals must fit inside the five-space compact run'
+);
 assert.ok(LOG_BUILD_MODES.includes('stairs'), 'stairs must be player-selectable');
 assert.ok(!LOG_BUILD_MODES.includes('angle'), 'standalone angled log must no longer be player-selectable');
 assert.ok(LOG_CONSTRUCTION_MODES.includes('angle'), 'ANGLE must remain a persisted internal roof-rafter type');
@@ -44,33 +56,56 @@ assert.ok(LOG_CONSTRUCTION_MODES.includes('stairs'), 'stairs must be persistable
 const initial = collectStairBuildCandidates(regions, lowerFloors, []);
 assert.equal(initial.length, 2, 'an untouched two-cell opening should allow either stair direction');
 assert.ok(initial.every(candidate => candidate.stairStepIndex === 0));
+assert.ok(initial.every(candidate => candidate.snapKind === STAIR_PAIR_SNAP));
 assert.ok(initial.every(candidate => candidate.stairOpeningRegionKeys.length === 2));
 
+const fullPreview = stairFlightTreadPlacements(initial[0]);
+assert.equal(fullPreview.length, 6, 'first stair placement must describe the complete six-tread flight ghost');
+assert.equal(fullPreview[0].stairStepIndex, 0);
+assert.equal(fullPreview.at(-1).stairStepIndex, 5);
+
 const flightKey = initial[0].stairKey;
-const openingKey = initial[0].stairOpeningKey;
 const built = [];
 const supports = [];
-for (let step = 0; step < STAIR_BUILD_STEP_COUNT; step += 1) {
+for (let logIndex = 0; logIndex < STAIR_BUILD_STEP_COUNT / PHYSICAL_LOG.stairTreadsPerLog; logIndex += 1) {
   const available = collectStairBuildCandidates(regions, lowerFloors, built);
   const next = available.find(candidate => candidate.stairKey === flightKey);
-  assert.ok(next, `stair flight should expose tread ${step + 1}`);
-  assert.equal(next.stairStepIndex, step, 'stairs must build bottom-to-top one missing tread at a time');
-  supports.push(next.topY);
+  const expectedStart = logIndex * PHYSICAL_LOG.stairTreadsPerLog;
+  assert.ok(next, `stair flight should expose physical Log ${logIndex + 1}`);
+  assert.equal(next.stairStepIndex, expectedStart, 'each physical Log must advance two tread positions');
+  assert.equal(next.snapKind, STAIR_PAIR_SNAP);
+
+  const treads = stairBundleTreadPlacements(next);
+  assert.equal(treads.length, 2, 'each new stair Log must materialize two split-log treads');
+  assert.deepEqual(
+    treads.map(tread => tread.stairStepIndex),
+    [expectedStart, expectedStart + 1],
+    'paired treads must remain consecutive and bottom-to-top'
+  );
+  supports.push(...treads.map(tread => tread.topY));
   built.push({
     active: true,
     mode: 'stairs',
+    snapKind: next.snapKind,
     stairKey: next.stairKey,
     stairOpeningKey: next.stairOpeningKey,
     stairOpeningRegionKeys: next.stairOpeningRegionKeys,
     stairStepIndex: next.stairStepIndex,
-    storey: next.storey
+    stairStepCount: next.stairStepCount,
+    storey: next.storey,
+    x: next.x,
+    z: next.z,
+    yaw: next.yaw,
+    baseY: next.baseY,
+    topY: next.topY
   });
 }
 
+assert.equal(built.length, 3, 'a complete six-tread flight must consume exactly three physical Logs');
 assert.equal(
   collectStairBuildCandidates(regions, lowerFloors, built).length,
   0,
-  'a complete six-tread flight must expose no seventh stair piece'
+  'a complete paired flight must expose no fourth stair Log'
 );
 for (let index = 1; index < supports.length; index += 1) {
   const rise = supports[index] - supports[index - 1];
@@ -84,7 +119,31 @@ assert.ok(
 const repairState = built.filter(entry => entry.stairStepIndex !== 2);
 const repair = collectStairBuildCandidates(regions, lowerFloors, repairState);
 assert.equal(repair.length, 1, 'a damaged active flight must keep its established direction');
-assert.equal(repair[0].stairStepIndex, 2, 'the first missing stair tread must be repairable before later steps');
+assert.equal(repair[0].stairStepIndex, 2, 'a missing two-tread stair bundle must be repairable before later bundles');
+
+const legacySingle = [{
+  ...built[0],
+  snapKind: 'upper-floor-stair',
+  stairStepIndex: 0
+}];
+const legacyContinuation = collectStairBuildCandidates(regions, lowerFloors, legacySingle)
+  .find(candidate => candidate.stairKey === flightKey);
+assert.equal(
+  legacyContinuation?.stairStepIndex,
+  1,
+  'legacy persisted single-tread stairs must continue to occupy only one tread'
+);
+
+const pairVisual = createStairPairVisual({ stepRise: 0.5 });
+assert.ok(pairVisual.getObjectByName('SplitLogStairTread1'), 'paired stair visual must include its lower tread');
+assert.ok(pairVisual.getObjectByName('SplitLogStairTread2'), 'paired stair visual must include its upper tread');
+assert.ok(pairVisual.getObjectByName('StairSideLogLeft'), 'paired stair visual must include the left side log');
+assert.ok(pairVisual.getObjectByName('StairSideLogRight'), 'paired stair visual must include the right side log');
+assert.equal(
+  pairVisual.getObjectByName('SplitLogStairTread2').position.z,
+  -PHYSICAL_LOG.stairStepRun,
+  'paired stair treads must use the compact run spacing'
+);
 
 const upperFloor = {
   active: true,

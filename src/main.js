@@ -1,6 +1,7 @@
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
+import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
@@ -31,6 +32,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus: setGameplayStatus });
     await game.start();
+
+    const stairConstructionRuntime = new StairConstructionRuntimeController({ game });
+    stairConstructionRuntime.start();
+    game.stairConstructionRuntime = stairConstructionRuntime;
 
     const equipmentRuntime = new EquipmentRuntimeController({ game });
     equipmentRuntime.start();
