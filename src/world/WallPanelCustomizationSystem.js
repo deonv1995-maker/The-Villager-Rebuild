@@ -7,6 +7,7 @@ import {
   createPhysicalLogVisual,
   createSplitHalfLogVisual
 } from './PhysicalLogVisual.js';
+import { collectWallStructuralInteriorReferences } from './WallOrientationSupport.js';
 
 export const WALL_PANEL_VARIANTS = Object.freeze(['solid', 'door', 'window']);
 export const WALL_CUSTOMIZE_RANGE = 2.65;
@@ -54,25 +55,20 @@ const basis = yaw => ({
   zZ: Math.cos(yaw)
 });
 
-export function wallPanelTopY(pairTopY) {
-  if (!Number.isFinite(pairTopY)) return pairTopY;
-  return pairTopY - PHYSICAL_LOG.radius + WALL_TOP_TUCK;
-}
-
-export function resolveWallInwardYaw({ x, z, yaw, baseY, floors }) {
+const wallSideScores = ({ x, z, yaw, baseY }, references) => {
   const wallBasis = basis(yaw ?? 0);
   let positive = 0;
   let negative = 0;
 
-  for (const floor of floors ?? []) {
+  for (const reference of references ?? []) {
     if (
       Number.isFinite(baseY) &&
-      Number.isFinite(floor.topY) &&
-      Math.abs(floor.topY - baseY) > WALL_STOREY_TOLERANCE
+      Number.isFinite(reference.topY) &&
+      Math.abs(reference.topY - baseY) > WALL_STOREY_TOLERANCE
     ) continue;
 
-    const dx = floor.x - x;
-    const dz = floor.z - z;
+    const dx = reference.x - x;
+    const dz = reference.z - z;
     const localX = dx * wallBasis.xX + dz * wallBasis.xZ;
     const localZ = dx * wallBasis.zX + dz * wallBasis.zZ;
     if (Math.abs(localX) > PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorWidth * 0.72) continue;
@@ -83,8 +79,38 @@ export function resolveWallInwardYaw({ x, z, yaw, baseY, floors }) {
     else negative += weight;
   }
 
-  if (positive === 0 && negative === 0) return yaw;
-  return positive >= negative ? yaw : snapYaw((yaw ?? 0) + Math.PI);
+  return { positive, negative };
+};
+
+export function wallPanelTopY(pairTopY) {
+  if (!Number.isFinite(pairTopY)) return pairTopY;
+  return pairTopY - PHYSICAL_LOG.radius + WALL_TOP_TUCK;
+}
+
+/**
+ * Completed FRAME + RAW support cells are the primary interior-side authority. Physical
+ * floor strips remain the fallback for incomplete/legacy construction, but removing
+ * the two stairwell floor cells must never turn their adjacent wall panels inside out.
+ */
+export function resolveWallInwardYaw({
+  x,
+  z,
+  yaw,
+  baseY,
+  floors,
+  structuralInteriors = null
+}) {
+  const structural = wallSideScores(
+    { x, z, yaw, baseY },
+    structuralInteriors
+  );
+  const hasStructuralVote = structural.positive > 0 || structural.negative > 0;
+  const scores = hasStructuralVote
+    ? structural
+    : wallSideScores({ x, z, yaw, baseY }, floors);
+
+  if (scores.positive === 0 && scores.negative === 0) return yaw;
+  return scores.positive >= scores.negative ? yaw : snapYaw((yaw ?? 0) + Math.PI);
 }
 
 export function wallPanelIsComplete(entries, pairTopY) {
@@ -170,6 +196,8 @@ export class WallPanelCustomizationSystem {
     this.baysByKey = new Map();
     this.customizations = new Map();
     this.lastStructureRevision = -1;
+    this.wallInteriorReferenceRevision = -1;
+    this.wallInteriorReferences = [];
   }
 
   sync() {
@@ -212,7 +240,8 @@ export class WallPanelCustomizationSystem {
       z: placement.z,
       yaw: placement.yaw,
       baseY: placement.baseY ?? placement.ground,
-      floors: this.#activeEntries('floor')
+      floors: this.#activeEntries('floor'),
+      structuralInteriors: this.#structuralInteriorReferences()
     });
   }
 
@@ -305,6 +334,7 @@ export class WallPanelCustomizationSystem {
     }
 
     const floors = this.#activeEntries('floor');
+    const structuralInteriors = this.#structuralInteriorReferences();
     const frames = this.#activeEntries('frame');
     const bays = [];
 
@@ -316,7 +346,8 @@ export class WallPanelCustomizationSystem {
         z: pair.z,
         yaw: pair.yaw,
         baseY: pair.baseY,
-        floors
+        floors,
+        structuralInteriors
       });
       const sortedEntries = [...entries].sort((left, right) => left.centerY - right.centerY);
       const entryTopY = Math.max(...sortedEntries.map(entry => entry.topY));
@@ -563,6 +594,14 @@ export class WallPanelCustomizationSystem {
 
   #activeEntries(mode) {
     return this.physicalLogs.builtLogs.filter(entry => entry.active && entry.mode === mode);
+  }
+
+  #structuralInteriorReferences() {
+    const revision = this.physicalLogs.structureRevision ?? this.physicalLogs.builtLogs.length;
+    if (revision === this.wallInteriorReferenceRevision) return this.wallInteriorReferences;
+    this.wallInteriorReferences = collectWallStructuralInteriorReferences(this.physicalLogs.builtLogs);
+    this.wallInteriorReferenceRevision = revision;
+    return this.wallInteriorReferences;
   }
 
   #variantLabel(variant) {
