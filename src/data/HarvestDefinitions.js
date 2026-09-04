@@ -1,9 +1,9 @@
 const TREE_REGROWTH_TIMING = Object.freeze({
-  sproutDelaySeconds: 30,
+  stumpOnlySeconds: 30,
   stemGrowthSeconds: 30,
-  youngHoldSeconds: 30,
-  thickeningSeconds: 30,
-  finalGrowthSeconds: 60
+  branchGrowthSeconds: 30,
+  branchExpansionSeconds: 30,
+  authoredTreeGrowthSeconds: 60
 });
 
 export const HARVESTABLE_DEFINITIONS = Object.freeze({
