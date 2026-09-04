@@ -21,6 +21,7 @@ export class StairConstructionRuntimeController {
     this.collision = game.island.collision;
     this.running = false;
     this.frameHandle = null;
+    this.lastStructureRevision = -1;
     this.extraCollisions = new Map();
     this.frameCallback = () => {
       if (!this.running) return;
@@ -45,11 +46,14 @@ export class StairConstructionRuntimeController {
       if (tracked.handle) this.collision.removeObstacle(tracked.handle);
     }
     this.extraCollisions.clear();
+    this.lastStructureRevision = -1;
   }
 
   #sync() {
     this.#syncPreview();
+    if (this.lastStructureRevision === this.physicalLogs.structureRevision) return;
     this.#syncBuiltPairs();
+    this.lastStructureRevision = this.physicalLogs.structureRevision;
   }
 
   #stepRiseFor(placement) {
