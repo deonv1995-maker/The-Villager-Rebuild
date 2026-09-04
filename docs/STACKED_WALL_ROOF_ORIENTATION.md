@@ -6,6 +6,12 @@ A `SOLID` / `DOOR` / `WINDOW` wall bay is owned by one physical FRAME pair at on
 
 `WallPanelCustomizationSystem` therefore keys candidate wall-row groups by plan position, canonical wall axis and structural base level before resolving the owning FRAME pair. The final panel identity remains the FRAME-pair identity (`wall:<frame ids>`). Changing a downstairs wall variant may hide/replace only the rows and collision belonging to that downstairs pair; an upstairs wall directly above it remains visible, solid and collidable unless the player customizes that upper bay separately.
 
+## Wall interior-side authority
+
+A completed closed FRAME + RAW beam footprint is the primary authority for which side of a wall faces the building interior. `WallPanelCustomizationSystem` reuses the same enclosed structural support-cell topology that owns upper-storey floors and stairs, and derives stable interior reference points at both structural levels.
+
+Physical split-log floor strips remain a fallback for incomplete or legacy construction that does not yet expose a closed structural support cell. They are not allowed to override a completed structural footprint. This matters at stairwells: stairs intentionally remove the two upper-floor cells in their opening, but that removal is circulation state rather than a change to the building envelope. The adjacent walls therefore retain their original inward-facing orientation instead of flipping 180 degrees when the stair opening is created or another upper-storey piece increments the structure revision.
+
 ## Connected square-roof direction
 
 `RoofTopology` remains the single authority for roof direction used by physical ROOF placement, completed-roof queries, thatching and interior detection.
@@ -36,8 +42,11 @@ When that safety rule preserves a complete perpendicular primary gable at a side
 
 This retained-completion rule is geometry-first and requires the complete perpendicular five-member assembly. Partial stray members do not become a roof, and ordinary live placement continues to follow only the canonical roof direction.
 
+Finished thatch follows the same physical-lifetime rule. A structure revision or temporary local topology-query miss is not demolition by itself. Each thatched panel retains the footprint, eave and ridge geometry needed to verify its original four rafters plus ridge directly against the active physical roof members. While that five-member frame remains complete, the thatch stays in place and Grass is not refunded. Once a required physical roof member is actually removed, the existing removal/refund behavior still applies.
+
 ## Regression coverage
 
 - `verify:stacked-walls` proves a downstairs window conversion cannot hide or remove collision from a directly stacked upstairs wall.
+- `verify:construction-stability` proves a stairwell can remove its floor strips without flipping the adjacent wall and proves topology-query churn cannot delete/refund thatch while its physical five-member roof frame remains complete.
 - `verify:roof-orientation` proves a stepped L footprint rotates the unambiguous wing cell, preserves the stable L-corner, turns a side roof toward the nearest completed upper-storey structural wall edge, ignores unrelated upper edges, keeps a complete retained perpendicular primary gable thatchable as a completion-only roof, and reflows a completed stale roof plus thatch onto the corrected orientation when reflow is safe.
 - The existing wall, roof, stacked-roof, save, traversal, construction and PWA checks remain part of the full CI gate.
