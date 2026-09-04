@@ -710,13 +710,17 @@ export class PhysicalLogSystem {
     this.tempRoofStart.set(start.x, start.y, start.z);
     this.tempRoofEnd.set(end.x, end.y, end.z);
 
-    const distanceSq = this.tempRoofAimRay.distanceSqToSegment(
+    const rawDistanceSq = this.tempRoofAimRay.distanceSqToSegment(
       this.tempRoofStart,
       this.tempRoofEnd,
       this.tempAxisX,
       this.tempAxisY
     );
-    if (!Number.isFinite(distanceSq)) return Infinity;
+    if (!Number.isFinite(rawDistanceSq)) return Infinity;
+    // Exact ray/segment intersections can accumulate a tiny negative squared distance
+    // from floating-point cancellation inside Three.js. Clamp numerical noise before
+    // sqrt so a perfectly centred reticle hit cannot turn into NaN and lose its snap.
+    const distanceSq = Math.max(0, rawDistanceSq);
 
     const toTargetX = this.tempAxisY.x - origin.x;
     const toTargetY = this.tempAxisY.y - origin.y;
