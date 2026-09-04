@@ -22,6 +22,8 @@ Thatch is construction-owned presentation. If any required angled rafter, Raw ri
 
 `RoofMemberRules` owns the five member descriptors, role compatibility and geometry-based occupancy used by both runtime placement and `StructureRoofQuery`. ANGLE rafters, RAW ridges and legacy ROOF members therefore resolve against the same coordinates and tolerances.
 
+The roof snap metadata (`roofRole`, `snapKind` and `roofKey`) is also the authority for identifying structural roof members during presentation. Ordinary ANGLE or RAW construction near a roof is never inferred to be roof framing merely from its position.
+
 The current five-member gable resolves two stable panel descriptors from roof geometry. Panel identity is geometry-based rather than tied only to local topology keys so ordinary topology-key churn does not silently duplicate roof cover.
 
 `StructureRoofQuery.findStoreyRegion()` also exposes the closed FRAME/RAW support region that contains the Ranger's current level. This is a read-only visibility query over the same structural topology; it does not create a second building or floor definition.
@@ -37,10 +39,13 @@ When the Ranger occupies a lower storey inside a closed structural region, floor
 A completed roof remains the enclosure signal for indoor shell fading. While indoors:
 
 - the connected building shell fades as one unit instead of individual camera-side panels changing independently;
-- FRAME, RAW, WALL, roof members, customized wall roots and thatch visuals in that connected building share the fade state;
+- FRAME, RAW, WALL, customized wall roots and thatch visuals in that connected building share the fade state;
+- roof members created by the shared roof snap contract are fully visually suppressed from the occupied interior rather than showing the gable V/ridge framing through the finished room;
 - upper floor pieces above the Ranger's current storey are semi-transparent;
 - the supporting/current floor remains solid as the Ranger's visual walking reference;
 - adjacent bays and stacked storeys connected through the same structural footprint remain synchronized.
+
+First-person view keeps walls, floors and thatch solid and does **not** enable the third-person whole-building transparency effect. It runs only the narrow completed-interior roof cleanup: snapped roof rafters/ridges in the connected occupied structure are made invisible and are restored immediately after the Ranger leaves. This keeps the 1P interior polished without changing roof placement, occupancy, collision, demolition or save state.
 
 When the Ranger is outside a completed/recognized structure, the system still performs a bounded nearby visibility check against the Ranger's body line from the camera. If any member of a connected structural building lies between the camera and Ranger, that whole connected building is faded together. A separate nearby building outside that connected topology remains solid.
 
@@ -53,5 +58,7 @@ The visibility pass never changes collision, demolition, wall openings, roof pla
 ## Verification
 
 `scripts/verify-thatch-interior-occlusion.mjs` verifies roof cost, panel targeting, structural dependency, current-storey detection, whole-building indoor fading, connected multi-bay exterior fading, unrelated-building isolation, upper-floor fading, incomplete-structure blocker fallback and material restoration.
+
+`scripts/verify-roof-interior-visibility.mjs` verifies that roof-snap metadata distinguishes actual rafters/ridges from ordinary ANGLE construction, that completed occupied interiors fully suppress those snapped roof members in first and third person, and that leaving the structure restores their original materials.
 
 `scripts/verify-roof-build-sequence.mjs` separately verifies that ANGLE rafters plus RAW ridge segments satisfy the shared completion contract, that multi-bay shared rafters are not duplicated, and that thatch remains locked until the ridge stage is complete.

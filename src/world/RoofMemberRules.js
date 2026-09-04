@@ -133,6 +133,20 @@ export function orderedRoofBuildCandidates(candidates) {
   return runtimeStructuralTieOrder(eligible, progressByRegion);
 }
 
+/**
+ * Snapped roof identity is structural metadata, not a visual guess. Presentation
+ * systems use this contract to distinguish actual roof rafters/ridges from ordinary
+ * ANGLE or RAW construction that happens to sit near the roof line.
+ */
+export function isSnappedRoofMember(member) {
+  if (!member || (member.roofRole !== 'rafter' && member.roofRole !== 'ridge')) return false;
+  return (
+    member.snapKind === 'roof-rafter' ||
+    member.snapKind === 'roof-ridge' ||
+    Boolean(member.roofKey)
+  );
+}
+
 export function roofMemberModeMatches(candidate, member) {
   if (!candidate || !member) return false;
   if (member.mode === 'roof') return true;

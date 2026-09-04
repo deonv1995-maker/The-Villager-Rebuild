@@ -116,11 +116,16 @@ player.setCameraMode('third-person');
 let firstPerson = true;
 let positionReads = 0;
 let resets = 0;
-let updates = 0;
+let firstPersonUpdates = 0;
+let thirdPersonUpdates = 0;
 const occlusionGame = {
   player: {
     isFirstPerson: () => firstPerson,
-    getPosition: () => { positionReads += 1; }
+    getPosition: target => {
+      positionReads += 1;
+      target.set(1, 0, 2);
+      return target;
+    }
   },
   physicalLogs: { builtLogs: [] },
   sceneSystem: { camera: new THREE.PerspectiveCamera() }
@@ -131,16 +136,27 @@ const occlusionController = new StructureInteriorOcclusionController({
 });
 occlusionController.system = {
   reset: () => { resets += 1; },
-  update: () => { updates += 1; return 'third-person-occlusion'; }
+  updateFirstPerson: position => {
+    firstPersonUpdates += 1;
+    assert.deepEqual(position.toArray(), [1, 0, 2]);
+    return 'first-person-roof-visibility';
+  },
+  update: () => { thirdPersonUpdates += 1; return 'third-person-occlusion'; }
 };
-assert.equal(occlusionController.update(), null, 'First person must bypass third-person building fade logic');
-assert.equal(resets, 1, 'Entering first-person visibility must restore any previously faded structure materials');
-assert.equal(positionReads, 0, 'First-person visibility bypass should not run the third-person occlusion query');
-assert.equal(updates, 0);
+assert.equal(
+  occlusionController.update(),
+  'first-person-roof-visibility',
+  'First person must run only the narrow snapped-roof interior visibility pass'
+);
+assert.equal(resets, 0, 'First person must no longer reset roof visibility after every frame');
+assert.equal(positionReads, 1, 'First-person roof visibility must receive the current Ranger position');
+assert.equal(firstPersonUpdates, 1);
+assert.equal(thirdPersonUpdates, 0, 'First person must still bypass the third-person whole-building fade pass');
 
 firstPerson = false;
 assert.equal(occlusionController.update(), 'third-person-occlusion');
-assert.equal(positionReads, 1, 'Third person must continue using the existing structure occlusion system');
-assert.equal(updates, 1);
+assert.equal(positionReads, 2, 'Third person must continue using the same current Ranger position source');
+assert.equal(firstPersonUpdates, 1);
+assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('First/third-person camera toggle, view-relative controls, presentation visibility and occlusion handoff verified');
+console.log('First/third-person camera toggle, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
