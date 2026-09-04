@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { addCoastalRockFormations } from '../world/CoastalRockSystem.js';
 import { ExpandedIslandTerrainSystem } from '../world/ExpandedIslandTerrainSystem.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 
@@ -98,6 +101,21 @@ export function createTitleIslandBackdrop() {
     island.add(tree);
     treeCount += 1;
   }
+
+  const loader = new GLTFLoader();
+  void loader.loadAsync(ASSET_PATHS.forest.rock)
+    .then(coastalRock => {
+      addCoastalRockFormations({
+        group: island,
+        terrain,
+        template: coastalRock.scene,
+        horizontalScale: TITLE_SCENE.islandHorizontalScale,
+        verticalScale: TITLE_SCENE.islandVerticalScale,
+        localizeTerrainCenterZ: true,
+        namePrefix: 'title-coastal-rock'
+      });
+    })
+    .catch(error => console.error('[TITLE COASTAL ROCK FALLBACK]', error));
 
   terrain.terrainMaterial?.dispose?.();
   return island;

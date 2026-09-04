@@ -147,6 +147,7 @@ export class TestIslandSystem {
       chunkedTreeCount = this.chunks.splitTreeBatches(this.group);
       this.chunks.adoptNamedObjects(this.group, object => (
         object.name.startsWith('forest-rock-')
+        || object.name.startsWith('coastal-rock-')
       ));
       this.treeOcclusion = new TreeOcclusionSystem({
         group: this.group,
@@ -162,7 +163,8 @@ export class TestIslandSystem {
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
     const chunkStats = this.chunks.getStats();
-    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
+    const coastalRockCount = this.scatter.coastalRockCount ?? 0;
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${coastalRockCount} coastal rocks · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {

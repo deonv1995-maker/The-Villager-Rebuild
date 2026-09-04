@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
+import { addCoastalRockFormations } from './CoastalRockSystem.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -64,6 +65,7 @@ export class EnvironmentScatterSystem {
     this.collision = collision;
     this.reservations = new ReservationGrid();
     this.state = 0x8f213;
+    this.coastalRockCount = 0;
     this.shrubMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8c49, roughness: 1, flatShading: true });
   }
 
@@ -96,6 +98,11 @@ export class EnvironmentScatterSystem {
     }
 
     this.#placeForest(assets);
+    this.coastalRockCount = addCoastalRockFormations({
+      group: this.group,
+      terrain: this.terrain,
+      template: assets.forestRock
+    });
     this.#placeUnderstory();
     return true;
   }
