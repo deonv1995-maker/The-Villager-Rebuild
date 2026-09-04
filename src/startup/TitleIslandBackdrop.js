@@ -105,17 +105,17 @@ export function createTitleIslandBackdrop() {
   const loader = new GLTFLoader();
   void loader.loadAsync(ASSET_PATHS.forest.rock)
     .then(coastalRock => {
+      const titleCoastalRockScale = TITLE_SCENE.islandVerticalScale * TITLE_SCENE.coastalRockSilhouetteScale;
       addCoastalRockFormations({
         group: island,
         terrain,
         template: coastalRock.scene,
         horizontalScale: TITLE_SCENE.islandHorizontalScale,
         verticalScale: TITLE_SCENE.islandVerticalScale,
-        // Keep title positions compressed to the backdrop island while scaling the
-        // rock mesh itself uniformly with the vertical scene scale. This preserves
-        // the same X/Y/Z silhouette proportions seen on the playable coastline.
-        silhouetteHorizontalScale: TITLE_SCENE.islandVerticalScale,
-        silhouetteVerticalScale: TITLE_SCENE.islandVerticalScale,
+        // Keep title positions compressed to the backdrop island, but make the
+        // mesh itself half the previous title size while preserving its X/Y/Z proportions.
+        silhouetteHorizontalScale: titleCoastalRockScale,
+        silhouetteVerticalScale: titleCoastalRockScale,
         localizeTerrainCenterZ: true,
         namePrefix: 'title-coastal-rock'
       });
