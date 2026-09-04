@@ -33,6 +33,35 @@ const averagePoint = points => ({
   z: points.reduce((sum, point) => sum + point.z, 0) / points.length
 });
 
+const retainedPerpendicularFrameCellRegion = region => ({
+  ...region,
+  key: `${region.key}:retained-perpendicular`,
+  a: { ...region.a },
+  b: { ...region.c },
+  c: { ...region.b },
+  d: { ...region.d },
+  ridgeYaw: (region.ridgeYaw ?? 0) + Math.PI / 2,
+  topology: 'frame-cell-retained'
+});
+
+/**
+ * A frame-cell may retain a complete perpendicular gable after canonical roof
+ * orientation changes around an upper-storey/side-wing intersection. That physical
+ * assembly remains a valid finished roof surface, but it is completion-only: live
+ * placement still receives only RoofTopology's canonical candidates.
+ */
+export function collectCompletedRoofRegions(regions, members) {
+  const completed = [];
+  for (const region of regions ?? []) {
+    if (roofRegionComplete(region, members)) completed.push(region);
+    if (region?.topology !== 'frame-cell') continue;
+
+    const retained = retainedPerpendicularFrameCellRegion(region);
+    if (roofRegionComplete(retained, members)) completed.push(retained);
+  }
+  return completed;
+}
+
 export function roofPanelDescriptors(region) {
   const ridgeA = {
     x: (region.a.x + region.c.x) * 0.5,
@@ -146,7 +175,7 @@ export class StructureRoofQuery {
 
   getCompletedRegions(focus) {
     const activeMembers = this.physicalLogs.builtLogs.filter(entry => entry.active);
-    return this.getRegions(focus).filter(region => roofRegionComplete(region, activeMembers));
+    return collectCompletedRoofRegions(this.getRegions(focus), activeMembers);
   }
 
   getCompletedPanels(focus) {
