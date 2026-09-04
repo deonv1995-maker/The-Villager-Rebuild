@@ -32,8 +32,12 @@ This rule is applied by `RoofTopology`, so the same corrected orientation is con
 
 The reflow deliberately skips incomplete assemblies and members currently satisfying another roof region, preserving the existing shared-rafter safety contract.
 
+When that safety rule preserves a complete perpendicular primary gable at a side-wing/upper-storey intersection, the physical frame is no longer treated as an orphan. `StructureRoofQuery` recognizes the perpendicular five-member assembly as a **completion-only retained roof region** whenever all four rafters and its ridge still physically exist. It does not add another ROOF placement path or compete with `RoofTopology`; it only keeps the already-built primary frame eligible for roof completion, interior coverage and its two thatch panels. If the newly canonical side roof is also complete, both gables expose their own two panels so the intersection can be fully thatched instead of leaving the primary frame bare.
+
+This retained-completion rule is geometry-first and requires the complete perpendicular five-member assembly. Partial stray members do not become a roof, and ordinary live placement continues to follow only the canonical roof direction.
+
 ## Regression coverage
 
 - `verify:stacked-walls` proves a downstairs window conversion cannot hide or remove collision from a directly stacked upstairs wall.
-- `verify:roof-orientation` proves a stepped L footprint rotates the unambiguous wing cell, preserves the stable L-corner, turns a side roof toward the nearest completed upper-storey structural wall edge, ignores unrelated upper edges, and reflows a completed stale roof plus thatch onto the corrected orientation.
+- `verify:roof-orientation` proves a stepped L footprint rotates the unambiguous wing cell, preserves the stable L-corner, turns a side roof toward the nearest completed upper-storey structural wall edge, ignores unrelated upper edges, keeps a complete retained perpendicular primary gable thatchable as a completion-only roof, and reflows a completed stale roof plus thatch onto the corrected orientation when reflow is safe.
 - The existing wall, roof, stacked-roof, save, traversal, construction and PWA checks remain part of the full CI gate.
