@@ -81,6 +81,7 @@ export class PhysicalLogSystem {
     this.tempRoofDirection = new THREE.Vector3();
     this.tempRoofStart = new THREE.Vector3();
     this.tempRoofEnd = new THREE.Vector3();
+    this.tempRoofAimRay = new THREE.Ray();
     this.structureRevision = 0;
     this.framePairCacheRevision = -1;
     this.framePairCache = [];
@@ -354,7 +355,7 @@ export class PhysicalLogSystem {
     if (mode === 'frame') return this.#framePlacement(base, playerPosition);
     if (mode === 'wall') return this.#wallPlacement(base);
     if (mode === 'stairs') return this.#stairsPlacement(base);
-    if (mode === 'roof') return this.#roofPlacement(base);
+    if (mode === 'roof') return this.#roofPlacement(base, constructionAim);
     return base;
   }
 
@@ -656,11 +657,30 @@ export class PhysicalLogSystem {
     };
   }
 
-  #roofPlacement(base) {
+  #roofPlacement(base, constructionAim = null) {
     const staged = orderedRoofBuildCandidates(this.#roofCandidates(base));
+    const reachable = staged.filter(candidate =>
+      Math.hypot(candidate.x - base.x, candidate.z - base.z) < PHYSICAL_LOG.roofSnapRange
+    );
+
+    if (constructionAim) {
+      const aimed = reachable
+        .map((candidate, index) => ({
+          candidate,
+          index,
+          score: this.#roofReticleScore(candidate, constructionAim)
+        }))
+        .filter(entry => Number.isFinite(entry.score))
+        .sort((left, right) => left.score - right.score || left.index - right.index);
+      const best = aimed[0]?.candidate;
+      return best
+        ? this.#roofMemberPlacement(base, best)
+        : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+    }
+
     let best = null;
     let bestDistance = PHYSICAL_LOG.roofSnapRange;
-    for (const candidate of staged) {
+    for (const candidate of reachable) {
       const distance = Math.hypot(candidate.x - base.x, candidate.z - base.z);
       if (distance >= bestDistance) continue;
       bestDistance = distance;
@@ -669,6 +689,48 @@ export class PhysicalLogSystem {
     return best
       ? this.#roofMemberPlacement(base, best)
       : { ...base, y: base.ground + PHYSICAL_LOG.length, valid: false };
+  }
+
+  #roofReticleScore(candidate, constructionAim) {
+    const origin = constructionAim?.origin;
+    const direction = constructionAim?.direction;
+    const start = candidate?.start;
+    const end = candidate?.end;
+    if (
+      !Number.isFinite(origin?.x) || !Number.isFinite(origin?.y) || !Number.isFinite(origin?.z) ||
+      !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y) || !Number.isFinite(direction?.z) ||
+      !Number.isFinite(start?.x) || !Number.isFinite(start?.y) || !Number.isFinite(start?.z) ||
+      !Number.isFinite(end?.x) || !Number.isFinite(end?.y) || !Number.isFinite(end?.z)
+    ) return Infinity;
+
+    this.tempRoofAimRay.origin.set(origin.x, origin.y, origin.z);
+    this.tempRoofAimRay.direction.set(direction.x, direction.y, direction.z);
+    if (this.tempRoofAimRay.direction.lengthSq() < 0.0001) return Infinity;
+    this.tempRoofAimRay.direction.normalize();
+    this.tempRoofStart.set(start.x, start.y, start.z);
+    this.tempRoofEnd.set(end.x, end.y, end.z);
+
+    const distanceSq = this.tempRoofAimRay.distanceSqToSegment(
+      this.tempRoofStart,
+      this.tempRoofEnd,
+      this.tempAxisX,
+      this.tempAxisY
+    );
+    if (!Number.isFinite(distanceSq)) return Infinity;
+
+    const toTargetX = this.tempAxisY.x - origin.x;
+    const toTargetY = this.tempAxisY.y - origin.y;
+    const toTargetZ = this.tempAxisY.z - origin.z;
+    const forwardDistance = (
+      toTargetX * this.tempRoofAimRay.direction.x +
+      toTargetY * this.tempRoofAimRay.direction.y +
+      toTargetZ * this.tempRoofAimRay.direction.z
+    );
+    if (forwardDistance <= 0.05) return Infinity;
+
+    const maxMiss = PHYSICAL_LOG.radius + PHYSICAL_LOG.roofReticleSnapPadding;
+    if (distanceSq > maxMiss * maxMiss) return Infinity;
+    return Math.sqrt(distanceSq) / Math.max(0.001, maxMiss);
   }
 
   #resolvedPlacementMode(requestedMode, placement) {
