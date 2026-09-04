@@ -56,9 +56,21 @@ assert.equal(
   'Coastal formations must resolve from the authoritative procedural coastline'
 );
 assert.equal(
+  coastalSystem.includes('definition.coastOffset * coastOffsetScale'),
+  true,
+  'Coastal placement must support a gameplay-specific near-shore offset without duplicating definitions'
+);
+assert.equal(
   coastalSystem.includes('terrain.heightAt(x, z) <= terrain.waterLevel + MAX_EMERGED_TERRAIN'),
   true,
   'Coastal formations must move outward until they resolve over water'
+);
+assert.equal(
+  coastalSystem.includes('definition.scaleX * horizontalScale * footprintScale')
+    && coastalSystem.includes('definition.scaleZ * horizontalScale * footprintScale')
+    && coastalSystem.includes('definition.scaleY * verticalScale'),
+  true,
+  'Shared coastal silhouette tuning should widen X/Z while preserving authored height'
 );
 assert.equal(
   coastalSystem.includes('collision.addObstacle'),
@@ -71,20 +83,35 @@ assert.equal(
   'Offshore silhouette rocks must remain separate from harvestable inland rocks'
 );
 assert.equal(
-  islandSource.includes("object.name.startsWith('coastal-rock-')"),
+  scatterSource.includes('COASTAL_ROCK_PRESENTATION.playableCoastOffsetScale'),
   true,
-  'Playable coastal formations should participate in world chunk visibility management'
+  'Playable coastal formations should use the shared closer-shore presentation tuning'
+);
+assert.equal(
+  islandSource.includes("object.name.startsWith('coastal-rock-')"),
+  false,
+  'Coastal landmark rocks must remain outside chunk visibility so shoreline silhouettes are not hidden'
 );
 
 const formationCount = (coastalDefinitions.match(/formation\(\{/g) ?? []).length;
 assert.ok(
-  formationCount >= 16,
+  formationCount >= 17,
   `Expected a substantial island-perimeter coastal formation set, found ${formationCount}`
 );
 assert.equal(
   coastalDefinitions.includes("id: 'wreck-west-inner'") && coastalDefinitions.includes("id: 'wreck-east-inner'"),
   true,
   'Shared definitions should include authored rocks flanking the shipwreck approach'
+);
+assert.equal(
+  coastalDefinitions.includes("id: 'day-one-beach-visible'") && coastalDefinitions.includes('coastOffset: 6'),
+  true,
+  'Shared definitions should include one guaranteed near-shore Day-1 visibility anchor'
+);
+assert.equal(
+  coastalDefinitions.includes('footprintScale: 1.2') && coastalDefinitions.includes('playableCoastOffsetScale: 0.62'),
+  true,
+  'Coastal silhouette width and playable shoreline distance should have one shared tuning source'
 );
 assert.equal(
   coastalDefinitions.includes("id: 'west-breaker-mid'") && coastalDefinitions.includes("id: 'north-east-spire'"),
