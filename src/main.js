@@ -11,6 +11,7 @@ import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
+import { RoofWallPolishSystem } from './world/RoofWallPolishSystem.js';
 import { StackedRoofReflowSystem } from './world/StackedRoofReflowSystem.js';
 import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
@@ -52,9 +53,15 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       roofQuery,
       roofThatchSystem: roofThatch.system
     });
+    const roofWallPolish = new RoofWallPolishSystem({
+      physicalLogs: game.physicalLogs,
+      roofQuery,
+      wallPanelSystem: wallPanelCustomization.system
+    });
     game.roofQuery = roofQuery;
     game.roofThatch = roofThatch;
     game.stackedRoofReflow = stackedRoofReflow;
+    game.roofWallPolish = roofWallPolish;
     roofThatch.start();
 
     const structureInteriorOcclusion = new StructureInteriorOcclusionController({
