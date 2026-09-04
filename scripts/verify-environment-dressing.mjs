@@ -66,11 +66,17 @@ assert.equal(
   'Coastal formations must move outward until they resolve over water'
 );
 assert.equal(
-  coastalSystem.includes('definition.scaleX * horizontalScale * footprintScale')
-    && coastalSystem.includes('definition.scaleZ * horizontalScale * footprintScale')
-    && coastalSystem.includes('definition.scaleY * verticalScale'),
+  coastalSystem.includes('silhouetteHorizontalScale = horizontalScale')
+    && coastalSystem.includes('silhouetteVerticalScale = verticalScale'),
   true,
-  'Shared coastal silhouette tuning should widen X/Z while preserving authored height'
+  'Coastal rock placement scale and silhouette scale should be separable without duplicating rock identity'
+);
+assert.equal(
+  coastalSystem.includes('definition.scaleX * silhouetteHorizontalScale * footprintScale')
+    && coastalSystem.includes('definition.scaleZ * silhouetteHorizontalScale * footprintScale')
+    && coastalSystem.includes('definition.scaleY * silhouetteVerticalScale'),
+  true,
+  'Shared coastal silhouette tuning should control X/Z and Y independently of scene-space placement'
 );
 assert.equal(
   coastalSystem.includes('collision.addObstacle'),
@@ -128,6 +134,13 @@ assert.equal(
   titleBackdrop.includes("namePrefix: 'title-coastal-rock'") && titleBackdrop.includes('localizeTerrainCenterZ: true'),
   true,
   'Title coastal formations should be clearly named and mapped into title-island local coordinates'
+);
+assert.equal(
+  titleBackdrop.includes('horizontalScale: TITLE_SCENE.islandHorizontalScale')
+    && titleBackdrop.includes('silhouetteHorizontalScale: TITLE_SCENE.islandVerticalScale')
+    && titleBackdrop.includes('silhouetteVerticalScale: TITLE_SCENE.islandVerticalScale'),
+  true,
+  'Title rocks should keep compressed backdrop positions while preserving gameplay-like rock proportions'
 );
 assert.equal(
   titleBackdrop.includes('export function createTitleIslandBackdrop()'),
