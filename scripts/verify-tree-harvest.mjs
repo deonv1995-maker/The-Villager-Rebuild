@@ -186,8 +186,14 @@ for (const forbidden of ["inventory.add('log'", "inventory.get('log'", "inventor
 }
 assert(appSource.includes("toolId === 'axe'"), 'Tree chopping must be enabled by the equipped axe instead of tutorial state');
 assert(appSource.includes('this.physicalLogs?.pickup(this.playerPosition)'), 'Log interaction must lift the physical log');
-assert(appSource.includes('this.physicalLogs.update(this.playerPosition, this.playerFacing)'), 'Carried log preview must follow Ranger movement/facing');
-assert(appSource.includes('this.physicalLogs.build(null, this.playerPosition, this.playerFacing)'), 'The main interaction action must confirm the selected log preview');
+assert(
+  /this\.physicalLogs\.update\(\s*this\.playerPosition,\s*this\.playerFacing,\s*this\.#currentConstructionAim\(\)/.test(appSource),
+  'Carried log preview must follow Ranger movement/facing and receive optional first-person reticle aim'
+);
+assert(
+  /this\.physicalLogs\.build\(\s*null,\s*this\.playerPosition,\s*this\.playerFacing,\s*constructionAim/.test(appSource),
+  'The main interaction action must confirm the selected log preview with the same construction aim'
+);
 
 assert(hudSource.includes('data-role="log-build"'), 'Holding a log must expose the log build tray');
 for (const mode of [...LOG_BUILD_MODES, 'drop']) {

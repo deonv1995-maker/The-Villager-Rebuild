@@ -40,6 +40,15 @@ system does not auto-fill the floor. Concave and stepped footprints preserve the
 outline because cells connected to exterior air are not exposed as supported upstairs
 floor space. No duplicate upstairs building system or interior post grid is introduced.
 
+A completed structural roof changes the role of that support ring. Once all four rafters
+and the ridge for a roof region are physically present, that covered region is treated as
+roof-occupied and no longer exposes coincident upper `FLOOR` snap slots. This prevents a
+finished roof from stealing replacement floor Logs toward its top frame. Partial roofs do
+not lock the region, and neighbouring uncovered support regions remain valid. Because roof
+completion is derived from the existing geometry-first roof-member authority and cached by
+construction revision, demolishing a roof member automatically reopens the support region
+without introducing a second roof-completion flag.
+
 An upper storey has two intentionally different vertical references:
 
 - the **walking surface** sits on the physical top of the supporting RAW beam;
@@ -60,14 +69,21 @@ introduced.
 
 In player terms, a "fully built frame" means the upright perimeter plus its closed RAW
 top-beam ring. With `FLOOR` selected, that completed enclosure becomes the upper-floor
-snap target. The resulting floor can carry the next perimeter of FRAME posts and RAW top
-beams using the same rules again.
+snap target until that same region is committed to a completed roof. The resulting floor
+can carry the next perimeter of FRAME posts and RAW top beams using the same rules again.
 
 Floor targeting must cover the entire physical split-log slot, not only the long-axis
 half-length. The shared floor snap range therefore covers the half-cell diagonal plus a
 small construction-grid allowance. This removes dead aiming seams at bay/strip boundaries:
 when the placement point is still inside a completed support ring, `FLOOR` stays attached
 to an upstairs slot instead of silently falling back to a ground-level placement.
+
+In first-person view, the centre reticle contributes vertical targeting intent to that same
+`FLOOR` resolver. If a ground-floor repair slot and an upper support slot occupy the same
+X/Z, valid candidates are ranked by their distance to the reticle ray height at the normal
+construction reach. Looking down at the lower hole therefore selects the lower lattice;
+looking up can still select an uncovered upper support. Third-person ordering and all
+support, collision, terrain and stair-opening validation remain unchanged.
 
 ## Stacked wall selection
 
@@ -162,6 +178,13 @@ topology limits prevent selection from searching unrelated distant buildings.
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;
 - reconstructed storey metadata recovers the same structural FRAME seat.
+
+`scripts/verify-first-person-floor-targeting.mjs` locks:
+
+- the first-person centre reticle disambiguates vertically coincident lower and upper `FLOOR` snaps without replacing the shared construction system;
+- a demolished ground-floor strip remains repairable while a completed support ring exists above it;
+- a complete four-rafter-plus-ridge roof suppresses upper-floor candidates inside that occupied roof region;
+- an incomplete roof does not prematurely lock an upper support region.
 
 `scripts/verify-stacked-storey-placement.mjs` locks:
 
