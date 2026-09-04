@@ -244,12 +244,18 @@ for (const requirement of [
   'this.player.playSpearThrow(() =>',
   'target: () => this.hunt.getProjectileTargetPosition()',
   'onHit: () => this.hunt.applyDamage',
-  'this.physicalLogs.update(this.playerPosition, this.playerFacing)',
-  'this.physicalLogs.build(null, this.playerPosition, this.playerFacing)',
   'TOOLBELT_INPUT_ORDER'
 ]) {
   assert.ok(appSource.includes(requirement), `GameApp is missing survival interaction contract: ${requirement}`);
 }
+assert.ok(
+  /this\.physicalLogs\.update\(\s*this\.playerPosition,\s*this\.playerFacing,\s*this\.#currentConstructionAim\(\)/.test(appSource),
+  'GameApp must update carried Log placement from Ranger movement/facing with optional first-person reticle aim'
+);
+assert.ok(
+  /this\.physicalLogs\.build\(\s*null,\s*this\.playerPosition,\s*this\.playerFacing,\s*constructionAim/.test(appSource),
+  'GameApp must confirm the selected Log preview with the same construction aim'
+);
 assert.ok(appSource.includes('/^Digit[1-7]$/'), 'Desktop toolbelt hotkeys must expose Hand plus all six tool slots');
 assert.ok(!appSource.includes('playSpearAttack()'), 'Active spear combat must not use the old stabbing/thrust attack path');
 assert.ok(!appSource.includes("inventory.add('log'"), 'GameApp must never store logs in inventory');
