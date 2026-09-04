@@ -24,9 +24,10 @@ const definition = HARVESTABLE_DEFINITIONS.forestTree;
 assert(Number.isFinite(definition.regrowSeconds) && definition.regrowSeconds === 180, 'Forest tree regrowth must complete at exactly three active-play minutes');
 assert(definition.regrowth, 'Forest tree regrowth must expose staged presentation timing');
 assert(definition.regrowth.stumpOnlySeconds === 30, 'Stump-only stage must last 30 seconds');
-assert(definition.regrowth.stemGrowthSeconds === 30, 'Main-stem growth stage must last 30 seconds');
-assert(definition.regrowth.branchGrowthSeconds === 30, 'Side-branch growth stage must last 30 seconds');
-assert(definition.regrowth.branchExpansionSeconds === 30, 'Branch expansion stage must last 30 seconds');
+assert(definition.regrowth.firstLeafSeconds === 15, 'First leafy shoot stage must last 15 seconds');
+assert(definition.regrowth.stemGrowthSeconds === 25, 'Curved main-shoot growth stage must last 25 seconds');
+assert(definition.regrowth.branchSiteLeafSeconds === 20, 'Branch-site leaf stage must last 20 seconds');
+assert(definition.regrowth.branchGrowthSeconds === 30, 'Curved side-branch growth stage must last 30 seconds');
 assert(definition.regrowth.authoredTreeGrowthSeconds === 60, 'Final authored-tree growth must occupy the last minute');
 const stagedDuration = Object.values(definition.regrowth).reduce((sum, seconds) => sum + seconds, 0);
 assert(stagedDuration === definition.regrowSeconds, 'Staged tree growth must fill the complete three-minute harvest lockout');
@@ -106,48 +107,60 @@ assert(Math.abs(captured[0].remainingSeconds - definition.regrowSeconds) < 0.001
 assert(captured[0].stumpRemoved === false, 'Freshly chopped tree must persist that its stump is still present');
 assert(captured[0].cleared === false, 'Freshly chopped tree site must remain eligible for normal regrowth');
 
-regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 150 }]);
-assert(sprout.visible, 'Main stem must emerge from the stump at 30 seconds');
-const stem = group.getObjectByName('tree-regrowth-stem-0');
+const stems = group.getObjectByName('tree-regrowth-stems-0');
+const firstLeaves = group.getObjectByName('tree-regrowth-first-leaves-0');
 const branches = group.getObjectByName('tree-regrowth-branches-0');
-const buds = group.getObjectByName('tree-regrowth-buds-0');
-assert(stem && branches && buds, 'Regrowth presentation must contain one main stem plus staged side branches and buds');
+const nodeLeaves = group.getObjectByName('tree-regrowth-node-leaves-0');
+assert(stems && firstLeaves && branches && nodeLeaves, 'Regrowth presentation must contain curved stem segments, first leaves, side branches and branch-site leaves');
+assert(stems.children.length >= 4, 'Organic main shoot must use several connected segments rather than one straight pole');
 assert(branches.children.length >= 4, 'Regrowth presentation must provide several side branches');
-assert(branches.children.every(branch => !branch.visible), 'Side branches must stay hidden when the main stem first emerges');
-assert(buds.children.every(bud => !bud.visible), 'Foliage buds must not appear during the main-stem-only stage');
-const stemHeightAt30 = stem.scale.y;
+assert(branches.children.every(branch => branch.children.length === 2), 'Each side branch must use a bent two-segment presentation rather than one rigid stick');
+
+regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 142.5 }]);
+assert(sprout.visible, 'Leafy stump shoot must become visible during the first-leaf stage');
+assert(firstLeaves.visible && firstLeaves.scale.x > 0.1, 'Leaves must visibly emerge before meaningful stem growth');
+assert(stems.children.every(segment => !segment.visible), 'Main stem must still be hidden while the first leaves are opening');
+assert(branches.children.every(branch => !branch.visible), 'Side branches must stay hidden during first-leaf emergence');
+assert(nodeLeaves.children.every(cluster => !cluster.visible), 'Future branch-site leaves must wait until the main shoot has formed');
+const leafHeightBeforeStem = firstLeaves.position.y;
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 135 }]);
-assert(stem.scale.y > stemHeightAt30, 'Main stem must visibly expand upward between 30 and 60 seconds');
-assert(branches.children.every(branch => !branch.visible), 'Main-stem growth must complete before any side branch appears');
-assert(buds.children.every(bud => !bud.visible), 'Main-stem growth must not create an early foliage blob');
+assert(firstLeaves.visible, 'First leaves must remain attached when main-shoot growth begins');
+assert(stems.children.every(segment => !segment.visible), 'At the exact main-shoot boundary the curved stem has not extended yet');
 
-regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 120 }]);
-const stemHeightAt60 = stem.scale.y;
-const stemWidthAt60 = stem.scale.x;
-assert(branches.children.every(branch => !branch.visible), 'Side branches must begin after the main stem has reached its first full height');
+regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 122.5 }]);
+const visibleStemSegmentsMidway = stems.children.filter(segment => segment.visible);
+assert(visibleStemSegmentsMidway.length > 0, 'Main shoot must grow progressively after the first leaves appear');
+assert(firstLeaves.position.y > leafHeightBeforeStem, 'The first leaf cluster must ride upward on the growing shoot tip');
+assert(branches.children.every(branch => !branch.visible), 'Branches must not precede the completed main shoot');
+assert(nodeLeaves.children.every(cluster => !cluster.visible), 'Branch-site leaf clusters must not precede the completed main shoot');
 
-regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 105 }]);
-const visibleBranchesAt75 = branches.children.filter(branch => branch.visible);
-assert(visibleBranchesAt75.length > 0, 'Side branches must grow progressively during the 60-to-90-second stage');
-assert(Math.abs(stem.scale.y - stemHeightAt60) < 0.000001, 'Main stem height must hold while side branches are being established');
-assert(Math.abs(stem.scale.x - stemWidthAt60) < 0.000001, 'Main stem thickness must hold during initial side-branch growth');
-assert(buds.children.every(bud => !bud.visible), 'Foliage buds must wait until the branch structure has been established');
-const firstBranchLengthAt75 = visibleBranchesAt75[0].scale.y;
+regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 110 }]);
+const visibleStemSegments = stems.children.filter(segment => segment.visible);
+assert(visibleStemSegments.length === stems.children.length, 'Main shoot must finish its segmented growth before branch-site leaves begin');
+assert(visibleStemSegments.some(segment => Math.hypot(segment.position.x, segment.position.z) > 0.01), 'Main shoot must follow an irregular lateral curve instead of a perfectly vertical pole');
+assert(branches.children.every(branch => !branch.visible), 'Side branches must still be hidden when the main shoot completes');
+
+regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 100 }]);
+const visibleNodeLeavesAt80 = nodeLeaves.children.filter(cluster => cluster.visible);
+assert(visibleNodeLeavesAt80.length > 0, 'Additional leaves must appear at future branch sites before the branches grow');
+assert(branches.children.every(branch => !branch.visible), 'Branch-site leaves must visibly lead branch formation');
+const firstNodeLeafPosition = nodeLeaves.children[0].position.clone();
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 90 }]);
-const firstBranchAt90 = branches.children[0];
-assert(firstBranchAt90.visible && firstBranchAt90.scale.y > firstBranchLengthAt75, 'Primary side branch must continue extending through the branch-growth stage');
-const stemWidthAt90 = stem.scale.x;
-const branchWidthAt90 = firstBranchAt90.scale.x;
-assert(buds.children.every(bud => !bud.visible), 'Foliage buds must remain hidden at the start of branch expansion');
+assert(nodeLeaves.children.every(cluster => cluster.visible), 'All branch-site leaf clusters must be established before side-branch growth begins');
+assert(branches.children.every(branch => !branch.visible), 'Side branches must begin only after their leaf sites are established');
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 75 }]);
-assert(stem.scale.x > stemWidthAt90, 'Main stem must thicken during the 90-to-120-second expansion stage');
-assert(firstBranchAt90.scale.x > branchWidthAt90, 'Established side branches must thicken during the expansion stage');
+const visibleBranchesAt105 = branches.children.filter(branch => branch.visible);
+assert(visibleBranchesAt105.length > 0, 'Side branches must extend progressively during the branch-growth stage');
+assert(nodeLeaves.children[0].position.distanceTo(firstNodeLeafPosition) > 0.05, 'The established leaf cluster must be carried outward by the growing branch tip');
 
 regrowth.restoreRegrowthState([{ treeId: 0, remainingSeconds: 60 }]);
-assert(buds.children.some(bud => bud.visible), 'Small foliage buds may appear only after the branch structure has expanded');
+assert(branches.children.every(branch => branch.visible), 'All juvenile side branches must be established by the authored-tree handoff');
+const firstBranchSegments = branches.children[0].children;
+assert(firstBranchSegments.every(segment => segment.visible), 'A completed juvenile branch must expose both curved segments');
+assert(Math.abs(firstBranchSegments[0].quaternion.dot(firstBranchSegments[1].quaternion)) < 0.9999, 'Juvenile side branches must bend rather than form a single straight manufactured member');
 const finalStartMatrix = new THREE.Matrix4();
 treeMesh.getMatrixAt(0, finalStartMatrix);
 assert(finalStartMatrix.elements[13] > -100, 'Authored tree must become visible at the start of the final minute');
@@ -161,7 +174,7 @@ const finalMidScale = matrixScale(finalMidMatrix);
 assert(finalMidScale.y > finalStartScale.y, 'Authored tree must expand upward through the final minute');
 assert(finalMidScale.x > finalStartScale.x, 'Authored tree must thicken through the final minute');
 assert(!matricesEqual(finalMidMatrix, originalMatrix), 'Tree must remain below full authored size before three minutes');
-assert(!sprout.visible, 'Temporary branch scaffold must yield to the authored tree before final growth completes');
+assert(!sprout.visible, 'Temporary organic growth scaffold must yield to the authored tree before final growth completes');
 assert(!tree.active, 'Growing tree must remain unchoppable before the three-minute mark');
 assert(collision.getObstaclesByType('tree').length === 0, 'Growing visual must not restore harvest collision early');
 
@@ -294,4 +307,4 @@ for (const requirement of [
   assert(saveControllerSource.includes(requirement), `Save/continue must preserve staged regrowth progress: ${requirement}`);
 }
 
-console.log('Three-minute trunk-first tree regrowth, permanent shovel-cleared sites, canonical bonus Log yield and save migration verified');
+console.log('Three-minute leaf-first organic tree regrowth, permanent shovel-cleared sites, canonical bonus Log yield and save migration verified');
