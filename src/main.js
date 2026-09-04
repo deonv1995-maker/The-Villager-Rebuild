@@ -2,6 +2,7 @@ import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
+import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
@@ -21,12 +22,14 @@ function setStatus(message, error = false) {
   status.dataset.error = error ? 'true' : 'false';
 }
 
+const setGameplayStatus = createGameplayStatusSink(setStatus);
+
 async function bootGameplay(titleScene = null, { resume = false } = {}) {
   titleScene?.dispose({ keepTransition: true });
 
   try {
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
-    const game = new GameApp({ canvas, setStatus });
+    const game = new GameApp({ canvas, setStatus: setGameplayStatus });
     await game.start();
 
     const equipmentRuntime = new EquipmentRuntimeController({ game });
@@ -75,14 +78,14 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     } else {
       const arrivalIntro = new BeachArrivalIntroController({
         game,
-        setStatus,
+        setStatus: setGameplayStatus,
         onComplete: () => saveController.start({ saveImmediately: true })
       });
       game.arrivalIntro = arrivalIntro;
       const arrivalStarted = arrivalIntro.start();
       if (!arrivalStarted) {
         saveController.start({ saveImmediately: true });
-        setStatus('DAY 1 · GATHER A STICK + STONE');
+        setStatus('DAY 1 · ASHORE');
       }
     }
 
