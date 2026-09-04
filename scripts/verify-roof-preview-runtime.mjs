@@ -199,17 +199,45 @@ precisionSystem.update(roofPlayer, facingDirection);
 assert.equal(precisionSystem.previewValid, true, 'Third-person ROOF proximity targeting must remain valid');
 const proximityKey = precisionSystem.previewPlacement.roofKey;
 
-const reachableAlternative = roofCandidates.find(candidate =>
-  candidate.roofKey !== proximityKey &&
+const reachableCandidates = roofCandidates.filter(candidate =>
   Math.hypot(candidate.x - roofBase.x, candidate.z - roofBase.z) < PHYSICAL_LOG.roofSnapRange
 );
-assert.ok(reachableAlternative, 'Reticle regression needs a reachable roof member distinct from proximity selection');
 const aimOrigin = new THREE.Vector3(0, 1.72, -PHYSICAL_LOG.placeDistance - 0.5);
-const aimDirection = new THREE.Vector3(
-  reachableAlternative.x - aimOrigin.x,
-  reachableAlternative.y - aimOrigin.y,
-  reachableAlternative.z - aimOrigin.z
-).normalize();
+const aimFractions = [0.18, 0.32, 0.68, 0.82];
+let preciseCase = null;
+
+for (const candidate of reachableCandidates) {
+  if (candidate.roofKey === proximityKey) continue;
+  const start = new THREE.Vector3(candidate.start.x, candidate.start.y, candidate.start.z);
+  const end = new THREE.Vector3(candidate.end.x, candidate.end.y, candidate.end.z);
+  for (const fraction of aimFractions) {
+    const aimPoint = start.clone().lerp(end, fraction);
+    const direction = aimPoint.clone().sub(aimOrigin).normalize();
+    const ray = new THREE.Ray(aimOrigin.clone(), direction.clone());
+    let nearestOtherSq = Infinity;
+
+    for (const other of reachableCandidates) {
+      if (other.roofKey === candidate.roofKey) continue;
+      const otherStart = new THREE.Vector3(other.start.x, other.start.y, other.start.z);
+      const otherEnd = new THREE.Vector3(other.end.x, other.end.y, other.end.z);
+      nearestOtherSq = Math.min(
+        nearestOtherSq,
+        ray.distanceSqToSegment(otherStart, otherEnd)
+      );
+    }
+
+    if (!preciseCase || nearestOtherSq > preciseCase.separationSq) {
+      preciseCase = { candidate, direction, separationSq: nearestOtherSq };
+    }
+  }
+}
+
+assert.ok(
+  preciseCase && preciseCase.separationSq > 1e-5,
+  'Reticle regression needs an unambiguous reachable roof ray distinct from the proximity target'
+);
+const reachableAlternative = preciseCase.candidate;
+const aimDirection = preciseCase.direction;
 const preciseAim = {
   origin: { x: aimOrigin.x, y: aimOrigin.y, z: aimOrigin.z },
   direction: { x: aimDirection.x, y: aimDirection.y, z: aimDirection.z }
@@ -219,7 +247,7 @@ assert.equal(precisionSystem.previewValid, true, 'A reticle ray through a legal 
 assert.equal(
   precisionSystem.previewPlacement.roofKey,
   reachableAlternative.roofKey,
-  'First-person ROOF must select the legal member under the centre reticle instead of the nearest broad snap target'
+  'First-person ROOF must select the unambiguous legal member under the centre reticle instead of the broad proximity target'
 );
 
 precisionSystem.update(roofPlayer, facingDirection, {
