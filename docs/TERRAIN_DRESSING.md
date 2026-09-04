@@ -15,3 +15,11 @@ The Kenney `rock_largeA.glb` asset is no longer spawned by `EnvironmentScatterSy
 Natural KayKit forest rocks remain in the environment scatter layer. The Kenney asset may remain in the repository for future reference, but it is not part of the runtime island dressing.
 
 These terrain-dressing removals do not change Logs, construction, water, vegetation, terrain generation, Ranger behavior, or the authoritative continuous terrain surface.
+
+## 2026-09-04 — Shared coastal crash-rock formations
+
+Large offshore rocks now reuse the existing KayKit forest-rock asset through one authored, coast-relative layout in `src/data/CoastalRockDefinitions.js`. `CoastalRockSystem` resolves each formation from `ExpandedIslandTerrainSystem.coastRadiusAt()` and pushes the placement outward until it is over water, so later coastline reshaping does not leave the formations stranded inland.
+
+The playable island and the title/shipwreck island both consume that same definition set. The title backdrop maps the formations through `TITLE_SCENE.islandHorizontalScale` and `TITLE_SCENE.islandVerticalScale` instead of maintaining a second approximation, keeping the crash approach visually consistent with the island reached in gameplay.
+
+The offshore formations are environmental silhouette dressing only. They do not register locomotion collision or harvesting targets, preserving the established Day-1 shallow-water arrival and crawl route. In the playable world they are adopted by `WorldChunkSystem` so mobile render-distance management remains authoritative.
