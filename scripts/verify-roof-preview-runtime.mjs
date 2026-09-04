@@ -199,55 +199,67 @@ precisionSystem.update(roofPlayer, facingDirection);
 assert.equal(precisionSystem.previewValid, true, 'Third-person ROOF proximity targeting must remain valid');
 const proximityKey = precisionSystem.previewPlacement.roofKey;
 
-const reachableCandidates = roofCandidates.filter(candidate =>
-  Math.hypot(candidate.x - roofBase.x, candidate.z - roofBase.z) < PHYSICAL_LOG.roofSnapRange
-);
-const aimOrigin = new THREE.Vector3(0, 1.72, -PHYSICAL_LOG.placeDistance - 0.5);
-const aimFractions = [0.18, 0.32, 0.68, 0.82];
-let preciseCase = null;
-
-for (const candidate of reachableCandidates) {
-  if (candidate.roofKey === proximityKey) continue;
-  const start = new THREE.Vector3(candidate.start.x, candidate.start.y, candidate.start.z);
-  const end = new THREE.Vector3(candidate.end.x, candidate.end.y, candidate.end.z);
-  for (const fraction of aimFractions) {
-    const aimPoint = start.clone().lerp(end, fraction);
-    const direction = aimPoint.clone().sub(aimOrigin).normalize();
-    const ray = new THREE.Ray(aimOrigin.clone(), direction.clone());
-    let nearestOtherSq = Infinity;
-
-    for (const other of reachableCandidates) {
-      if (other.roofKey === candidate.roofKey) continue;
-      const otherStart = new THREE.Vector3(other.start.x, other.start.y, other.start.z);
-      const otherEnd = new THREE.Vector3(other.end.x, other.end.y, other.end.z);
-      nearestOtherSq = Math.min(
-        nearestOtherSq,
-        ray.distanceSqToSegment(otherStart, otherEnd)
-      );
-    }
-
-    if (!preciseCase || nearestOtherSq > preciseCase.separationSq) {
-      preciseCase = { candidate, direction, separationSq: nearestOtherSq };
-    }
-  }
+const runtimeAlternatives = new Map();
+for (const candidate of roofCandidates) {
+  const probePlayer = new THREE.Vector3(
+    candidate.x,
+    0,
+    candidate.z - PHYSICAL_LOG.placeDistance
+  );
+  precisionSystem.update(probePlayer, facingDirection);
+  const placement = precisionSystem.previewPlacement;
+  if (!precisionSystem.previewValid || !placement?.roofKey) continue;
+  if (placement.roofKey === proximityKey) continue;
+  if (Math.hypot(placement.x - roofBase.x, placement.z - roofBase.z) >= PHYSICAL_LOG.roofSnapRange) continue;
+  runtimeAlternatives.set(placement.roofKey, {
+    ...placement,
+    start: { ...placement.start },
+    end: { ...placement.end }
+  });
 }
+assert.ok(runtimeAlternatives.size > 0, 'Reticle regression needs a second reachable runtime roof target');
 
-assert.ok(
-  preciseCase && preciseCase.separationSq > 1e-5,
-  'Reticle regression needs an unambiguous reachable roof ray distinct from the proximity target'
+const reachableAlternative = [...runtimeAlternatives.values()][0];
+const aimOrigin = new THREE.Vector3(0, 1.72, -PHYSICAL_LOG.placeDistance - 0.5);
+const targetStart = new THREE.Vector3(
+  reachableAlternative.start.x,
+  reachableAlternative.start.y,
+  reachableAlternative.start.z
 );
-const reachableAlternative = preciseCase.candidate;
-const aimDirection = preciseCase.direction;
+const targetEnd = new THREE.Vector3(
+  reachableAlternative.end.x,
+  reachableAlternative.end.y,
+  reachableAlternative.end.z
+);
+const aimPoint = targetStart.clone().lerp(targetEnd, 0.28);
+const aimDirection = aimPoint.clone().sub(aimOrigin).normalize();
 const preciseAim = {
   origin: { x: aimOrigin.x, y: aimOrigin.y, z: aimOrigin.z },
   direction: { x: aimDirection.x, y: aimDirection.y, z: aimDirection.z }
 };
 precisionSystem.update(roofPlayer, facingDirection, preciseAim);
-assert.equal(precisionSystem.previewValid, true, 'A reticle ray through a legal roof Log must keep the preview valid');
-assert.equal(
+assert.equal(precisionSystem.previewValid, true, 'A reticle ray through a reachable runtime roof Log must keep the preview valid');
+assert.notEqual(
   precisionSystem.previewPlacement.roofKey,
-  reachableAlternative.roofKey,
-  'First-person ROOF must select the unambiguous legal member under the centre reticle instead of the broad proximity target'
+  proximityKey,
+  'First-person ROOF must be able to leave the broad proximity target when the centre reticle points at another legal member'
+);
+const selectedStart = new THREE.Vector3(
+  precisionSystem.previewPlacement.start.x,
+  precisionSystem.previewPlacement.start.y,
+  precisionSystem.previewPlacement.start.z
+);
+const selectedEnd = new THREE.Vector3(
+  precisionSystem.previewPlacement.end.x,
+  precisionSystem.previewPlacement.end.y,
+  precisionSystem.previewPlacement.end.z
+);
+const selectedRay = new THREE.Ray(aimOrigin.clone(), aimDirection.clone());
+const selectedMissSq = selectedRay.distanceSqToSegment(selectedStart, selectedEnd);
+const maxReticleMiss = PHYSICAL_LOG.radius + PHYSICAL_LOG.roofReticleSnapPadding;
+assert.ok(
+  selectedMissSq <= maxReticleMiss * maxReticleMiss,
+  'The selected first-person roof member must actually lie under the centre-reticle tolerance'
 );
 
 precisionSystem.update(roofPlayer, facingDirection, {
