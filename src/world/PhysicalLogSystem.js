@@ -20,7 +20,8 @@ import {
   orderedRoofBuildCandidates,
   roofMemberCandidates,
   roofMemberOccupied,
-  roofRaftersComplete
+  roofRaftersComplete,
+  roofRegionComplete
 } from './RoofMemberRules.js';
 import {
   collectStairBuildCandidates,
@@ -90,6 +91,9 @@ export class PhysicalLogSystem {
     this.roofQueryCacheRevision = -1;
     this.roofQueryCacheKey = '';
     this.roofQueryCache = [];
+    this.completedRoofQueryCacheRevision = -1;
+    this.completedRoofQueryCacheKey = '';
+    this.completedRoofQueryCache = [];
   }
 
   isCarrying() {
@@ -148,7 +152,7 @@ export class PhysicalLogSystem {
     return this.getCarryState();
   }
 
-  update(playerPosition, facingDirection) {
+  update(playerPosition, facingDirection, constructionAim = null) {
     if (!this.carriedItem || !playerPosition || !facingDirection) {
       this.carryPose.setActive(false);
       this.#destroyPreview();
@@ -156,7 +160,12 @@ export class PhysicalLogSystem {
     }
     this.carryPose.setActive(SHOW_CARRIED_LOG_VISUAL);
     if (SHOW_CARRIED_LOG_VISUAL) this.carryPose.update();
-    const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
+    const placement = this.#resolvePlacement(
+      this.buildMode,
+      playerPosition,
+      facingDirection,
+      constructionAim
+    );
     this.#showPreview(this.buildMode, placement);
     return this.getBuildState();
   }
@@ -179,10 +188,15 @@ export class PhysicalLogSystem {
     return { mode: 'drop', position: { x: point.x, y: pose.position.y, z: point.z } };
   }
 
-  build(mode, playerPosition, facingDirection) {
+  build(mode, playerPosition, facingDirection, constructionAim = null) {
     if (!this.carriedItem) return null;
     if (mode && !this.setBuildMode(mode)) return null;
-    const placement = this.#resolvePlacement(this.buildMode, playerPosition, facingDirection);
+    const placement = this.#resolvePlacement(
+      this.buildMode,
+      playerPosition,
+      facingDirection,
+      constructionAim
+    );
     if (!placement?.valid) {
       this.#showPreview(this.buildMode, placement);
       return null;
@@ -328,10 +342,11 @@ export class PhysicalLogSystem {
     return result;
   }
 
-  #resolvePlacement(mode, playerPosition, facingDirection) {
+  #resolvePlacement(mode, playerPosition, facingDirection, constructionAim = null) {
     const base = this.#placementPoint(playerPosition, facingDirection, PHYSICAL_LOG.placeDistance, true);
     base.yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
     base.ground = this.#baseTerrainHeightAt(base.x, base.z);
+    base.aimY = this.#constructionAimY(base, constructionAim);
     base.snapKind = null;
     base.valid = false;
 
@@ -387,12 +402,29 @@ export class PhysicalLogSystem {
       ...this.#floorEdgeCandidates(base)
     ];
     const candidates = snappedCandidates.length ? snappedCandidates : [base];
-    const evaluated = candidates.map(candidate => this.#evaluateFloorCandidate(candidate, Boolean(snappedCandidates.length)));
-    const resolved = evaluated.find(candidate => candidate.valid) ?? evaluated[0];
+    const evaluated = candidates.map(candidate =>
+      this.#evaluateFloorCandidate(candidate, Boolean(snappedCandidates.length))
+    );
+    const ranked = Number.isFinite(base.aimY)
+      ? [...evaluated].sort((left, right) => (
+          this.#floorAimDistance(left, base) - this.#floorAimDistance(right, base) ||
+          (left.storey ?? 0) - (right.storey ?? 0)
+        ))
+      : evaluated;
+    const resolved = ranked.find(candidate => candidate.valid) ?? ranked[0];
     return {
       ...base,
       ...resolved
     };
+  }
+
+  #floorAimDistance(candidate, base) {
+    const targetY = candidate.topY ?? candidate.baseY ?? candidate.y ?? base.ground;
+    return Math.hypot(
+      candidate.x - base.x,
+      candidate.z - base.z,
+      targetY - base.aimY
+    );
   }
 
   #evaluateFloorCandidate(candidate, snapped) {
@@ -653,15 +685,34 @@ export class PhysicalLogSystem {
     return candidates;
   }
 
+  #completedRoofRegions(base) {
+    const queryKey = `${Math.round(base.x / PHYSICAL_LOG.gridStep)}:${Math.round(base.z / PHYSICAL_LOG.gridStep)}`;
+    if (
+      this.completedRoofQueryCacheRevision === this.structureRevision &&
+      this.completedRoofQueryCacheKey === queryKey
+    ) {
+      return this.completedRoofQueryCache;
+    }
+
+    const activeMembers = this.#activeBuilt();
+    this.completedRoofQueryCache = this.#roofRegions(base)
+      .filter(region => roofRegionComplete(region, activeMembers));
+    this.completedRoofQueryCacheRevision = this.structureRevision;
+    this.completedRoofQueryCacheKey = queryKey;
+    return this.completedRoofQueryCache;
+  }
+
   #upperStoreyFloorCandidates(base) {
     const regions = this.#upperStoreyRegions();
     const stairs = this.#activeBuilt('stairs');
+    const completedRoofs = this.#completedRoofRegions(base);
     return collectUpperStoreyFloorCandidates(regions, this.#activeBuilt('floor'), {
       floorTopLift: FLOOR_TOP_LIFT,
       beamRadius: PHYSICAL_LOG.radius,
       levelTolerance: PHYSICAL_LOG.frameLevelTolerance
     })
       .filter(candidate => !floorCandidateBlockedByStairs(candidate, stairs))
+      .filter(candidate => !this.#floorCandidateCoveredByCompletedRoof(candidate, completedRoofs))
       .map(candidate => ({
         ...candidate,
         distance: Math.hypot(candidate.x - base.x, candidate.z - base.z)
@@ -669,6 +720,32 @@ export class PhysicalLogSystem {
       .filter(candidate => candidate.distance < PHYSICAL_LOG.floorSnapRange)
       .sort((left, right) => left.distance - right.distance || left.sourceFloorId - right.sourceFloorId)
       .map(({ distance, ...candidate }) => candidate);
+  }
+
+  #floorCandidateCoveredByCompletedRoof(candidate, completedRoofs) {
+    for (const region of completedRoofs ?? []) {
+      if (!Number.isFinite(region?.frameTopY)) continue;
+      const candidateTopY = candidate.topY ?? candidate.baseY + FLOOR_TOP_LIFT;
+      const supportTopY = region.frameTopY + PHYSICAL_LOG.radius;
+      if (Math.abs(candidateTopY - supportTopY) > PHYSICAL_LOG.frameLevelTolerance) continue;
+
+      const abX = region.b.x - region.a.x;
+      const abZ = region.b.z - region.a.z;
+      const acX = region.c.x - region.a.x;
+      const acZ = region.c.z - region.a.z;
+      const determinant = abX * acZ - abZ * acX;
+      if (Math.abs(determinant) < 0.0001) continue;
+
+      const dx = candidate.x - region.a.x;
+      const dz = candidate.z - region.a.z;
+      const u = (dx * acZ - dz * acX) / determinant;
+      const v = (abX * dz - abZ * dx) / determinant;
+      const margin = 0.025;
+      if (u >= -margin && u <= 1 + margin && v >= -margin && v <= 1 + margin) {
+        return true;
+      }
+    }
+    return false;
   }
 
   #upperStoreyRegions() {
@@ -1244,6 +1321,22 @@ export class PhysicalLogSystem {
       z = this.#snapGrid(z);
     }
     return { x, y: this.#baseTerrainHeightAt(x, z), z };
+  }
+
+  #constructionAimY(base, constructionAim) {
+    const origin = constructionAim?.origin;
+    const direction = constructionAim?.direction;
+    if (
+      !Number.isFinite(origin?.x) || !Number.isFinite(origin?.y) || !Number.isFinite(origin?.z) ||
+      !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y) || !Number.isFinite(direction?.z)
+    ) return null;
+
+    const horizontalDirectionLength = Math.hypot(direction.x, direction.z);
+    if (horizontalDirectionLength < 0.05) return null;
+    const horizontalDistance = Math.hypot(base.x - origin.x, base.z - origin.z);
+    const rayDistance = horizontalDistance / horizontalDirectionLength;
+    const aimY = origin.y + direction.y * rayDistance;
+    return Number.isFinite(aimY) ? aimY : null;
   }
 
   #baseTerrainHeightAt(x, z) {
