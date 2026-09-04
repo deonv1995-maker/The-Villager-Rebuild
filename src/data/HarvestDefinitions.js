@@ -1,8 +1,9 @@
 const TREE_REGROWTH_TIMING = Object.freeze({
   stumpOnlySeconds: 30,
-  stemGrowthSeconds: 30,
+  firstLeafSeconds: 15,
+  stemGrowthSeconds: 25,
+  branchSiteLeafSeconds: 20,
   branchGrowthSeconds: 30,
-  branchExpansionSeconds: 30,
   authoredTreeGrowthSeconds: 60
 });
 
