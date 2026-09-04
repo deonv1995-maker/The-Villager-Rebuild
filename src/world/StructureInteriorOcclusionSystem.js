@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { isSnappedRoofMember } from './RoofMemberRules.js';
 
 export const STRUCTURE_INTERIOR_FADE_OPACITY = 0.28;
+export const STRUCTURE_INTERIOR_ROOF_OPACITY = 0;
 
 const UPPER_FLOOR_CLEARANCE = 0.42;
 const UPPER_FLOOR_REGION_MARGIN = 0.45;
@@ -125,7 +127,8 @@ export class StructureInteriorOcclusionSystem {
       this.#fadeBuildingEntries(entries, nextFaded, {
         playerPosition,
         storeyRegion,
-        preserveCurrentFloor: true
+        preserveCurrentFloor: true,
+        hideRoofMembers: true
       });
     } else {
       if (storeyRegion) {
@@ -141,7 +144,8 @@ export class StructureInteriorOcclusionSystem {
         this.#fadeBuildingEntries(state.entries, nextFaded, {
           playerPosition,
           storeyRegion,
-          preserveCurrentFloor: false
+          preserveCurrentFloor: false,
+          hideRoofMembers: false
         });
       }
 
@@ -154,11 +158,43 @@ export class StructureInteriorOcclusionSystem {
       }
     }
 
-    for (const mesh of this.fadedMeshes) {
-      if (nextFaded.has(mesh)) continue;
-      this.#setMeshFaded(mesh, false);
+    this.#finishVisibilityPass(nextFaded);
+    return interiorRegion;
+  }
+
+  /**
+   * First person deliberately avoids the third-person whole-building transparency pass.
+   * It still needs one narrow interior presentation rule: roof members created by the
+   * shared roof snap contract disappear while the Ranger occupies their completed
+   * connected structure. Thatch, walls, floors and ordinary ANGLE/RAW construction stay
+   * unchanged, so this does not become a second occlusion or construction system.
+   */
+  updateFirstPerson(playerPosition) {
+    if (!playerPosition) {
+      this.#restoreAll();
+      return null;
     }
-    this.fadedMeshes = nextFaded;
+
+    this.wallPanelSystem?.sync?.();
+    this.roofThatchSystem?.sync?.();
+    const interiorRegion = this.roofQuery.findInteriorRegion(playerPosition);
+    const nextFaded = new Set();
+
+    if (interiorRegion) {
+      const regionGroups = this.#collectRegionGroups(playerPosition);
+      const groupStates = regionGroups.map(regions => ({
+        regions,
+        entries: this.#collectVisualEntriesForRegions(regions)
+      }));
+      const interiorGroup = this.#findGroupState(groupStates, interiorRegion);
+      const entries = interiorGroup?.entries ?? this.#collectVisualEntries(interiorRegion);
+      for (const entry of entries) {
+        if (!entry.root?.visible || !entry.roofSnapped) continue;
+        this.#fadeEntry(entry, nextFaded, STRUCTURE_INTERIOR_ROOF_OPACITY);
+      }
+    }
+
+    this.#finishVisibilityPass(nextFaded);
     return interiorRegion;
   }
 
@@ -235,7 +271,8 @@ export class StructureInteriorOcclusionSystem {
         baseY: built.baseY,
         topY: built.topY,
         storey: built.storey ?? 0,
-        mode: built.mode
+        mode: built.mode,
+        roofSnapped: isSnappedRoofMember(built)
       });
     }
 
@@ -251,26 +288,38 @@ export class StructureInteriorOcclusionSystem {
           z: bay.z,
           baseY: bay.baseY,
           topY: bay.topY,
-          mode: 'wall-panel'
+          mode: 'wall-panel',
+          roofSnapped: false
         });
       }
     }
 
     for (const entry of this.roofThatchSystem?.getVisualEntries?.() ?? []) {
       if (Math.hypot(entry.x - center.x, entry.z - center.z) > radius) continue;
-      entries.push(entry);
+      entries.push({ ...entry, roofSnapped: false });
     }
 
     return entries;
   }
 
-  #fadeBuildingEntries(entries, nextFaded, { playerPosition, storeyRegion, preserveCurrentFloor }) {
+  #fadeBuildingEntries(entries, nextFaded, {
+    playerPosition,
+    storeyRegion,
+    preserveCurrentFloor,
+    hideRoofMembers = false
+  }) {
     for (const entry of entries) {
       if (!entry.root?.visible) continue;
       if (preserveCurrentFloor && entry.mode === 'floor') {
         if (!this.#isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion)) continue;
       }
-      this.#fadeEntry(entry, nextFaded);
+      this.#fadeEntry(
+        entry,
+        nextFaded,
+        hideRoofMembers && entry.roofSnapped
+          ? STRUCTURE_INTERIOR_ROOF_OPACITY
+          : STRUCTURE_INTERIOR_FADE_OPACITY
+      );
     }
   }
 
@@ -281,12 +330,20 @@ export class StructureInteriorOcclusionSystem {
     }
   }
 
-  #fadeEntry(entry, nextFaded) {
+  #fadeEntry(entry, nextFaded, opacityScale = STRUCTURE_INTERIOR_FADE_OPACITY) {
     entry.root.traverse(object => {
       if (!object.isMesh || !object.visible) return;
-      this.#setMeshFaded(object, true);
+      this.#setMeshFaded(object, true, opacityScale);
       nextFaded.add(object);
     });
+  }
+
+  #finishVisibilityPass(nextFaded) {
+    for (const mesh of this.fadedMeshes) {
+      if (nextFaded.has(mesh)) continue;
+      this.#setMeshFaded(mesh, false);
+    }
+    this.fadedMeshes = nextFaded;
   }
 
   #isUpperFloorAbovePlayer(entry, playerPosition, storeyRegion) {
@@ -319,13 +376,13 @@ export class StructureInteriorOcclusionSystem {
     return false;
   }
 
-  #setMeshFaded(mesh, faded) {
+  #setMeshFaded(mesh, faded, opacityScale = STRUCTURE_INTERIOR_FADE_OPACITY) {
     const state = this.#materialState(mesh);
     for (const materialState of state.materials) {
       const material = materialState.material;
       if (faded) {
         material.transparent = true;
-        material.opacity = materialState.opacity * STRUCTURE_INTERIOR_FADE_OPACITY;
+        material.opacity = materialState.opacity * opacityScale;
         material.depthWrite = false;
       } else {
         material.transparent = materialState.transparent;
