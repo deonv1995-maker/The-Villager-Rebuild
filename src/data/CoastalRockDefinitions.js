@@ -22,12 +22,20 @@ const formation = ({
   sink
 });
 
+// Shared presentation tuning keeps the title wreck and playable coastline using
+// one silhouette language while allowing the gameplay ring to sit closer to shore.
+export const COASTAL_ROCK_PRESENTATION = Object.freeze({
+  footprintScale: 1.2,
+  playableCoastOffsetScale: 0.62
+});
+
 // One authored shoreline-rock layout is shared by the playable island and the
 // shipwreck/title island. Positions are resolved from the authoritative coast
 // radius at runtime so terrain reshaping does not leave rocks stranded inland.
 export const COASTAL_ROCK_FORMATIONS = Object.freeze([
   formation({ id: 'wreck-west-outer', angle: Math.PI * 0.425, coastOffset: 22, scaleX: 9.4, scaleY: 11.6, scaleZ: 8.1, yaw: 0.32, pitch: 0.06, roll: -0.08, sink: 1.9 }),
   formation({ id: 'wreck-west-inner', angle: Math.PI * 0.468, coastOffset: 12, scaleX: 6.8, scaleY: 8.6, scaleZ: 6.1, yaw: 1.12, pitch: -0.03, roll: 0.07, sink: 1.35 }),
+  formation({ id: 'day-one-beach-visible', angle: Math.PI * 0.485, coastOffset: 6, scaleX: 8.6, scaleY: 10.4, scaleZ: 7.8, yaw: 1.84, pitch: 0.03, roll: -0.04, sink: 1.55 }),
   formation({ id: 'wreck-east-inner', angle: Math.PI * 0.535, coastOffset: 13, scaleX: 7.2, scaleY: 9.2, scaleZ: 6.6, yaw: 2.18, pitch: 0.04, roll: -0.04, sink: 1.45 }),
   formation({ id: 'wreck-east-outer', angle: Math.PI * 0.58, coastOffset: 24, scaleX: 10.6, scaleY: 13.2, scaleZ: 9.4, yaw: 2.72, pitch: -0.05, roll: 0.09, sink: 2.1 }),
   formation({ id: 'wreck-breaker-east', angle: Math.PI * 0.615, coastOffset: 34, scaleX: 5.8, scaleY: 7.4, scaleZ: 5.2, yaw: 0.82, pitch: 0.08, roll: 0.05, sink: 1.2 }),
