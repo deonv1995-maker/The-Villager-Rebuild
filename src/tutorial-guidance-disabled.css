@@ -1,0 +1,9 @@
+/*
+ * Temporary milestone gate: the legacy Day-1 objective strip is intentionally hidden
+ * while the core gameplay loop is being defined. Keep gameplay controls/status feedback
+ * active; tutorial presentation will return through a dedicated observer once the loop
+ * contract is stable.
+ */
+.hud-note[data-role="objective"] {
+  display: none !important;
+}
