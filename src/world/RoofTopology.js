@@ -472,6 +472,53 @@ const quarterTurnFrameCell = region => ({
   ridgeYaw: axisHeading((region.ridgeYaw ?? 0) + Math.PI / 2)
 });
 
+const pairsShareAnchor = (left, right) => {
+  const ids = new Set(left?.anchorIds ?? []);
+  return (right?.anchorIds ?? []).some(id => ids.has(id));
+};
+
+const pairSide = (pair, point) => {
+  const pairBasis = basis(pair?.yaw ?? 0);
+  const dx = point.x - pair.x;
+  const dz = point.z - pair.z;
+  return dx * pairBasis.zX + dz * pairBasis.zZ;
+};
+
+const upperPairHasCollinearRun = (pair, supports, levelTolerance, yawTolerance = 0.16) => (
+  (supports ?? []).some(candidate =>
+    candidate !== pair &&
+    Number.isFinite(candidate?.baseY) &&
+    Math.abs(candidate.baseY - pair.baseY) <= levelTolerance &&
+    axisYawDelta(candidate.yaw ?? 0, pair.yaw ?? 0) <= yawTolerance &&
+    pairsShareAnchor(pair, candidate)
+  )
+);
+
+const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
+  const center = frameCellCenter(region);
+  const side = pairSide(pair, center);
+  if (Math.abs(side) <= 0.08) return false;
+  const axisX = Math.cos(pair.yaw ?? 0);
+  const axisZ = -Math.sin(pair.yaw ?? 0);
+
+  return (regions ?? []).some(candidate => {
+    if (candidate?.topology !== 'frame-cell' || candidate.key === region.key) return false;
+    if (sharedFrameCount(region, candidate) !== 2) return false;
+    if (Math.abs((candidate.frameTopY ?? 0) - (region.frameTopY ?? 0)) > 0.16) return false;
+
+    const target = frameCellCenter(candidate);
+    const dx = target.x - center.x;
+    const dz = target.z - center.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 0.001) return false;
+    const alongAlignment = Math.abs((dx * axisX + dz * axisZ) / length);
+    if (alongAlignment < 0.82) return false;
+
+    const targetSide = pairSide(pair, target);
+    return side * targetSide > 0.02;
+  });
+};
+
 /**
  * A square roof cell has two mathematically valid gable directions. In a stepped or
  * L-shaped footprint the connected wing is the structural tie-break: endpoint cells
@@ -502,11 +549,13 @@ export function orientConnectedFrameCellRegions(regions) {
 }
 
 /**
- * A lower square roof beside the next storey's completed FRAME + RAW edge should
- * present its gable toward that upper wall line. The physical upper frame pair is the
- * structural source of truth, so SOLID / DOOR / WINDOW visual variants do not create
- * competing roof rules. Only the nearest upper edge is considered; a balanced upper
- * ring directly over the cell remains ambiguous and keeps the existing direction.
+ * A single lower square roof beside the next storey's completed FRAME + RAW edge may
+ * present its gable toward that upper wall line. When two or more connected lower bays
+ * sit on the same side of a continuous upper FRAME + RAW wall run, the upper run wins
+ * as a larger-roof tie-break instead: the lower ridges stay parallel to that wall so
+ * their shared thatch edges read as one continuous roof mass terminating cleanly at the
+ * upper storey. The exact upper FRAME pair is retained as structural metadata for wall
+ * conflict polishing; SOLID / DOOR / WINDOW visuals never participate in roof geometry.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -536,6 +585,7 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
     if (!upper.length) return region;
 
     upper.sort((left, right) => left.distance - right.distance || left.pair.rawKey.localeCompare(right.pair.rawKey));
+    const primaryPair = upper[0].pair;
     const nearestDistance = upper[0].distance;
     const targetBand = Math.max(nearestBand, span * 0.08);
     const targets = upper
@@ -544,6 +594,26 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
 
     const currentYaw = axisHeading(region.ridgeYaw ?? 0);
     const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
+    const continuousUpperRun = (
+      upperPairHasCollinearRun(primaryPair, supports, levelTolerance) &&
+      lowerRegionContinuesAlongUpperPair(region, primaryPair, source)
+    );
+
+    if (continuousUpperRun) {
+      const wallYaw = axisHeading(primaryPair.yaw ?? 0);
+      const currentDelta = axisYawDelta(currentYaw, wallYaw);
+      const alternateDelta = axisYawDelta(alternateYaw, wallYaw);
+      const oriented = alternateDelta + 0.05 < currentDelta
+        ? quarterTurnFrameCell(region)
+        : region;
+      return {
+        ...oriented,
+        upperWallRun: true,
+        upperWallPairKey: primaryPair.rawKey,
+        upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
+      };
+    }
+
     const currentScore = pairAlignmentScore(region, targets, currentYaw);
     const alternateScore = pairAlignmentScore(region, targets, alternateYaw);
     return alternateScore > currentScore + 0.05
