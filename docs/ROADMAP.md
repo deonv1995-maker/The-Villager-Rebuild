@@ -35,48 +35,50 @@ Success condition: the game reliably boots on target mobile browsers and display
 
 ## Phase 2 — Day 1 survival vertical slice
 
-Status: **in progress — Foundation 0.3.4 first-campfire pass is under device acceptance on 2026-08-30.**
+Status: **in progress — Day 1 remains the active vertical slice, with the current construction/device acceptance baseline protected by Foundation 0.3.11 regressions and the later scoped building/camera refinements merged through 2026-09-03.**
 
 Accepted foundation carried forward:
 
 - the 0.3.2 terrain, collision, ecology, satellite-island, vegetation, mountain-silhouette and mobile-performance architecture remains authoritative;
 - the native Chromium PWA install flow, PNG-only launcher manifest, simple service worker and deterministic branch-source-first / production-dist-last Pages deployment architecture remain unchanged;
-- the 0.3.3 tree/log loop has passed device verification: the first tree uses the existing forest population, three deliberate axe swings, removable shared collision, one retained stump and three normal Log pickups;
-- gameplay, tree-harvest, landscape, runtime-asset, production-build and PWA checks remain required before merge.
+- the established tree/log survival loop remains in the shared world rather than being replaced by a second construction inventory model;
+- Stick, Stone, Grass and food remain inventory resources while Logs remain physical world resources;
+- physical construction continues to extend the same shared collision, persistence, structural-level and placement boundaries rather than adding parallel player-only systems;
+- gameplay, camera, construction, terrain-fit, harvesting, survival, save, runtime-asset, production-build and PWA checks remain required before merge.
 
-Current playable sequence:
+### Current construction/device acceptance checkpoint — 2026-09-04
 
-Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> chop first tree -> gather logs -> **build first campfire**.
+The repository has accumulated several player-requested construction refinements ahead of the later settlement phases. These are treated as foundation work and must be device-verified before more structural behavior is layered on top:
 
-Foundation 0.3.4 adds:
+- **STAIRS** replaces the player-facing ANGLE build option. A flight occupies two supported upper-floor cells and is built as six split-log treads, bottom-to-top, while those two upper-floor cells remain reserved as the stairwell opening;
+- upper-storey split-log floors and traversal use the shared structural-level/support model, including the 0.3.11 continuous floor-support regression;
+- top-floor ROOF targeting prefers the highest valid completed FRAME + RAW support ring after preserving any in-progress roof work;
+- `RoofTopology` remains the single roof-direction authority for placement, completion, thatching and interior queries;
+- stepped/L-shaped roof cells use connected-building structure as their tie-break, and lower side roofs can use the nearest completed upper-storey structural wall edge as the stronger local orientation hint;
+- stale completed non-shared roof assemblies and their thatch can reflow together when the authoritative direction changes;
+- stacked wall customization is isolated by structural elevation so a lower wall variant cannot remove or hide the upper wall directly above it;
+- connected completed buildings can fade as one presentation unit while unrelated nearby buildings remain independent;
+- third person remains the default Ranger camera, while optional first person reuses the same movement, look, interaction and construction paths and adds a small non-interactive center reticle;
+- the 0.3.11 regression suite additionally protects RAW frame traversal behavior, geometric roof occupancy and near-player tree interaction visibility.
 
-- a data-driven `campfire` world-structure definition with a three-Log requirement and placement constraints;
-- a dedicated `CampfireSystem` rather than representing the fire as an inventory item or adding a second crafting economy;
-- the existing mobile craft button becomes contextual: spear during the spear step, campfire during the campfire step; desktop continues to use C;
-- a shared `WorldCollisionSystem.isCircleClear()` placement query so structures can validate existing world obstacles without duplicating collision rules;
-- a Ranger facing-direction accessor so placement systems use the player-controller boundary rather than reading controller internals;
-- nearby placement search around the Ranger using playable terrain, slope and collision clearance, with materials consumed only after a valid placement is found;
-- one grounded campfire presentation using a stone ring, crossed logs, emissive flame geometry and one non-shadow-casting point light;
-- one normal campfire collision handle after construction;
-- an active campfire state intended to become the shared proximity anchor for cooking and first-night sleeping;
-- a dedicated campfire regression contract beside the existing gameplay, harvesting and landscape checks.
+Device acceptance gate before another structural feature is added:
 
-Foundation 0.3.4 acceptance gate before adding cooking:
+- a six-tread stair flight can be built piece-by-piece from a valid two-cell opening and traversed cleanly to the upper floor;
+- the two stairwell cells cannot be refilled while that stair flight exists and become available again after the flight is removed;
+- a roof can be started on the highest valid supported top floor even when a lower closed roof topology also exists;
+- a stepped side roof turns toward the nearest completed upper-storey structural wall when that wall provides an unambiguous local direction;
+- changing a lower wall to DOOR/WINDOW leaves a directly stacked upper wall intact;
+- connected-building fade behaves as one building without affecting unrelated nearby structures;
+- first-person/third-person switching preserves movement and building behavior, with the reticle visible only in first person;
+- the full `npm run check` suite remains green and the production GitHub Pages deployment completes successfully.
 
-- after all three Logs are gathered, the objective changes clearly to building the campfire;
-- the mobile contextual craft button shows the campfire glyph instead of the spear glyph, while desktop C performs the same build action;
-- the campfire cannot be built before the three Log requirement is met;
-- building consumes exactly three Logs once and does not leave a fake campfire item in inventory;
-- the campfire appears on valid nearby ground rather than at one fixed tutorial coordinate;
-- the build avoids tree/rock/cliff collision and rejects unsuitable steep/out-of-bounds placement without consuming materials;
-- the campfire remains grounded and visually readable, with lightweight visible flame/flicker on target mobile hardware;
-- the campfire registers one shared-world collision handle and does not alter unrelated collision;
-- after construction the objective advances to cooking the gathered meat;
-- the full gather/craft/hunt/meat/tree/log sequence still works from a clean page load;
-- terrain, ecology and PWA/install behavior remain unchanged;
-- gameplay, tree-harvest, campfire, landscape, runtime-asset, production-build, PWA and Pages deployment checks are green.
+Current playable survival sequence:
 
-Next playable milestone after this gate: **cook the gathered meat at the campfire.**
+Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> chop first tree -> gather logs -> build first campfire.
+
+The construction foundation now extends beyond what the Day 1 sequence strictly requires, but it does not replace the unfinished Day 1 progression work below.
+
+Next playable milestone after the current acceptance gate: **cook the gathered meat at the campfire.**
 
 Target final-game Day 1 sequence:
 
@@ -117,6 +119,8 @@ Required supporting systems:
 - blueprint construction;
 - villager home ownership;
 - basic idle roaming.
+
+Existing structural building features developed during Phase 2 foundation work should be reused here. Phase 3 must not introduce a second construction grid, resource economy, collision path or persistence model for villagers.
 
 Success condition: the player can transform the Day 1 survival camp into the beginning of a functioning settlement.
 
