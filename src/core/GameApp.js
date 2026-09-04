@@ -27,6 +27,10 @@ export class GameApp {
     this.running = false;
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3();
+    this.constructionAim = {
+      origin: new THREE.Vector3(),
+      direction: new THREE.Vector3()
+    };
     this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
   }
@@ -137,7 +141,11 @@ export class GameApp {
         this.campfire.updatePreview(this.playerPosition, this.playerFacing);
       }
       if (this.physicalLogs?.isCarrying()) {
-        this.physicalLogs.update(this.playerPosition, this.playerFacing);
+        this.physicalLogs.update(
+          this.playerPosition,
+          this.playerFacing,
+          this.#currentConstructionAim()
+        );
       }
       this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
       if (this.gatherables && this.hunt) this.#refreshTargets(dt);
@@ -146,6 +154,13 @@ export class GameApp {
     this.sceneSystem.render();
     requestAnimationFrame(this.#frame);
   };
+
+  #currentConstructionAim() {
+    if (!this.player?.isFirstPerson?.() || !this.sceneSystem?.camera) return null;
+    this.constructionAim.origin.copy(this.sceneSystem.camera.position);
+    this.sceneSystem.camera.getWorldDirection(this.constructionAim.direction);
+    return this.constructionAim;
+  }
 
   #refreshTargets(dt = 0) {
     this.resourceRenewal?.update(dt, this.playerPosition);
@@ -220,16 +235,22 @@ export class GameApp {
     if (!this.player || !this.inventory) return;
     this.player.getPosition(this.playerPosition);
     this.player.getFacingDirection(this.playerFacing);
+    const constructionAim = this.#currentConstructionAim();
 
     if (this.physicalLogs?.isCarrying()) {
-      this.physicalLogs.update(this.playerPosition, this.playerFacing);
+      this.physicalLogs.update(this.playerPosition, this.playerFacing, constructionAim);
       const buildState = this.physicalLogs.getBuildState();
       if (!buildState.previewValid) {
         this.setStatus(`${buildState.label.toUpperCase()} · CANNOT PLACE HERE`);
         this.hud?.setObjective('Red preview is blocked · move or change build mode');
         return;
       }
-      const built = this.physicalLogs.build(null, this.playerPosition, this.playerFacing);
+      const built = this.physicalLogs.build(
+        null,
+        this.playerPosition,
+        this.playerFacing,
+        constructionAim
+      );
       if (!built) {
         this.setStatus('LOG · PLACEMENT CHANGED · TRY AGAIN');
         return;
@@ -305,7 +326,11 @@ export class GameApp {
       const carried = this.physicalLogs?.pickup(this.playerPosition);
       if (!carried) return;
       this.player.getFacingDirection(this.playerFacing);
-      this.physicalLogs.update(this.playerPosition, this.playerFacing);
+      this.physicalLogs.update(
+        this.playerPosition,
+        this.playerFacing,
+        this.#currentConstructionAim()
+      );
       this.#syncEquippedToolPresentation();
       this.#refreshTargets(0);
       this.#syncProgress();
@@ -363,7 +388,11 @@ export class GameApp {
     }
 
     if (!this.physicalLogs.setBuildMode(mode)) return;
-    this.physicalLogs.update(this.playerPosition, this.playerFacing);
+    this.physicalLogs.update(
+      this.playerPosition,
+      this.playerFacing,
+      this.#currentConstructionAim()
+    );
     const state = this.physicalLogs.getBuildState();
     this.hud?.setLogBuildMode(true, state);
     this.#refreshTargets(0);
