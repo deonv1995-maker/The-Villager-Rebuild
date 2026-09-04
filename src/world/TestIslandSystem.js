@@ -147,7 +147,6 @@ export class TestIslandSystem {
       chunkedTreeCount = this.chunks.splitTreeBatches(this.group);
       this.chunks.adoptNamedObjects(this.group, object => (
         object.name.startsWith('forest-rock-')
-        || object.name.startsWith('coastal-rock-')
       ));
       this.treeOcclusion = new TreeOcclusionSystem({
         group: this.group,
