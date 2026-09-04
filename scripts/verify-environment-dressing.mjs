@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [scatterSource, islandSource, coastalDefinitions, coastalSystem, titleBackdrop] = await Promise.all([
+const [scatterSource, islandSource, coastalDefinitions, coastalSystem, titleBackdrop, titleConfig] = await Promise.all([
   readFile('src/world/EnvironmentScatterSystem.js', 'utf8'),
   readFile('src/world/TestIslandSystem.js', 'utf8'),
   readFile('src/data/CoastalRockDefinitions.js', 'utf8'),
   readFile('src/world/CoastalRockSystem.js', 'utf8'),
-  readFile('src/startup/TitleIslandBackdrop.js', 'utf8')
+  readFile('src/startup/TitleIslandBackdrop.js', 'utf8'),
+  readFile('src/startup/TitleSceneConfig.js', 'utf8')
 ]);
 
 assert.equal(
@@ -136,11 +137,17 @@ assert.equal(
   'Title coastal formations should be clearly named and mapped into title-island local coordinates'
 );
 assert.equal(
-  titleBackdrop.includes('horizontalScale: TITLE_SCENE.islandHorizontalScale')
-    && titleBackdrop.includes('silhouetteHorizontalScale: TITLE_SCENE.islandVerticalScale')
-    && titleBackdrop.includes('silhouetteVerticalScale: TITLE_SCENE.islandVerticalScale'),
+  titleConfig.includes('coastalRockSilhouetteScale: 0.5'),
   true,
-  'Title rocks should keep compressed backdrop positions while preserving gameplay-like rock proportions'
+  'Title scene should keep its coastal rock mesh at half the previous title silhouette size'
+);
+assert.equal(
+  titleBackdrop.includes('horizontalScale: TITLE_SCENE.islandHorizontalScale')
+    && titleBackdrop.includes('TITLE_SCENE.islandVerticalScale * TITLE_SCENE.coastalRockSilhouetteScale')
+    && titleBackdrop.includes('silhouetteHorizontalScale: titleCoastalRockScale')
+    && titleBackdrop.includes('silhouetteVerticalScale: titleCoastalRockScale'),
+  true,
+  'Title rocks should keep compressed backdrop positions while uniformly applying the title-only half-size silhouette multiplier'
 );
 assert.equal(
   titleBackdrop.includes('export function createTitleIslandBackdrop()'),

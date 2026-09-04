@@ -5,6 +5,7 @@ export const TITLE_SCENE = Object.freeze({
   oceanY: -1.28,
   islandHorizontalScale: 0.095,
   islandVerticalScale: 0.78,
+  coastalRockSilhouetteScale: 0.5,
   stormWaveAmplitudeMax: 1.16,
   stormWaveSpeedBoost: 1.3,
   stormShipHeave: 0.4,
