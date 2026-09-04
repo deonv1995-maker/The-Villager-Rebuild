@@ -21,6 +21,10 @@ const FLOOR_SNAP_RANGE = Math.hypot(LOG_LENGTH * 0.5, FLOOR_WIDTH * 0.5) + CONST
 // above. The centre reticle must actually intersect the intended floor footprint, with
 // only a small seam allowance so mobile hand movement does not make exact seams unusable.
 const FLOOR_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.45;
+// Roof Logs are narrow targets viewed above the Ranger, so first-person aiming gets a
+// slightly larger world-space allowance than a floor seam. This is additional tolerance
+// beyond the physical Log radius, not a second structural snap range.
+const ROOF_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.65;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
@@ -54,6 +58,7 @@ export const PHYSICAL_LOG = Object.freeze({
   // rafter after nearer members have been placed. Keep topology local, but allow
   // interaction to span one physical Log plus the normal forward placement reach.
   roofSnapRange: LOG_LENGTH + PLACEMENT_REACH,
+  roofReticleSnapPadding: ROOF_RETICLE_SNAP_PADDING,
   // FRAME placement is deliberately stricter than recognition of an already-valid
   // frame pair. This prevents floor-strip seams becoming structural posts while
   // allowing a closed bay to absorb the small accumulated drift of snapped floors.

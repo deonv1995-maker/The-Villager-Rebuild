@@ -26,7 +26,11 @@ First person is an optional view over the same Ranger state:
 - vertically coincident lower and upper floor candidates are therefore resolved by the surface actually under the dot rather than by the broad structural snap radius;
 - if the reticle leaves every eligible floor footprint, the structural snap is released instead of magnetically falling back to the nearest floor slot;
 - a completed roof removes its occupied upper-floor support region from candidate generation, and aiming at that roof does not pull a lower floor target into place; the player must point the dot at the lower repair itself;
-- the reticle only chooses among already-valid floor candidates; it does not create support, bypass collision/terrain rules or change third-person placement ordering;
+- `ROOF` uses that same reticle ray against the actual three-dimensional segment of each currently legal staged roof member inside the existing roof interaction reach. The white dot therefore selects the rafter or ridge the player is pointing at instead of allowing another legal member elsewhere inside the broad roof snap radius to win by proximity;
+- moving the reticle off every reachable legal roof member releases the ROOF snap instead of magnetically jumping to a neighbouring bay or storey;
+- first-person roof intent does not change `RoofTopology`, rafter-before-ridge sequencing, physical-Log occupancy, roof reach, thatching, reflow or completed-roof rules. It only resolves which already-eligible member is intended;
+- third-person ROOF placement keeps the established proximity ordering when no explicit centre-reticle ray is supplied;
+- the reticle only chooses among already-valid construction candidates; it does not create support, bypass collision/terrain rules or change third-person placement ordering;
 - auto-facing actions align the first-person view with their world target;
 - the third-person Ranger body, spear presentation and hand-mounted tool props are hidden to prevent camera clipping;
 - third-person structure transparency is reset/disabled while first person is active because the camera is already inside the structure.
@@ -48,3 +52,5 @@ Camera mode is presentation/session state, not gameplay progression, and is not 
 `scripts/verify-camera-modes.mjs` verifies default third-person behavior, first-person eye placement, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
 `scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.
+
+`scripts/verify-roof-preview-runtime.mjs` verifies invalid ROOF previews remain safe, first-person reticle aim acquires the intended reachable roof member, leaving all roof members releases the snap, and third-person ROOF proximity targeting remains unchanged.
