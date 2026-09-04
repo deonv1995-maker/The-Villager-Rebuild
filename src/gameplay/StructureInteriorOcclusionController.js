@@ -29,11 +29,10 @@ export class StructureInteriorOcclusionController {
   }
 
   update() {
-    if (this.game.player.isFirstPerson?.()) {
-      this.system.reset();
-      return null;
-    }
     this.game.player.getPosition(this.playerPosition);
+    if (this.game.player.isFirstPerson?.()) {
+      return this.system.updateFirstPerson(this.playerPosition);
+    }
     return this.system.update(this.playerPosition, this.game.sceneSystem.camera);
   }
 
