@@ -9,7 +9,10 @@ import {
   roofMemberCandidates,
   roofRegionComplete
 } from '../src/world/RoofMemberRules.js';
-import { roofPanelDescriptors } from '../src/world/StructureRoofQuery.js';
+import {
+  collectCompletedRoofRegions,
+  roofPanelDescriptors
+} from '../src/world/StructureRoofQuery.js';
 import { StackedRoofReflowSystem } from '../src/world/StackedRoofReflowSystem.js';
 
 const axisDelta = (a, b) => {
@@ -28,6 +31,31 @@ const makeFrame = (id, x, z, baseY = 0) => ({
   storey: baseY > 0 ? 1 : 0,
   root: new THREE.Group()
 });
+
+const makeRoofMember = (candidate, id, storey = 0) => {
+  const root = new THREE.Group();
+  root.position.set(candidate.x, candidate.y, candidate.z);
+  return {
+    id,
+    mode: candidate.roofRole === 'rafter' ? 'angle' : 'raw',
+    active: true,
+    x: candidate.x,
+    z: candidate.z,
+    yaw: candidate.yaw,
+    baseY: Math.min(candidate.start.y, candidate.end.y),
+    centerY: candidate.y,
+    topY: Math.max(candidate.start.y, candidate.end.y) + PHYSICAL_LOG.radius,
+    roofKey: candidate.roofKey,
+    roofRegionKey: candidate.roofRegionKey,
+    roofRole: candidate.roofRole,
+    roofLength: candidate.roofLength,
+    snapKind: candidate.snapKind,
+    storey,
+    root,
+    collisionHandle: null,
+    supportRoot: null
+  };
+};
 
 const L = PHYSICAL_LOG.length;
 const frames = [
@@ -106,31 +134,43 @@ assert.ok(
 
 const targetRegion = upperWallNorthWing;
 const oldRegion = northWing;
-const members = roofMemberCandidates(oldRegion).map((candidate, index) => {
-  const root = new THREE.Group();
-  root.position.set(candidate.x, candidate.y, candidate.z);
-  return {
-    id: 500 + index,
-    mode: candidate.roofRole === 'rafter' ? 'angle' : 'raw',
-    active: true,
-    x: candidate.x,
-    z: candidate.z,
-    yaw: candidate.yaw,
-    baseY: Math.min(candidate.start.y, candidate.end.y),
-    centerY: candidate.y,
-    topY: Math.max(candidate.start.y, candidate.end.y) + PHYSICAL_LOG.radius,
-    roofKey: candidate.roofKey,
-    roofRegionKey: candidate.roofRegionKey,
-    roofRole: candidate.roofRole,
-    roofLength: candidate.roofLength,
-    snapKind: candidate.snapKind,
-    storey: 0,
-    root,
-    collisionHandle: null,
-    supportRoot: null
-  };
-});
+const members = roofMemberCandidates(oldRegion)
+  .map((candidate, index) => makeRoofMember(candidate, 500 + index));
 assert.equal(roofRegionComplete(targetRegion, members), false, 'A completed roof facing away from the new upper wall must not already satisfy the corrected target');
+
+const retainedOnly = collectCompletedRoofRegions([targetRegion], members);
+assert.equal(
+  retainedOnly.length,
+  1,
+  'A complete perpendicular primary frame must remain a completed roof surface after canonical orientation changes'
+);
+assert.equal(
+  retainedOnly[0].topology,
+  'frame-cell-retained',
+  'The preserved primary gable must be completion-only rather than a second live placement topology'
+);
+assert.equal(
+  roofPanelDescriptors(retainedOnly[0]).length,
+  2,
+  'A preserved primary gable must expose both of its thatch slopes'
+);
+
+const correctedMembers = roofMemberCandidates(targetRegion)
+  .map((candidate, index) => makeRoofMember(candidate, 600 + index));
+const intersectionRegions = collectCompletedRoofRegions(
+  [targetRegion],
+  [...members, ...correctedMembers]
+);
+assert.equal(
+  intersectionRegions.length,
+  2,
+  'When the corrected side roof and retained primary frame both exist, both must remain finishable'
+);
+assert.equal(
+  intersectionRegions.flatMap(roofPanelDescriptors).length,
+  4,
+  'The completed roof intersection must expose four thatch panels so the primary frame is not left bare'
+);
 
 const oldPanel = roofPanelDescriptors(oldRegion)[0];
 const targetPanel = roofPanelDescriptors(targetRegion).find(panel => panel.side === oldPanel.side);
@@ -167,4 +207,4 @@ assert.ok(Math.abs(Math.abs(thatchRoot.rotation.y) - Math.PI / 2) < 0.01, 'Thatc
 assert.ok(Math.abs(thatchRoot.position.x - targetPanel.center.x) < 0.001);
 assert.ok(Math.abs(thatchRoot.position.z - targetPanel.center.z) < 0.001);
 
-console.log('Connected roofs follow their wing, side roofs turn toward upper walls, and completed stale roofs reflow with thatch.');
+console.log('Connected roofs follow their wing, retained cross-gables stay thatchable, and completed stale roofs reflow with thatch.');
