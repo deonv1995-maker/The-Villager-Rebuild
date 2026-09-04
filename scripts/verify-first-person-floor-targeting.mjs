@@ -12,6 +12,11 @@ const floorTopY = floorBaseY + FLOOR_TOP_LIFT;
 const frameTopY = floorTopY + PHYSICAL_LOG.length;
 const targetZ = PHYSICAL_LOG.floorWidth * 1.5;
 
+assert.ok(
+  PHYSICAL_LOG.floorReticleSnapPadding < PHYSICAL_LOG.floorWidth * 0.2,
+  'First-person floor acquisition padding must remain a small seam allowance rather than a broad magnetic snap range'
+);
+
 const makeFloor = (id, z) => ({
   id,
   mode: 'floor',
@@ -196,6 +201,29 @@ assert.ok(
   'Reticle repair must resolve the exact missing split-log strip'
 );
 
+const missTarget = new THREE.Vector3(
+  PHYSICAL_LOG.halfLength + PHYSICAL_LOG.floorReticleSnapPadding + 0.06,
+  floorTopY,
+  targetZ
+);
+const missAim = {
+  origin: aimOrigin,
+  direction: missTarget.clone().sub(aimOrigin).normalize()
+};
+reticleSystem.update(playerPosition, facing, missAim);
+assert.equal(
+  reticleSystem.previewValid,
+  false,
+  'Moving the white dot outside the floor footprint must release the target instead of magnetically keeping the nearest slot'
+);
+assert.equal(
+  reticleSystem.previewPlacement.snapKind,
+  null,
+  'A reticle miss must not silently fall back to another structural floor snap'
+);
+reticleSystem.update(playerPosition, facing, lowerAim);
+assert.equal(reticleSystem.previewValid, true, 'Returning the dot to the hole must reacquire the exact repair slot');
+
 const roofLockedSystem = makeSystem([
   ...lowerFloorsWithGap,
   ...frames,
@@ -211,7 +239,18 @@ const upperAim = {
   direction: upperTarget.clone().sub(aimOrigin).normalize()
 };
 roofLockedSystem.update(playerPosition, facing, upperAim);
-assert.equal(roofLockedSystem.previewValid, true, 'The lower repair remains valid beneath a completed roof');
+assert.equal(
+  roofLockedSystem.previewValid,
+  false,
+  'Aiming at a completed roof must not pull the lower repair slot into place when the dot is not on that floor'
+);
+assert.equal(
+  roofLockedSystem.previewPlacement.snapKind,
+  null,
+  'A completed roof must expose neither an upper-floor snap nor a loose fallback floor snap under the reticle'
+);
+roofLockedSystem.update(playerPosition, facing, lowerAim);
+assert.equal(roofLockedSystem.previewValid, true, 'The lower repair must remain directly targetable beneath a completed roof');
 assert.notEqual(
   roofLockedSystem.previewPlacement.snapKind,
   'closed-frame-upper-floor',
@@ -220,7 +259,7 @@ assert.notEqual(
 assert.equal(
   roofLockedSystem.previewPlacement.storey,
   0,
-  'Completed roof lockout must leave the lower floor repair target available instead of stealing the Log upstairs'
+  'Pointing the dot at the lower hole beneath a completed roof must resolve only that lower floor strip'
 );
 
 const partialRoofSystem = makeSystem([
@@ -239,4 +278,4 @@ assert.equal(
 );
 assert.equal(partialRoofSystem.previewPlacement.storey, 1);
 
-console.log('First-person floor reticle level selection and completed-roof floor lockout verified');
+console.log('Exact first-person floor reticle acquisition, release and completed-roof lockout verified');
