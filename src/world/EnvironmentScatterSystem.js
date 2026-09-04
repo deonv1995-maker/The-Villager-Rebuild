@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { COASTAL_ROCK_PRESENTATION } from '../data/CoastalRockDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 import { addCoastalRockFormations } from './CoastalRockSystem.js';
 
@@ -101,7 +102,8 @@ export class EnvironmentScatterSystem {
     this.coastalRockCount = addCoastalRockFormations({
       group: this.group,
       terrain: this.terrain,
-      template: assets.forestRock
+      template: assets.forestRock,
+      coastOffsetScale: COASTAL_ROCK_PRESENTATION.playableCoastOffsetScale
     });
     this.#placeUnderstory();
     return true;
