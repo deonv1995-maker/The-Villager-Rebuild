@@ -346,12 +346,11 @@ export class PhysicalLogSystem {
     const base = this.#placementPoint(playerPosition, facingDirection, PHYSICAL_LOG.placeDistance, true);
     base.yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
     base.ground = this.#baseTerrainHeightAt(base.x, base.z);
-    base.aimY = this.#constructionAimY(base, constructionAim);
     base.snapKind = null;
     base.valid = false;
 
     if (mode === 'raw') return this.#rawPlacement(base);
-    if (mode === 'floor') return this.#floorPlacement(base);
+    if (mode === 'floor') return this.#floorPlacement(base, constructionAim);
     if (mode === 'frame') return this.#framePlacement(base, playerPosition);
     if (mode === 'wall') return this.#wallPlacement(base);
     if (mode === 'stairs') return this.#stairsPlacement(base);
@@ -396,7 +395,7 @@ export class PhysicalLogSystem {
     return { ...base, y: pose.position.y, quaternion: pose.quaternion, valid };
   }
 
-  #floorPlacement(base) {
+  #floorPlacement(base, constructionAim = null) {
     const snappedCandidates = [
       ...this.#upperStoreyFloorCandidates(base),
       ...this.#floorEdgeCandidates(base)
@@ -405,26 +404,76 @@ export class PhysicalLogSystem {
     const evaluated = candidates.map(candidate =>
       this.#evaluateFloorCandidate(candidate, Boolean(snappedCandidates.length))
     );
-    const ranked = Number.isFinite(base.aimY)
-      ? [...evaluated].sort((left, right) => (
-          this.#floorAimDistance(left, base) - this.#floorAimDistance(right, base) ||
-          (left.storey ?? 0) - (right.storey ?? 0)
-        ))
-      : evaluated;
-    const resolved = ranked.find(candidate => candidate.valid) ?? ranked[0];
+
+    if (constructionAim && snappedCandidates.length) {
+      const aimed = evaluated
+        .map(candidate => ({
+          candidate,
+          score: this.#floorReticleScore(candidate, constructionAim)
+        }))
+        .filter(entry => Number.isFinite(entry.score))
+        .sort((left, right) => (
+          left.score - right.score ||
+          (left.candidate.storey ?? 0) - (right.candidate.storey ?? 0)
+        ));
+      const resolved = aimed.find(entry => entry.candidate.valid)?.candidate ?? aimed[0]?.candidate;
+      if (!resolved) {
+        const baseY = base.ground + PHYSICAL_LOG.floorGroundClearance;
+        return {
+          ...base,
+          baseY,
+          y: baseY + FLOOR_CENTER_LIFT,
+          topY: baseY + FLOOR_TOP_LIFT,
+          valid: false
+        };
+      }
+      return {
+        ...base,
+        ...resolved
+      };
+    }
+
+    const resolved = evaluated.find(candidate => candidate.valid) ?? evaluated[0];
     return {
       ...base,
       ...resolved
     };
   }
 
-  #floorAimDistance(candidate, base) {
-    const targetY = candidate.topY ?? candidate.baseY ?? candidate.y ?? base.ground;
-    return Math.hypot(
-      candidate.x - base.x,
-      candidate.z - base.z,
-      targetY - base.aimY
+  #floorReticleScore(candidate, constructionAim) {
+    const origin = constructionAim?.origin;
+    const direction = constructionAim?.direction;
+    if (
+      !Number.isFinite(origin?.x) || !Number.isFinite(origin?.y) || !Number.isFinite(origin?.z) ||
+      !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y) || !Number.isFinite(direction?.z)
+    ) return Infinity;
+
+    const targetY = candidate.topY ?? candidate.baseY ?? candidate.y;
+    if (!Number.isFinite(targetY) || Math.abs(direction.y) < 0.01) return Infinity;
+    const rayDistance = (targetY - origin.y) / direction.y;
+    if (!Number.isFinite(rayDistance) || rayDistance <= 0) return Infinity;
+
+    const hitX = origin.x + direction.x * rayDistance;
+    const hitZ = origin.z + direction.z * rayDistance;
+    const basis = this.#basis(candidate.yaw ?? 0);
+    const dx = hitX - candidate.x;
+    const dz = hitZ - candidate.z;
+    const along = dx * basis.xX + dz * basis.xZ;
+    const across = dx * basis.zX + dz * basis.zZ;
+    const halfLength = PHYSICAL_LOG.halfLength;
+    const halfWidth = PHYSICAL_LOG.floorWidth * 0.5;
+    const padding = PHYSICAL_LOG.floorReticleSnapPadding;
+    const outsideAlong = Math.max(0, Math.abs(along) - halfLength);
+    const outsideAcross = Math.max(0, Math.abs(across) - halfWidth);
+    const outside = Math.hypot(outsideAlong, outsideAcross);
+    if (outside > padding) return Infinity;
+
+    const centerScore = Math.hypot(
+      along / (halfLength + padding),
+      across / (halfWidth + padding)
     );
+    const outsidePenalty = outside / Math.max(0.001, padding);
+    return outsidePenalty * 2 + centerScore;
   }
 
   #evaluateFloorCandidate(candidate, snapped) {
@@ -1321,22 +1370,6 @@ export class PhysicalLogSystem {
       z = this.#snapGrid(z);
     }
     return { x, y: this.#baseTerrainHeightAt(x, z), z };
-  }
-
-  #constructionAimY(base, constructionAim) {
-    const origin = constructionAim?.origin;
-    const direction = constructionAim?.direction;
-    if (
-      !Number.isFinite(origin?.x) || !Number.isFinite(origin?.y) || !Number.isFinite(origin?.z) ||
-      !Number.isFinite(direction?.x) || !Number.isFinite(direction?.y) || !Number.isFinite(direction?.z)
-    ) return null;
-
-    const horizontalDirectionLength = Math.hypot(direction.x, direction.z);
-    if (horizontalDirectionLength < 0.05) return null;
-    const horizontalDistance = Math.hypot(base.x - origin.x, base.z - origin.z);
-    const rayDistance = horizontalDistance / horizontalDirectionLength;
-    const aimY = origin.y + direction.y * rayDistance;
-    return Number.isFinite(aimY) ? aimY : null;
   }
 
   #baseTerrainHeightAt(x, z) {

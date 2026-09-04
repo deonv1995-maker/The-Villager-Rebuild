@@ -22,8 +22,11 @@ First person is an optional view over the same Ranger state:
 - movement remains camera-relative through the existing Ranger movement path;
 - interaction and log dropping continue to use the horizontal first-person view direction;
 - while carrying a physical Log, `GameApp` also passes the full centre-camera reticle ray into the existing `PhysicalLogSystem` as optional targeting intent rather than starting a second first-person build system;
-- `FLOOR` uses the reticle ray height to disambiguate vertically coincident snap candidates, so looking at a demolished ground-floor strip selects that strip instead of an upper FRAME + RAW support at the same X/Z;
-- the reticle only changes which already-valid floor snap wins; it does not create support, bypass collision/terrain rules or change third-person placement ordering;
+- `FLOOR` projects that reticle ray onto each candidate floor plane and only acquires a structural snap when the white dot intersects that floor's actual full-Log by one-third-Log footprint, plus one small mobile seam allowance;
+- vertically coincident lower and upper floor candidates are therefore resolved by the surface actually under the dot rather than by the broad structural snap radius;
+- if the reticle leaves every eligible floor footprint, the structural snap is released instead of magnetically falling back to the nearest floor slot;
+- a completed roof removes its occupied upper-floor support region from candidate generation, and aiming at that roof does not pull a lower floor target into place; the player must point the dot at the lower repair itself;
+- the reticle only chooses among already-valid floor candidates; it does not create support, bypass collision/terrain rules or change third-person placement ordering;
 - auto-facing actions align the first-person view with their world target;
 - the third-person Ranger body, spear presentation and hand-mounted tool props are hidden to prevent camera clipping;
 - third-person structure transparency is reset/disabled while first person is active because the camera is already inside the structure.
@@ -44,4 +47,4 @@ Camera mode is presentation/session state, not gameplay progression, and is not 
 
 `scripts/verify-camera-modes.mjs` verifies default third-person behavior, first-person eye placement, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
-`scripts/verify-first-person-floor-targeting.mjs` verifies that the centre reticle can select a demolished lower split-log floor strip beneath a coincident upper support and that the same shared construction path remains valid on mobile-first first-person controls.
+`scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.

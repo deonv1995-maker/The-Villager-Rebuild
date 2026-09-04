@@ -17,6 +17,10 @@ const STAIR_STEP_RUN = STAIR_RUN_LENGTH / STAIR_TREAD_COUNT;
 // plus half a construction-grid step so aiming near a bay/strip seam still reaches one
 // canonical floor slot instead of falling through to an unrelated ground placement.
 const FLOOR_SNAP_RANGE = Math.hypot(LOG_LENGTH * 0.5, FLOOR_WIDTH * 0.5) + CONSTRUCTION_GRID_STEP * 0.5;
+// First-person acquisition is deliberately much tighter than the broad structural query
+// above. The centre reticle must actually intersect the intended floor footprint, with
+// only a small seam allowance so mobile hand movement does not make exact seams unusable.
+const FLOOR_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.45;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
@@ -34,6 +38,7 @@ export const PHYSICAL_LOG = Object.freeze({
   // Spacing validity remains governed separately by framePlacementSpacingTolerance.
   frameSnapRange: FRAME_SNAP_RANGE,
   floorSnapRange: FLOOR_SNAP_RANGE,
+  floorReticleSnapPadding: FLOOR_RETICLE_SNAP_PADDING,
   wallSnapRange: 1.7,
   // Retained for legacy persisted ANGLE pieces. New player-facing construction uses
   // the dedicated two-cell stair contract below; ROOF still stores rafters as ANGLE.
