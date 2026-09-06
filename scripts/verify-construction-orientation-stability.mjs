@@ -129,6 +129,47 @@ assert.ok(
   'All rows in the stair-adjacent wall bay must keep the structural interior orientation'
 );
 
+// Save data already contains the directed wall yaw the player saw before leaving the game.
+// A FRAME pair only defines an axis; when no structural/floor reference can break the tie,
+// reconstruction must keep that persisted facing rather than deriving a new direction from
+// frame endpoint order.
+const restoredFrames = [
+  makeFrame(101, -half, 0),
+  makeFrame(102, half, 0)
+];
+const persistedYaw = Math.PI;
+const restoredWalls = wallCenters.map((centerY, index) => ({
+  id: 130 + index,
+  mode: 'wall',
+  active: true,
+  x: 0,
+  z: 0,
+  yaw: persistedYaw,
+  baseY: 0,
+  centerY,
+  topY: centerY + CONSTRUCTION_DIMENSIONS.wallSectionTopOffset,
+  root: new THREE.Group(),
+  collisionHandle: null
+}));
+const restoredWallSystem = new WallPanelCustomizationSystem({
+  group: new THREE.Group(),
+  collision,
+  physicalLogs: {
+    structureRevision: 1,
+    builtLogs: [...restoredFrames, ...restoredWalls]
+  }
+});
+const restoredBay = restoredWallSystem.sync().find(bay => bay.key === 'wall:101-102');
+assert.ok(restoredBay, 'A restored wall must still resolve to its physical frame pair');
+assert.ok(
+  directedYawDelta(restoredBay.yaw, persistedYaw) < 0.001,
+  'Save/load sync must preserve the wall directed yaw when the frame pair has no interior-side vote'
+);
+assert.ok(
+  restoredWalls.every(wall => directedYawDelta(wall.yaw, persistedYaw) < 0.001),
+  'All restored wall rows must retain their persisted flat-face direction'
+);
+
 const roofRegion = {
   key: 'roof:test-thatch-retention',
   a: { x: -half, z: -half },
@@ -211,4 +252,4 @@ assert.equal(
   'Actual roof demolition must retain the existing Grass refund contract'
 );
 
-console.log('Stairwell walls keep structural inward facing and completed physical roofs retain thatch through topology churn.');
+console.log('Walls keep stable inward/save-facing orientation and completed physical roofs retain thatch through topology churn.');
