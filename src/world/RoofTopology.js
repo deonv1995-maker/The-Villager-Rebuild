@@ -519,6 +519,34 @@ const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
   });
 };
 
+const hostRoofRegionForUpperPair = (region, pair, regions, levelTolerance) => {
+  const center = frameCellCenter(region);
+  const candidates = (regions ?? [])
+    .filter(candidate =>
+      candidate?.key !== region.key &&
+      Number.isFinite(candidate?.frameBaseY) &&
+      Math.abs(candidate.frameBaseY - region.frameTopY) <= levelTolerance &&
+      (candidate.sourceBeamKeys ?? []).includes(pair?.rawKey)
+    )
+    .map(candidate => ({
+      candidate,
+      distance: Math.hypot(frameCellCenter(candidate).x - center.x, frameCellCenter(candidate).z - center.z)
+    }))
+    .sort((left, right) => left.distance - right.distance || left.candidate.key.localeCompare(right.candidate.key));
+  return candidates[0]?.candidate ?? null;
+};
+
+const orientFrameCellToAxis = (region, targetYaw) => {
+  const currentYaw = axisHeading(region.ridgeYaw ?? 0);
+  const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
+  const target = axisHeading(targetYaw ?? 0);
+  const currentDelta = axisYawDelta(currentYaw, target);
+  const alternateDelta = axisYawDelta(alternateYaw, target);
+  return alternateDelta + 0.05 < currentDelta
+    ? quarterTurnFrameCell(region)
+    : region;
+};
+
 /**
  * A square roof cell has two mathematically valid gable directions. In a stepped or
  * L-shaped footprint the connected wing is the structural tie-break: endpoint cells
@@ -549,13 +577,15 @@ export function orientConnectedFrameCellRegions(regions) {
 }
 
 /**
- * A single lower square roof beside the next storey's completed FRAME + RAW edge may
- * present its gable toward that upper wall line. When two or more connected lower bays
- * sit on the same side of a continuous upper FRAME + RAW wall run, the upper run wins
- * as a larger-roof tie-break instead: the lower ridges stay parallel to that wall so
- * their shared thatch edges read as one continuous roof mass terminating cleanly at the
- * upper storey. The exact upper FRAME pair is retained as structural metadata for wall
- * conflict polishing; SOLID / DOOR / WINDOW visuals never participate in roof geometry.
+ * A lower square roof beside the next storey's completed FRAME + RAW structure first
+ * inherits the ridge axis of the actual roof-support region that owns that upper edge.
+ * This keeps attached lower sections aligned with the main roof instead of turning into
+ * a separate awning merely because several upper wall pairs happen to form a long run.
+ * If no complete upper roof-support region exists yet, the established wall-only rules
+ * remain the fallback: an isolated edge faces the gable toward that edge, while multiple
+ * connected lower bays may follow a continuous upper wall run. Exact upper FRAME-pair
+ * identity is retained for wall conflict polishing; SOLID / DOOR / WINDOW visuals never
+ * participate in roof geometry.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -592,12 +622,34 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       .filter(entry => entry.distance <= nearestDistance + targetBand)
       .map(entry => entry.pair);
 
-    const currentYaw = axisHeading(region.ridgeYaw ?? 0);
-    const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
     const continuousUpperRun = (
       upperPairHasCollinearRun(primaryPair, supports, levelTolerance) &&
       lowerRegionContinuesAlongUpperPair(region, primaryPair, source)
     );
+    const hostRoofRegion = hostRoofRegionForUpperPair(
+      region,
+      primaryPair,
+      source,
+      levelTolerance
+    );
+
+    if (hostRoofRegion) {
+      const oriented = orientFrameCellToAxis(region, hostRoofRegion.ridgeYaw);
+      return {
+        ...oriented,
+        ...(continuousUpperRun
+          ? {
+              upperWallRun: true,
+              upperWallPairKey: primaryPair.rawKey,
+              upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
+            }
+          : {}),
+        hostRoofRegionKey: hostRoofRegion.key
+      };
+    }
+
+    const currentYaw = axisHeading(region.ridgeYaw ?? 0);
+    const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
 
     if (continuousUpperRun) {
       const wallYaw = axisHeading(primaryPair.yaw ?? 0);
