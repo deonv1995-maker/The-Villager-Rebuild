@@ -18,6 +18,10 @@ The first valid stair placement still resolves the chosen flight direction from 
 
 The same ghost remains aligned to the selected flight direction as construction progresses. In side view, a flight that rises from right to left remains right-to-left; the preview does not impose a screen-space direction of its own.
 
+First-person stair placement is centre-reticle driven. The white dot can acquire any tread in the full-flight ghost, while the lower end also exposes a floor-level target so pointing at the intended foot of the stairs chooses the initial rise direction. Moving the dot off the stair footprint releases the target rather than silently selecting another stair opening within the broad structural query range. The reticle allowance is only an interaction tolerance; structural validity and the two-cell stairwell remain governed by the canonical stair rules.
+
+Third-person placement remains proximity-driven. The nearest reachable stair opening wins, with existing flight progress used only as a tie-breaker instead of pulling the player back to a farther staircase.
+
 ## Stairwell opening
 
 The two support cells selected for a flight are the stairwell opening. When the first stair section is committed, any already-built upper-floor strips inside those two cells are disassembled and returned as physical logs. While any tread from that flight remains active, both cells are reserved and `FLOOR` cannot refill them through either the upper-storey support query or ordinary floor-edge snapping.
@@ -49,6 +53,9 @@ Existing roof rafters saved as `angle` remain valid persisted construction even 
 - `stairs` is selectable while `angle` remains internal/persistable;
 - an untouched two-cell opening can begin from either direction;
 - the first placement exposes enough geometry to describe the full six-tread ghost;
+- the first-person reticle can select either initial low end directly;
+- a first-person reticle miss releases the stair target instead of magnetically choosing a distant flight;
+- third-person targeting prefers the nearest opening before in-progress-flight tie-breaking;
 - an active paired flight advances 1-2, 3-4, then 5-6 while keeping its chosen direction;
 - a damaged two-tread section is repairable before later sections;
 - no fourth stair Log is exposed after completion;

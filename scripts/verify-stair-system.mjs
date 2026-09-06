@@ -10,6 +10,7 @@ import {
   STAIR_BUILD_STEP_COUNT,
   STAIR_PAIR_SNAP
 } from '../src/world/StairPlacementRules.js';
+import { selectStairBuildCandidate } from '../src/world/StairTargetingRules.js';
 
 const L = PHYSICAL_LOG.length;
 const region = (key, x, z) => ({
@@ -37,6 +38,32 @@ const lowerFloors = [{
   storey: 0
 }];
 
+const aimAtLowEnd = candidate => {
+  const firstTread = stairFlightTreadPlacements(candidate)[0];
+  const run = {
+    x: -Math.sin(candidate.yaw),
+    z: -Math.cos(candidate.yaw)
+  };
+  const origin = {
+    x: firstTread.x - run.x * 2,
+    y: candidate.baseY + 1.7,
+    z: firstTread.z - run.z * 2
+  };
+  const target = {
+    x: firstTread.x,
+    y: candidate.baseY,
+    z: firstTread.z
+  };
+  const dx = target.x - origin.x;
+  const dy = target.y - origin.y;
+  const dz = target.z - origin.z;
+  const length = Math.hypot(dx, dy, dz);
+  return {
+    origin,
+    direction: { x: dx / length, y: dy / length, z: dz / length }
+  };
+};
+
 assert.equal(STAIR_BUILD_STEP_COUNT, 6, 'stair flight must retain six walkable treads');
 assert.equal(PHYSICAL_LOG.stairTreadsPerLog, 2, 'one physical Log must split into two stair treads');
 assert.equal(PHYSICAL_LOG.stairRunSpaces, 5, 'stair flight must use five split-log run spaces');
@@ -58,6 +85,44 @@ assert.equal(initial.length, 2, 'an untouched two-cell opening should allow eith
 assert.ok(initial.every(candidate => candidate.stairStepIndex === 0));
 assert.ok(initial.every(candidate => candidate.snapKind === STAIR_PAIR_SNAP));
 assert.ok(initial.every(candidate => candidate.stairOpeningRegionKeys.length === 2));
+
+const aimedFirstDirection = selectStairBuildCandidate(
+  initial.map(candidate => ({ ...candidate, distance: 2 })),
+  aimAtLowEnd(initial[0])
+);
+assert.equal(
+  aimedFirstDirection?.stairKey,
+  initial[0].stairKey,
+  'first-person reticle aimed at one low end must select that stair direction'
+);
+
+const aimedReverseDirection = selectStairBuildCandidate(
+  initial.map(candidate => ({ ...candidate, distance: 2 })),
+  aimAtLowEnd(initial[1])
+);
+assert.equal(
+  aimedReverseDirection?.stairKey,
+  initial[1].stairKey,
+  'moving the reticle to the opposite low end must reverse the initial flight direction'
+);
+
+const missAim = {
+  origin: { x: -L * 3, y: 1.7, z: -L * 3 },
+  direction: { x: 0, y: -1, z: 0 }
+};
+assert.equal(
+  selectStairBuildCandidate(initial.map(candidate => ({ ...candidate, distance: 2 })), missAim),
+  null,
+  'a first-person reticle miss must release stairs instead of magnetically choosing a distant flight'
+);
+
+const nearestUntouched = { ...initial[0], distance: 1.2, stairStepIndex: 0 };
+const fartherProgress = { ...initial[1], distance: 3.1, stairStepIndex: 2 };
+assert.equal(
+  selectStairBuildCandidate([fartherProgress, nearestUntouched])?.stairKey,
+  nearestUntouched.stairKey,
+  'third-person stairs must prefer the nearest opening instead of a farther in-progress flight'
+);
 
 const fullPreview = stairFlightTreadPlacements(initial[0]);
 assert.equal(fullPreview.length, 6, 'first stair placement must describe the complete six-tread flight ghost');
