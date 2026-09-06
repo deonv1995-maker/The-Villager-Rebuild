@@ -520,31 +520,57 @@ const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
 };
 
 /**
- * A square roof cell has two mathematically valid gable directions. In a stepped or
- * L-shaped footprint the connected wing is the structural tie-break: endpoint cells
- * point their ridge toward the neighbouring occupied cell and straight runs keep the
- * ridge along the run. Corner cells with equal perpendicular neighbours retain the
- * deterministic canonical direction. This keeps an isolated square stable while
- * making extensions automatically turn with the building footprint.
+ * A square roof cell has two mathematically valid gable directions. In a stepped,
+ * L-shaped, T-shaped or crossed footprint the connected wings are the structural
+ * authority: endpoint cells point their ridge toward the occupied run, while a cell
+ * connected on both perpendicular axes automatically exposes both gables as a crossed
+ * roof junction. The player never selects a special junction mode; it is derived from
+ * the completed FRAME + RAW roof-support topology.
+ *
+ * The original region key remains the primary gable identity. The perpendicular gable
+ * receives a deterministic `:cross` key so existing saves and already-built members can
+ * continue to match geometry-first while the newly connected wing becomes buildable.
  */
 export function orientConnectedFrameCellRegions(regions) {
   const cells = (regions ?? []).filter(region => region?.topology === 'frame-cell');
   if (cells.length < 2) return regions ?? [];
 
-  return (regions ?? []).map(region => {
-    if (region?.topology !== 'frame-cell') return region;
+  return (regions ?? []).flatMap(region => {
+    if (region?.topology !== 'frame-cell') return [region];
     const neighbours = cells.filter(candidate =>
       candidate.key !== region.key && sharedFrameCount(region, candidate) === 2
     );
-    if (!neighbours.length) return region;
+    if (!neighbours.length) return [region];
 
     const currentYaw = axisHeading(region.ridgeYaw ?? 0);
     const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
     const currentScore = ridgeAlignmentScore(region, neighbours, currentYaw);
     const alternateScore = ridgeAlignmentScore(region, neighbours, alternateYaw);
-    return alternateScore > currentScore + 0.05
+    const oriented = alternateScore > currentScore + 0.05
       ? quarterTurnFrameCell(region)
       : region;
+
+    // A shared-edge neighbour contributes ~1 to the score of the axis it occupies and
+    // ~0 to its perpendicular axis. Requiring meaningful support on both axes avoids
+    // inventing cross-gables for isolated endpoints or straight multi-bay runs while
+    // tolerating the small positional drift allowed by structural snapping.
+    const crossesBothAxes = currentScore > 0.75 && alternateScore > 0.75;
+    if (!crossesBothAxes) return [oriented];
+
+    const primary = {
+      ...oriented,
+      crossJunction: true,
+      junctionRole: 'primary',
+      junctionPrimaryKey: region.key
+    };
+    const cross = {
+      ...quarterTurnFrameCell(primary),
+      key: `${region.key}:cross`,
+      crossJunction: true,
+      junctionRole: 'cross',
+      junctionPrimaryKey: region.key
+    };
+    return [primary, cross];
   });
 }
 
@@ -567,6 +593,9 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
 
   return source.map(region => {
     if (region?.topology !== 'frame-cell') return region;
+    // A crossed junction already carries both valid perpendicular gables. Rotating one
+    // half toward an upper wall would collapse the automatic cross back into one axis.
+    if (region.crossJunction) return region;
     if (!Number.isFinite(region.frameTopY)) return region;
 
     const center = frameCellCenter(region);
