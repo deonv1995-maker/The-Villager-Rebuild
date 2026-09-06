@@ -18,6 +18,14 @@ No duplicate roof-building system, junction tool or special inventory item is in
 
 If a primary gable was already complete before a perpendicular wing was attached, its physical members remain valid. The new `:cross` region simply exposes the missing perpendicular members as the next structural work. Existing completion is not invalidated merely because the footprint gained another wing.
 
+## Main-roof orientation inheritance
+
+A crossed lower junction can also be attached to a next-storey main roof. When the exact upper FRAME + RAW edge belongs to a resolved host roof-support region, the lower junction's stable primary gable inherits the host roof ridge axis automatically. The derived `:cross` gable is then rebuilt perpendicular to that resolved primary.
+
+This keeps the two required junction axes intact while allowing the connected lower roof mass to follow the same orientation as the main roof. The host's stable primary region is used as orientation authority if the host is itself a crossed junction; its derived `:cross` partner is not allowed to make the result ambiguous.
+
+The player performs no special action for this transition. Structural changes update `RoofTopology`; live ROOF targets follow the new canonical geometry, and already-completed non-shared assemblies use the established stacked roof reflow path where relocation is safe.
+
 ## Completion and thatch
 
 A completed crossed junction contains two live perpendicular gables. Each gable exposes its normal two slope panels, so a fully completed junction has four finishable thatch panels.
@@ -37,7 +45,8 @@ Ordinary non-junction roof plan identity remains unchanged, including the existi
 - The existing primary region key remains stable.
 - The perpendicular live region uses the deterministic `:cross` suffix.
 - Straight runs and endpoints do not gain unnecessary duplicate gables.
-- Upper-wall orientation logic does not collapse a crossed junction back to one axis; both axes are already structurally represented.
+- Upper-wall or main-roof orientation logic may rotate the stable primary gable but never collapses a crossed junction back to one axis; the live `:cross` gable remains its perpendicular partner.
+- A resolved next-storey host roof outranks the provisional continuous-wall direction for an attached lower primary.
 - Existing geometry-first roof-member occupancy remains authoritative.
 - Existing completed primary members remain valid when a later extension creates a crossed junction.
 - A fully completed crossed junction exposes exactly four thatch panels, not a duplicate retained-perpendicular set.
@@ -55,3 +64,5 @@ Ordinary non-junction roof plan identity remains unchanged, including the existi
 - completing both live junction gables yields exactly two completed regions and four thatch panels;
 - primary and cross junctions receive distinct stacked roof plan keys;
 - the pre-existing upper-wall orientation/reflow and retained-gable behavior continues to work for non-junction cells.
+
+`scripts/verify-roof-wall-polish.mjs` additionally proves that a structural next-storey host roof rotates the attached lower primary to the host ridge direction while its automatic `:cross` partner remains perpendicular and the exact upper-wall polish metadata remains intact.
