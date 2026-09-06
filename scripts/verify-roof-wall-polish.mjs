@@ -90,22 +90,25 @@ const southWestCross = regions.find(region =>
 const southEast = regions.find(region => region.anchorIds.join('-') === '41-42-44-45');
 const northWest = regions.find(region => region.anchorIds.join('-') === '43-44-46-47');
 
-assert.ok(southWest && southWestCross && southEast && northWest, 'Stepped lower footprint must retain its primary, automatic cross and two outgoing roof cells');
-assert.ok(axisDelta(southWest.ridgeYaw, 0) < 0.01, 'Wall-only lower bays may still share a ridge parallel to the continuous upper wall');
-assert.ok(axisDelta(southEast.ridgeYaw, 0) < 0.01, 'The adjoining wall-only bay must continue the same provisional roof ridge');
-assert.equal(southWest.upperWallRun, true, 'The first lower roof bay must record that it terminates against an upper wall run');
-assert.equal(southEast.upperWallRun, true, 'The second lower roof bay must record the same upper-wall-backed roof behavior');
+assert.ok(southWest && southWestCross && southEast && northWest, 'Stepped lower footprint must retain its primary, perpendicular junction and two outgoing roof cells');
+assert.ok(axisDelta(southWest.ridgeYaw, 0) < 0.01, 'The lower horizontal mass must keep one ridge along its connected footprint');
+assert.ok(axisDelta(southEast.ridgeYaw, 0) < 0.01, 'The adjoining lower bay must continue the same footprint-owned roof ridge');
+assert.equal(southWest.roofMassKey, southEast.roofMassKey, 'Two adjacent lower bays must be one logical roof mass');
+assert.equal(southWest.footprintOrientationLocked, true);
+assert.equal(southEast.footprintOrientationLocked, true);
+assert.equal(southWest.upperWallRun, true, 'The first lower roof bay must still record that it terminates against an upper wall run');
+assert.equal(southEast.upperWallRun, true, 'The second lower roof bay must still record the same upper-wall-backed coverage relationship');
 assert.equal(upperWallKeyForRoofRegion(southWest), 'wall:60-61');
 assert.equal(upperWallKeyForRoofRegion(southEast), 'wall:61-62');
 assert.ok(
   axisDelta(southWest.ridgeYaw, southWestCross.ridgeYaw) > Math.PI / 2 - 0.01,
-  'Wall-only orientation must preserve the automatic perpendicular cross gable'
+  'Footprint planning must preserve the automatic perpendicular junction gable'
 );
 assert.ok(
   axisDelta(northWest.ridgeYaw, Math.PI / 2) < 0.01,
-  'A lower bay on the opposite side of the upper wall must not be absorbed into the front roof run'
+  'The perpendicular lower branch must keep its own connected roof-mass direction'
 );
-assert.notEqual(northWest.upperWallRun, true, 'Opposite-side roof cells must keep the established single-edge rule');
+assert.notEqual(northWest.upperWallRun, true, 'Opposite-side roof cells must keep the established coverage metadata boundary');
 
 const southWestPanels = roofPanelDescriptors(southWest);
 const southEastPanels = roofPanelDescriptors(southEast);
@@ -113,7 +116,7 @@ const joined = southWestPanels.some(panel =>
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 0, 3) ||
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 1, 2)
 );
-assert.equal(joined, true, 'Adjacent wall-only lower roof panels must keep their existing joined finished edge');
+assert.equal(joined, true, 'Adjacent lower roof panels must keep their joined finished edge so the run reads as one pitch');
 
 const mainRoofHost = {
   key: 'roof:main-host',
@@ -141,23 +144,25 @@ const hosted = orientFrameCellRegionsTowardUpperPairs(
 const hostedSouthWest = hosted.find(region => region.key === southWest.key);
 const hostedSouthWestCross = hosted.find(region => region.key === southWestCross.key);
 const hostedSouthEast = hosted.find(region => region.key === southEast.key);
-assert.ok(hostedSouthWest && hostedSouthWestCross && hostedSouthEast, 'Host-roof resolution must preserve both attached lower sections and the live cross gable');
+assert.ok(hostedSouthWest && hostedSouthWestCross && hostedSouthEast, 'Host-roof resolution must preserve both attached lower sections and the live junction gable');
 assert.ok(
-  axisDelta(hostedSouthWest.ridgeYaw, mainRoofHost.ridgeYaw) < 0.01,
-  'An attached lower roof must inherit the main roof ridge instead of staying parallel to its wall run'
+  axisDelta(hostedSouthWest.ridgeYaw, 0) < 0.01,
+  'A resolved main roof must not turn the connected lower run sideways into repeated gables'
 );
 assert.ok(
-  axisDelta(hostedSouthEast.ridgeYaw, mainRoofHost.ridgeYaw) < 0.01,
-  'All lower sections attached to the same main roof must resolve to the same main-roof orientation'
+  axisDelta(hostedSouthEast.ridgeYaw, 0) < 0.01,
+  'Every bay in the connected lower mass must keep the same footprint-owned pitch'
 );
 assert.ok(
   axisDelta(hostedSouthWest.ridgeYaw, hostedSouthWestCross.ridgeYaw) > Math.PI / 2 - 0.01,
-  'Main-roof inheritance must rotate only the crossed junction primary and keep its live cross partner perpendicular'
+  'Host annotation must keep the perpendicular junction mass intact'
 );
 assert.equal(hostedSouthWest.hostRoofRegionKey, mainRoofHost.key);
 assert.equal(hostedSouthEast.hostRoofRegionKey, mainRoofHost.key);
-assert.equal(hostedSouthWest.upperWallRun, true, 'Host inheritance must retain exact wall-coverage metadata for roof polish');
-assert.equal(hostedSouthEast.upperWallRun, true, 'Host inheritance must retain exact wall-coverage metadata for every attached bay');
+assert.equal(hostedSouthWest.roofOrientationAuthority, 'footprint');
+assert.equal(hostedSouthEast.roofOrientationAuthority, 'footprint');
+assert.equal(hostedSouthWest.upperWallRun, true, 'Host annotation must retain exact wall-coverage metadata for roof polish');
+assert.equal(hostedSouthEast.upperWallRun, true, 'Host annotation must retain exact wall-coverage metadata for every attached bay');
 assert.equal(upperWallKeyForRoofRegion(hostedSouthWest), 'wall:60-61');
 assert.equal(upperWallKeyForRoofRegion(hostedSouthEast), 'wall:61-62');
 
@@ -185,7 +190,7 @@ const roofQuery = {
 };
 const polish = new RoofWallPolishSystem({ physicalLogs, roofQuery, wallPanelSystem });
 const first = polish.sync();
-assert.equal(first.solidified, 2, 'Completing the host-aligned lower roof must reset covered upper windows and doors to solid');
+assert.equal(first.solidified, 2, 'Completing the connected lower roof must reset covered upper windows and doors to solid');
 assert.equal(customizations.size, 0, 'Covered upper wall openings must be physically restored to their solid wall state');
 
 customizations.set('wall:60-61', { variant: 'window' });
@@ -204,4 +209,4 @@ const rebuilt = polish.sync();
 assert.equal(rebuilt.solidified, 1, 'Demolishing and rebuilding the lower roof must apply the solid default again');
 assert.equal(customizations.has('wall:60-61'), false);
 
-console.log('Attached lower roofs inherit their main roof direction while crossed junctions, wall-only fallback and wall polish stay stable.');
+console.log('Connected lower roof masses keep one footprint-owned pitch while perpendicular junctions and wall polish remain stable.');

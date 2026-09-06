@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import {
   collectLocalRoofFramePairs,
-  collectRoofRegions
+  collectRoofRegions,
+  orientFrameCellRegionsTowardUpperPairs
 } from '../src/world/RoofTopology.js';
 import {
   roofMemberCandidates,
@@ -13,10 +14,7 @@ import {
   collectCompletedRoofRegions,
   roofPanelDescriptors
 } from '../src/world/StructureRoofQuery.js';
-import {
-  roofPlanKey,
-  StackedRoofReflowSystem
-} from '../src/world/StackedRoofReflowSystem.js';
+import { roofPlanKey } from '../src/world/StackedRoofReflowSystem.js';
 
 const axisDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -106,7 +104,7 @@ const regions = collectRoofRegions(pairs, roofOptions);
 assert.equal(
   regions.length,
   4,
-  'Stepped L footprint must expose three occupied cells plus the automatic perpendicular gable at the connected junction'
+  'Stepped L footprint must expose three occupied cells plus the perpendicular junction gable'
 );
 const corner = regions.find(region =>
   region.anchorIds.join('-') === '40-41-43-44' && region.junctionRole === 'primary'
@@ -116,19 +114,38 @@ const crossCorner = regions.find(region =>
 );
 const eastWing = regions.find(region => region.anchorIds.join('-') === '41-42-44-45');
 const northWing = regions.find(region => region.anchorIds.join('-') === '43-44-46-47');
-assert.ok(corner && crossCorner && eastWing && northWing, 'Stepped roof cells must keep stable structural identities and add the crossed junction automatically');
+assert.ok(corner && crossCorner && eastWing && northWing, 'Stepped roof cells must keep stable structural identities and expose the footprint junction automatically');
 assert.equal(corner.crossJunction, true);
 assert.equal(crossCorner.crossJunction, true);
-assert.equal(crossCorner.key, `${corner.key}:cross`, 'The perpendicular junction gable must have a stable derived identity');
-assert.ok(axisDelta(corner.ridgeYaw, 0) < 0.01, 'The primary L-junction gable keeps the deterministic canonical ridge');
-assert.ok(axisDelta(crossCorner.ridgeYaw, Math.PI / 2) < 0.01, 'The L-junction must automatically add the perpendicular ridge that connects the outgoing wing');
-assert.ok(axisDelta(corner.ridgeYaw, crossCorner.ridgeYaw) > Math.PI / 2 - 0.01, 'The two junction gables must remain perpendicular');
-assert.ok(axisDelta(eastWing.ridgeYaw, 0) < 0.01, 'Horizontal endpoint ridge must follow its connected horizontal wing');
-assert.ok(axisDelta(northWing.ridgeYaw, Math.PI / 2) < 0.01, 'Vertical endpoint ridge must automatically rotate with its connected wing');
+assert.equal(corner.footprintJunctionKind, 'corner', 'The L intersection must be classified from the whole connected footprint');
+assert.equal(crossCorner.key, `${corner.key}:cross`, 'The perpendicular junction gable must keep its stable derived identity');
+assert.ok(axisDelta(corner.ridgeYaw, 0) < 0.01, 'The horizontal roof mass must keep one continuous ridge axis');
+assert.ok(axisDelta(crossCorner.ridgeYaw, Math.PI / 2) < 0.01, 'The junction must expose the perpendicular connected roof mass');
+assert.ok(axisDelta(corner.ridgeYaw, crossCorner.ridgeYaw) > Math.PI / 2 - 0.01, 'The two junction masses must remain perpendicular');
+assert.ok(axisDelta(eastWing.ridgeYaw, 0) < 0.01, 'Horizontal endpoint ridge must follow the horizontal footprint mass');
+assert.ok(axisDelta(northWing.ridgeYaw, Math.PI / 2) < 0.01, 'Vertical endpoint ridge must follow the vertical footprint mass');
+assert.equal(corner.footprintOrientationLocked, true);
+assert.equal(eastWing.footprintOrientationLocked, true);
+assert.equal(northWing.footprintOrientationLocked, true);
+assert.equal(
+  corner.roofMassKey,
+  eastWing.roofMassKey,
+  'Adjacent horizontal bays must belong to one logical roof mass rather than independent side-by-side gables'
+);
+assert.equal(
+  crossCorner.roofMassKey,
+  northWing.roofMassKey,
+  'The perpendicular branch must have one continuous roof-mass identity through its junction'
+);
+assert.notEqual(
+  corner.roofMassKey,
+  crossCorner.roofMassKey,
+  'Perpendicular roof masses must remain distinct at the junction'
+);
 assert.notEqual(
   roofPlanKey(corner),
   roofPlanKey(crossCorner),
-  'Stacked roof relocation must keep the two live gable axes distinct even though they share one footprint'
+  'Stacked roof relocation must keep the two live junction axes distinct even though they share one footprint'
 );
 
 const primaryJunctionMembers = roofMemberCandidates(corner)
@@ -138,7 +155,7 @@ assert.equal(roofRegionComplete(crossCorner, primaryJunctionMembers), false);
 assert.equal(
   collectCompletedRoofRegions([corner, crossCorner], primaryJunctionMembers).length,
   1,
-  'An existing primary gable remains complete when a new perpendicular wing turns its cell into a crossed junction'
+  'An existing primary gable remains complete when the perpendicular footprint branch is introduced'
 );
 const crossJunctionMembers = roofMemberCandidates(crossCorner)
   .map((candidate, index) => makeRoofMember(candidate, 400 + index));
@@ -149,14 +166,18 @@ const completedJunction = collectCompletedRoofRegions(
 assert.equal(
   completedJunction.length,
   2,
-  'A finished crossed junction must expose exactly its two live gables without a duplicate retained-perpendicular region'
+  'A finished junction must expose exactly its two live perpendicular structural gables'
 );
 assert.equal(
   completedJunction.flatMap(roofPanelDescriptors).length,
   4,
-  'The automatic crossed junction must expose both slopes of both perpendicular gables for thatch finishing'
+  'The existing finish contract remains two slopes per live junction mass'
 );
 
+// Reproduce the device failure that motivated the footprint-plan resolver: a later
+// next-storey wall/roof hint must not rotate a connected lower roof mass away from its
+// own straight run. Before this rule the two lower horizontal bays could be turned
+// sideways into separate repeated gables even though their local footprint was one pitch.
 const upperFrames = [
   makeFrame(60, L, L, L),
   makeFrame(61, L, L * 2, L)
@@ -168,91 +189,55 @@ const upperPairs = collectLocalRoofFramePairs(
   pairOptions(upperBeamKeys)
 );
 const upperRegions = collectRoofRegions(upperPairs, roofOptions);
-const upperWallNorthWing = upperRegions.find(region => region.anchorIds.join('-') === '43-44-46-47');
-const upperWallEastWing = upperRegions.find(region => region.anchorIds.join('-') === '41-42-44-45');
-assert.ok(upperWallNorthWing && upperWallEastWing, 'Adding one upper structural wall edge must preserve lower roof region identities');
+const upperNorthWing = upperRegions.find(region => region.anchorIds.join('-') === '43-44-46-47');
+const upperEastWing = upperRegions.find(region => region.anchorIds.join('-') === '41-42-44-45');
+assert.ok(upperNorthWing && upperEastWing, 'Adding an upper structural edge must preserve lower roof region identities');
 assert.ok(
-  axisDelta(upperWallNorthWing.ridgeYaw, 0) < 0.01,
-  'A side roof must turn its gable toward the nearest completed upper-storey wall edge'
+  axisDelta(upperNorthWing.ridgeYaw, Math.PI / 2) < 0.01,
+  'A connected vertical roof mass must keep its footprint direction when an upper edge appears'
 );
 assert.ok(
-  axisDelta(upperWallEastWing.ridgeYaw, 0) < 0.01,
-  'An upper wall outside the local side-roof span must not rotate an unrelated roof bay'
+  axisDelta(upperEastWing.ridgeYaw, 0) < 0.01,
+  'An unrelated horizontal roof mass must remain one continuous pitch'
 );
-
-const targetRegion = upperWallNorthWing;
-const oldRegion = northWing;
-const members = roofMemberCandidates(oldRegion)
+const existingNorthMembers = roofMemberCandidates(northWing)
   .map((candidate, index) => makeRoofMember(candidate, 500 + index));
-assert.equal(roofRegionComplete(targetRegion, members), false, 'A completed roof facing away from the new upper wall must not already satisfy the corrected target');
-
-const retainedOnly = collectCompletedRoofRegions([targetRegion], members);
 assert.equal(
-  retainedOnly.length,
-  1,
-  'A complete perpendicular primary frame must remain a completed roof surface after canonical orientation changes'
-);
-assert.equal(
-  retainedOnly[0].topology,
-  'frame-cell-retained',
-  'The preserved primary gable must be completion-only rather than a second live placement topology'
-);
-assert.equal(
-  roofPanelDescriptors(retainedOnly[0]).length,
-  2,
-  'A preserved primary gable must expose both of its thatch slopes'
+  roofRegionComplete(upperNorthWing, existingNorthMembers),
+  true,
+  'Later upper-storey construction must not invalidate a completed connected lower roof by rotating it'
 );
 
-const correctedMembers = roofMemberCandidates(targetRegion)
-  .map((candidate, index) => makeRoofMember(candidate, 600 + index));
-const intersectionRegions = collectCompletedRoofRegions(
-  [targetRegion],
-  [...members, ...correctedMembers]
-);
-assert.equal(
-  intersectionRegions.length,
-  2,
-  'When the corrected side roof and retained primary frame both exist, both must remain finishable'
-);
-assert.equal(
-  intersectionRegions.flatMap(roofPanelDescriptors).length,
-  4,
-  'The completed roof intersection must expose four thatch panels so the primary frame is not left bare'
-);
-
-const oldPanel = roofPanelDescriptors(oldRegion)[0];
-const targetPanel = roofPanelDescriptors(targetRegion).find(panel => panel.side === oldPanel.side);
-const thatchRoot = new THREE.Group();
-thatchRoot.position.set(oldPanel.center.x, oldPanel.center.y, oldPanel.center.z);
-thatchRoot.userData.thatchPanelId = oldPanel.id;
-const roofThatchSystem = {
-  thatched: new Map([[oldPanel.id, { panel: oldPanel, root: thatchRoot }]])
+const mainRoofHost = {
+  key: 'roof:main-host',
+  anchorIds: [60, 61, 70, 71],
+  sourceBeamKeys: ['beam:60-61'],
+  frameBaseY: L,
+  frameTopY: L * 2,
+  a: { x: L, z: L },
+  b: { x: L * 2, z: L },
+  c: { x: L, z: L * 2 },
+  d: { x: L * 2, z: L * 2 },
+  eaveY: L * 2 + 0.08,
+  ridgeY: L * 2 + 1,
+  ridgeYaw: 0,
+  topology: 'closed-loop'
 };
-const physicalLogs = {
-  structureRevision: 7,
-  builtLogs: [...frames, ...upperFrames, ...members],
-  framePairCacheRevision: 7,
-  floorCornerCacheRevision: 7,
-  roofQueryCacheRevision: 7,
-  roofQueryCacheKey: 'stale',
-  roofQueryCache: [{}]
-};
-const roofQuery = {
-  cacheRevision: 7,
-  regionCache: new Map([['stale', [targetRegion]]]),
-  getRegions: () => [targetRegion]
-};
-const reflow = new StackedRoofReflowSystem({ physicalLogs, roofQuery, roofThatchSystem });
-const result = reflow.sync();
-assert.equal(result.moved, true, 'A completed side roof must reflow automatically when an upper wall gives it a stronger direction');
-assert.equal(result.members, 5, 'All four rafters and the ridge must rotate as one completed roof assembly');
-assert.equal(result.panels, 1, 'Existing thatch must rotate with the corrected roof instead of being refunded');
-assert.equal(roofRegionComplete(targetRegion, members), true, 'Reflowed physical members must exactly satisfy the upper-wall-oriented roof topology');
-assert.equal(physicalLogs.structureRevision, 8, 'Automatic roof rotation must invalidate structure-derived caches once');
-assert.equal(roofThatchSystem.thatched.has(oldPanel.id), false);
-assert.equal(roofThatchSystem.thatched.has(targetPanel.id), true, 'Thatch persistence identity must follow the rotated panel geometry');
-assert.ok(Math.abs(Math.abs(thatchRoot.rotation.y) - Math.PI / 2) < 0.01, 'Thatch visual must turn a quarter rotation with the roof plane');
-assert.ok(Math.abs(thatchRoot.position.x - targetPanel.center.x) < 0.001);
-assert.ok(Math.abs(thatchRoot.position.z - targetPanel.center.z) < 0.001);
+const hosted = orientFrameCellRegionsTowardUpperPairs(
+  [...upperRegions, mainRoofHost],
+  upperPairs,
+  {
+    levelTolerance: Math.max(0.42, roofOptions.topTolerance + 0.08),
+    nearestBand: Math.max(0.18, roofOptions.maxAlong * 0.6)
+  }
+);
+const hostedNorthWing = hosted.find(region => region.key === upperNorthWing.key);
+assert.ok(hostedNorthWing, 'Host annotation must preserve the connected lower region');
+assert.ok(
+  axisDelta(hostedNorthWing.ridgeYaw, Math.PI / 2) < 0.01,
+  'A main-roof host may annotate ownership but must not override a connected footprint mass direction'
+);
+assert.equal(hostedNorthWing.hostRoofRegionKey, mainRoofHost.key);
+assert.equal(hostedNorthWing.roofOrientationAuthority, 'footprint');
 
-console.log('Connected roofs now auto-cross at perpendicular junctions, retained gables stay thatchable, and completed stale roofs reflow with thatch.');
+console.log('Connected roof masses now keep one footprint-owned pitch, while perpendicular junction masses remain live and stable against later upper-storey hints.');
