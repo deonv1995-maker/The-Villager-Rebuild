@@ -194,8 +194,9 @@ assert.deepEqual(
 );
 
 // A stepped L structure is not one rectangular envelope. Once each extension bay
-// has its four physical RAW top beams, recover three local roof cells and never
-// bridge the missing fourth bay with an invented roof.
+// has its four physical RAW top beams, recover its three occupied roof cells and let
+// the shared corner expose a second perpendicular live gable automatically. Never
+// bridge the missing fourth bay with an invented roof cell.
 const steppedRoofFrames = [
   makeFrame(40, 0, 0),
   makeFrame(41, PHYSICAL_LOG.length, 0),
@@ -226,8 +227,8 @@ const steppedRoofPairs = collectLocalRoofFramePairs(
 const steppedRoofRegions = collectRoofRegions(steppedRoofPairs, regionOptions);
 assert.equal(
   steppedRoofRegions.length,
-  3,
-  'A fully top-beamed L footprint must resolve exactly its three occupied roof bays'
+  4,
+  'A fully top-beamed L footprint must resolve three occupied roof cells plus the automatic perpendicular junction gable'
 );
 assert.ok(
   steppedRoofRegions.every(region => region.topology === 'frame-cell'),
@@ -235,14 +236,27 @@ assert.ok(
 );
 assert.deepEqual(
   steppedRoofRegions.map(region => region.anchorIds),
-  [[40, 41, 43, 44], [41, 42, 44, 45], [43, 44, 46, 47]],
-  'Each stepped roof bay must stay anchored to its own four posts'
+  [
+    [40, 41, 43, 44],
+    [40, 41, 43, 44],
+    [41, 42, 44, 45],
+    [43, 44, 46, 47]
+  ],
+  'Each stepped roof region must stay anchored to a real occupied cell, with only the connected corner represented twice for its crossed gables'
+);
+const steppedJunctionRegions = steppedRoofRegions.filter(region =>
+  region.anchorIds.join('-') === '40-41-43-44'
+);
+assert.deepEqual(
+  steppedJunctionRegions.map(region => region.junctionRole),
+  ['primary', 'cross'],
+  'The connected L corner must derive exactly one primary and one perpendicular cross gable'
 );
 assert.ok(
   steppedRoofRegions.every(region =>
     region.sourceBeamKeys.length === 4 && roofMemberCandidates(region).length === 5
   ),
-  'Every stepped roof bay must retain the physical four-beam support and ordered five-member roof sequence'
+  'Every stepped roof gable must retain the physical four-beam support and ordered five-member roof sequence'
 );
 
 const denseFrames = Array.from({ length: 240 }, (_, index) => {
@@ -300,4 +314,4 @@ assert.ok(!physicalLogSource.includes('roofRegionCacheRevision'), 'Roof preview 
 assert.ok(!physicalLogSource.includes('roofCandidateCacheRevision'), 'Roof preview must use the local query cache instead of the former global candidate cache');
 assert.ok(!physicalLogSource.includes('for (const region of this.#roofRegions())'), 'Roof preview must not enumerate global roof regions on selection');
 
-console.log('Closed-perimeter and per-bay multi-frame roof geometry, deterministic gable axis and bounded mobile query verified');
+console.log('Closed-perimeter, per-bay and automatic cross-gable roof geometry, deterministic axes and bounded mobile query verified');
