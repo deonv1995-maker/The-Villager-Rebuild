@@ -25,6 +25,10 @@ const FLOOR_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.45;
 // slightly larger world-space allowance than a floor seam. This is additional tolerance
 // beyond the physical Log radius, not a second structural snap range.
 const ROOF_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.65;
+// Stair treads are narrow, stepped targets and need a little more mobile reticle forgiveness
+// than floor strips. This remains only a targeting tolerance; stair topology still comes
+// from the canonical two-cell structural opening query.
+const STAIR_RETICLE_SNAP_PADDING = CONSTRUCTION_GRID_STEP * 0.75;
 
 export const PHYSICAL_LOG = Object.freeze({
   length: LOG_LENGTH,
@@ -53,6 +57,7 @@ export const PHYSICAL_LOG = Object.freeze({
   stairStepRun: STAIR_STEP_RUN,
   stairRunLength: STAIR_RUN_LENGTH,
   stairSnapRange: LOG_LENGTH * 2 + PLACEMENT_REACH,
+  stairReticleSnapPadding: STAIR_RETICLE_SNAP_PADDING,
   stairMaxStepRise: 0.58,
   // From outside a full bay, the ordered ROOF workflow must still reach the far
   // rafter after nearer members have been placed. Keep topology local, but allow
