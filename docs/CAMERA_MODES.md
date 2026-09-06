@@ -30,6 +30,8 @@ First person is an optional view over the same Ranger state:
 - moving the reticle off every reachable legal roof member releases the ROOF snap instead of magnetically jumping to a neighbouring bay or storey;
 - first-person roof intent does not change `RoofTopology`, rafter-before-ridge sequencing, physical-Log occupancy, roof reach, thatching, reflow or completed-roof rules. It only resolves which already-eligible member is intended;
 - third-person ROOF placement keeps the established proximity ordering when no explicit centre-reticle ray is supplied;
+- with the hammer equipped, first-person demolition also uses the same centre-camera ray against the actual visible mesh of each reachable placed construction piece and the campfire. The highlighted demolition target is therefore the object under the white dot, not merely the nearest object within hammer range;
+- if the hammer reticle misses all reachable demolition geometry, the first-person demolition target is released instead of falling back to a neighbouring wall, floor, roof member or campfire. Third-person hammer targeting keeps its established proximity behavior;
 - the reticle only chooses among already-valid construction candidates; it does not create support, bypass collision/terrain rules or change third-person placement ordering;
 - auto-facing actions align the first-person view with their world target;
 - the third-person Ranger body, spear presentation and hand-mounted tool props are hidden to prevent camera clipping;
@@ -52,5 +54,7 @@ Camera mode is presentation/session state, not gameplay progression, and is not 
 `scripts/verify-camera-modes.mjs` verifies default third-person behavior, first-person eye placement, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
 `scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.
+
+`scripts/verify-first-person-demolition-targeting.mjs` verifies that the first-person hammer selects the reachable placed construction mesh intersected by the centre reticle instead of a nearer off-axis object, resolves the front visible target on the same ray, releases on a reticle miss, respects the existing interaction reach, ignores hidden construction geometry, and applies the same exact-reticle contract to the campfire.
 
 `scripts/verify-roof-preview-runtime.mjs` verifies invalid ROOF previews remain safe, first-person reticle aim acquires the intended reachable roof member, leaving all roof members releases the snap, and third-person ROOF proximity targeting remains unchanged.
