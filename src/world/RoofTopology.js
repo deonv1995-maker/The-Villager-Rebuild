@@ -582,6 +582,11 @@ export function orientConnectedFrameCellRegions(regions) {
  * their shared thatch edges read as one continuous roof mass terminating cleanly at the
  * upper storey. The exact upper FRAME pair is retained as structural metadata for wall
  * conflict polishing; SOLID / DOOR / WINDOW visuals never participate in roof geometry.
+ *
+ * At an automatic crossed junction, only the stable primary gable participates in this
+ * upper-wall tie-break. The live `:cross` gable is then rebuilt geometrically as the
+ * primary's perpendicular partner, preserving both roof axes without losing the wall-run
+ * metadata required by the primary roof mass.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -591,11 +596,9 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   const supports = pairs ?? [];
   if (!source.length || !supports.length) return source;
 
-  return source.map(region => {
+  const oriented = source.map(region => {
     if (region?.topology !== 'frame-cell') return region;
-    // A crossed junction already carries both valid perpendicular gables. Rotating one
-    // half toward an upper wall would collapse the automatic cross back into one axis.
-    if (region.crossJunction) return region;
+    if (region.crossJunction && region.junctionRole === 'cross') return region;
     if (!Number.isFinite(region.frameTopY)) return region;
 
     const center = frameCellCenter(region);
@@ -632,11 +635,11 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       const wallYaw = axisHeading(primaryPair.yaw ?? 0);
       const currentDelta = axisYawDelta(currentYaw, wallYaw);
       const alternateDelta = axisYawDelta(alternateYaw, wallYaw);
-      const oriented = alternateDelta + 0.05 < currentDelta
+      const resolved = alternateDelta + 0.05 < currentDelta
         ? quarterTurnFrameCell(region)
         : region;
       return {
-        ...oriented,
+        ...resolved,
         upperWallRun: true,
         upperWallPairKey: primaryPair.rawKey,
         upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
@@ -648,6 +651,27 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
     return alternateScore > currentScore + 0.05
       ? quarterTurnFrameCell(region)
       : region;
+  });
+
+  const primaryByKey = new Map(
+    oriented
+      .filter(region => region?.crossJunction && region.junctionRole === 'primary')
+      .map(region => [region.junctionPrimaryKey ?? region.key, region])
+  );
+
+  return oriented.map(region => {
+    if (!region?.crossJunction || region.junctionRole !== 'cross') return region;
+    const primary = primaryByKey.get(region.junctionPrimaryKey);
+    if (!primary) return region;
+    const perpendicular = quarterTurnFrameCell(primary);
+    return {
+      ...region,
+      a: { ...perpendicular.a },
+      b: { ...perpendicular.b },
+      c: { ...perpendicular.c },
+      d: { ...perpendicular.d },
+      ridgeYaw: perpendicular.ridgeYaw
+    };
   });
 }
 
