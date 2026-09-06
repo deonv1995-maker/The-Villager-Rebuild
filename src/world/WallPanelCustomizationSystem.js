@@ -341,10 +341,14 @@ export class WallPanelCustomizationSystem {
     for (const entries of groups.values()) {
       const pair = this.#findFramePair(entries, frames);
       if (!pair) continue;
+      // A FRAME pair owns the undirected wall axis, but its endpoint order can reverse
+      // the directed yaw by PI. Keep the wall's already-established facing as the seed
+      // so a save/load or balanced interior vote cannot turn a correct wall inside out.
+      const facingYaw = Number.isFinite(entries[0]?.yaw) ? entries[0].yaw : pair.yaw;
       const yaw = resolveWallInwardYaw({
         x: pair.x,
         z: pair.z,
-        yaw: pair.yaw,
+        yaw: facingYaw,
         baseY: pair.baseY,
         floors,
         structuralInteriors
