@@ -520,31 +520,57 @@ const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
 };
 
 /**
- * A square roof cell has two mathematically valid gable directions. In a stepped or
- * L-shaped footprint the connected wing is the structural tie-break: endpoint cells
- * point their ridge toward the neighbouring occupied cell and straight runs keep the
- * ridge along the run. Corner cells with equal perpendicular neighbours retain the
- * deterministic canonical direction. This keeps an isolated square stable while
- * making extensions automatically turn with the building footprint.
+ * A square roof cell has two mathematically valid gable directions. In a stepped,
+ * L-shaped, T-shaped or crossed footprint the connected wings are the structural
+ * authority: endpoint cells point their ridge toward the occupied run, while a cell
+ * connected on both perpendicular axes automatically exposes both gables as a crossed
+ * roof junction. The player never selects a special junction mode; it is derived from
+ * the completed FRAME + RAW roof-support topology.
+ *
+ * The original region key remains the primary gable identity. The perpendicular gable
+ * receives a deterministic `:cross` key so existing saves and already-built members can
+ * continue to match geometry-first while the newly connected wing becomes buildable.
  */
 export function orientConnectedFrameCellRegions(regions) {
   const cells = (regions ?? []).filter(region => region?.topology === 'frame-cell');
   if (cells.length < 2) return regions ?? [];
 
-  return (regions ?? []).map(region => {
-    if (region?.topology !== 'frame-cell') return region;
+  return (regions ?? []).flatMap(region => {
+    if (region?.topology !== 'frame-cell') return [region];
     const neighbours = cells.filter(candidate =>
       candidate.key !== region.key && sharedFrameCount(region, candidate) === 2
     );
-    if (!neighbours.length) return region;
+    if (!neighbours.length) return [region];
 
     const currentYaw = axisHeading(region.ridgeYaw ?? 0);
     const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
     const currentScore = ridgeAlignmentScore(region, neighbours, currentYaw);
     const alternateScore = ridgeAlignmentScore(region, neighbours, alternateYaw);
-    return alternateScore > currentScore + 0.05
+    const oriented = alternateScore > currentScore + 0.05
       ? quarterTurnFrameCell(region)
       : region;
+
+    // A shared-edge neighbour contributes ~1 to the score of the axis it occupies and
+    // ~0 to its perpendicular axis. Requiring meaningful support on both axes avoids
+    // inventing cross-gables for isolated endpoints or straight multi-bay runs while
+    // tolerating the small positional drift allowed by structural snapping.
+    const crossesBothAxes = currentScore > 0.75 && alternateScore > 0.75;
+    if (!crossesBothAxes) return [oriented];
+
+    const primary = {
+      ...oriented,
+      crossJunction: true,
+      junctionRole: 'primary',
+      junctionPrimaryKey: region.key
+    };
+    const cross = {
+      ...quarterTurnFrameCell(primary),
+      key: `${region.key}:cross`,
+      crossJunction: true,
+      junctionRole: 'cross',
+      junctionPrimaryKey: region.key
+    };
+    return [primary, cross];
   });
 }
 
@@ -556,6 +582,11 @@ export function orientConnectedFrameCellRegions(regions) {
  * their shared thatch edges read as one continuous roof mass terminating cleanly at the
  * upper storey. The exact upper FRAME pair is retained as structural metadata for wall
  * conflict polishing; SOLID / DOOR / WINDOW visuals never participate in roof geometry.
+ *
+ * At an automatic crossed junction, only the stable primary gable participates in this
+ * upper-wall tie-break. The live `:cross` gable is then rebuilt geometrically as the
+ * primary's perpendicular partner, preserving both roof axes without losing the wall-run
+ * metadata required by the primary roof mass.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -565,8 +596,9 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   const supports = pairs ?? [];
   if (!source.length || !supports.length) return source;
 
-  return source.map(region => {
+  const oriented = source.map(region => {
     if (region?.topology !== 'frame-cell') return region;
+    if (region.crossJunction && region.junctionRole === 'cross') return region;
     if (!Number.isFinite(region.frameTopY)) return region;
 
     const center = frameCellCenter(region);
@@ -603,11 +635,11 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       const wallYaw = axisHeading(primaryPair.yaw ?? 0);
       const currentDelta = axisYawDelta(currentYaw, wallYaw);
       const alternateDelta = axisYawDelta(alternateYaw, wallYaw);
-      const oriented = alternateDelta + 0.05 < currentDelta
+      const resolved = alternateDelta + 0.05 < currentDelta
         ? quarterTurnFrameCell(region)
         : region;
       return {
-        ...oriented,
+        ...resolved,
         upperWallRun: true,
         upperWallPairKey: primaryPair.rawKey,
         upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
@@ -619,6 +651,27 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
     return alternateScore > currentScore + 0.05
       ? quarterTurnFrameCell(region)
       : region;
+  });
+
+  const primaryByKey = new Map(
+    oriented
+      .filter(region => region?.crossJunction && region.junctionRole === 'primary')
+      .map(region => [region.junctionPrimaryKey ?? region.key, region])
+  );
+
+  return oriented.map(region => {
+    if (!region?.crossJunction || region.junctionRole !== 'cross') return region;
+    const primary = primaryByKey.get(region.junctionPrimaryKey);
+    if (!primary) return region;
+    const perpendicular = quarterTurnFrameCell(primary);
+    return {
+      ...region,
+      a: { ...perpendicular.a },
+      b: { ...perpendicular.b },
+      c: { ...perpendicular.c },
+      d: { ...perpendicular.d },
+      ridgeYaw: perpendicular.ridgeYaw
+    };
   });
 }
 

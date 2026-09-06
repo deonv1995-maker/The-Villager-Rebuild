@@ -16,11 +16,21 @@ const quantize = value => Math.round(value * PLAN_QUANTIZATION) / PLAN_QUANTIZAT
 
 const planPointKey = point => `${quantize(point.x)},${quantize(point.z)}`;
 
-export const roofPlanKey = region => [region?.a, region?.b, region?.c, region?.d]
-  .filter(Boolean)
-  .map(planPointKey)
-  .sort()
-  .join('|');
+export const roofPlanKey = region => {
+  const footprint = [region?.a, region?.b, region?.c, region?.d]
+    .filter(Boolean)
+    .map(planPointKey)
+    .sort()
+    .join('|');
+  if (!footprint || !region?.crossJunction) return footprint;
+
+  // A crossed junction contains two live gables on the same X/Z footprint. Keep their
+  // stable primary/cross identities separate for stacked relocation so a complete half
+  // cannot move upstairs while its perpendicular junction partner is mistaken for the
+  // same plan level.
+  const role = region.junctionRole === 'cross' ? 'cross' : 'primary';
+  return `${footprint}|junction:${role}`;
+};
 
 const axisYawDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));

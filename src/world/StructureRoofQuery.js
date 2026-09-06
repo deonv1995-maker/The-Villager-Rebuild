@@ -49,12 +49,16 @@ const retainedPerpendicularFrameCellRegion = region => ({
  * orientation changes around an upper-storey/side-wing intersection. That physical
  * assembly remains a valid finished roof surface, but it is completion-only: live
  * placement still receives only RoofTopology's canonical candidates.
+ *
+ * Automatic cross-gable junctions are different: both perpendicular gables are already
+ * live structural regions, so synthesizing another retained perpendicular copy would
+ * duplicate completed regions and thatch panels.
  */
 export function collectCompletedRoofRegions(regions, members) {
   const completed = [];
   for (const region of regions ?? []) {
     if (roofRegionComplete(region, members)) completed.push(region);
-    if (region?.topology !== 'frame-cell') continue;
+    if (region?.topology !== 'frame-cell' || region.crossJunction) continue;
 
     const retained = retainedPerpendicularFrameCellRegion(region);
     if (roofRegionComplete(retained, members)) completed.push(retained);
