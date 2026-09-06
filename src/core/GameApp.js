@@ -9,6 +9,7 @@ import { RockHarvestSystem } from '../world/RockHarvestSystem.js';
 import { PhysicalLogSystem } from '../world/PhysicalLogSystem.js';
 import { CampfireSystem } from '../world/CampfireSystem.js';
 import { DemolitionPreviewSystem } from '../world/DemolitionPreviewSystem.js';
+import { FirstPersonDemolitionTargeting } from '../world/DemolitionTargetingRules.js';
 import { SpearProjectileSystem } from '../world/SpearProjectileSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
@@ -31,6 +32,7 @@ export class GameApp {
       origin: new THREE.Vector3(),
       direction: new THREE.Vector3()
     };
+    this.firstPersonDemolitionTargeting = new FirstPersonDemolitionTargeting();
     this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
   }
@@ -204,10 +206,18 @@ export class GameApp {
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
     const rockTarget = this.rockHarvest?.update(this.playerPosition, toolId === 'pickaxe') ?? null;
+    const demolitionAim = toolId === 'hammer' ? this.#currentConstructionAim() : null;
     const demolitionTarget = toolId === 'hammer'
-      ? this.physicalLogs?.getDemolitionTarget(this.playerPosition)
-        ?? this.campfire?.getDemolitionTarget(this.playerPosition)
-        ?? null
+      ? demolitionAim
+        ? this.firstPersonDemolitionTargeting.select({
+          physicalLogs: this.physicalLogs,
+          campfire: this.campfire,
+          playerPosition: this.playerPosition,
+          aim: demolitionAim
+        })
+        : this.physicalLogs?.getDemolitionTarget(this.playerPosition)
+          ?? this.campfire?.getDemolitionTarget(this.playerPosition)
+          ?? null
       : null;
     const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
 
