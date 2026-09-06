@@ -33,7 +33,8 @@ const {
 
 const snapYaw = yaw => {
   const snapped = Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
-  return Object.is(snapped, -0) ? 0 : snapped;
+  const wrapped = Math.atan2(Math.sin(snapped), Math.cos(snapped));
+  return Math.abs(wrapped) < 0.000001 ? 0 : wrapped;
 };
 
 export function axisYawDelta(a, b) {
