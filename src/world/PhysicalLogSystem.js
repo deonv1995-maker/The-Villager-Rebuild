@@ -28,6 +28,7 @@ import {
   floorCandidateBlockedByStairs,
   stairOpeningContainsFloor
 } from './StairPlacementRules.js';
+import { selectStairBuildCandidate } from './StairTargetingRules.js';
 import {
   collectUpperStoreyFloorCandidates,
   collectUpperStoreySupportRegions
@@ -354,7 +355,7 @@ export class PhysicalLogSystem {
     if (mode === 'floor') return this.#floorPlacement(base, constructionAim);
     if (mode === 'frame') return this.#framePlacement(base, playerPosition);
     if (mode === 'wall') return this.#wallPlacement(base);
-    if (mode === 'stairs') return this.#stairsPlacement(base);
+    if (mode === 'stairs') return this.#stairsPlacement(base, constructionAim);
     if (mode === 'roof') return this.#roofPlacement(base, constructionAim);
     return base;
   }
@@ -616,7 +617,7 @@ export class PhysicalLogSystem {
     return best ? { ...base, ...best } : { ...base, y: base.ground + PHYSICAL_LOG.halfLength, valid: false };
   }
 
-  #stairsPlacement(base) {
+  #stairsPlacement(base, constructionAim = null) {
     const regions = this.#upperStoreyRegions();
     const candidates = collectStairBuildCandidates(
       regions,
@@ -632,14 +633,9 @@ export class PhysicalLogSystem {
         ...candidate,
         distance: Math.hypot(candidate.x - base.x, candidate.z - base.z)
       }))
-      .filter(candidate => candidate.distance < PHYSICAL_LOG.stairSnapRange)
-      .sort((left, right) => (
-        Number(right.stairStepIndex > 0) - Number(left.stairStepIndex > 0) ||
-        left.distance - right.distance ||
-        left.stairKey.localeCompare(right.stairKey)
-      ));
+      .filter(candidate => candidate.distance < PHYSICAL_LOG.stairSnapRange);
 
-    const candidate = candidates[0];
+    const candidate = selectStairBuildCandidate(candidates, constructionAim);
     if (!candidate) {
       return {
         ...base,
