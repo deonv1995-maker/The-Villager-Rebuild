@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import {
   collectLocalRoofFramePairs,
-  collectRoofRegions
+  collectRoofRegions,
+  orientFrameCellRegionsTowardUpperPairs
 } from '../src/world/RoofTopology.js';
 import { roofPanelEdgeHasNeighbour } from '../src/world/RoofThatchSystem.js';
 import { roofPanelDescriptors } from '../src/world/StructureRoofQuery.js';
@@ -85,8 +86,8 @@ const southEast = regions.find(region => region.anchorIds.join('-') === '41-42-4
 const northWest = regions.find(region => region.anchorIds.join('-') === '43-44-46-47');
 
 assert.ok(southWest && southEast && northWest, 'Stepped lower footprint must keep its three physical roof cells');
-assert.ok(axisDelta(southWest.ridgeYaw, 0) < 0.01, 'Two lower bays beside one upper wall run must share a ridge parallel to that wall');
-assert.ok(axisDelta(southEast.ridgeYaw, 0) < 0.01, 'The adjoining lower bay must continue the same larger roof ridge');
+assert.ok(axisDelta(southWest.ridgeYaw, 0) < 0.01, 'Wall-only lower bays may still share a ridge parallel to the continuous upper wall');
+assert.ok(axisDelta(southEast.ridgeYaw, 0) < 0.01, 'The adjoining wall-only bay must continue the same larger roof ridge');
 assert.equal(southWest.upperWallRun, true, 'The first lower roof bay must record that it terminates against an upper wall run');
 assert.equal(southEast.upperWallRun, true, 'The second lower roof bay must record the same upper-wall-backed roof behavior');
 assert.equal(upperWallKeyForRoofRegion(southWest), 'wall:60-61');
@@ -103,7 +104,48 @@ const joined = southWestPanels.some(panel =>
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 0, 3) ||
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 1, 2)
 );
-assert.equal(joined, true, 'Adjacent lower roof panels must share a finished edge so thatch reads as one larger roof mass');
+assert.equal(joined, true, 'Adjacent wall-only lower roof panels must keep their existing joined finished edge');
+
+const mainRoofHost = {
+  key: 'roof:main-host',
+  anchorIds: [60, 61, 62, 63],
+  sourceBeamKeys: ['beam:60-61', 'beam:61-62'],
+  frameBaseY: L,
+  frameTopY: L * 2,
+  a: { x: 0, z: L },
+  b: { x: L * 2, z: L },
+  c: { x: 0, z: L * 2 },
+  d: { x: L * 2, z: L * 2 },
+  eaveY: L * 2 + 0.08,
+  ridgeY: L * 2 + 1,
+  ridgeYaw: Math.PI / 2,
+  topology: 'closed-loop'
+};
+const hosted = orientFrameCellRegionsTowardUpperPairs(
+  [southWest, southEast, mainRoofHost],
+  pairs,
+  {
+    levelTolerance: Math.max(0.42, roofOptions.topTolerance + 0.08),
+    nearestBand: Math.max(0.18, roofOptions.maxAlong * 0.6)
+  }
+);
+const hostedSouthWest = hosted.find(region => region.key === southWest.key);
+const hostedSouthEast = hosted.find(region => region.key === southEast.key);
+assert.ok(hostedSouthWest && hostedSouthEast, 'Host-roof resolution must preserve both attached lower structural cells');
+assert.ok(
+  axisDelta(hostedSouthWest.ridgeYaw, mainRoofHost.ridgeYaw) < 0.01,
+  'An attached lower roof must inherit the main roof ridge instead of staying parallel to the wall run'
+);
+assert.ok(
+  axisDelta(hostedSouthEast.ridgeYaw, mainRoofHost.ridgeYaw) < 0.01,
+  'All lower sections attached to the same main roof must resolve to that same roof orientation'
+);
+assert.equal(hostedSouthWest.hostRoofRegionKey, mainRoofHost.key);
+assert.equal(hostedSouthEast.hostRoofRegionKey, mainRoofHost.key);
+assert.equal(hostedSouthWest.upperWallRun, true, 'Host inheritance must retain exact wall-coverage metadata for polish');
+assert.equal(hostedSouthEast.upperWallRun, true, 'Host inheritance must retain exact wall-coverage metadata for every attached bay');
+assert.equal(upperWallKeyForRoofRegion(hostedSouthWest), 'wall:60-61');
+assert.equal(upperWallKeyForRoofRegion(hostedSouthEast), 'wall:61-62');
 
 const customizations = new Map([
   ['wall:60-61', { variant: 'window' }],
@@ -123,13 +165,13 @@ const wallPanelSystem = {
   }
 };
 const physicalLogs = { structureRevision: 10, builtLogs: [] };
-let completedRegions = [southWest, southEast];
+let completedRegions = [hostedSouthWest, hostedSouthEast];
 const roofQuery = {
   getCompletedRegions: () => completedRegions
 };
 const polish = new RoofWallPolishSystem({ physicalLogs, roofQuery, wallPanelSystem });
 const first = polish.sync();
-assert.equal(first.solidified, 2, 'Completing the lower roof must reset covered upper windows and doors to solid');
+assert.equal(first.solidified, 2, 'Completing the host-aligned lower roof must reset covered upper windows and doors to solid');
 assert.equal(customizations.size, 0, 'Covered upper wall openings must be physically restored to their solid wall state');
 
 customizations.set('wall:60-61', { variant: 'window' });
@@ -141,11 +183,11 @@ assert.equal(customizations.get('wall:60-61')?.variant, 'window');
 completedRegions = [];
 physicalLogs.structureRevision += 1;
 polish.sync();
-completedRegions = [southWest, southEast];
+completedRegions = [hostedSouthWest, hostedSouthEast];
 customizations.set('wall:60-61', { variant: 'door' });
 physicalLogs.structureRevision += 1;
 const rebuilt = polish.sync();
 assert.equal(rebuilt.solidified, 1, 'Demolishing and rebuilding the lower roof must apply the solid default again');
 assert.equal(customizations.has('wall:60-61'), false);
 
-console.log('Continuous lower roofs align with upper wall runs, join their thatch, and default covered upper openings to solid.');
+console.log('Attached lower roofs inherit their host roof direction while wall-only joins and wall polish stay stable.');
