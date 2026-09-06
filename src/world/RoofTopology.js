@@ -1,3 +1,5 @@
+import { resolveFrameCellFootprintPlan } from './RoofFootprintPlan.js';
+
 const distanceSq = (a, b) => {
   const dx = a.x - b.x;
   const dz = a.z - b.z;
@@ -554,75 +556,22 @@ const orientFrameCellToAxis = (region, targetYaw) => {
 };
 
 /**
- * A square roof cell has two mathematically valid gable directions. In a stepped,
- * L-shaped, T-shaped or crossed footprint the connected wings are the structural
- * authority: endpoint cells point their ridge toward the occupied run, while a cell
- * connected on both perpendicular axes automatically exposes both gables as a crossed
- * roof junction. The player never selects a special junction mode; it is derived from
- * the completed FRAME + RAW roof-support topology.
- *
- * The original region key remains the primary gable identity. The perpendicular gable
- * receives a deterministic `:cross` key so existing saves and already-built members can
- * continue to match geometry-first while the newly connected wing becomes buildable.
+ * Resolve connected frame cells as footprint-level roof masses. Straight runs share one
+ * ridge axis even though their members remain segmented one physical Log per bay, while
+ * perpendicular connected masses expose the deterministic live `:cross` partner at the
+ * junction. This replaces the old cell-local neighbour scoring with one explicit roof
+ * footprint authority.
  */
 export function orientConnectedFrameCellRegions(regions) {
-  const cells = (regions ?? []).filter(region => region?.topology === 'frame-cell');
-  if (cells.length < 2) return regions ?? [];
-
-  return (regions ?? []).flatMap(region => {
-    if (region?.topology !== 'frame-cell') return [region];
-    const neighbours = cells.filter(candidate =>
-      candidate.key !== region.key && sharedFrameCount(region, candidate) === 2
-    );
-    if (!neighbours.length) return [region];
-
-    const currentYaw = axisHeading(region.ridgeYaw ?? 0);
-    const alternateYaw = axisHeading(currentYaw + Math.PI / 2);
-    const currentScore = ridgeAlignmentScore(region, neighbours, currentYaw);
-    const alternateScore = ridgeAlignmentScore(region, neighbours, alternateYaw);
-    const oriented = alternateScore > currentScore + 0.05
-      ? quarterTurnFrameCell(region)
-      : region;
-
-    // A shared-edge neighbour contributes ~1 to the score of the axis it occupies and
-    // ~0 to its perpendicular axis. Requiring meaningful support on both axes avoids
-    // inventing cross-gables for isolated endpoints or straight multi-bay runs while
-    // tolerating the small positional drift allowed by structural snapping.
-    const crossesBothAxes = currentScore > 0.75 && alternateScore > 0.75;
-    if (!crossesBothAxes) return [oriented];
-
-    const primary = {
-      ...oriented,
-      crossJunction: true,
-      junctionRole: 'primary',
-      junctionPrimaryKey: region.key
-    };
-    const cross = {
-      ...quarterTurnFrameCell(primary),
-      key: `${region.key}:cross`,
-      crossJunction: true,
-      junctionRole: 'cross',
-      junctionPrimaryKey: region.key
-    };
-    return [primary, cross];
-  });
+  return resolveFrameCellFootprintPlan(regions);
 }
 
 /**
- * A lower square roof beside the next storey's completed FRAME + RAW structure first
- * inherits the ridge axis of the actual roof-support region that owns that upper edge.
- * This keeps attached lower sections aligned with the main roof instead of turning into
- * a separate awning merely because several upper wall pairs form one long run.
- *
- * When the upper structure is still wall-only, the existing fallback remains: an
- * isolated upper edge may face the lower gable toward that edge, while connected lower
- * bays on one side of a continuous upper wall run may share a ridge parallel to the
- * wall. Exact upper FRAME-pair metadata is retained for wall conflict polishing.
- *
- * At an automatic crossed junction, only the stable primary gable participates in this
- * host/wall tie-break. The live `:cross` gable is then rebuilt geometrically as the
- * primary's perpendicular partner, so main-roof inheritance never collapses the crossed
- * junction back to one axis.
+ * Upper-storey support remains useful for isolated square roof cells and for exact wall
+ * coverage metadata, but a connected footprint is now the stronger roof-shape authority.
+ * A later main roof or upper wall must never rotate a connected lower run into a row of
+ * side-by-side gables. Cross-junction partners remain perpendicular to their footprint
+ * primary.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -637,6 +586,7 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
     if (region.crossJunction && region.junctionRole === 'cross') return region;
     if (!Number.isFinite(region.frameTopY)) return region;
 
+    const footprintLocked = region.footprintOrientationLocked === true;
     const center = frameCellCenter(region);
     const span = frameCellSpan(region);
     if (!Number.isFinite(span) || span <= 0.01) return region;
@@ -672,7 +622,9 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
     );
 
     if (hostRoofRegion) {
-      const resolved = orientFrameCellToAxis(region, hostRoofRegion.ridgeYaw);
+      const resolved = footprintLocked
+        ? region
+        : orientFrameCellToAxis(region, hostRoofRegion.ridgeYaw);
       return {
         ...resolved,
         ...(continuousUpperRun
@@ -682,7 +634,8 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
               upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
             }
           : {}),
-        hostRoofRegionKey: hostRoofRegion.key
+        hostRoofRegionKey: hostRoofRegion.key,
+        roofOrientationAuthority: footprintLocked ? 'footprint' : 'host-roof'
       };
     }
 
@@ -693,16 +646,21 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       const wallYaw = axisHeading(primaryPair.yaw ?? 0);
       const currentDelta = axisYawDelta(currentYaw, wallYaw);
       const alternateDelta = axisYawDelta(alternateYaw, wallYaw);
-      const resolved = alternateDelta + 0.05 < currentDelta
-        ? quarterTurnFrameCell(region)
-        : region;
+      const resolved = footprintLocked
+        ? region
+        : alternateDelta + 0.05 < currentDelta
+          ? quarterTurnFrameCell(region)
+          : region;
       return {
         ...resolved,
         upperWallRun: true,
         upperWallPairKey: primaryPair.rawKey,
-        upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])]
+        upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])],
+        roofOrientationAuthority: footprintLocked ? 'footprint' : 'upper-wall-run'
       };
     }
+
+    if (footprintLocked) return region;
 
     const currentScore = pairAlignmentScore(region, targets, currentYaw);
     const alternateScore = pairAlignmentScore(region, targets, alternateYaw);
