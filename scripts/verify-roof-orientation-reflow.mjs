@@ -13,7 +13,10 @@ import {
   collectCompletedRoofRegions,
   roofPanelDescriptors
 } from '../src/world/StructureRoofQuery.js';
-import { StackedRoofReflowSystem } from '../src/world/StackedRoofReflowSystem.js';
+import {
+  roofPlanKey,
+  StackedRoofReflowSystem
+} from '../src/world/StackedRoofReflowSystem.js';
 
 const axisDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -100,14 +103,59 @@ const pairs = collectLocalRoofFramePairs(
 );
 const regions = collectRoofRegions(pairs, roofOptions);
 
-assert.equal(regions.length, 3, 'Stepped L footprint must still resolve exactly its three occupied roof cells');
-const corner = regions.find(region => region.anchorIds.join('-') === '40-41-43-44');
+assert.equal(
+  regions.length,
+  4,
+  'Stepped L footprint must expose three occupied cells plus the automatic perpendicular gable at the connected junction'
+);
+const corner = regions.find(region =>
+  region.anchorIds.join('-') === '40-41-43-44' && region.junctionRole === 'primary'
+);
+const crossCorner = regions.find(region =>
+  region.anchorIds.join('-') === '40-41-43-44' && region.junctionRole === 'cross'
+);
 const eastWing = regions.find(region => region.anchorIds.join('-') === '41-42-44-45');
 const northWing = regions.find(region => region.anchorIds.join('-') === '43-44-46-47');
-assert.ok(corner && eastWing && northWing, 'Stepped roof cells must keep stable structural identities');
-assert.ok(axisDelta(corner.ridgeYaw, 0) < 0.01, 'Balanced L corner may retain the deterministic canonical ridge');
+assert.ok(corner && crossCorner && eastWing && northWing, 'Stepped roof cells must keep stable structural identities and add the crossed junction automatically');
+assert.equal(corner.crossJunction, true);
+assert.equal(crossCorner.crossJunction, true);
+assert.equal(crossCorner.key, `${corner.key}:cross`, 'The perpendicular junction gable must have a stable derived identity');
+assert.ok(axisDelta(corner.ridgeYaw, 0) < 0.01, 'The primary L-junction gable keeps the deterministic canonical ridge');
+assert.ok(axisDelta(crossCorner.ridgeYaw, Math.PI / 2) < 0.01, 'The L-junction must automatically add the perpendicular ridge that connects the outgoing wing');
+assert.ok(axisDelta(corner.ridgeYaw, crossCorner.ridgeYaw) > Math.PI / 2 - 0.01, 'The two junction gables must remain perpendicular');
 assert.ok(axisDelta(eastWing.ridgeYaw, 0) < 0.01, 'Horizontal endpoint ridge must follow its connected horizontal wing');
 assert.ok(axisDelta(northWing.ridgeYaw, Math.PI / 2) < 0.01, 'Vertical endpoint ridge must automatically rotate with its connected wing');
+assert.notEqual(
+  roofPlanKey(corner),
+  roofPlanKey(crossCorner),
+  'Stacked roof relocation must keep the two live gable axes distinct even though they share one footprint'
+);
+
+const primaryJunctionMembers = roofMemberCandidates(corner)
+  .map((candidate, index) => makeRoofMember(candidate, 300 + index));
+assert.equal(roofRegionComplete(corner, primaryJunctionMembers), true);
+assert.equal(roofRegionComplete(crossCorner, primaryJunctionMembers), false);
+assert.equal(
+  collectCompletedRoofRegions([corner, crossCorner], primaryJunctionMembers).length,
+  1,
+  'An existing primary gable remains complete when a new perpendicular wing turns its cell into a crossed junction'
+);
+const crossJunctionMembers = roofMemberCandidates(crossCorner)
+  .map((candidate, index) => makeRoofMember(candidate, 400 + index));
+const completedJunction = collectCompletedRoofRegions(
+  [corner, crossCorner],
+  [...primaryJunctionMembers, ...crossJunctionMembers]
+);
+assert.equal(
+  completedJunction.length,
+  2,
+  'A finished crossed junction must expose exactly its two live gables without a duplicate retained-perpendicular region'
+);
+assert.equal(
+  completedJunction.flatMap(roofPanelDescriptors).length,
+  4,
+  'The automatic crossed junction must expose both slopes of both perpendicular gables for thatch finishing'
+);
 
 const upperFrames = [
   makeFrame(60, L, L, L),
@@ -207,4 +255,4 @@ assert.ok(Math.abs(Math.abs(thatchRoot.rotation.y) - Math.PI / 2) < 0.01, 'Thatc
 assert.ok(Math.abs(thatchRoot.position.x - targetPanel.center.x) < 0.001);
 assert.ok(Math.abs(thatchRoot.position.z - targetPanel.center.z) < 0.001);
 
-console.log('Connected roofs follow their wing, retained cross-gables stay thatchable, and completed stale roofs reflow with thatch.');
+console.log('Connected roofs now auto-cross at perpendicular junctions, retained gables stay thatchable, and completed stale roofs reflow with thatch.');
