@@ -135,16 +135,88 @@ body.arrival-intro-revealing .mobile-hud {
   position: fixed;
   inset: 0;
   z-index: 60;
-  background: #08110f;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(63, 108, 116, .26), transparent 38%),
+    linear-gradient(180deg, #102528 0%, #0b1b1c 52%, #071211 100%);
   opacity: 0;
   pointer-events: none;
   transition: opacity 950ms ease;
 }
 
+.title-transition::before {
+  content: "THE VILLAGER\A REBUILD\A\A LOADING WORLD";
+  position: relative;
+  z-index: 1;
+  width: min(84vw, 420px);
+  padding: 26px 24px 54px;
+  border: 1px solid rgba(229, 193, 110, .46);
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(20, 43, 45, .82), rgba(9, 24, 24, .9));
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, .4),
+    inset 0 0 0 1px rgba(255, 244, 210, .05);
+  color: #fff2ce;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(22px, 5.8vw, 38px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: .08em;
+  text-align: center;
+  text-shadow: 0 3px 12px rgba(0, 0, 0, .55);
+  white-space: pre-line;
+  opacity: 0;
+  transform: translateY(10px) scale(.985);
+  transition: opacity 420ms ease 240ms, transform 520ms ease 240ms;
+}
+
+.title-transition::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: calc(50% + 92px);
+  width: min(62vw, 286px);
+  height: 6px;
+  border: 1px solid rgba(229, 193, 110, .34);
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg,
+      rgba(229, 193, 110, .08) 0%,
+      rgba(243, 204, 114, .24) 32%,
+      rgba(255, 242, 206, .95) 50%,
+      rgba(243, 204, 114, .24) 68%,
+      rgba(229, 193, 110, .08) 100%);
+  background-size: 220% 100%;
+  box-shadow: 0 0 18px rgba(243, 204, 114, .14);
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
 .title-transition.is-covering { opacity: 1; }
+.title-transition.is-covering::before {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.title-transition.is-covering::after {
+  opacity: 1;
+  animation: title-loading-sweep 1.15s linear infinite;
+}
 .title-transition.is-revealing {
   opacity: 0;
   transition-duration: 620ms;
+}
+
+@keyframes title-loading-sweep {
+  from { background-position: 110% 0; }
+  to { background-position: -110% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-transition::before { transition: none; }
+  .title-transition.is-covering::after { animation: none; background-position: 50% 0; }
 }
 
 @media (orientation: landscape) and (max-height: 620px) {
@@ -164,4 +236,15 @@ body.arrival-intro-revealing .mobile-hud {
   .title-logo .title-rebuild { margin-left: 8px; }
   .title-menu-actions { align-items: flex-end; width: min(47vw, 360px); }
   .title-play { width: min(44vw, 330px); min-height: 60px; }
+
+  .title-transition::before {
+    width: min(58vw, 390px);
+    padding: 18px 20px 44px;
+    font-size: clamp(19px, 4.5vw, 30px);
+  }
+
+  .title-transition::after {
+    top: calc(50% + 69px);
+    width: min(40vw, 250px);
+  }
 }
