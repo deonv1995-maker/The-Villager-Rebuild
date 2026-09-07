@@ -72,6 +72,8 @@ Wall entries have one additional persistence invariant: their directed facing is
 
 A compatible autosave can also already contain the wrong rendered wall direction if it was written after an older Continue pass had flipped the split face. For a physically closed room, wall synchronization therefore has a conservative recovery authority derived from FRAME positions plus occupied wall edges. Those undirected edges are flood-filled through the existing closed-structure topology to recover the enclosed side without trusting the persisted wall direction. This compatibility path is used only when the wall geometry forms a closed structural cell; isolated or deliberately open wall runs keep their saved directed facing. The normal completed FRAME + RAW structural interior remains the primary authority when available.
 
+Older device saves may contain only part of that wall or RAW perimeter, so Continue performs one additional recovery pass from completed four-corner FRAME cells before reconstructing saved `DOOR` / `WINDOW` variants. This pass is restore-only: it repairs the directed yaw stored on the reconstructed wall rows and then returns control to the normal live wall-orientation rules. A true two-post/open-frame wall still has no invented interior and keeps its saved facing.
+
 ## Transient state normalization
 
 Some runtime state is intentionally normalized instead of persisted literally.

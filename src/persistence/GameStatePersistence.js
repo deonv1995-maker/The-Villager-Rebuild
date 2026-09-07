@@ -562,7 +562,7 @@ const captureWallPanels = game => ({
 const restoreWallPanels = (game, state) => {
   const system = game.wallPanelCustomization?.system;
   if (!system) return;
-  system.sync();
+  system.recoverRestoredFacing();
   for (const panel of Array.isArray(state?.panels) ? state.panels : []) {
     const result = system.customize(panel.id, panel.variant);
     if (!result) throw new Error(`Saved wall panel ${panel.id} could not be reconstructed`);
