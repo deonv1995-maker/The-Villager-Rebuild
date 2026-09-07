@@ -2,23 +2,23 @@
 
 ## Purpose
 
-The Villager now has one authoritative local save-game boundary for the current playable world. The save system is intentionally data-oriented: it stores stable gameplay state and reconstructs runtime objects through the established systems instead of serializing Three.js scene objects.
+The Villager has one authoritative local save-game boundary for the current playable world. Persistence is data-oriented: gameplay state is saved and runtime objects are reconstructed through their owning systems instead of serializing Three.js scene objects.
 
-This fulfills the persistence requirement described in `TECHNICAL_ARCHITECTURE.md` before permanent progression expands further.
+`SaveGameStore` is the only layer that reads/writes browser storage. Gameplay systems extend the versioned save state through `SaveGameController` rather than creating independent local-storage keys.
 
 ## Current save slot
 
 - Storage key: `the-villager-rebuild.save`
-- Save schema version: `1`
-- World revision: `1`
+- Save schema version: **2**
+- World revision: **2**
 - Slot model: one automatic local save
-- Storage backend: browser/PWA `localStorage` behind `SaveGameStore`
+- Backend: browser/PWA `localStorage` behind `SaveGameStore`
 
-`SaveGameStore` is the only layer that talks to browser storage. Gameplay and title-scene code do not write arbitrary `localStorage` keys.
+A record is resumable only when both schema version and world revision match the running build. Corrupt or incompatible records are ignored rather than partially loaded.
 
-A save is considered resumable only when both its schema version and world revision match the current game. An incompatible or corrupt record is ignored rather than partially loaded.
+Schema/world revision 2 is an intentional construction migration boundary. Schema-1 saves stored individual physical-Log construction transforms and wall-facing compatibility state. They are **not** interpreted as semantic panel buildings and therefore are no longer offered as Continue saves after the Floor/Wall panel cutover.
 
-The separate world revision exists because a future terrain/layout migration can invalidate stable world IDs or coordinates without requiring the storage contract itself to change.
+This is deliberate data safety, not a best-effort migration: carrying the old orientation/inference model into the new save would preserve the problem the construction rebuild is replacing.
 
 ## Autosave policy
 
@@ -26,92 +26,106 @@ The separate world revision exists because a future terrain/layout migration can
 
 The game saves:
 
-- every 8 seconds while normal gameplay is active and state has changed;
-- when the page/PWA receives `pagehide`;
+- every 8 seconds while gameplay is active and state changed;
+- on `pagehide`;
 - when the document becomes hidden/backgrounded;
-- immediately after the first beach-arrival cinematic completes for a New Game.
+- immediately after the beach-arrival cinematic completes for a New Game.
 
-Autosave does **not** begin while the Ranger is crawling out of the water. This prevents a suspended or closed app during the opening cinematic from creating a Continue point in shallow water or halfway through the crawl.
+Autosave does not begin while the Ranger is still in the opening water/crawl sequence. A previous compatible save is not replaced by a New Game until the new Ranger has reached the safe gameplay handoff.
 
-When an older valid save already exists and the player selects New Game, that record is retained during the shipwreck and beach-arrival sequence. The first safe New Game autosave replaces it only after the arrival handoff completes. This protects the previous save if the app closes during the opening cinematic.
+## Title menu
 
-## Title menu and opening flows
+`TitleSaveMenuController` asks `SaveGameStore` whether a compatible record exists.
 
-The title scene remains a presentation/cinematic system and does not own persistence.
-
-`TitleSaveMenuController` decorates the existing menu only when `SaveGameStore` reports a compatible save:
+When one exists:
 
 - `CONTINUE` appears first;
-- the existing `PLAY` action is relabeled `NEW GAME`;
-- `NEW GAME` retains the complete storm, shipwreck and beach-arrival opening;
-- `CONTINUE` fades the title scene to black, boots the normal gameplay world under the cover, restores the save point, then uses the existing reveal transition to fade in at the restored Ranger position.
+- `PLAY` is relabeled `NEW GAME`;
+- `NEW GAME` keeps the complete opening sequence;
+- `CONTINUE` boots the normal world under the title fade, restores gameplay, then reveals the restored Ranger position.
 
-Continue therefore never replays the shipwreck or beach crawl.
+An old schema-1 record fails the compatibility check, so Continue is hidden rather than attempting a partial construction migration.
 
-## Persisted state in schema 1
+## Persisted state in schema 2
 
-The schema currently preserves the meaningful mutable Day-1 state:
+The current save preserves:
 
 - Ranger world position, facing and camera orientation;
-- inventory quantities;
-- equipped tool selection;
-- per-tool durability units;
-- partially damaged and harvested trees;
-- partially damaged and mined rocks;
-- initial and dynamically spawned world gatherables;
-- harvested grass-patch IDs;
+- inventory quantities, including inventory-backed Logs;
+- equipped tool selection and per-tool durability units;
+- tree and rock harvest state;
+- initial/dynamic world gatherables and harvested grass patches;
 - campfire built state and position;
-- active placed-log construction pieces with stable construction IDs and transforms;
-- active construction mode and a carried physical log;
-- wall-panel variants (`solid` remains the default, while `door` and `window` customizations are stored explicitly);
-- completed thatch panel IDs and their lookup centers.
+- **semantic panel construction registry/grid state**;
+- tree-regrowth and renewable-resource timers;
+- recoverable spear durability state;
+- temporarily retained legacy construction/wall/roof fields required by deferred transition systems.
 
-Physical construction restoration reuses the authoritative `PHYSICAL_LOG` dimensions and shared collision service. The save contains data and transforms only; it never writes a serialized scene graph.
+The player-facing Floor/Wall construction authority is the semantic panel snapshot, not those retained legacy fields.
 
-Wall entries have one additional persistence invariant: their directed facing is normalized from the serialized rendered transform at both capture and restore. Schema 1 historically stored both a scalar wall yaw and the rendered quaternion; runtime wall-orientation passes could leave an older save with a correct visual transform but stale scalar yaw. The rendered transform is therefore the compatibility authority at the persistence boundary, after which `WallPanelCustomizationSystem` remains the structural inward-facing authority. This heals compatible schema-1 saves without a schema or world-revision bump and does not change the persistence contract for other construction modes.
+## Panel construction persistence
 
-A compatible autosave can also already contain the wrong rendered wall direction if it was written after an older Continue pass had flipped the split face. For a physically closed room, wall synchronization therefore has a conservative recovery authority derived from FRAME positions plus occupied wall edges. Those undirected edges are flood-filled through the existing closed-structure topology to recover the enclosed side without trusting the persisted wall direction. This compatibility path is used only when the wall geometry forms a closed structural cell; isolated or deliberately open wall runs keep their saved directed facing. The normal completed FRAME + RAW structural interior remains the primary authority when available.
+`PanelConstructionSystem.snapshot()` captures:
 
-Older device saves may contain only part of that wall or RAW perimeter, so Continue performs one additional recovery pass from completed four-corner FRAME cells before reconstructing saved `DOOR` / `WINDOW` variants. This pass is restore-only: it repairs the directed yaw stored on the reconstructed wall rows and then returns control to the normal live wall-orientation rules. A true two-post/open-frame wall still has no invented interior and keeps its saved facing.
+- active panel build mode;
+- structure registry cell size and next structure ID;
+- each structure's world origin and snapped yaw;
+- each structure's semantic grid;
+- floor cell coordinates/storeys/levels;
+- canonical wall-edge identity, owner/interior semantics and wall variant;
+- roof-zone data already defined by the panel model for later live roof work.
 
-## Transient state normalization
+No panel mesh transform is the authority for wall orientation.
 
-Some runtime state is intentionally normalized instead of persisted literally.
+On restore, `PanelStructureRegistry` and `PanelConstructionGrid` recreate the same semantic state and `PanelConstructionSystem` rematerializes visuals, collision and floor-support presentation from it.
 
-Thrown or embedded spears are not restored as projectiles attached to transient targets. On Continue, every recoverable thrown spear is returned to inventory with its saved durability. Broken spears remain broken. This guarantees that autosaving during or after a throw cannot permanently strand a spear because an animal/animation target no longer exists on reload.
-
-The following are currently session-transient and rebuild from their normal systems on Continue:
-
-- title/shipwreck/arrival cinematic phase;
-- current HUD target and open contextual UI;
-- active animation one-shots and hit feedback;
-- exact wildlife roaming positions, current behavior and short-lived combat/respawn timers.
-
-Wildlife loot that has become a world gatherable is persisted through the gatherable state. The renewable wildlife population itself remains ecology state rather than permanent progression in schema 1.
+Restore does not consume construction materials again; inventory quantities are restored independently from the saved inventory state.
 
 ## Restore ordering
 
-Restore order is deliberate because systems depend on one another:
+Ordering is deliberate because the Ranger may have been saved on player construction.
 
-1. inventory baseline;
-2. tree/rock harvest state;
-3. world gatherables and grass depletion;
-4. campfire;
-5. placed-log construction and floor supports/collision;
-6. wall-panel customization;
-7. roof thatch;
-8. transient thrown-spear recovery;
+`SaveGameController` restores semantic panel construction **before** calling the shared gameplay restore. This ensures panel floor/support collision already exists before Ranger placement.
+
+The effective ordering is:
+
+1. semantic panel construction runtime/collision;
+2. inventory baseline;
+3. tree/rock harvest state;
+4. world gatherables and grass depletion;
+5. campfire;
+6. retained legacy transition construction state (normally empty for schema 2 player-facing construction);
+7. retained legacy wall/roof presentation state where applicable;
+8. transient thrown-spear normalization;
 9. tool durability and equipped selection;
-10. Ranger save-point placement.
+10. Ranger save-point placement;
+11. tree-regrowth/resource-renewal timers.
 
-Placing the Ranger last ensures floor/support state is already reconstructed if the save point is inside or on a player-built structure.
+This keeps standable building collision available before the saved Ranger transform is applied.
+
+## Demolition/save invariant
+
+Panel demolition mutates semantic state first. If a floor still owns dependent wall/roof modules, removal is rejected and nothing is refunded or removed from the runtime.
+
+A successful demolition removes the semantic module, its generated collision/presentation and any floor supports, then refunds the module's Log cost. The next autosave therefore observes one coherent state rather than a mixture of removed meshes and retained structure data.
+
+## Transient normalization
+
+Thrown or embedded spears are normalized back to inventory on Continue with their stored durability instead of attempting to restore transient projectile/animal attachment state.
+
+Session-transient state includes:
+
+- title/shipwreck/arrival phase;
+- current HUD target/menu state;
+- active one-shot animations and hit feedback;
+- exact wildlife roaming/short-lived behavior state.
 
 ## Expansion rule
 
-Future persistent systems should extend the versioned gameplay state through the persistence boundary instead of adding independent browser keys. Expected future providers include survival stats, day/night time, discoveries/tutorial completion, settlement state, storage, villagers, jobs, homes and production state.
+Future persistent systems must extend the versioned gameplay state through this boundary. Do not add independent browser keys for survival stats, settlement state, storage, villagers, jobs, homes or production.
 
-A schema migration must be explicit. Do not silently reinterpret an incompatible save when stable IDs or world topology have changed.
+Any migration that changes stable IDs, semantic topology or interpretation of saved state must explicitly bump or migrate the version. Never silently reinterpret incompatible construction data.
 
 ## Device limitation
 
-The current save is local to the browser/PWA origin on that device. Clearing site/app data removes it. Cross-device/cloud synchronization is intentionally outside schema 1 and can later replace or wrap `SaveGameStore` without changing gameplay systems.
+The save is local to the browser/PWA origin on the current device. Clearing site/app data removes it. Cross-device/cloud synchronization remains outside the current save architecture and can later wrap or replace `SaveGameStore` without moving persistence ownership into gameplay systems.
