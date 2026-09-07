@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import {
   PANEL_BUILD_COSTS,
-  PANEL_BUILD_LABELS,
   PANEL_CONSTRUCTION_RESOURCE_ID
 } from '../data/PanelConstructionDefinitions.js';
 import { PanelConstructionSystem } from '../world/PanelConstructionSystem.js';
@@ -294,6 +293,7 @@ export class PanelConstructionRuntimeController {
       this.game.setStatus(`${target.label.toUpperCase()} · REMOVE ATTACHED PANELS FIRST`);
       return false;
     }
+    this.game.equipmentRuntime?.recordUse?.('hammer');
     const refunded = PANEL_BUILD_COSTS[target.kind]?.[0]?.quantity ?? 0;
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus(`${result.label.toUpperCase()} DISASSEMBLED · ${refunded} LOGS RETURNED`);
