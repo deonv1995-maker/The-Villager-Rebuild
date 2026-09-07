@@ -201,10 +201,20 @@ assert.equal(
   'Trees inside axe interaction range must stay opaque so TreeHitShakeSystem animates the visible instance'
 );
 
-const [physicalLogSource, treeOcclusionSource, collisionSource] = await Promise.all([
+const [
+  physicalLogSource,
+  treeOcclusionSource,
+  collisionSource,
+  hammerMenuSource,
+  hammerMenuStylesSource,
+  cameraStylesSource
+] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/TreeOcclusionSystem.js', 'utf8'),
-  readFile('src/world/WorldCollisionSystem.js', 'utf8')
+  readFile('src/world/WorldCollisionSystem.js', 'utf8'),
+  readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
+  readFile('src/hammer-construction-menu.css', 'utf8'),
+  readFile('src/camera-view.css', 'utf8')
 ]);
 
 for (const contract of [
@@ -222,4 +232,24 @@ assert.ok(collisionSource.includes('supportOverridesBase'), 'World collision mus
 assert.ok(treeOcclusionSource.includes('TREE_INTERACTION_OPAQUE_RADIUS = 3.1'), 'Harvest-range trees must remain on the shakeable opaque render path');
 assert.ok(nearlyEqual(PHYSICAL_LOG.floorSupportSeamPadding, 0.06), 'Floor seam support padding must remain deliberate and bounded');
 
-console.log('Android frame traversal, floor support, roof occupancy and tree-shake regressions verified');
+assert.ok(
+  hammerMenuSource.includes("const MENU_OPEN_BODY_CLASS = 'hammer-construction-open'") &&
+  hammerMenuSource.includes("document.body.classList.toggle(MENU_OPEN_BODY_CLASS, this.open)") &&
+  hammerMenuSource.includes('document.body.classList.remove(MENU_OPEN_BODY_CLASS)'),
+  'Hammer menu open state must be published and cleaned up so sibling mobile controls can avoid its footprint'
+);
+assert.ok(
+  hammerMenuStylesSource.includes('.hammer-construction-close {') &&
+  hammerMenuStylesSource.includes('width: 44px;') &&
+  hammerMenuStylesSource.includes('height: 44px;') &&
+  hammerMenuStylesSource.includes('min-height: 44px;'),
+  'Hammer menu Close and Remove actions must retain deliberate mobile touch targets'
+);
+assert.ok(
+  cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
+  cameraStylesSource.includes('max(268px, calc(env(safe-area-inset-right) + 264px))') &&
+  cameraStylesSource.includes('max(240px, calc(env(safe-area-inset-right) + 237px))'),
+  'Camera view toggle must move clear of the Hammer menu in landscape and portrait so first-person targeting remains reachable'
+);
+
+console.log('Android frame traversal, floor support, roof occupancy, tree-shake and Hammer menu device regressions verified');

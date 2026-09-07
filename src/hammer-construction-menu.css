@@ -19,7 +19,7 @@
 
 .hammer-construction-header {
   display: grid;
-  grid-template-columns: 34px 1fr 34px;
+  grid-template-columns: 34px 1fr 44px;
   align-items: center;
   gap: 7px;
   padding: 2px 2px 7px;
@@ -51,8 +51,8 @@
 }
 
 .hammer-construction-close {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border: 1px solid rgba(225, 207, 151, .36);
   border-radius: 10px;
   background: rgba(68, 68, 49, .82);
@@ -61,6 +61,7 @@
   font-weight: 700;
   line-height: 1;
   pointer-events: auto;
+  touch-action: none;
 }
 
 .construction-house {
@@ -210,7 +211,7 @@
 
 .hammer-construction-actions {
   display: grid;
-  grid-template-columns: 76px 1fr;
+  grid-template-columns: 82px 1fr;
   align-items: center;
   gap: 7px;
   margin-top: 7px;
@@ -221,7 +222,7 @@
   grid-template-columns: 24px 1fr;
   align-items: center;
   gap: 4px;
-  min-height: 38px;
+  min-height: 44px;
   padding: 5px 7px;
   border: 1px solid rgba(225, 207, 151, .36);
   border-radius: 9px;
@@ -231,6 +232,7 @@
   font-weight: 900;
   letter-spacing: .03em;
   pointer-events: auto;
+  touch-action: none;
 }
 
 .construction-remove img { width: 22px; height: 22px; object-fit: contain; pointer-events: none; }
