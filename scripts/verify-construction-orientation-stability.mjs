@@ -176,6 +176,48 @@ assert.ok(
   'Closed-room recovery must repair every persisted row in the corrupted wall bay'
 );
 
+// The reported device save is not guaranteed to contain a closed wall/RAW perimeter.
+// Four established FRAME corners still define one unambiguous structural cell, so the
+// dedicated restore pass must be able to heal a corrupted remaining wall without
+// changing ordinary live synchronization for open two-post runs.
+const partialRecoveryFrames = [
+  makeFrame(401, -half, -half),
+  makeFrame(402, half, -half),
+  makeFrame(403, half, half),
+  makeFrame(404, -half, half)
+];
+const partialRecoveryWestWalls = makeWallRows({
+  idBase: 430,
+  x: -half,
+  z: 0,
+  yaw: -Math.PI / 2
+});
+const partialRecoveryWallSystem = new WallPanelCustomizationSystem({
+  group: new THREE.Group(),
+  collision,
+  physicalLogs: {
+    structureRevision: 1,
+    builtLogs: [...partialRecoveryFrames, ...partialRecoveryWestWalls]
+  }
+});
+const unrecoveredPartialBay = partialRecoveryWallSystem.sync()
+  .find(bay => bay.key === 'wall:401-404');
+assert.ok(unrecoveredPartialBay, 'An incomplete saved wall must still resolve to its FRAME edge');
+assert.ok(
+  directedYawDelta(unrecoveredPartialBay.yaw, -Math.PI / 2) < 0.001,
+  'Normal live sync must not invent an interior for an incomplete/open wall perimeter'
+);
+const recoveredPartialBay = partialRecoveryWallSystem.recoverRestoredFacing()
+  .find(bay => bay.key === 'wall:401-404');
+assert.ok(
+  directedYawDelta(recoveredPartialBay.yaw, Math.PI / 2) < 0.001,
+  'Save recovery must use the completed FRAME cell to heal an incomplete wall run'
+);
+assert.ok(
+  partialRecoveryWestWalls.every(wall => directedYawDelta(wall.yaw, Math.PI / 2) < 0.001),
+  'FRAME-cell save recovery must repair every persisted row in the incomplete wall bay'
+);
+
 // Save data already contains the directed wall yaw the player saw before leaving the game.
 // A FRAME pair only defines an axis; when no structural/floor reference can break the tie,
 // reconstruction must keep that persisted facing rather than deriving a new direction from
@@ -292,4 +334,4 @@ assert.equal(
   'Actual roof demolition must retain the existing Grass refund contract'
 );
 
-console.log('Walls recover closed-room interiors, preserve open-run save facing, and completed physical roofs retain thatch through topology churn.');
+console.log('Walls recover closed and incomplete saved-room interiors, preserve live open-run facing, and completed physical roofs retain thatch through topology churn.');

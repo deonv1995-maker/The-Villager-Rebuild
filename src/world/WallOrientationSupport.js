@@ -87,6 +87,36 @@ const collectWallEdgePairs = (frameById, walls) => {
   return pairs;
 };
 
+const collectFrameCellPairs = frameById => {
+  const frames = [...frameById.values()];
+  const pairs = [];
+  for (let aIndex = 0; aIndex < frames.length; aIndex += 1) {
+    for (let bIndex = aIndex + 1; bIndex < frames.length; bIndex += 1) {
+      const a = frames[aIndex];
+      const b = frames[bIndex];
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const spacing = Math.hypot(dx, dz);
+      if (Math.abs(spacing - PHYSICAL_LOG.length) > PHYSICAL_LOG.frameSpacingTolerance) continue;
+      if (Math.abs(a.topY - b.topY) > PHYSICAL_LOG.frameLevelTolerance) continue;
+
+      const anchorIds = [a.id, b.id].sort((left, right) => left - right);
+      pairs.push({
+        a,
+        b,
+        x: (a.x + b.x) * 0.5,
+        z: (a.z + b.z) * 0.5,
+        yaw: Math.atan2(-dz, dx),
+        baseY: Math.max(a.baseY, b.baseY),
+        topY: (a.topY + b.topY) * 0.5,
+        anchorIds,
+        rawKey: `restore-frame-edge:${anchorIds.join('-')}`
+      });
+    }
+  }
+  return pairs;
+};
+
 const appendRegionReferences = (regions, references, seen) => {
   for (const region of regions ?? []) {
     const x = (region.a.x + region.b.x + region.c.x + region.d.x) * 0.25;
@@ -123,7 +153,9 @@ const appendRegionReferences = (regions, references, seen) => {
  * can heal an older autosave that already captured the flat split face on the exterior.
  * Isolated/open wall runs do not form a closed cell and keep their persisted facing.
  */
-export function collectWallStructuralInteriorReferences(builtLogs) {
+export function collectWallStructuralInteriorReferences(builtLogs, {
+  includeRestoreFrameCells = false
+} = {}) {
   const active = (builtLogs ?? []).filter(entry => entry?.active !== false);
   const frameById = new Map(
     active
@@ -144,6 +176,21 @@ export function collectWallStructuralInteriorReferences(builtLogs) {
   if (pairsByKey.size >= 4) {
     appendRegionReferences(
       collectUpperStoreySupportRegions([...pairsByKey.values()], {
+        levelTolerance: PHYSICAL_LOG.frameLevelTolerance
+      }),
+      references,
+      seen
+    );
+  }
+
+  // An older save can contain an incomplete/open wall run whose persisted rendered
+  // facing was already corrupted by a previous Continue. During the one restore pass,
+  // completed FRAME cells provide the missing unambiguous interior reference even when
+  // the save has no closed RAW or wall-edge loop. Live synchronization does not use this
+  // fallback, so an ordinary two-post/open-frame wall keeps its established direction.
+  if (includeRestoreFrameCells) {
+    appendRegionReferences(
+      collectUpperStoreySupportRegions(collectFrameCellPairs(frameById), {
         levelTolerance: PHYSICAL_LOG.frameLevelTolerance
       }),
       references,

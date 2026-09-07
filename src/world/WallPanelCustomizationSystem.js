@@ -234,6 +234,23 @@ export class WallPanelCustomizationSystem {
     return this.bays;
   }
 
+  /**
+   * Run the first save reconstruction with a conservative FRAME-cell compatibility
+   * authority. The repaired directed yaw is written back to every wall row by sync(),
+   * after which normal live structure revisions can preserve it without keeping a
+   * second wall-orientation mode active.
+   */
+  recoverRestoredFacing() {
+    const revision = this.physicalLogs.structureRevision ?? this.physicalLogs.builtLogs.length;
+    this.wallInteriorReferences = collectWallStructuralInteriorReferences(
+      this.physicalLogs.builtLogs,
+      { includeRestoreFrameCells: true }
+    );
+    this.wallInteriorReferenceRevision = revision;
+    this.lastStructureRevision = -1;
+    return this.sync();
+  }
+
   resolveInwardYawAt(placement) {
     if (!placement) return placement?.yaw ?? 0;
     return resolveWallInwardYaw({
