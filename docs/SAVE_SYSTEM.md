@@ -70,6 +70,8 @@ Physical construction restoration reuses the authoritative `PHYSICAL_LOG` dimens
 
 Wall entries have one additional persistence invariant: their directed facing is normalized from the serialized rendered transform at both capture and restore. Schema 1 historically stored both a scalar wall yaw and the rendered quaternion; runtime wall-orientation passes could leave an older save with a correct visual transform but stale scalar yaw. The rendered transform is therefore the compatibility authority at the persistence boundary, after which `WallPanelCustomizationSystem` remains the structural inward-facing authority. This heals compatible schema-1 saves without a schema or world-revision bump and does not change the persistence contract for other construction modes.
 
+A compatible autosave can also already contain the wrong rendered wall direction if it was written after an older Continue pass had flipped the split face. For a physically closed room, wall synchronization therefore has a conservative recovery authority derived from FRAME positions plus occupied wall edges. Those undirected edges are flood-filled through the existing closed-structure topology to recover the enclosed side without trusting the persisted wall direction. This compatibility path is used only when the wall geometry forms a closed structural cell; isolated or deliberately open wall runs keep their saved directed facing. The normal completed FRAME + RAW structural interior remains the primary authority when available.
+
 ## Transient state normalization
 
 Some runtime state is intentionally normalized instead of persisted literally.
