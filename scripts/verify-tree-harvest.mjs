@@ -50,11 +50,13 @@ const [
   feedbackSource,
   panelSystemSource,
   panelRuntimeSource,
+  hammerMenuSource,
   mainSource,
   hudSource,
   contextActionSource,
   toolSource,
-  stylesSource
+  stylesSource,
+  hammerMenuStylesSource
 ] = await Promise.all([
   readFile('src/world/TreeHarvestSystem.js', 'utf8'),
   readFile('src/world/GatherableSystem.js', 'utf8'),
@@ -63,11 +65,13 @@ const [
   readFile('src/world/HarvestHitFeedback.js', 'utf8'),
   readFile('src/world/PanelConstructionSystem.js', 'utf8'),
   readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
+  readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/ui/ContextActionPolicy.js', 'utf8'),
   readFile('src/player/RangerToolPresentation.js', 'utf8'),
-  readFile('src/styles.css', 'utf8')
+  readFile('src/styles.css', 'utf8'),
+  readFile('src/hammer-construction-menu.css', 'utf8')
 ]);
 
 for (const requirement of [
@@ -135,25 +139,42 @@ for (const requirement of [
 
 for (const requirement of [
   "this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)",
-  "row = event.target.closest?.('[data-resource=\"log\"]')",
-  "button.hidden = !['floor', 'wall', 'drop'].includes(mode)",
+  "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
+  "toolId === 'hammer' && equippedToolId === 'hammer'",
+  'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   'this.confirmBuild()',
   "this.game.equipmentRuntime?.recordUse?.('hammer')"
 ]) {
   assert(panelRuntimeSource.includes(requirement), `Panel construction runtime is missing contract: ${requirement}`);
 }
+assert(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs must stay material-only and must not reopen construction directly');
+assert(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Hammer must stay equipped during semantic panel placement');
 assert(mainSource.includes('new PanelConstructionRuntimeController({ game })'), 'Gameplay startup must install the live panel construction runtime');
 
-assert(hudSource.includes('data-role="log-build"'), 'Panel construction must reuse the existing compact build tray instead of adding a competing menu');
-assert(hudSource.includes('data-build="floor"') && hudSource.includes('data-build="wall"'), 'Build tray must retain Floor and Wall choices');
+for (const mode of ['floor', 'wall', 'remove', 'close']) {
+  assert(hammerMenuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
+}
+for (const lockedMode of ['door', 'window', 'stairs', 'roof']) {
+  assert(
+    new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(hammerMenuSource),
+    `Deferred ${lockedMode} control must remain visibly locked until its semantic runtime exists`
+  );
+}
+for (const legacyMode of ['raw', 'frame', 'drop']) {
+  assert(!hammerMenuSource.includes(`data-build="${legacyMode}"`), `Hammer structure menu must not expose legacy ${legacyMode}`);
+}
+
+assert(hudSource.includes('data-role="log-build"'), 'Legacy physical-log tray must remain isolated transition infrastructure until deferred systems are removed');
 assert(contextActionSource.includes("'panel-construction'"), 'Unified Hammer action must recognize semantic panel demolition targets');
+assert(contextActionSource.includes("? 'REMOVE'"), 'Hammer demolition action must be labelled REMOVE rather than BUILD');
 assert(hudSource.includes('class="hud-button action"'), 'Mobile HUD must preserve one unified equipped-tool/world Action button');
 assert(
-  stylesSource.includes('.log-build-tray {') &&
-  stylesSource.includes('right: max(8px') &&
-  stylesSource.includes('flex-direction: column'),
-  'Construction controls must remain in the compact right-side mobile safe area'
+  hammerMenuStylesSource.includes('.hammer-construction-menu {') &&
+  hammerMenuStylesSource.includes('right: max(10px') &&
+  hammerMenuStylesSource.includes('.construction-house'),
+  'Hammer construction controls must use the dedicated compact right-side house schematic'
 );
+assert(stylesSource.includes('.log-build-tray {'), 'Legacy transition tray styling must remain available for isolated physical-log systems');
 
 for (const requirement of ['class HarvestHitFeedback', 'RingGeometry', 'hitVelocity', 'duration: 0.28']) {
   assert(feedbackSource.includes(requirement), `Harvest hit feedback is missing contract: ${requirement}`);
@@ -162,4 +183,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Tree-to-inventory Log harvesting, semantic Floor/Wall panel construction, coherent floor support and unified mobile action contracts verified');
+console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall construction, coherent floor support and unified mobile action contracts verified');
