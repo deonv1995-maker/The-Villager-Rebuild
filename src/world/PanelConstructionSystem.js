@@ -584,7 +584,7 @@ export class PanelConstructionSystem {
 
   #showPreview(mode, placement, valid) {
     if (!this.previewRoot || this.previewMode !== mode) {
-      this.#clearPreview();
+      if (this.previewRoot) this.previewRoot.parent?.remove(this.previewRoot);
       this.previewRoot = createPanelPreview(mode, this.previewMaterial);
       this.previewMode = mode;
       this.group.add(this.previewRoot);
