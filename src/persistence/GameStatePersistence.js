@@ -36,6 +36,27 @@ const applyTransform = (object, transform) => {
   object.scale.fromArray(scale);
 };
 
+/**
+ * WALL roots are runtime-oriented after their initial between-FRAME placement. Schema 1
+ * stores both that rendered transform and a logical yaw, so older saves can contain a
+ * stale logical value even though the wall looked correct when it was saved. Recover the
+ * directed wall axis from the serialized root quaternion and use it as the persistence
+ * boundary authority. Other construction modes keep their established logical yaw.
+ */
+export function constructionFacingYaw({ mode, yaw, root }) {
+  const fallback = finiteNumber(yaw);
+  if (mode !== 'wall' || !root?.quaternion) return fallback;
+
+  const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(root.quaternion);
+  if (
+    !Number.isFinite(axis.x) ||
+    !Number.isFinite(axis.z) ||
+    Math.hypot(axis.x, axis.z) < 0.0001
+  ) return fallback;
+
+  return Math.atan2(-axis.z, axis.x);
+}
+
 const capturePlayer = game => {
   const position = game.player.getPosition(new THREE.Vector3());
   return {
@@ -293,7 +314,7 @@ const captureConstruction = game => ({
       mode: entry.mode,
       x: entry.x,
       z: entry.z,
-      yaw: entry.yaw,
+      yaw: constructionFacingYaw(entry),
       baseY: entry.baseY,
       centerY: entry.centerY,
       topY: entry.topY,
@@ -446,7 +467,7 @@ const restoreConstruction = (game, state) => {
     const placement = {
       x: finiteNumber(saved.x, root.position.x),
       z: finiteNumber(saved.z, root.position.z),
-      yaw: finiteNumber(saved.yaw),
+      yaw: constructionFacingYaw({ mode: saved.mode, yaw: saved.yaw, root }),
       baseY: finiteNumber(saved.baseY, root.position.y),
       ground: finiteNumber(saved.baseY, root.position.y),
       y: root.position.y,
