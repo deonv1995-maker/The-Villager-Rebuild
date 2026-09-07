@@ -32,6 +32,10 @@ The following structure locations are visible but disabled so the player can und
 
 Those controls must remain disabled until their semantic runtime slices are implemented.
 
+While the Hammer structure menu is open, the normal camera view control must remain independently reachable. The menu publishes the `hammer-construction-open` page state and the camera control moves clear of the menu footprint in both portrait and landscape. This preserves direct 3P/1P switching while Floor, Wall or Remove is active instead of forcing the player to close construction before checking first-person targeting.
+
+The player-facing **Close** and **Remove** controls retain at least 44 CSS-pixel touch targets. The menu itself remains in the established top-right safe area so the bottom movement/action controls are not displaced.
+
 ## Hammer behavior
 
 The Hammer remains equipped while Floor or Wall placement is active. Construction must never silently switch the toolbelt back to Hand.
@@ -59,6 +63,8 @@ When Remove is selected:
 `HammerConstructionMenu` owns only presentation and player choice. `PanelConstructionRuntimeController` owns the translation between Hammer/toolbelt state, menu state and the existing semantic construction runtime.
 
 The old `MobileHud` physical-log build tray remains transition infrastructure for deferred legacy systems but is explicitly hidden during semantic panel construction and is not a source of Floor/Wall choices.
+
+The Hammer menu page-state class is a presentation-only coordination boundary. It exists so sibling HUD controls can avoid the menu footprint; it must not become a source of gameplay or construction state.
 
 The change does not alter:
 
@@ -88,4 +94,10 @@ The change does not alter:
 - RAW, FRAME and physical-log DROP are not exposed in the semantic structure menu;
 - the production shell loads the dedicated structure-menu styling.
 
-Device verification remains required for menu readability, touch target size, placement confirmation, Remove targeting and first-person behavior on the installed Android PWA.
+`verify-device-regressions-0.3.11.mjs` additionally protects the mobile Hammer layout contract:
+
+- Hammer menu open state is published and cleaned up;
+- Close and Remove retain deliberate touch targets;
+- the 3P/1P camera control moves clear of the menu in landscape and portrait.
+
+Physical-device verification remains required for visual readability, Floor/Wall placement confirmation, Remove targeting, and first-person aim behavior on the installed Android PWA.
