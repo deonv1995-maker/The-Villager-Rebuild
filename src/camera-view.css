@@ -22,6 +22,13 @@
   backdrop-filter: blur(6px);
 }
 
+body.hammer-construction-open .camera-view-toggle {
+  right: min(
+    max(268px, calc(env(safe-area-inset-right) + 264px)),
+    calc(100vw - 56px)
+  );
+}
+
 .mobile-hud:has(.camera-view-toggle.first-person)::after {
   content: '';
   position: absolute;
@@ -63,5 +70,12 @@
     top: max(7px, calc(env(safe-area-inset-top) + 4px));
     width: 46px;
     height: 38px;
+  }
+
+  body.hammer-construction-open .camera-view-toggle {
+    right: min(
+      max(240px, calc(env(safe-area-inset-right) + 237px)),
+      calc(100vw - 54px)
+    );
   }
 }
