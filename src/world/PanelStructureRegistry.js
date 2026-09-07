@@ -1,5 +1,5 @@
 import { PANEL_GRID } from '../data/PanelConstructionDefinitions.js';
-import { PanelConstructionGrid } from './PanelConstructionGrid.js';
+import { panelEdgeDescriptor, PanelConstructionGrid } from './PanelConstructionGrid.js';
 
 const normalizeYaw = yaw => {
   const value = Math.atan2(Math.sin(yaw ?? 0), Math.cos(yaw ?? 0));
@@ -71,6 +71,20 @@ export class PanelStructureRegistry {
     return this.localToWorld(structure, local.x, local.z);
   }
 
+  floorPlacementWorld(structure, floor) {
+    const center = this.cellCenterWorld(structure, floor);
+    if (!center) return null;
+    return {
+      key: floor.key,
+      x: center.x,
+      z: center.z,
+      baseY: floor.levelY,
+      topY: floor.levelY + 0.028,
+      yaw: structure.yaw,
+      storey: floor.storey
+    };
+  }
+
   localToWorld(structure, localX, localZ) {
     const frame = basis(structure.yaw);
     return {
@@ -79,23 +93,46 @@ export class PanelStructureRegistry {
     };
   }
 
-  wallPlacementWorld(structure, edgeKey) {
+  edgePlacementWorld(structure, { x, z, storey = 0, direction }) {
     if (!structure) return null;
-    const local = structure.grid.wallPlacement(edgeKey);
-    if (!local) return null;
-    const world = this.localToWorld(structure, local.x, local.z);
+    const edge = panelEdgeDescriptor({ x, z, storey, direction });
+    const localX = edge.axis === 'x'
+      ? structure.grid.originX + (edge.edgeX + 0.5) * structure.grid.cellSize
+      : structure.grid.originX + edge.edgeX * structure.grid.cellSize;
+    const localZ = edge.axis === 'x'
+      ? structure.grid.originZ + edge.edgeZ * structure.grid.cellSize
+      : structure.grid.originZ + (edge.edgeZ + 0.5) * structure.grid.cellSize;
+    const world = this.localToWorld(structure, localX, localZ);
     const frame = basis(structure.yaw);
     const rotateNormal = normal => ({
       x: frame.xX * normal.x + frame.zX * normal.z,
       z: frame.xZ * normal.x + frame.zZ * normal.z
     });
     return {
-      ...local,
+      key: edge.key,
+      ownerCellKey: edge.ownerCellKey,
       x: world.x,
       z: world.z,
-      yaw: local.axis === 'x' ? structure.yaw : structure.yaw - Math.PI / 2,
-      inwardNormal: rotateNormal(local.inwardNormal),
-      outwardNormal: rotateNormal(local.outwardNormal)
+      axis: edge.axis,
+      yaw: edge.axis === 'x' ? structure.yaw : structure.yaw - Math.PI / 2,
+      inwardNormal: rotateNormal(edge.inwardNormal),
+      outwardNormal: rotateNormal(edge.outwardNormal)
+    };
+  }
+
+  wallPlacementWorld(structure, edgeKey) {
+    if (!structure) return null;
+    const wall = structure.grid.walls.get(edgeKey);
+    if (!wall) return null;
+    const placement = this.edgePlacementWorld(structure, wall);
+    if (!placement) return null;
+    return {
+      ...placement,
+      baseY: wall.baseY,
+      topY: wall.topY,
+      length: this.cellSize,
+      variant: wall.variant,
+      storey: wall.storey
     };
   }
 
