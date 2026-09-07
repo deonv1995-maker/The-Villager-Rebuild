@@ -68,6 +68,8 @@ The schema currently preserves the meaningful mutable Day-1 state:
 
 Physical construction restoration reuses the authoritative `PHYSICAL_LOG` dimensions and shared collision service. The save contains data and transforms only; it never writes a serialized scene graph.
 
+Wall entries have one additional persistence invariant: their directed facing is normalized from the serialized rendered transform at both capture and restore. Schema 1 historically stored both a scalar wall yaw and the rendered quaternion; runtime wall-orientation passes could leave an older save with a correct visual transform but stale scalar yaw. The rendered transform is therefore the compatibility authority at the persistence boundary, after which `WallPanelCustomizationSystem` remains the structural inward-facing authority. This heals compatible schema-1 saves without a schema or world-revision bump and does not change the persistence contract for other construction modes.
+
 ## Transient state normalization
 
 Some runtime state is intentionally normalized instead of persisted literally.

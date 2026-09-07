@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import * as THREE from 'three';
 import {
   SAVE_SCHEMA_VERSION,
   SAVE_STORAGE_KEY,
   SAVE_WORLD_REVISION,
   SaveGameStore
 } from '../src/persistence/SaveGameStore.js';
+import { constructionFacingYaw } from '../src/persistence/GameStatePersistence.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
@@ -42,6 +44,32 @@ assert.equal(store.hasValidSave(), false, 'incompatible schema must not expose C
 store.clear();
 assert.equal(memory.has(SAVE_STORAGE_KEY), false);
 
+// Schema 1 has historically stored both the wall's rendered quaternion and a logical yaw.
+// Older wall-orientation passes could leave those two values out of sync. Continue must
+// recover the direction the player actually saw from the serialized rendered transform.
+const savedWallRoot = new THREE.Group();
+savedWallRoot.rotation.y = Math.PI;
+const restoredWallRoot = new THREE.Group();
+restoredWallRoot.quaternion.fromArray(savedWallRoot.quaternion.toArray()).normalize();
+const recoveredWallYaw = constructionFacingYaw({
+  mode: 'wall',
+  yaw: 0,
+  root: restoredWallRoot
+});
+const recoveredWallYawDelta = Math.abs(Math.atan2(
+  Math.sin(recoveredWallYaw - Math.PI),
+  Math.cos(recoveredWallYaw - Math.PI)
+));
+assert.ok(
+  recoveredWallYawDelta < 0.000001,
+  'legacy wall restore must prefer the serialized rendered facing over stale logical yaw'
+);
+assert.equal(
+  constructionFacingYaw({ mode: 'floor', yaw: Math.PI / 2, root: restoredWallRoot }),
+  Math.PI / 2,
+  'non-wall construction must keep its established logical yaw persistence contract'
+);
+
 const checks = [
   ['one versioned save-store key owns browser persistence', SAVE_STORAGE_KEY === 'the-villager-rebuild.save'],
   ['main boot owns a shared SaveGameStore', main.includes('const saveStore = new SaveGameStore()')],
@@ -55,6 +83,7 @@ const checks = [
   ['save state includes resource harvesting and world gatherables', persistence.includes('harvest: captureHarvest(game)') && persistence.includes('gatherables: captureGatherables(game)') && persistence.includes('harvestedGrassPatchIds')],
   ['save state includes campfire and physical construction', persistence.includes('campfire: captureCampfire(game)') && persistence.includes('construction: captureConstruction(game)') && persistence.includes('builtLogs:')],
   ['save state includes wall variants and roof thatch', persistence.includes('wallPanels: captureWallPanels(game)') && persistence.includes('roofThatch: captureRoofThatch(game)')],
+  ['wall facing is normalized from the rendered transform at capture and restore', persistence.includes('yaw: constructionFacingYaw(entry)') && persistence.includes('yaw: constructionFacingYaw({ mode: saved.mode, yaw: saved.yaw, root })')],
   ['physical construction restores from data rather than serialized scene objects', persistence.includes('createConstructionLogVisual(saved.mode)') && persistence.includes('captureTransform(entry.root)') && !persistence.includes('toJSON()')],
   ['thrown spears normalize safely back to inventory with durability', persistence.includes('recoverableSpearDurabilities') && persistence.includes("game.inventory.add('spear', 1)") && persistence.includes('recoveredSpearDurabilities')],
   ['Ranger resume uses the cinematic controller boundary for safe teleport', persistence.includes("const driver = { id: 'save-game-restore' }") && persistence.includes('game.player.beginCinematic(driver)') && persistence.includes('game.player.endCinematic(driver)')]
