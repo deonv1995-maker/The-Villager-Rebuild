@@ -1,6 +1,7 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const ACTIVE_MODES = new Set(['floor', 'wall', 'remove']);
+const MENU_OPEN_BODY_CLASS = 'hammer-construction-open';
 
 export class HammerConstructionMenu {
   constructor({ onSelect }) {
@@ -100,6 +101,7 @@ export class HammerConstructionMenu {
     this.open = Boolean(open);
     if (ACTIVE_MODES.has(mode)) this.mode = mode;
     this.root.hidden = !this.open;
+    document.body.classList.toggle(MENU_OPEN_BODY_CLASS, this.open);
     this.root.classList.toggle('invalid', this.open && this.mode !== 'remove' && !previewValid);
 
     if (this.material) this.material.textContent = `LOGS ${materialQuantity}`;
@@ -126,6 +128,7 @@ export class HammerConstructionMenu {
   }
 
   dispose() {
+    document.body.classList.remove(MENU_OPEN_BODY_CLASS);
     this.root.remove();
     this.buttons.clear();
   }
