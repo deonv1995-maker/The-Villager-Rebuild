@@ -496,6 +496,12 @@ const upperPairHasCollinearRun = (pair, supports, levelTolerance, yawTolerance =
   )
 );
 
+const isRectangularRoofRegion = region => (
+  region?.topology === 'frame-cell' ||
+  region?.topology === 'frame-bounds' ||
+  region?.topology === 'closed-loop'
+);
+
 const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
   const center = frameCellCenter(region);
   const side = pairSide(pair, center);
@@ -504,7 +510,8 @@ const lowerRegionContinuesAlongUpperPair = (region, pair, regions) => {
   const axisZ = -Math.sin(pair.yaw ?? 0);
 
   return (regions ?? []).some(candidate => {
-    if (candidate?.topology !== 'frame-cell' || candidate.key === region.key) return false;
+    if (!isRectangularRoofRegion(candidate) || candidate.key === region.key) return false;
+    if (candidate.junctionRole === 'cross') return false;
     if (sharedFrameCount(region, candidate) !== 2) return false;
     if (Math.abs((candidate.frameTopY ?? 0) - (region.frameTopY ?? 0)) > 0.16) return false;
 
@@ -555,6 +562,58 @@ const orientFrameCellToAxis = (region, targetYaw) => {
     : region;
 };
 
+const edgeMidpoint = (left, right) => ({
+  x: (left.x + right.x) * 0.5,
+  z: (left.z + right.z) * 0.5
+});
+
+const regionEdgeLengths = region => ({
+  along: Math.hypot(region.b.x - region.a.x, region.b.z - region.a.z),
+  across: Math.hypot(region.c.x - region.a.x, region.c.z - region.a.z)
+});
+
+const roofOrientationLockedByShape = region => {
+  if (region?.footprintOrientationLocked === true) return true;
+  if (region?.topology === 'frame-bounds') return true;
+  const lengths = regionEdgeLengths(region);
+  return Math.abs(lengths.along - lengths.across) > 0.2;
+};
+
+const upperWallBackingEdge = (region, pair) => {
+  if (axisYawDelta(region?.ridgeYaw ?? 0, pair?.yaw ?? 0) > 0.16) return null;
+  const span = frameCellSpan(region);
+  if (!Number.isFinite(span) || span <= 0.01) return null;
+  const ab = edgeMidpoint(region.a, region.b);
+  const cd = edgeMidpoint(region.c, region.d);
+  const abDistance = Math.hypot(pair.x - ab.x, pair.z - ab.z);
+  const cdDistance = Math.hypot(pair.x - cd.x, pair.z - cd.z);
+  const maxDistance = Math.max(0.24, span * 0.24);
+  const nearest = Math.min(abDistance, cdDistance);
+  if (nearest > maxDistance) return null;
+  return abDistance <= cdDistance ? 'ab' : 'cd';
+};
+
+const singlePitchRoofRegion = (region, pair, highSide, metadata = {}) => {
+  const existingRise = Math.max(0.12, (region.ridgeY ?? region.eaveY) - region.eaveY);
+  const desiredHighY = region.eaveY + existingRise * 2;
+  const wallLimit = Number.isFinite(pair?.topY)
+    ? Math.max(region.eaveY + existingRise, pair.topY - 0.18)
+    : desiredHighY;
+  const highY = Math.max(region.eaveY + existingRise, Math.min(desiredHighY, wallLimit));
+  return {
+    ...region,
+    ...metadata,
+    ridgeY: highY,
+    roofProfile: 'single-pitch',
+    singlePitchHighSide: highSide,
+    singlePitchWallPairKey: pair.rawKey,
+    upperWallRun: true,
+    upperWallPairKey: pair.rawKey,
+    upperWallAnchorIds: [...(pair.anchorIds ?? [])],
+    roofOrientationAuthority: 'upper-wall-single-pitch'
+  };
+};
+
 /**
  * Resolve connected frame cells as footprint-level roof masses. Straight runs share one
  * ridge axis even though their members remain segmented one physical Log per bay, while
@@ -567,11 +626,15 @@ export function orientConnectedFrameCellRegions(regions) {
 }
 
 /**
- * Upper-storey support remains useful for isolated square roof cells and for exact wall
- * coverage metadata, but a connected footprint is now the stronger roof-shape authority.
- * A later main roof or upper wall must never rotate a connected lower run into a row of
- * side-by-side gables. Cross-junction partners remain perpendicular to their footprint
- * primary.
+ * The roof profile is resolved after the horizontal footprint but before member targets
+ * are consumed. A lower bay that runs parallel to a real next-storey FRAME + RAW wall
+ * uses that wall as the high edge of one continuous single-pitch roof. A bay that reaches
+ * the wall end-on stays a gable/cross-gable, because turning that branch into a lean-to
+ * would destroy the intended perpendicular junction.
+ *
+ * This applies to frame-cell, frame-bounds and closed-loop regions. The old implementation
+ * only considered frame-cell direction, which left multi-bay `frame-bounds` roofs as full
+ * gables even when they visibly buried one slope inside the upper storey.
  */
 export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   levelTolerance = 0.42,
@@ -582,11 +645,12 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
   if (!source.length || !supports.length) return source;
 
   const oriented = source.map(region => {
-    if (region?.topology !== 'frame-cell') return region;
+    if (!isRectangularRoofRegion(region)) return region;
     if (region.crossJunction && region.junctionRole === 'cross') return region;
     if (!Number.isFinite(region.frameTopY)) return region;
 
     const footprintLocked = region.footprintOrientationLocked === true;
+    const orientationLocked = roofOrientationLockedByShape(region);
     const center = frameCellCenter(region);
     const span = frameCellSpan(region);
     if (!Number.isFinite(span) || span <= 0.01) return region;
@@ -621,8 +685,24 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       levelTolerance
     );
 
+    // A structurally connected perpendicular junction remains a gable/cross-gable. For
+    // ordinary backed bays, align only square/isolated shapes to the wall; long/multi-bay
+    // masses keep their footprint axis and qualify only when already parallel.
+    const profileCandidate = orientationLocked
+      ? region
+      : orientFrameCellToAxis(region, primaryPair.yaw);
+    const backingEdge = region.crossJunction
+      ? null
+      : upperWallBackingEdge(profileCandidate, primaryPair);
+    if (backingEdge) {
+      return singlePitchRoofRegion(profileCandidate, primaryPair, backingEdge, {
+        ...(hostRoofRegion ? { hostRoofRegionKey: hostRoofRegion.key } : {}),
+        ...(continuousUpperRun ? { upperWallRun: true } : {})
+      });
+    }
+
     if (hostRoofRegion) {
-      const resolved = footprintLocked
+      const resolved = orientationLocked
         ? region
         : orientFrameCellToAxis(region, hostRoofRegion.ridgeYaw);
       return {
@@ -635,7 +715,7 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
             }
           : {}),
         hostRoofRegionKey: hostRoofRegion.key,
-        roofOrientationAuthority: footprintLocked ? 'footprint' : 'host-roof'
+        roofOrientationAuthority: orientationLocked ? 'footprint' : 'host-roof'
       };
     }
 
@@ -646,7 +726,7 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       const wallYaw = axisHeading(primaryPair.yaw ?? 0);
       const currentDelta = axisYawDelta(currentYaw, wallYaw);
       const alternateDelta = axisYawDelta(alternateYaw, wallYaw);
-      const resolved = footprintLocked
+      const resolved = orientationLocked
         ? region
         : alternateDelta + 0.05 < currentDelta
           ? quarterTurnFrameCell(region)
@@ -656,11 +736,11 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
         upperWallRun: true,
         upperWallPairKey: primaryPair.rawKey,
         upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])],
-        roofOrientationAuthority: footprintLocked ? 'footprint' : 'upper-wall-run'
+        roofOrientationAuthority: orientationLocked ? 'footprint' : 'upper-wall-run'
       };
     }
 
-    if (footprintLocked) return region;
+    if (orientationLocked) return region;
 
     const currentScore = pairAlignmentScore(region, targets, currentYaw);
     const alternateScore = pairAlignmentScore(region, targets, alternateYaw);
