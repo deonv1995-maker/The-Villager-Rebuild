@@ -1,113 +1,124 @@
 # Survival interaction model
 
-Foundation 0.3.8 keeps the shared gathering/crafting/building/combat boundaries from 0.3.7 and refines physical construction, hauling posture and mobile tool actions after Android verification. The archived original game remains a behavioural reference only; the rebuild keeps its modular architecture and continuous terrain ownership.
+Foundation 0.3.8 keeps the established gathering, crafting, tools, combat, terrain and mobile-control boundaries while construction transitions to semantic panels.
 
 ## Resource storage
 
-Resources declare their storage mode in `ResourceDefinitions.js`.
+Resources declare storage in `ResourceDefinitions.js`.
 
-- `stick`, `stone`, `grass` and food are inventory resources. Picking them up removes the world presentation and increments the player inventory.
-- `log` is a physical resource. A log never enters `InventorySystem` and therefore cannot be consumed by a normal crafting recipe.
-- Chopping a tree creates physical log world objects. The Ranger lifts one log at a time and carries that same object until it is placed or dropped.
+- Stick, Stone, Grass, food and **Log** are inventory resources after pickup.
+- Chopping a tree still creates visible world Log pickups using the established full-sized Log presentation.
+- Picking up a world Log removes that presentation and increments `InventorySystem` by `Log x1`.
+- The Ranger no longer has to shoulder-carry one Log at a time to place Floor/Wall construction.
 
-This distinction is architectural: future large building materials should extend the physical-resource path instead of adding hidden inventory stacks for objects the player is expected to carry and place.
+This is an intentional gameplay/architecture change. Future logistics depth should be added through capacity, stockpiles, carts or storage rather than making semantic building orientation depend on a carried mesh again.
 
-## Physical log hauling
+## Log scale and presentation
 
-`PhysicalLogDefinitions.js` remains the authority for raw Log size and carry placement. The Log is 2.90 units long and the carried object is the same world object that was picked up.
+`PhysicalLogDefinitions.js` remains the shared dimensional authority for the timber presentation and construction scale. The established Log is 2.90 units long.
 
-Foundation 0.3.8 separates carry presentation from locomotion. `RangerLogCarryPose` runs after the Ranger animation mixer and adjusts only the upper-arm/lower-arm presentation toward shoulder-support targets. Normal idle/walk/run animation remains owned by `RangerController`. The carried Log anchor is positioned above and behind the torso to reduce body clipping.
+`PhysicalLogVisual` remains reusable presentation code for world Log pickups, split-log panel visuals and automatic floor supports. It does not own semantic building identity.
 
-This is intentionally not a new player-state controller. Future multi-log hauling must extend the physical hauling boundary rather than duplicate Ranger locomotion.
+The old `RangerLogCarryPose` and `PhysicalLogSystem` remain transition code while deferred stairs/roof systems are replaced, but inventory Logs cannot enter that player-facing construction path in the current Floor/Wall slice.
 
-## Physical log building
+## Panel building
 
-`PhysicalLogDefinitions.js` owns the 2.90-unit Log length, 0.27 radius, 0.25 construction grid, 45-degree yaw increments and support/roof constants. Loose, carried, previewed and committed raw Logs share that definition.
+`PanelConstructionSystem` is the live Floor/Wall structural authority.
 
-Holding a Log temporarily exposes the construction tray across the top of the mobile viewport:
+Current modules:
 
-- **RAW** — places the whole physical Log. On open ground it follows the terrain-aware rest pose; between a supported frame pair it can snap as a structural beam.
-- **FLOOR** — creates the split-log floor presentation. The first floor establishes a construction level above the highest sampled terrain beneath it. Any adjacent snapped floor inherits that exact level rather than calculating a new Y value from local terrain.
-- **FRAME** — creates an upright whole-Log frame from a valid floor corner and rejects occupied corners.
-- **WALL** — creates a split-log wall section between a supported pair of frames and refuses to stack above their supported height.
-- **ANGLE** — creates an angled whole-Log structural member from a supported frame top.
-- **ROOF** — consumes the carried whole Log and snaps it as a pitched rafter from a valid supported frame pair. Duplicate placement on the same frame pair/side is rejected.
-- **DROP** — returns the carried Log to the loose physical-resource state rather than committing it as construction.
+- **Floor Panel** — one full 2.9 x 2.9 structural cell, cost 3 Logs;
+- **Solid Wall Panel** — one full storey canonical cell edge, cost 3 Logs.
 
-Selecting a build mode does not consume or place the Log. `PhysicalLogSystem` continuously resolves the current target from Ranger position/facing and displays a translucent construction ghost. Green means the selected piece is valid; red means blocked or unsupported. The Hand interaction commits only the current valid placement.
+The first Floor Panel establishes a local structure grid. Adjacent floors join that grid. Separate buildings can establish their own snapped grid yaw, so every building is not forced onto one world orientation.
 
-### Uneven terrain and floor support
+Wall orientation comes from the canonical grid edge and semantic owner/interior side. Ranger facing, camera yaw and rendered mesh transforms are not wall-orientation authorities.
 
-The rebuild does **not** restore the archived `FoundationTerrainSystem` behaviour that cut or flattened the terrain beneath floors. The island terrain remains the single world-generation/traversal surface.
+## Mobile/desktop build interaction
 
-Instead, `FloorSupportVisual` adapts construction to the existing terrain:
+The existing compact build tray is reused. During the current live slice it exposes only Floor, Wall and Close while build mode is active.
 
-- shallow voids beneath floor corners receive small construction-owned fill piers;
-- larger voids receive vertical physical-Log support posts;
-- support posts can stack visually when the gap exceeds one Log length;
-- floors reject terrain that protrudes above their shared construction level or requires support deeper than the configured maximum;
-- demolishing the floor removes its generated support/fill presentation with it.
+- tap/click the Log inventory row to open or close panel build mode;
+- `B` opens build mode or cycles Floor/Wall;
+- `E` / `V` confirms a valid preview;
+- `G` / Escape closes build mode.
 
-`WorldCollisionSystem.isCircleClear()` accepts an optional scoped ignore predicate. FLOOR placement uses it only to ignore intentional contact with existing floor construction during adjacency checks; ordinary collision semantics for trees, rocks, walls, campfire, environment props and traversal are unchanged.
+A green preview means the semantic slot, terrain/collision conditions and 3-Log material requirement are valid. A red preview means the placement is blocked/unsupported or the inventory does not contain enough Logs.
 
-Placed floor/raw pieces continue to use the shared standable collision path. Frame/wall/angle pieces use shared construction collision. ROOF currently remains presentation/demolition construction without adding a broad blocking collider through the building interior; later roof cladding/traversal work must introduce purpose-built roof support/collision rather than a false rectangular blocker.
+Third person uses Ranger-relative target placement. First person scores construction slots against the centre-camera ray so the white reticle selects the intended structural slot directly.
+
+## Uneven terrain and floor support
+
+The island terrain remains authoritative. Construction does not reinstate permanent terrain cutting/flattening.
+
+`FloorSupportVisual` remains the presentation boundary for shallow fill and vertical timber supports beneath floors. One full Floor Panel materializes a full-cell standable collider while reusing the established support logic underneath its three visual floor strips.
+
+`WorldCollisionSystem` remains the one shared collision authority.
+
+## Demolition
+
+Hammer demolition recognizes semantic panel targets alongside remaining supported legacy targets such as campfire.
+
+For panel construction:
+
+- first person raycasts the exact panel mesh under the centre reticle;
+- third person uses the nearest in-range panel target;
+- semantic dependency rules are checked before removal;
+- a Floor Panel with attached walls refuses demolition;
+- successful Wall/Floor demolition refunds exactly 3 Logs;
+- successful panel demolition records one normal Hammer durability use;
+- rejected demolition does not refund material or consume Hammer durability.
 
 ## Inventory crafting and toolbelt
 
-The bottom toolbelt is the single basic-tool selection surface. Its first slot is always **Hand**, representing the default Ranger state with no tool equipped. The five craftable slots remain Spear, Axe, Hammer, Pickaxe and Sword.
+The bottom toolbelt remains the shared Hand + crafted-tool selection surface.
 
-Selecting Hand clears the equipped tool without consuming or discarding owned tools. Selecting an unowned tool attempts to craft it through `CraftingSystem`; selecting an owned tool equips it.
+Current tool roles remain:
 
-Foundation 0.3.8 adds one dedicated right-side action control whenever a tool is equipped. The button uses the equipped tool's icon. Hand pickup/build remains a separate contextual interaction path, so tool use no longer has to reuse the pickup button visually.
+- Spear — projectile hunting weapon with authored Throw release and retrievable projectile durability;
+- Axe — tree harvesting;
+- Hammer — demolition, including semantic panel demolition;
+- Pickaxe — rock harvesting;
+- Shovel — stump removal;
+- Sword — short-range melee.
 
-Current roles are:
+Tool crafting consumes inventory resources through `CraftingSystem`. Tool durability remains owned by `ToolDurabilitySystem` / `EquipmentRuntimeController`, not by individual structure systems.
 
-- **Spear** — projectile hunting weapon. It auto-locks a valid target inside spear range. The Ranger uses the authored KayKit `Throw` animation, releases the held spear part-way through that animation, and the projectile follows a visible ballistic-style arc toward the live locked target. Damage resolves only when that projectile arrives.
-- **Axe** — enables tree harvesting. Its authored skeleton action remains authoritative while `RangerToolPresentation` adds a small grip-relative strike accent for clearer mobile impact.
-- **Hammer** — enables demolition of supported player-built structures such as Log construction and the current campfire, using the same strengthened work-action presentation.
-- **Pickaxe** — mines large world rocks into loose Stone pickups, using the same strengthened work-action presentation.
-- **Sword** — short-range fighting/defence weapon with a dedicated lateral slash sweep rather than the generic vertical work-tool arc.
+## Tree and stump loop
 
-All handheld tool visuals continue to mount through the Ranger's shared authored right-hand attachment slot. Axe, Hammer and Pickaxe still request one-shot skeleton actions from `RangerController`; the new strike accent does not replace the authored body motion. Spear remains completely on its existing authored Throw/release/projectile path.
+Tree harvesting remains multi-hit and Axe-gated. A felled tree creates its configured number of world Log pickups.
 
-Tool recipes consume only inventory resources. Tool ownership is stored in the inventory/crafting data model, while equipped-tool state belongs to `ToolbeltSystem`.
+Stump removal remains Shovel-gated and creates one additional world Log pickup. That pickup now enters inventory when collected, matching all other Logs.
 
-## Harvest hit feedback
-
-`HarvestHitFeedback` is a shared presentation-only effect for successful tree/rock impacts. Every successful Axe or Pickaxe hit emits a short expanding ring plus a bounded set of chip fragments. It does not own damage, resource yield, collision, harvesting state or persistence.
-
-Tree health/yield remains in `TreeHarvestSystem`; rock hit/yield state remains in `RockHarvestSystem`. The visual effect is capped and short-lived so it cannot grow into an unbounded mobile particle system.
+Tree regrowth, grass renewal and ambient Stick renewal remain unchanged by the construction storage migration.
 
 ## Campfire
 
-The campfire costs three Sticks plus three Stones. It does not consume Logs. Logs remain reserved for physical construction.
+Campfire remains a separate crafted world structure costing three Sticks plus three Stones. It does not consume Logs and keeps its existing two-step preview/confirm workflow.
 
-Campfire construction stays a two-step placement flow:
+## Save/Continue
 
-1. the first Campfire action searches the existing playable/slope/collision rules and displays a translucent green world template at the current valid placement;
-2. the second Campfire action confirms that same template and only then consumes the three Sticks and three Stones, creates the real fire and registers collision.
+The panel cutover uses save schema/world revision 2. Semantic panel state is reconstructed before Ranger restore so floor/support collision already exists when a saved player position is applied.
 
-The green template follows the Ranger-facing placement calculation while preview mode is active. It has no gameplay collision and consumes no materials. Selecting another tool cancels an unconfirmed preview.
+Schema-1 placed-Log construction saves are intentionally incompatible and are not exposed as Continue saves under this build.
 
 ## System boundaries
 
-- `InventorySystem` never stores physical Logs.
-- `GatherableSystem` owns loose world resources, creates the authoritative raw-Log visual and refuses to inventory a resource declared `storage: 'physical'`.
-- `PhysicalLogDefinitions` owns authoritative Log dimensions, carry transform and construction snap/support/roof constants.
-- `PhysicalLogVisual` owns raw/split/roof construction presentations without deciding placement validity.
-- `RangerLogCarryPose` owns the post-mixer upper-body hauling posture only.
-- `FloorSupportVisual` owns automatic floor support/fill presentation only and never mutates island terrain.
-- `PhysicalLogSystem` owns carrying, dropping, construction-mode selection, preview validity, storey-aware level snapping, committed construction, support lifecycle and demolition conversion back to a physical Log.
-- `UpperStoreyFloorRules` projects only occupied lower-floor strips through the shared closed RAW top-beam topology; it does not create terrain foundations or a second structural graph.
-- `WorldCollisionSystem` remains the shared collision authority; its optional clearance ignore callback is caller-scoped and does not create a second construction collision system.
-- `ToolbeltSystem` owns Hand/default state plus craft/select/equip state for the five basic tools.
-- `RangerController` owns the authored right-hand attachment boundary, spear Throw/release timing and production work-action selection/timing.
-- `RangerToolPresentation` mounts Axe, Hammer, Pickaxe and Sword through that hand boundary; Axe/Hammer/Pickaxe request skeleton actions and Sword owns the lateral slash presentation.
-- `HarvestHitFeedback` owns only transient hit presentation.
-- `TreeHarvestSystem` only operates when Axe is selected by the app interaction layer.
-- `RockHarvestSystem` only operates when Pickaxe is selected.
-- `CampfireSystem` owns preview, confirmation, final placement and its demolition handle.
-- `SpearProjectileSystem` owns the moving arcing spear presentation and hit timing.
-- `DayOneHuntSystem` exposes target acquisition and damage; it does not decide which player tool is equipped.
+- `InventorySystem` stores picked-up Logs together with other inventory resources.
+- `GatherableSystem` owns world pickup presentation/removal; a Log may look physical in the world while still becoming inventory on pickup.
+- `PhysicalLogDefinitions` owns shared timber dimensions and retained transition constants.
+- `PhysicalLogVisual` owns timber/split-timber presentation only.
+- `PanelConstructionGrid` owns semantic cell/edge/roof-zone identity.
+- `PanelStructureRegistry` owns per-building local grid origin/yaw and local/world transforms.
+- `PanelConstructionSystem` owns live Floor/Wall placement validity, semantic state, generated collision/supports, material consume/refund and semantic snapshot/restore.
+- `PanelConstructionRuntimeController` owns build-mode UI/keyboard integration, first-person target routing and Hammer panel interaction.
+- `WorldCollisionSystem` remains the shared collision authority.
+- `FloorSupportVisual` remains construction-owned support/fill presentation and never mutates island terrain permanently.
+- `EquipmentRuntimeController` remains the shared tool durability/crafting runtime.
+- `TreeHarvestSystem`, `RockHarvestSystem`, `CampfireSystem`, `SpearProjectileSystem` and `DayOneHuntSystem` retain their established responsibilities.
 
-The PWA shell, native Chrome installation model, deterministic Pages deployment ordering, expanded mainland, render chunks, terrain, water, tree occlusion and world-generation architecture are outside this refinement pass and remain unchanged.
+## Deferred construction systems
+
+Stairs, door/window variants, upper-storey panel placement and live roof-zone construction are later milestones. Existing old Log/frame/roof code may remain mounted temporarily as transition infrastructure, but new Floor/Wall features must not be added back to it and it must not become a competing player-facing construction authority.
+
+The PWA shell, native Chrome install model, Pages deployment ordering, terrain/world generation, water, ecology and Ranger movement/camera architecture remain outside this construction slice.

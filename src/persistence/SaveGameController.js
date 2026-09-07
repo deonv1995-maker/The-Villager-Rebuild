@@ -23,6 +23,11 @@ export class SaveGameController {
   restore() {
     const record = this.store.read();
     if (!record) return { restored: false, savedAt: null };
+
+    // Panel construction is restored before the shared gameplay restore places the Ranger.
+    // This preserves the existing save invariant that standable structure collision exists
+    // before the saved player position is applied.
+    this.game.panelConstruction?.restore?.(record.state.panelConstruction);
     restoreGameState(this.game, record.state);
     this.game.treeHarvest?.restoreRegrowthState?.(record.state.treeRegrowth);
     this.game.resourceRenewal?.restoreState?.(record.state.resourceRenewal);
@@ -47,6 +52,7 @@ export class SaveGameController {
     if (!this.running && reason !== 'gameplay-start') return null;
     try {
       const state = captureGameState(this.game);
+      state.panelConstruction = this.game.panelConstruction?.snapshot?.() ?? null;
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];
       state.resourceRenewal = this.game.resourceRenewal?.captureState?.() ?? null;
       const fingerprint = JSON.stringify(state);

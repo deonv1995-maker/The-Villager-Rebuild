@@ -1,7 +1,7 @@
 const WORK_TARGETS = Object.freeze({
   axe: Object.freeze(new Set(['tree'])),
   pickaxe: Object.freeze(new Set(['rock'])),
-  hammer: Object.freeze(new Set(['placed-log', 'campfire']))
+  hammer: Object.freeze(new Set(['placed-log', 'panel-construction', 'campfire']))
 });
 
 const WEAPON_TOOLS = Object.freeze(new Set(['spear', 'sword']));
@@ -37,7 +37,7 @@ export function resolveContextAction({
       source: 'interaction',
       available: Boolean(interactionTarget) && Boolean(buildPreviewValid),
       icon: 'hand',
-      label: interactionTarget?.actionLabel ?? 'Place carried log',
+      label: interactionTarget?.actionLabel ?? 'Place construction panel',
       caption: 'PLACE'
     };
   }

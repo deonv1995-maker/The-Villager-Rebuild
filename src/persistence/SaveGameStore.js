@@ -1,6 +1,6 @@
 export const SAVE_STORAGE_KEY = 'the-villager-rebuild.save';
-export const SAVE_SCHEMA_VERSION = 1;
-export const SAVE_WORLD_REVISION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_WORLD_REVISION = 2;
 
 const isRecord = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 

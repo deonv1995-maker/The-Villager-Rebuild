@@ -1,5 +1,6 @@
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
+import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
@@ -42,6 +43,14 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     equipmentRuntime.start();
     game.equipmentRuntime = equipmentRuntime;
 
+    const panelConstructionRuntime = new PanelConstructionRuntimeController({ game });
+    panelConstructionRuntime.start();
+    game.panelConstructionRuntime = panelConstructionRuntime;
+
+    // Legacy physical-log wall/roof presentation remains mounted during the transition so
+    // non-panel runtime boundaries stay stable. Inventory Logs can no longer enter that
+    // construction path, so these systems are restore-compatible observers rather than a
+    // second player-facing construction authority.
     const wallPanelCustomization = new WallPanelCustomizationController({ game });
     wallPanelCustomization.start();
     game.wallPanelCustomization = wallPanelCustomization;

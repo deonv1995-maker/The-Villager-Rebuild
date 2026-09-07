@@ -23,7 +23,8 @@ const survivalResourceIcons = Object.freeze({
   stick: 'icon-resource-stick.webp',
   stone: 'icon-resource-stone.webp',
   grass: 'icon-resource-grass.webp',
-  meat: 'icon-resource-meat.webp'
+  meat: 'icon-resource-meat.webp',
+  log: 'icon-build-raw.webp'
 });
 
 const survivalBuildIcons = Object.freeze({
@@ -67,12 +68,12 @@ assert.match(
 assert.match(
   mobileHudSource,
   /data-build="stairs"[^>]*aria-label="Split-log stairs"/,
-  'Mobile HUD must expose the player-facing split-log Stairs build mode'
+  'Mobile HUD must retain the dormant Stairs button for the later panel-system migration slice'
 );
 assert.match(
   mobileHudSource,
   /data-build="stairs"[\s\S]*?<img src="\$\{this\.buildIcons\.stairs\}"/,
-  'Player-facing Stairs must render the dedicated stairs icon'
+  'Dormant Stairs must retain its dedicated icon until its replacement slice is activated'
 );
 assert.doesNotMatch(
   mobileHudSource,
@@ -98,4 +99,4 @@ assert.match(
   'Survival icons must keep their painted full-colour presentation instead of fantasy pixel filtering'
 );
 
-console.log('Approved rustic survival icon set verified');
+console.log('Approved rustic survival resource/tool/build icon set including inventory Logs verified');
