@@ -68,19 +68,25 @@ const beams = [
 ];
 
 const wallCenters = [0.26, 1.04, 1.82];
-const westWalls = wallCenters.map((centerY, index) => ({
-  id: 30 + index,
+const makeWallRows = ({ idBase, x, z, yaw }) => wallCenters.map((centerY, index) => ({
+  id: idBase + index,
   mode: 'wall',
   active: true,
-  x: -half,
-  z: 0,
-  yaw: -Math.PI / 2,
+  x,
+  z,
+  yaw,
   baseY: 0,
   centerY,
   topY: centerY + CONSTRUCTION_DIMENSIONS.wallSectionTopOffset,
   root: new THREE.Group(),
   collisionHandle: null
 }));
+const westWalls = makeWallRows({
+  idBase: 30,
+  x: -half,
+  z: 0,
+  yaw: -Math.PI / 2
+});
 
 const physicalLogs = {
   structureRevision: 1,
@@ -129,28 +135,62 @@ assert.ok(
   'All rows in the stair-adjacent wall bay must keep the structural interior orientation'
 );
 
+// A schema-1 autosave can already contain the wrong rendered wall direction if it was
+// captured after an older Continue pass flipped the split face. A physically closed room
+// must recover its interior from FRAME + wall-edge geometry even when RAW/floor metadata
+// is unavailable and the persisted directed yaw itself is therefore not trustworthy.
+const recoveryFrames = [
+  makeFrame(301, -half, -half),
+  makeFrame(302, half, -half),
+  makeFrame(303, half, half),
+  makeFrame(304, -half, half)
+];
+const corruptRecoveryWestWalls = makeWallRows({
+  idBase: 330,
+  x: -half,
+  z: 0,
+  yaw: -Math.PI / 2
+});
+const recoveryWalls = [
+  ...makeWallRows({ idBase: 340, x: 0, z: -half, yaw: 0 }),
+  ...makeWallRows({ idBase: 350, x: half, z: 0, yaw: -Math.PI / 2 }),
+  ...makeWallRows({ idBase: 360, x: 0, z: half, yaw: Math.PI }),
+  ...corruptRecoveryWestWalls
+];
+const recoveryWallSystem = new WallPanelCustomizationSystem({
+  group: new THREE.Group(),
+  collision,
+  physicalLogs: {
+    structureRevision: 1,
+    builtLogs: [...recoveryFrames, ...recoveryWalls]
+  }
+});
+const recoveredClosedBay = recoveryWallSystem.sync().find(bay => bay.key === 'wall:301-304');
+assert.ok(recoveredClosedBay, 'A corrupted saved wall must still resolve to its FRAME edge');
+assert.ok(
+  directedYawDelta(recoveredClosedBay.yaw, Math.PI / 2) < 0.001,
+  'A closed wall perimeter must recover the west split face toward the room interior'
+);
+assert.ok(
+  corruptRecoveryWestWalls.every(wall => directedYawDelta(wall.yaw, Math.PI / 2) < 0.001),
+  'Closed-room recovery must repair every persisted row in the corrupted wall bay'
+);
+
 // Save data already contains the directed wall yaw the player saw before leaving the game.
 // A FRAME pair only defines an axis; when no structural/floor reference can break the tie,
 // reconstruction must keep that persisted facing rather than deriving a new direction from
-// frame endpoint order.
+// frame endpoint order. The closed-wall recovery above must not change this open-run rule.
 const restoredFrames = [
   makeFrame(101, -half, 0),
   makeFrame(102, half, 0)
 ];
 const persistedYaw = Math.PI;
-const restoredWalls = wallCenters.map((centerY, index) => ({
-  id: 130 + index,
-  mode: 'wall',
-  active: true,
+const restoredWalls = makeWallRows({
+  idBase: 130,
   x: 0,
   z: 0,
-  yaw: persistedYaw,
-  baseY: 0,
-  centerY,
-  topY: centerY + CONSTRUCTION_DIMENSIONS.wallSectionTopOffset,
-  root: new THREE.Group(),
-  collisionHandle: null
-}));
+  yaw: persistedYaw
+});
 const restoredWallSystem = new WallPanelCustomizationSystem({
   group: new THREE.Group(),
   collision,
@@ -252,4 +292,4 @@ assert.equal(
   'Actual roof demolition must retain the existing Grass refund contract'
 );
 
-console.log('Walls keep stable inward/save-facing orientation and completed physical roofs retain thatch through topology churn.');
+console.log('Walls recover closed-room interiors, preserve open-run save facing, and completed physical roofs retain thatch through topology churn.');
