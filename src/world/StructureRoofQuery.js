@@ -33,6 +33,12 @@ const averagePoint = points => ({
   z: points.reduce((sum, point) => sum + point.z, 0) / points.length
 });
 
+const midpoint = (left, right) => ({
+  x: (left.x + right.x) * 0.5,
+  y: (left.y + right.y) * 0.5,
+  z: (left.z + right.z) * 0.5
+});
+
 const retainedPerpendicularFrameCellRegion = region => ({
   ...region,
   key: `${region.key}:retained-perpendicular`,
@@ -52,13 +58,19 @@ const retainedPerpendicularFrameCellRegion = region => ({
  *
  * Automatic cross-gable junctions are different: both perpendicular gables are already
  * live structural regions, so synthesizing another retained perpendicular copy would
- * duplicate completed regions and thatch panels.
+ * duplicate completed regions and thatch panels. Single-pitch profiles are also excluded
+ * because a backed lean-to has only one deliberate roof plane and must never resurrect a
+ * hidden perpendicular/full-gable completion path.
  */
 export function collectCompletedRoofRegions(regions, members) {
   const completed = [];
   for (const region of regions ?? []) {
     if (roofRegionComplete(region, members)) completed.push(region);
-    if (region?.topology !== 'frame-cell' || region.crossJunction) continue;
+    if (
+      region?.topology !== 'frame-cell' ||
+      region.crossJunction ||
+      region.roofProfile === 'single-pitch'
+    ) continue;
 
     const retained = retainedPerpendicularFrameCellRegion(region);
     if (roofRegionComplete(retained, members)) completed.push(retained);
@@ -66,7 +78,50 @@ export function collectCompletedRoofRegions(regions, members) {
   return completed;
 }
 
+const panelDescriptor = (region, panel) => {
+  const center = averagePoint(panel.corners);
+  return {
+    id: `thatch:${panelGeometryKey(panel.corners)}`,
+    regionKey: region.key,
+    side: panel.side,
+    corners: panel.corners,
+    eave: panel.eave,
+    center,
+    eaveY: region.eaveY,
+    ridgeY: region.ridgeY,
+    roofProfile: region.roofProfile ?? 'gable',
+    singlePitchHighSide: region.singlePitchHighSide ?? null,
+    footprint: [region.a, region.b, region.d, region.c]
+  };
+};
+
+const singlePitchPanels = region => {
+  const highIsAB = region.singlePitchHighSide === 'ab';
+  const highStart2D = highIsAB ? region.a : region.c;
+  const highEnd2D = highIsAB ? region.b : region.d;
+  const lowStart2D = highIsAB ? region.c : region.a;
+  const lowEnd2D = highIsAB ? region.d : region.b;
+  const highStart = { x: highStart2D.x, y: region.ridgeY, z: highStart2D.z };
+  const highEnd = { x: highEnd2D.x, y: region.ridgeY, z: highEnd2D.z };
+  const lowStart = { x: lowStart2D.x, y: region.eaveY, z: lowStart2D.z };
+  const lowEnd = { x: lowEnd2D.x, y: region.eaveY, z: lowEnd2D.z };
+  const highMid = midpoint(highStart, highEnd);
+  const lowMid = midpoint(lowStart, lowEnd);
+
+  // Keep two logical finish panels per physical Log bay so existing thatch cost,
+  // persistence side identities and reflow behavior remain stable. The two quads are
+  // coplanar halves of one visible roof pitch rather than opposite gable slopes.
+  return [
+    { side: 'a', corners: [lowStart, lowMid, highMid, highStart], eave: [lowStart, lowMid] },
+    { side: 'c', corners: [lowMid, lowEnd, highEnd, highMid], eave: [lowMid, lowEnd] }
+  ].map(panel => panelDescriptor(region, panel));
+};
+
 export function roofPanelDescriptors(region) {
+  if (region?.roofProfile === 'single-pitch') {
+    return singlePitchPanels(region);
+  }
+
   const ridgeA = {
     x: (region.a.x + region.c.x) * 0.5,
     y: region.ridgeY,
@@ -86,20 +141,7 @@ export function roofPanelDescriptors(region) {
     { side: 'c', corners: [eaveC, eaveD, ridgeB, ridgeA], eave: [eaveC, eaveD] }
   ];
 
-  return panels.map(panel => {
-    const center = averagePoint(panel.corners);
-    return {
-      id: `thatch:${panelGeometryKey(panel.corners)}`,
-      regionKey: region.key,
-      side: panel.side,
-      corners: panel.corners,
-      eave: panel.eave,
-      center,
-      eaveY: region.eaveY,
-      ridgeY: region.ridgeY,
-      footprint: [region.a, region.b, region.d, region.c]
-    };
-  });
+  return panels.map(panel => panelDescriptor(region, panel));
 }
 
 export function pointInsideRoofRegion(region, point, margin = 0) {
