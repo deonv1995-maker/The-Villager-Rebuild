@@ -24,12 +24,12 @@ export const PANEL_BUILD_LABELS = Object.freeze({
   wall: 'Wall panel'
 });
 
-// Costs preserve the material meaning of the replaced physical workflow: one full
-// square floor contains three former one-third-width floor strips, while one full
-// storey wall replaces four stacked wall sections.
+// Costs preserve the material meaning of the replaced physical workflow. One square
+// floor combines the three former one-third-width floor strips. A completed wall bay
+// was three stacked wall sections before its Hammer customization became available.
 export const PANEL_BUILD_COSTS = Object.freeze({
   floor: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }]),
-  wall: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 4 }])
+  wall: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }])
 });
 
 export const PANEL_WALL_VARIANTS = Object.freeze(['solid', 'door', 'window']);
