@@ -55,7 +55,8 @@ export const ASSET_PATHS = Object.freeze({
         stick: asset('ui/survival/icon-resource-stick.webp'),
         stone: asset('ui/survival/icon-resource-stone.webp'),
         grass: asset('ui/survival/icon-resource-grass.webp'),
-        meat: asset('ui/survival/icon-resource-meat.webp')
+        meat: asset('ui/survival/icon-resource-meat.webp'),
+        log: asset('ui/survival/icon-build-raw.webp')
       }),
       build: Object.freeze({
         raw: asset('ui/survival/icon-build-raw.webp'),
