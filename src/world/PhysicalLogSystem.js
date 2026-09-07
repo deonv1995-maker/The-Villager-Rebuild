@@ -248,6 +248,8 @@ export class PhysicalLogSystem {
       roofKey: placement.roofKey ?? null,
       roofRegionKey: placement.roofRegionKey ?? null,
       roofRole: placement.roofRole ?? null,
+      roofForm: placement.roofForm ?? null,
+      highEdge: placement.highEdge ?? null,
       roofLength: placement.roofLength ?? null,
       supportRegionKey: placement.supportRegionKey ?? null,
       stairKey: placement.stairKey ?? null,
@@ -781,6 +783,14 @@ export class PhysicalLogSystem {
     const candidates = [];
 
     for (const region of regions) {
+      const regionForm = region.roofForm ?? 'gable';
+      const ownedRoofMembers = activeMembers.filter(member =>
+        member.roofRegionKey === region.key &&
+        (member.roofRole === 'rafter' || member.roofRole === 'ridge')
+      );
+      if (ownedRoofMembers.some(member => (member.roofForm ?? 'gable') !== regionForm)) {
+        continue;
+      }
       const raftersComplete = roofRaftersComplete(region, activeMembers);
       for (const member of roofMemberCandidates(region)) {
         if (this.#roofSlotOccupied(member, activeMembers)) continue;

@@ -21,6 +21,7 @@ The current `main` branch has moved beyond the original 0.3.8 construction pass 
 - top-floor ROOF targeting prefers the highest valid completed FRAME + RAW support ring while preserving in-progress work first;
 - `RoofTopology` remains the single roof-direction authority for live placement, completed-roof queries, thatching and interior detection;
 - stepped/L-shaped side roofs use connected structure and the nearest completed upper-storey structural wall edge as orientation hints, and completed stale roof assemblies plus thatch reflow together when the corrected direction becomes authoritative;
+- connected lower roof runs backed by a continuous upper-storey wall resolve as true one-pitch roofs (one exterior slope, two rafters and one high-edge Log per bay), while perpendicular footprint branches retain the automatic crossed-gable junction;
 - stacked wall customization is isolated by structural level so changing a lower wall to a door/window cannot remove the wall directly above it;
 - connected completed building shells share one occlusion/fade unit while unrelated nearby buildings remain independent;
 - third person remains the default Ranger camera, with optional first person reusing the same movement, interaction and construction systems rather than creating a parallel controller;

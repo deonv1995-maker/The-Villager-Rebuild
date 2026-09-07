@@ -8,6 +8,7 @@ import {
   roofMemberOccupied,
   roofRegionComplete
 } from './RoofMemberRules.js';
+import { monoPitchRoofGeometry } from './RoofFormGeometry.js';
 
 export {
   roofMemberCandidates,
@@ -57,8 +58,26 @@ const retainedPerpendicularFrameCellRegion = region => ({
 export function collectCompletedRoofRegions(regions, members) {
   const completed = [];
   for (const region of regions ?? []) {
-    if (roofRegionComplete(region, members)) completed.push(region);
-    if (region?.topology !== 'frame-cell' || region.crossJunction) continue;
+    const regionComplete = roofRegionComplete(region, members);
+    if (region?.roofForm === 'mono-pitch') {
+      if (regionComplete) {
+        completed.push(region);
+        continue;
+      }
+      const legacyGable = {
+        ...region,
+        roofForm: 'gable',
+        highEdge: null,
+        legacyRoofForm: true
+      };
+      if (roofRegionComplete(legacyGable, members)) completed.push(legacyGable);
+      continue;
+    }
+    if (regionComplete) completed.push(region);
+    if (
+      region?.topology !== 'frame-cell' ||
+      region.crossJunction
+    ) continue;
 
     const retained = retainedPerpendicularFrameCellRegion(region);
     if (roofRegionComplete(retained, members)) completed.push(retained);
@@ -67,6 +86,30 @@ export function collectCompletedRoofRegions(regions, members) {
 }
 
 export function roofPanelDescriptors(region) {
+  const monoPitch = monoPitchRoofGeometry(region);
+  if (monoPitch) {
+    const { lowA, lowB, highA, highB } = monoPitch;
+    const corners = [
+      { ...lowA },
+      { ...lowB },
+      { ...highB },
+      { ...highA }
+    ];
+    return [{
+      id: `${region.key}:panel:mono`,
+      regionKey: region.key,
+      side: 'mono',
+      corners,
+      eave: [corners[0], corners[1]],
+      center: averagePoint(corners),
+      eaveY: region.eaveY,
+      ridgeY: region.ridgeY,
+      roofForm: 'mono-pitch',
+      highEdge: region.highEdge,
+      footprint: [region.a, region.b, region.d, region.c]
+    }];
+  }
+
   const ridgeA = {
     x: (region.a.x + region.c.x) * 0.5,
     y: region.ridgeY,

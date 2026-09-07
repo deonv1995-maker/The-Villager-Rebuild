@@ -195,8 +195,9 @@ export const roofPanelEdgeHasNeighbour = (
 
 /**
  * A finished panel carries enough immutable geometry to re-check its original physical
- * five-member gable even when a later structure revision temporarily changes the local
- * topology query. Query identity may churn; physically present rafters and ridge do not.
+ * physical roof assembly even when a later structure revision temporarily changes the
+ * local topology query. Query identity may churn; physically present rafters/high edge do
+ * not.
  */
 export const roofRegionSnapshotForPanel = panel => {
   if (!Array.isArray(panel?.footprint) || panel.footprint.length !== 4) return null;
@@ -213,6 +214,8 @@ export const roofRegionSnapshotForPanel = panel => {
     d: { x: d.x, z: d.z },
     eaveY: panel.eaveY,
     ridgeY: panel.ridgeY,
+    roofForm: panel.roofForm ?? 'gable',
+    highEdge: panel.highEdge,
     topology: 'thatched-panel-snapshot'
   };
 };

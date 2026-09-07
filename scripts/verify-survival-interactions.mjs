@@ -383,7 +383,10 @@ for (const requirement of [
   assert.ok(logSource.includes(requirement), `Physical log system is missing contract: ${requirement}`);
 }
 assert.ok(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
-assert.ok(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
+assert.ok(
+  roofRulesSource.includes('roofRole,') && roofRulesSource.includes('snapKind,'),
+  'Shared roof member authority must expose structural roles to placement and completion'
+);
 
 assert.ok(carrySource.includes('class RangerLogCarryPose') && carrySource.includes("this.#poseArm('l'") && carrySource.includes("this.#poseArm('r'"), 'Log shoulder carry must use an actual Ranger arm posture');
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"), 'Uneven floors must generate automatic supports/fill without terrain mutation');

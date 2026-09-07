@@ -143,7 +143,10 @@ assert(
   'Level floor snapping may meet boundary frames/walls but must keep arbitrary placed Logs blocking clearance'
 );
 assert(roofRulesSource.includes('roofRegionKey: region.key'), 'Shared roof member authority must retain stable region identity');
-assert(roofRulesSource.includes("roofRole,\n    snapKind"), 'Shared roof member authority must expose structural roles to placement and completion');
+assert(
+  roofRulesSource.includes('roofRole,') && roofRulesSource.includes('snapKind,'),
+  'Shared roof member authority must expose structural roles to placement and completion'
+);
 
 for (const requirement of [
   'PHYSICAL_LOG.length',

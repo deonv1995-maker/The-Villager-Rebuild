@@ -22,14 +22,16 @@ export const roofPlanKey = region => {
     .map(planPointKey)
     .sort()
     .join('|');
-  if (!footprint || !region?.crossJunction) return footprint;
+  if (!footprint) return footprint;
+  const form = region?.roofForm ?? 'gable';
+  if (!region?.crossJunction) return `${footprint}|form:${form}`;
 
   // A crossed junction contains two live gables on the same X/Z footprint. Keep their
   // stable primary/cross identities separate for stacked relocation so a complete half
   // cannot move upstairs while its perpendicular junction partner is mistaken for the
   // same plan level.
   const role = region.junctionRole === 'cross' ? 'cross' : 'primary';
-  return `${footprint}|junction:${role}`;
+  return `${footprint}|form:${form}|junction:${role}`;
 };
 
 const axisYawDelta = (a, b) => {
@@ -122,6 +124,8 @@ const applyRoofMemberTarget = (member, target, storey) => {
   member.roofKey = target.roofKey;
   member.roofRegionKey = target.roofRegionKey;
   member.roofRole = target.roofRole;
+  member.roofForm = target.roofForm;
+  member.highEdge = target.highEdge;
   member.roofLength = target.roofLength;
   member.snapKind = target.snapKind;
   member.storey = storey;
@@ -330,6 +334,8 @@ export class StackedRoofReflowSystem {
       ));
       if (ownedMembers.some(member => !member)) continue;
       if (new Set(ownedMembers.map(member => member.id)).size !== targets.length) continue;
+      const regionForm = region.roofForm ?? 'gable';
+      if (ownedMembers.some(member => (member.roofForm ?? 'gable') !== regionForm)) continue;
       if (targets.every((target, index) => roofMemberOccupied(target, [ownedMembers[index]]))) continue;
 
       const sharesCurrentTarget = ownedMembers.some(member => regions.some(other =>

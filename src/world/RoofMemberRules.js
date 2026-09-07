@@ -1,10 +1,14 @@
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
+import {
+  isMonoPitchRoof,
+  monoPitchRoofGeometry
+} from './RoofFormGeometry.js';
 
 const ROOF_CENTER_TOLERANCE = 0.18;
 const ROOF_HEIGHT_TOLERANCE = 0.18;
 const ROOF_AXIS_TOLERANCE = 0.12;
 const ROOF_LENGTH_TOLERANCE = 0.22;
-const RAFTERS_PER_REGION = 4;
+const raftersPerRegion = region => isMonoPitchRoof(region) ? 2 : 4;
 
 const axisYawDelta = (a, b) => {
   const delta = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
@@ -25,6 +29,9 @@ const descriptor = (region, suffix, start, end, roofRole, snapKind) => {
     roofKey: `${region.key}:${suffix}`,
     roofRegionKey: region.key,
     roofRole,
+    roofForm: region.roofForm ?? 'gable',
+    highEdge: region.highEdge,
+    raftersPerRegion: raftersPerRegion(region),
     snapKind,
     supportFrameTopY: region.frameTopY,
     supportTopology: region.topology ?? null,
@@ -49,10 +56,15 @@ const structuralTieOrder = candidates => [...candidates].sort((left, right) => (
 
 const runtimeRegionProgress = candidates => {
   const remainingRafters = new Map();
+  const totalRafters = new Map();
   for (const candidate of candidates ?? []) {
     const key = String(candidate?.roofRegionKey ?? '');
     if (!key) continue;
     if (!remainingRafters.has(key)) remainingRafters.set(key, 0);
+    totalRafters.set(key, Math.max(
+      totalRafters.get(key) ?? 0,
+      candidate.raftersPerRegion ?? 4
+    ));
     if (candidate.roofRole === 'rafter') {
       remainingRafters.set(key, remainingRafters.get(key) + 1);
     }
@@ -60,7 +72,7 @@ const runtimeRegionProgress = candidates => {
   return new Map(
     [...remainingRafters.entries()].map(([key, remaining]) => [
       key,
-      Math.max(0, RAFTERS_PER_REGION - remaining)
+      Math.max(0, (totalRafters.get(key) ?? 4) - remaining)
     ])
   );
 };
@@ -75,12 +87,24 @@ const runtimeStructuralTieOrder = (candidates, progressByRegion) => [...candidat
 ));
 
 /**
- * One shared five-member gable definition used by placement, thatch completion,
- * interior detection and regression checks. Adjacent roof bays may geometrically
- * share rafter descriptors; geometry-based occupancy lets one physical angled Log
- * satisfy both neighbouring bay descriptors.
+ * One shared physical roof definition used by placement, thatch completion, interior
+ * detection and regression checks. Free-standing gables use four rafters plus a ridge;
+ * attached mono-pitch bays use two full-span rafters plus their high-edge Log. Adjacent
+ * bays may geometrically share rafter descriptors, so geometry-based occupancy lets one
+ * physical angled Log satisfy both neighbouring bay descriptors.
  */
 export function roofMemberCandidates(region) {
+  const monoPitch = monoPitchRoofGeometry(region);
+  if (monoPitch) {
+    const { lowA, lowB, highA, highB } = monoPitch;
+
+    return [
+      descriptor(region, 'rafter:a', lowA, highA, 'rafter', 'roof-rafter'),
+      descriptor(region, 'rafter:b', lowB, highB, 'rafter', 'roof-rafter'),
+      descriptor(region, 'ridge', highA, highB, 'ridge', 'roof-ridge')
+    ];
+  }
+
   const ridgeA = {
     x: (region.a.x + region.c.x) * 0.5,
     y: region.ridgeY,

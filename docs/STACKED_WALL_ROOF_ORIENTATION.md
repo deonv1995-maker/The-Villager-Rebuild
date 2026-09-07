@@ -42,7 +42,7 @@ Where no connected footprint direction exists, existing deterministic/canonical 
 
 When two or more connected lower `frame-cell` bays sit on the same side of a continuous next-storey FRAME + RAW wall run, their connected lower footprint remains the roof-shape authority. If the lower cells form one straight run, they keep one continuous ridge direction and one logical roof mass.
 
-Physical roof construction remains one Log bay at a time, but adjacent completed slopes share their finished thatch edge so the result reads as one larger lower roof mass rather than repeated independent roof modules.
+These attached lower bays use a true one-pitch form. Each bay runs from one exterior eave to the high edge against the upper structural wall, using two angled rafters followed by one RAW high-edge Log and one finished thatch panel. No second slope is placed through the upper building interior. Physical construction remains one Log bay at a time, while adjacent completed slopes share their finished thatch edge so the result reads as one larger lower roof mass rather than repeated independent roof modules.
 
 A later completed main roof above that wall does not rotate the lower mass. It only becomes host metadata for the exact structural relationship. This keeps roof shape stable while preserving the wall-polish information that was previously bundled together with orientation.
 
@@ -52,7 +52,9 @@ The solid reset is a placement default rather than a permanent lock. After the c
 
 ## Existing completed roofs
 
-`StackedRoofReflowSystem` remains responsible for moving complete roof assemblies to a matching higher storey and for legacy canonicalization where a valid topology change genuinely requires relocation. It continues to move all four rafters and the ridge together and carries existing thatch with the assembly instead of refunding/rebuilding Grass.
+`StackedRoofReflowSystem` remains responsible for moving compatible complete roof assemblies to a matching higher storey and for legacy canonicalization where a valid topology change genuinely requires relocation. Roof plan identity now includes the physical roof form so a five-member gable cannot be mistaken for a three-member one-pitch assembly. Compatible assemblies and their thatch still move together instead of refunding/rebuilding Grass.
+
+Complete gables saved before the one-pitch rule remain recognized as completion-only legacy roofs. Their two thatch panels stay in place and new one-pitch placement is withheld for that bay until the old members are demolished, preventing automatic resource loss or overlapping roof forms.
 
 Connected footprint direction is now stable, so merely adding an upper structural wall or resolving a main-roof host is no longer a reason to rotate an already-completed connected lower roof. This removes the churn that previously required some completed lower roof assemblies to be reflowed sideways after later construction.
 
@@ -69,5 +71,5 @@ Finished thatch follows the same physical-lifetime rule. A structure revision or
 - `verify:stacked-walls` proves a downstairs window conversion cannot hide or remove collision from a directly stacked upstairs wall.
 - `verify:construction-stability` proves a stairwell can remove its floor strips without flipping the adjacent wall and proves topology-query churn cannot delete/refund thatch while its physical five-member roof frame remains complete.
 - `verify:roof-orientation` proves connected roof masses receive stable footprint identities, perpendicular junction masses remain live, and later upper structural hints cannot rotate those connected masses.
-- `verify:roof-wall-polish` reproduces the connected two-bay lower roof against an upper/main structure and proves it stays one pitch while exact covered-wall metadata and automatic perpendicular junction behavior remain intact.
+- `verify:roof-wall-polish` reproduces the connected two-bay lower roof against an upper/main structure and proves it becomes one physical pitch with one panel per bay, while exact covered-wall metadata, automatic perpendicular junction behavior and legacy-gable retention remain intact.
 - The existing wall, roof, stacked-roof, save, traversal, construction and PWA checks remain part of the full CI gate.

@@ -14,7 +14,7 @@ The established `roof:cell:<anchor ids>` key remains the primary gable identity.
 
 Each live gable also records the `roofMassKey` of the connected footprint run it belongs to. The primary and `:cross` partners therefore share one structural support cell but belong to two different logical roof masses.
 
-Both gables use the existing five-member roof definition: four `ANGLE` rafters followed by one `RAW` ridge. They are normal live roof regions and therefore use the same unified `ROOF` interaction, geometry-first occupancy checks, thatch completion and persistence rules as every other roof bay.
+The perpendicular `:cross` mass keeps the existing five-member gable definition: four `ANGLE` rafters followed by one `RAW` ridge. When the primary mass is a connected lower run backed by a continuous upper wall, that primary uses the attached one-pitch definition instead: two full-span `ANGLE` rafters, one RAW high-edge Log and one exterior thatch plane. Both forms remain normal live roof regions under the same unified `ROOF` interaction, geometry-first occupancy, completion and persistence authority.
 
 No duplicate roof-building system, junction tool or special inventory item is introduced.
 
@@ -34,7 +34,7 @@ See `ROOF_FOOTPRINT_PLAN.md` for the full authority hierarchy.
 
 ## Completion and thatch
 
-A completed current-milestone junction contains two live perpendicular gables. Each gable exposes its normal two slope panels, so a fully completed junction currently has four finishable thatch panels.
+A free-standing completed junction contains two live perpendicular gables and therefore four finishable thatch panels. An attached junction may combine one one-pitch primary panel with the perpendicular gable's two panels. This is the intended one-pitch-to-cross transition: the attached run stops at the upper wall while the perpendicular branch still produces the crossed roof section.
 
 The older completion-only `frame-cell-retained` fallback is not generated for an automatic junction because the perpendicular orientation already exists as a live region. This prevents duplicate completed regions and duplicate thatch panel identities.
 
@@ -55,6 +55,7 @@ Ordinary non-junction roof plan identity remains unchanged, including the existi
 - The perpendicular live region uses the deterministic `:cross` suffix.
 - Straight runs share one logical roof mass and one ridge axis.
 - Primary and cross junction regions have distinct `roofMassKey` values.
+- An attached primary may be `mono-pitch` without collapsing its perpendicular full-gable partner.
 - Upper-wall or main-roof metadata cannot rotate a connected footprint mass.
 - Existing geometry-first roof-member occupancy remains authoritative.
 - Existing completed primary members remain valid when a later extension creates a junction.

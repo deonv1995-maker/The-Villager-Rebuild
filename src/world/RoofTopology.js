@@ -555,6 +555,22 @@ const orientFrameCellToAxis = (region, targetYaw) => {
     : region;
 };
 
+const monoPitchFrameCellTowardUpperPair = (region, pair) => {
+  const edgeMidpoint = (left, right) => ({
+    x: (left.x + right.x) * 0.5,
+    z: (left.z + right.z) * 0.5
+  });
+  const ab = edgeMidpoint(region.a, region.b);
+  const cd = edgeMidpoint(region.c, region.d);
+  const distanceToPair = point => Math.hypot(point.x - pair.x, point.z - pair.z);
+
+  return {
+    ...region,
+    roofForm: 'mono-pitch',
+    highEdge: distanceToPair(ab) <= distanceToPair(cd) ? 'ab' : 'cd'
+  };
+};
+
 /**
  * Resolve connected frame cells as footprint-level roof masses. Straight runs share one
  * ridge axis even though their members remain segmented one physical Log per bay, while
@@ -625,8 +641,11 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
       const resolved = footprintLocked
         ? region
         : orientFrameCellToAxis(region, hostRoofRegion.ridgeYaw);
+      const shaped = continuousUpperRun
+        ? monoPitchFrameCellTowardUpperPair(resolved, primaryPair)
+        : resolved;
       return {
-        ...resolved,
+        ...shaped,
         ...(continuousUpperRun
           ? {
               upperWallRun: true,
@@ -651,8 +670,9 @@ export function orientFrameCellRegionsTowardUpperPairs(regions, pairs, {
         : alternateDelta + 0.05 < currentDelta
           ? quarterTurnFrameCell(region)
           : region;
+      const shaped = monoPitchFrameCellTowardUpperPair(resolved, primaryPair);
       return {
-        ...resolved,
+        ...shaped,
         upperWallRun: true,
         upperWallPairKey: primaryPair.rawKey,
         upperWallAnchorIds: [...(primaryPair.anchorIds ?? [])],
