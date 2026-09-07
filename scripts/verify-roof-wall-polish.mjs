@@ -5,8 +5,12 @@ import {
   collectRoofRegions,
   orientFrameCellRegionsTowardUpperPairs
 } from '../src/world/RoofTopology.js';
+import { roofMemberCandidates } from '../src/world/RoofMemberRules.js';
 import { roofPanelEdgeHasNeighbour } from '../src/world/RoofThatchSystem.js';
-import { roofPanelDescriptors } from '../src/world/StructureRoofQuery.js';
+import {
+  collectCompletedRoofRegions,
+  roofPanelDescriptors
+} from '../src/world/StructureRoofQuery.js';
 import {
   RoofWallPolishSystem,
   upperWallKeyForRoofRegion
@@ -96,6 +100,17 @@ assert.ok(axisDelta(southEast.ridgeYaw, 0) < 0.01, 'The adjoining lower bay must
 assert.equal(southWest.roofMassKey, southEast.roofMassKey, 'Two adjacent lower bays must be one logical roof mass');
 assert.equal(southWest.footprintOrientationLocked, true);
 assert.equal(southEast.footprintOrientationLocked, true);
+assert.equal(southWest.roofForm, 'mono-pitch', 'A lower roof backed by the upper wall must become one pitch instead of a full gable');
+assert.equal(southEast.roofForm, 'mono-pitch', 'Every bay in the attached run must use the same one-pitch roof form');
+for (const region of [southWest, southEast]) {
+  const highEdge = region.highEdge === 'ab' ? [region.a, region.b] : [region.c, region.d];
+  assert.ok(
+    highEdge.every(point => Math.abs(point.z - L) < 0.001),
+    'Every one-pitch high edge must sit against the same upper structural wall line'
+  );
+}
+assert.notEqual(southWestCross.roofForm, 'mono-pitch', 'The perpendicular junction mass must remain a full crossed gable section');
+assert.notEqual(northWest.roofForm, 'mono-pitch', 'A roof cell on the far side of the upper wall must not be absorbed into the attached one-pitch run');
 assert.equal(southWest.upperWallRun, true, 'The first lower roof bay must still record that it terminates against an upper wall run');
 assert.equal(southEast.upperWallRun, true, 'The second lower roof bay must still record the same upper-wall-backed coverage relationship');
 assert.equal(upperWallKeyForRoofRegion(southWest), 'wall:60-61');
@@ -112,6 +127,34 @@ assert.notEqual(northWest.upperWallRun, true, 'Opposite-side roof cells must kee
 
 const southWestPanels = roofPanelDescriptors(southWest);
 const southEastPanels = roofPanelDescriptors(southEast);
+assert.equal(southWestPanels.length, 1, 'An attached one-pitch bay must expose exactly one physical thatch plane');
+assert.equal(southEastPanels.length, 1, 'The adjoining attached bay must expose exactly one physical thatch plane');
+assert.equal(roofPanelDescriptors(southWestCross).length, 2, 'The perpendicular crossed gable must retain both roof planes');
+const southWestMembers = roofMemberCandidates(southWest);
+assert.equal(southWestMembers.length, 3, 'One-pitch framing must use two angled rafters followed by one high-edge Log');
+assert.equal(southWestMembers.filter(member => member.roofRole === 'rafter').length, 2);
+assert.equal(southWestMembers.filter(member => member.roofRole === 'ridge').length, 1);
+assert.ok(
+  southWestMembers
+    .filter(member => member.roofRole === 'rafter')
+    .every(member => member.roofLength <= PHYSICAL_LOG.length * 1.08),
+  'One-pitch rafters must remain within the fitted physical-Log scale limit'
+);
+assert.ok(
+  southWestPanels[0].corners.slice(0, 2).every(point => Math.abs(point.y - southWest.eaveY) < 0.001) &&
+  southWestPanels[0].corners.slice(2).every(point => Math.abs(point.y - southWest.ridgeY) < 0.001),
+  'The finished one-pitch panel must rise from the exterior eave to the upper wall without a second interior slope'
+);
+const legacyGable = { ...southWest, roofForm: 'gable', highEdge: null };
+const legacyMembers = roofMemberCandidates(legacyGable).map(member => ({
+  ...member,
+  mode: member.roofRole === 'rafter' ? 'angle' : 'raw',
+  active: true,
+  centerY: member.y
+}));
+const [legacyCompleted] = collectCompletedRoofRegions([southWest], legacyMembers);
+assert.equal(legacyCompleted?.legacyRoofForm, true, 'Existing saved gable framing must remain recognized until the player rebuilds that roof bay');
+assert.equal(roofPanelDescriptors(legacyCompleted).length, 2, 'Legacy thatch must keep both original panels instead of being deleted during the roof-form upgrade');
 const joined = southWestPanels.some(panel =>
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 0, 3) ||
   roofPanelEdgeHasNeighbour(panel, southEastPanels, 1, 2)
@@ -145,6 +188,9 @@ const hostedSouthWest = hosted.find(region => region.key === southWest.key);
 const hostedSouthWestCross = hosted.find(region => region.key === southWestCross.key);
 const hostedSouthEast = hosted.find(region => region.key === southEast.key);
 assert.ok(hostedSouthWest && hostedSouthWestCross && hostedSouthEast, 'Host-roof resolution must preserve both attached lower sections and the live junction gable');
+assert.equal(hostedSouthWest.roofForm, 'mono-pitch');
+assert.equal(hostedSouthEast.roofForm, 'mono-pitch');
+assert.notEqual(hostedSouthWestCross.roofForm, 'mono-pitch');
 assert.ok(
   axisDelta(hostedSouthWest.ridgeYaw, 0) < 0.01,
   'A resolved main roof must not turn the connected lower run sideways into repeated gables'
@@ -209,4 +255,4 @@ const rebuilt = polish.sync();
 assert.equal(rebuilt.solidified, 1, 'Demolishing and rebuilding the lower roof must apply the solid default again');
 assert.equal(customizations.has('wall:60-61'), false);
 
-console.log('Connected lower roof masses keep one footprint-owned pitch while perpendicular junctions and wall polish remain stable.');
+console.log('Attached lower runs build one-pitch roof planes while perpendicular crossed gables and wall polish remain stable.');

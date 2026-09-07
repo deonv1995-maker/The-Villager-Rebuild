@@ -154,6 +154,14 @@ Decision: desktop testing uses an installable Progressive Web App shell built fr
 
 Reason: one deployable build keeps gameplay, assets and verification identical across phone and desktop testing while still allowing a desktop/Start-menu launch experience.
 
+## 2026-09-07 — Attached roof form comes from structural topology
+
+Decision: a connected lower roof run backed by a continuous next-storey structural wall is a true one-pitch roof, not a rotated full gable. It has one exterior slope per bay and stops at the upper wall. A perpendicular footprint branch remains an automatic crossed-gable junction under the same `RoofTopology` authority.
+
+Reason: rotating independent gable cells could make the preview face the correct direction but still placed a second roof half through the building interior. Separating roof mass direction from physical roof form produces the requested continuous pitch and cross section without a second roof tool or competing construction system.
+
+Compatibility: newly placed members persist their roof form. Complete legacy gables remain completion-only with their thatch intact, and new one-pitch targets are withheld until those legacy members are deliberately demolished.
+
 ## Open decisions
 
 The following are intentionally not locked yet:

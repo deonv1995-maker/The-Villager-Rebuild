@@ -52,6 +52,16 @@ This specifically prevents a later upper storey from changing an already correct
 
 That metadata relationship does not own roof geometry. Wall presentation/collision remains owned by the wall system, while connected roof direction remains owned by the footprint plan.
 
+## Attached one-pitch roof form
+
+A connected lower `frame-cell` run backed by a continuous next-storey FRAME + RAW wall is not a complete gable hidden inside the upper building. It resolves as a true `mono-pitch` roof form. The edge nearest the upper structural wall is the high edge and the opposite edge is the exterior eave.
+
+Each bay exposes two full-span angled rafters followed by one RAW high-edge Log, then exactly one thatch panel. The slope therefore stops at the upper wall instead of placing a second roof half through the building interior. Adjacent bays retain their shared finished edge and read as one continuous pitch.
+
+The form is derived inside `RoofTopology`; it is not another player-facing build mode. Ordinary free-standing rectangular roofs remain gables. At a perpendicular footprint junction the attached primary can be one pitch while the live `:cross` partner remains a full perpendicular gable, preserving the requested cross section without duplicating the interior half of the attached run.
+
+Newly placed roof members persist `roofForm` and `highEdge`. A complete legacy gable built before this rule remains completion-only and keeps its existing thatch until the player demolishes it. Live placement does not mix new one-pitch members into that legacy assembly.
+
 ## Existing cross-gable contract
 
 The physical junction still uses the existing two live perpendicular five-member gable assemblies for the current construction milestone. This pass changes **which roof mass owns each direction** and prevents incorrect host-driven rotation; it does not introduce a second junction item or alter resource costs.
@@ -67,6 +77,9 @@ Junction classification is now explicit so a later visual-finishing pass can tri
 - Junction primary and `:cross` regions remain deterministic and perpendicular.
 - Connected footprint orientation outranks upper-wall and host-roof orientation hints.
 - Host/wall ownership metadata remains available for wall polish.
+- A continuous lower run backed by an upper wall has one physical slope and one thatch panel per bay.
+- Perpendicular junction partners remain full gables unless their own structural run independently qualifies as attached one-pitch roofing.
+- Legacy completed gables remain stable and do not receive overlapping new-form targets.
 - Existing geometry-first roof-member occupancy remains authoritative.
 - No terrain, collision, controls, ecology, world-generation, PWA or unrelated building behavior is changed.
 
