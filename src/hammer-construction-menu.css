@@ -1,0 +1,258 @@
+.hammer-construction-menu {
+  position: absolute;
+  z-index: 16;
+  right: max(10px, calc(env(safe-area-inset-right) + 6px));
+  top: max(10px, calc(env(safe-area-inset-top) + 6px));
+  width: min(248px, calc(100vw - 28px));
+  padding: 8px;
+  border: 1px solid rgba(225, 207, 151, .56);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(24, 43, 31, .97), rgba(15, 31, 23, .95));
+  box-shadow: 0 10px 28px rgba(4, 15, 9, .34), inset 0 0 0 1px rgba(255, 240, 190, .05);
+  color: #fff0cb;
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.hammer-construction-menu[hidden] { display: none; }
+
+.hammer-construction-header {
+  display: grid;
+  grid-template-columns: 34px 1fr 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 2px 7px;
+}
+
+.hammer-construction-header > img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}
+
+.hammer-construction-header > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hammer-construction-header strong {
+  font-size: 13px;
+  letter-spacing: .08em;
+}
+
+.hammer-construction-header span {
+  color: #f0cf76;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
+.hammer-construction-close {
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(225, 207, 151, .36);
+  border-radius: 10px;
+  background: rgba(68, 68, 49, .82);
+  color: #f8dfae;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.construction-house {
+  position: relative;
+  padding: 6px 8px 8px;
+  border: 1px solid rgba(225, 207, 151, .25);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(121, 128, 82, .16), transparent 52%),
+    rgba(28, 44, 33, .8);
+}
+
+.construction-roof-row {
+  display: flex;
+  justify-content: center;
+  margin: 0 28px -5px;
+}
+
+.construction-piece {
+  border: 1px solid rgba(225, 207, 151, .36);
+  background: rgba(68, 73, 50, .92);
+  color: #fff0cb;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .04em;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.construction-piece img {
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 2px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.construction-piece span,
+.construction-piece small { display: block; pointer-events: none; }
+.construction-piece small { color: rgba(255, 240, 203, .55); font-size: 7px; }
+
+.construction-piece-roof {
+  width: 142px;
+  min-height: 54px;
+  padding: 4px 14px 7px;
+  border-radius: 50% 50% 9px 9px / 68% 68% 9px 9px;
+  clip-path: polygon(50% 0, 100% 78%, 91% 100%, 9% 100%, 0 78%);
+}
+
+.construction-house-body {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: stretch;
+  gap: 5px;
+  min-height: 80px;
+  padding: 5px 4px 3px;
+  border-left: 4px solid rgba(159, 118, 64, .55);
+  border-right: 4px solid rgba(159, 118, 64, .55);
+  background: rgba(91, 80, 52, .17);
+}
+
+.construction-piece-wall,
+.construction-piece-stairs {
+  min-width: 0;
+  border-radius: 7px;
+  padding: 7px 4px;
+}
+
+.construction-openings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+  gap: 5px;
+  padding: 6px 1px 0;
+}
+
+.construction-opening {
+  min-width: 0;
+  height: 55px;
+  padding: 5px 2px 4px;
+  border: 1px solid rgba(225, 207, 151, .24);
+  border-radius: 6px 6px 3px 3px;
+  background: rgba(50, 57, 42, .72);
+  color: rgba(255, 240, 203, .58);
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.construction-door-shape {
+  display: block;
+  width: 18px;
+  height: 34px;
+  margin: 0 auto 4px;
+  border: 2px solid rgba(205, 164, 93, .46);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.construction-window-shape {
+  position: relative;
+  display: block;
+  width: 25px;
+  height: 23px;
+  margin: 6px auto 9px;
+  border: 2px solid rgba(205, 164, 93, .46);
+}
+
+.construction-window-shape::before,
+.construction-window-shape::after {
+  content: '';
+  position: absolute;
+  background: rgba(205, 164, 93, .46);
+}
+.construction-window-shape::before { left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); }
+.construction-window-shape::after { left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%); }
+
+.construction-piece-floor {
+  width: 100%;
+  min-height: 48px;
+  padding: 5px 10px;
+  border-radius: 4px 4px 10px 10px;
+  background: linear-gradient(180deg, rgba(106, 86, 53, .96), rgba(71, 65, 46, .96));
+}
+
+.construction-piece-floor img { width: 38px; height: 24px; }
+
+.construction-piece.selected,
+.construction-remove.selected {
+  border-color: #72dc86;
+  background: rgba(55, 94, 61, .98);
+  box-shadow: 0 0 0 2px rgba(101, 216, 121, .16) inset, 0 0 12px rgba(95, 207, 114, .12);
+}
+
+.hammer-construction-menu.invalid .construction-piece.selected {
+  border-color: #d85d57;
+  background: rgba(100, 54, 49, .98);
+  box-shadow: 0 0 0 2px rgba(216, 93, 87, .12) inset;
+}
+
+.construction-piece.locked,
+.construction-opening.locked {
+  opacity: .4;
+  filter: grayscale(.45);
+}
+
+.hammer-construction-actions {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.construction-remove {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  padding: 5px 7px;
+  border: 1px solid rgba(225, 207, 151, .36);
+  border-radius: 9px;
+  background: rgba(75, 58, 46, .92);
+  color: #f4d7c8;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .03em;
+  pointer-events: auto;
+}
+
+.construction-remove img { width: 22px; height: 22px; object-fit: contain; pointer-events: none; }
+.construction-remove span { pointer-events: none; }
+
+.hammer-construction-actions p {
+  margin: 0;
+  color: rgba(255, 240, 203, .78);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.hammer-construction-menu button:active:not(:disabled) { transform: scale(.95); }
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .hammer-construction-menu {
+    right: max(6px, calc(env(safe-area-inset-right) + 3px));
+    top: max(6px, calc(env(safe-area-inset-top) + 3px));
+    width: min(226px, calc(100vw - 20px));
+    padding: 7px;
+  }
+  .construction-house-body { grid-template-columns: 52px 1fr 52px; }
+  .construction-piece img { width: 27px; height: 27px; }
+}

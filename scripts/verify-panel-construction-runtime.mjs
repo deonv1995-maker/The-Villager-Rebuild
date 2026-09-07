@@ -116,8 +116,10 @@ assert.equal(poorState.previewValid, false, 'Unaffordable panel previews must st
 
 const controllerSource = await readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8');
 for (const requirement of [
-  "row = event.target.closest?.('[data-resource=\"log\"]')",
-  "button.hidden = !['floor', 'wall', 'drop'].includes(mode)",
+  "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
+  "toolId === 'hammer' && equippedToolId === 'hammer'",
+  'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
+  "mode === 'remove'",
   'this.raycaster.intersectObjects(this.targetMeshes, false)',
   "this.game.equipmentRuntime?.recordUse?.('hammer')",
   "event.code === 'KeyB'",
@@ -125,5 +127,30 @@ for (const requirement of [
 ]) {
   assert.ok(controllerSource.includes(requirement), `Panel runtime controller is missing contract: ${requirement}`);
 }
+assert.ok(
+  !controllerSource.includes("event.target.closest?.('[data-resource=\"log\"]')"),
+  'Inventory Logs must remain construction material and must not be a competing build-menu trigger'
+);
+assert.ok(
+  !controllerSource.includes("this.game.toolbelt?.select('hand')"),
+  'Panel construction must keep the Hammer equipped instead of silently switching to Hand'
+);
 
-console.log('Inventory-backed Floor/Wall panel placement, local structure orientation, dependency-safe demolition, refunds, collision and semantic restore verified');
+const menuSource = await readFile('src/ui/HammerConstructionMenu.js', 'utf8');
+for (const mode of ['floor', 'wall', 'remove', 'close']) {
+  assert.ok(menuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
+}
+for (const lockedMode of ['roof', 'door', 'window', 'stairs']) {
+  assert.ok(
+    new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(menuSource),
+    `Deferred ${lockedMode} control must stay visibly gated instead of entering legacy construction`
+  );
+}
+for (const forbiddenMode of ['raw', 'frame', 'drop']) {
+  assert.ok(!menuSource.includes(`data-build="${forbiddenMode}"`), `Hammer structure menu must not expose legacy ${forbiddenMode}`);
+}
+
+const indexSource = await readFile('index.html', 'utf8');
+assert.ok(indexSource.includes('./src/hammer-construction-menu.css'), 'Production shell must load the Hammer structure menu styling');
+
+console.log('Inventory-backed Floor/Wall panel placement, Hammer-owned structure menu, local orientation, dependency-safe demolition, refunds, collision and semantic restore verified');

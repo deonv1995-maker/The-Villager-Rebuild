@@ -264,13 +264,17 @@ for (const requirement of [
 }
 
 for (const requirement of [
-  "row = event.target.closest?.('[data-resource=\"log\"]')",
-  "button.hidden = !['floor', 'wall', 'drop'].includes(mode)",
+  "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
+  "toolId === 'hammer' && equippedToolId === 'hammer'",
+  'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
+  "mode === 'remove'",
   'this.raycaster.intersectObjects(this.targetMeshes, false)',
   "this.game.equipmentRuntime?.recordUse?.('hammer')"
 ]) {
   assert.ok(panelRuntimeSource.includes(requirement), `Panel runtime is missing contract: ${requirement}`);
 }
+assert.ok(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs must remain material-only instead of a competing build-menu trigger');
+assert.ok(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Semantic placement must keep the Hammer equipped');
 for (const requirement of [
   'this.registry = new PanelStructureRegistry()',
   'this.inventory.consume(cost)',
@@ -299,4 +303,4 @@ assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpea
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"));
 assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'));
 
-console.log('Inventory Logs, semantic Floor/Wall construction, six crafted tools, durability, campfire, harvesting and retrievable spear survival contracts verified');
+console.log('Inventory Logs, Hammer-owned semantic Floor/Wall construction, six crafted tools, durability, campfire, harvesting and retrievable spear survival contracts verified');

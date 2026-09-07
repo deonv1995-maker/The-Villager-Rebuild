@@ -67,7 +67,13 @@ export function resolveContextAction({
       available: true,
       icon: toolId,
       label: interactionTarget.actionLabel ?? `${toolId} action`,
-      caption: toolId === 'axe' ? 'CHOP' : toolId === 'pickaxe' ? 'MINE' : 'BUILD'
+      caption: toolId === 'axe'
+        ? 'CHOP'
+        : toolId === 'pickaxe'
+          ? 'MINE'
+          : toolId === 'hammer'
+            ? 'REMOVE'
+            : 'ACTION'
     };
   }
 
