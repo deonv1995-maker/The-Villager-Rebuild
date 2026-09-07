@@ -74,13 +74,59 @@ const runtimeStructuralTieOrder = (candidates, progressByRegion) => [...candidat
   String(left?.roofKey ?? '').localeCompare(String(right?.roofKey ?? ''))
 ));
 
+const pointOnEdge = (start, end, amount, y) => ({
+  x: start.x + (end.x - start.x) * amount,
+  y,
+  z: start.z + (end.z - start.z) * amount
+});
+
+const singlePitchEdges = region => {
+  const highIsAB = region?.singlePitchHighSide === 'ab';
+  const highStart = highIsAB ? region.a : region.c;
+  const highEnd = highIsAB ? region.b : region.d;
+  const lowStart = highIsAB ? region.c : region.a;
+  const lowEnd = highIsAB ? region.d : region.b;
+  return {
+    highStart: { x: highStart.x, y: region.ridgeY, z: highStart.z },
+    highEnd: { x: highEnd.x, y: region.ridgeY, z: highEnd.z },
+    lowStart: { x: lowStart.x, y: region.eaveY, z: lowStart.z },
+    lowEnd: { x: lowEnd.x, y: region.eaveY, z: lowEnd.z }
+  };
+};
+
+const singlePitchMemberCandidates = region => {
+  const edges = singlePitchEdges(region);
+  const amounts = [0, 1 / 3, 2 / 3, 1];
+  const suffixes = ['rafter:a', 'rafter:b', 'rafter:c', 'rafter:d'];
+  const rafters = amounts.map((amount, index) => descriptor(
+    region,
+    suffixes[index],
+    pointOnEdge(edges.lowStart, edges.lowEnd, amount, region.eaveY),
+    pointOnEdge(edges.highStart, edges.highEnd, amount, region.ridgeY),
+    'rafter',
+    'roof-rafter'
+  ));
+  return [
+    ...rafters,
+    descriptor(region, 'ridge', edges.highStart, edges.highEnd, 'ridge', 'roof-ridge')
+  ];
+};
+
 /**
- * One shared five-member gable definition used by placement, thatch completion,
- * interior detection and regression checks. Adjacent roof bays may geometrically
- * share rafter descriptors; geometry-based occupancy lets one physical angled Log
- * satisfy both neighbouring bay descriptors.
+ * One shared roof-member authority used by placement, thatch completion, interior
+ * detection and regression checks.
+ *
+ * Ordinary gables keep four end rafters plus one RAW ridge. A structurally backed
+ * single-pitch bay keeps the same four-ANGLE-then-one-RAW construction cadence, but the
+ * four rafters run parallel across the one sloped plane and the RAW member becomes the
+ * high wall-side edge. Keeping the five stable member keys lets completed legacy gables
+ * reflow cleanly when the structure later proves that the bay is actually a lean-to.
  */
 export function roofMemberCandidates(region) {
+  if (region?.roofProfile === 'single-pitch') {
+    return singlePitchMemberCandidates(region);
+  }
+
   const ridgeA = {
     x: (region.a.x + region.c.x) * 0.5,
     y: region.ridgeY,
