@@ -6,7 +6,9 @@ export const PANEL_CONSTRUCTION_RESOURCE_ID = 'log';
 export const PANEL_GRID = Object.freeze({
   cellSize: PHYSICAL_LOG.length,
   storeyHeight: PHYSICAL_LOG.length,
-  snapTolerance: PHYSICAL_LOG.gridStep * 0.5
+  snapTolerance: PHYSICAL_LOG.gridStep * 0.5,
+  placementReach: PHYSICAL_LOG.length + PHYSICAL_LOG.placeDistance * 0.35,
+  structureJoinRange: PHYSICAL_LOG.length * 1.15
 });
 
 export const PANEL_DIRECTIONS = Object.freeze({
@@ -14,6 +16,20 @@ export const PANEL_DIRECTIONS = Object.freeze({
   east: Object.freeze({ id: 'east', dx: 1, dz: 0, opposite: 'west' }),
   south: Object.freeze({ id: 'south', dx: 0, dz: 1, opposite: 'north' }),
   west: Object.freeze({ id: 'west', dx: -1, dz: 0, opposite: 'east' })
+});
+
+export const PANEL_BUILD_MODES = Object.freeze(['floor', 'wall']);
+export const PANEL_BUILD_LABELS = Object.freeze({
+  floor: 'Floor panel',
+  wall: 'Wall panel'
+});
+
+// Costs preserve the material meaning of the replaced physical workflow: one full
+// square floor contains three former one-third-width floor strips, while one full
+// storey wall replaces four stacked wall sections.
+export const PANEL_BUILD_COSTS = Object.freeze({
+  floor: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }]),
+  wall: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 4 }])
 });
 
 export const PANEL_WALL_VARIANTS = Object.freeze(['solid', 'door', 'window']);
