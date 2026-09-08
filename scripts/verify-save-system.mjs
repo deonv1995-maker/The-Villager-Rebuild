@@ -16,7 +16,9 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const main = read('src/main.js');
 const saveController = read('src/persistence/SaveGameController.js');
 const persistence = read('src/persistence/GameStatePersistence.js');
-const panelSystem = read('src/world/PanelConstructionSystem.js');
+const panelSystemExtension = read('src/world/PanelConstructionSystem.js');
+const panelSystemCore = read('src/world/PanelConstructionSystemCore.js');
+const panelSystem = `${panelSystemCore}\n${panelSystemExtension}`;
 const panelGrid = read('src/world/PanelConstructionGrid.js');
 const titleSaveMenu = read('src/startup/TitleSaveMenuController.js');
 
