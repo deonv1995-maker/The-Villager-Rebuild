@@ -67,11 +67,15 @@ When Remove is selected:
 
 `HammerConstructionMenu` owns only presentation and player choice, including whether its selector is expanded or collapsed. `PanelConstructionRuntimeController` owns the translation between Hammer/toolbelt state, selected semantic mode and the existing semantic construction runtime.
 
+`GameApp` remains the single publisher of the current world interaction target and demolition preview. While the semantic Hammer session is active, it asks `PanelConstructionRuntimeController` whether that session owns Hammer interaction. Floor/Wall placement suppresses unrelated world interaction targets while the external **PLACE** action is active. Remove mode supplies the semantic panel target to `GameApp`, which publishes that target to the HUD and demolition preview. Legacy physical-log/campfire Hammer targeting remains available only when the semantic construction session does not own Hammer interaction.
+
+This target-authority boundary is important on mobile. The panel controller may compute the exact first-person reticle target, but it must not independently race the global target refresh by writing a second HUD interaction target or demolition overlay. Physical Android verification exposed that competing publishers could clear a valid semantic Wall target immediately after the white dot acquired it.
+
 The old `MobileHud` physical-log build tray remains transition infrastructure for deferred legacy systems but is explicitly hidden during semantic panel construction and is not a source of Floor/Wall choices.
 
 The Hammer menu page-state classes are presentation-only coordination boundaries. They exist so sibling HUD controls can avoid the active build control footprint; they must not become sources of gameplay or construction state.
 
-The list presentation does not alter:
+The list presentation and target-authority fix do not alter:
 
 - panel costs;
 - schema-2 save format;
@@ -80,7 +84,7 @@ The list presentation does not alter:
 - collision authority;
 - Hammer durability rules;
 - exact demolition refunds;
-- first-person or third-person targeting rules;
+- first-person exact-ray or third-person proximity targeting rules;
 - PWA/install architecture;
 - deployment architecture.
 
@@ -102,6 +106,8 @@ The compact/expanded menu behavior is a mobile presentation layer only and does 
 - RAW, FRAME and physical-log DROP are not exposed in the semantic structure menu;
 - active Floor/Wall/Remove choices collapse to the compact build dock;
 - the compact and expanded HUD footprints have separate layout rules;
+- the panel controller exposes semantic Hammer ownership/target resolution without publishing a competing HUD target;
+- `GameApp` defers to semantic Hammer target authority while the panel session is active and keeps legacy demolition targeting isolated to the closed-session path;
 - the production shell loads the dedicated structure-menu styling.
 
 `verify-device-regressions-0.3.11.mjs` additionally protects the established mobile Hammer layout contract:
@@ -111,4 +117,4 @@ The compact/expanded menu behavior is a mobile presentation layer only and does 
 - Close and Remove retain deliberate touch targets;
 - the 3P/1P camera control keeps an explicit construction-safe offset for the narrower list in landscape and portrait.
 
-Physical-device verification remains required for compact/expanded readability, Floor/Wall placement confirmation, Remove targeting, status/control separation, and first-person aim behavior on the installed Android PWA.
+Physical-device verification remains required for exact first-person Remove acquisition/release and the actual Remove action on the installed Android PWA. Compact/expanded readability and third-person Floor/Wall placement have been physically verified on Android for this milestone.
