@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import {
   PANEL_BUILD_COSTS,
-  PANEL_GRID
+  PANEL_GRID,
+  panelBuildCost
 } from '../src/data/PanelConstructionDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
@@ -31,10 +32,20 @@ const makeRuntime = (logCount = 0) => {
   return { terrain, collision, inventory, group, system };
 };
 
+const rematerializeSeededState = runtime => {
+  const snapshot = runtime.system.snapshot();
+  runtime.system.restore(snapshot);
+  runtime.system.setActive(true);
+  return [...runtime.system.registry.structures.values()][0] ?? null;
+};
+
 assert.deepEqual(PANEL_BUILD_COSTS.floor, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.wall, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.door, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.window, [{ itemId: 'log', quantity: 3 }]);
+assert.deepEqual(PANEL_BUILD_COSTS.stairs, [{ itemId: 'log', quantity: 3 }]);
+assert.deepEqual(PANEL_BUILD_COSTS.roof, [{ itemId: 'log', quantity: 5 }]);
+assert.deepEqual(panelBuildCost('roof', { roofCellCount: 2 }), [{ itemId: 'log', quantity: 10 }]);
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
@@ -247,6 +258,95 @@ assert.equal(removedWindow?.label, 'Window panel');
 assert.equal(windowRuntime.inventory.get('log'), 3, 'Window demolition must refund its three Logs');
 assert.equal(windowRuntime.collision.getObstaclesByType('panel-wall').length, 0, 'Window demolition must remove every composite collider');
 
+// Stairs are a complete semantic two-cell flight. The shared edge remains open, six
+// standable tread colliders climb by less than the Ranger step limit, and the whole flight
+// persists/removes/refunds as one 3-Log module.
+const stairRuntime = makeRuntime(3);
+const stairSeed = stairRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
+assert.equal(stairSeed.grid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok, true);
+assert.equal(stairSeed.grid.placeFloor({ x: 0, z: 1, levelY: 0.08 }).ok, true);
+rematerializeSeededState(stairRuntime);
+stairRuntime.system.setBuildMode('stairs');
+const stairState = stairRuntime.system.update(player, facing);
+assert.equal(stairState.mode, 'stairs');
+assert.equal(stairState.previewValid, true, 'Two adjacent clear Floor cells must expose a valid Stair preview');
+assert.equal(stairState.cost[0].quantity, 3);
+const stairBuilt = stairRuntime.system.build(player, facing);
+assert.equal(stairBuilt?.kind, 'stairs');
+assert.equal(stairBuilt?.label, 'Stairs');
+assert.equal(stairRuntime.inventory.get('log'), 0, 'Semantic Stairs must consume exactly three Logs');
+const stairEntry = stairRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'stairs');
+assert.ok(stairEntry?.root.userData.semanticStairs, 'Stair runtime must materialize the semantic flight visual');
+const stairColliders = stairRuntime.collision.getObstaclesByType('panel-stair');
+assert.equal(stairColliders.length, 6, 'Semantic Stairs must own six deterministic standable tread colliders');
+const orderedTreads = [...stairColliders].sort((a, b) => a.supportY - b.supportY);
+let stairReferenceY = stairRuntime.collision.getObstaclesByType('panel-floor')[0].supportY;
+for (const tread of orderedTreads) {
+  assert.ok(tread.supportY - stairReferenceY <= 0.58 + 0.000001, 'Every semantic Stair rise must stay within Ranger step height');
+  const support = stairRuntime.collision.supportHeightAt(tread.x, tread.z, 0, {
+    referenceY: stairReferenceY,
+    maxStepUp: 0.58
+  });
+  assert.ok(Math.abs(support - tread.supportY) < 0.000001, 'Each Stair tread must resolve as the next walkable support');
+  stairReferenceY = tread.supportY;
+}
+const stairSnapshot = stairRuntime.system.snapshot();
+const restoredStairRuntime = makeRuntime(0);
+assert.equal(restoredStairRuntime.system.restore(stairSnapshot), true);
+assert.deepEqual(restoredStairRuntime.system.snapshot(), stairSnapshot, 'Stairs must round-trip through semantic persistence');
+assert.equal(restoredStairRuntime.collision.getObstaclesByType('panel-stair').length, 6, 'Continue must recreate every Stair tread collider');
+assert.equal(restoredStairRuntime.inventory.get('log'), 0, 'Stair restore must not consume Logs');
+const stairPoint = new THREE.Vector3(stairEntry.root.position.x, 0, stairEntry.root.position.z);
+const removedStairs = stairRuntime.system.demolish(stairPoint, stairEntry.id);
+assert.equal(removedStairs?.kind, 'stairs');
+assert.equal(removedStairs?.refund?.[0]?.quantity, 3);
+assert.equal(stairRuntime.inventory.get('log'), 3, 'Stair demolition must refund exactly three Logs');
+assert.equal(stairRuntime.collision.getObstaclesByType('panel-stair').length, 0, 'Stair demolition must remove every tread collider');
+
+// Roof is an explicit semantic top-floor zone. A one-cell gable requires a complete
+// perimeter wall ring, costs five Logs, protects its support walls from demolition, and
+// restores/removes as one roof-zone record rather than inferred physical roof members.
+const roofRuntime = makeRuntime(5);
+const roofSeed = roofRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
+assert.equal(roofSeed.grid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok, true);
+for (const direction of ['north', 'east', 'south', 'west']) {
+  assert.equal(roofSeed.grid.placeWall({ x: 0, z: 0, direction }).ok, true);
+}
+rematerializeSeededState(roofRuntime);
+roofRuntime.system.setBuildMode('roof');
+const roofState = roofRuntime.system.update(player, facing);
+assert.equal(roofState.mode, 'roof');
+assert.equal(roofState.previewValid, true, 'A fully wall-supported top Floor must expose a valid Roof preview');
+assert.equal(roofState.cost[0].quantity, 5, 'One semantic Roof cell must cost five Logs');
+const roofBuilt = roofRuntime.system.build(player, facing);
+assert.equal(roofBuilt?.kind, 'roof');
+assert.equal(roofBuilt?.label, 'Roof');
+assert.equal(roofRuntime.inventory.get('log'), 0, 'One-cell Roof placement must consume exactly five Logs');
+const roofEntry = roofRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
+assert.ok(roofEntry?.root.userData.semanticRoof, 'Roof runtime must materialize semantic roof geometry');
+assert.ok(roofEntry.root.getObjectByName('SemanticRoofSlopeNorth'), 'Roof visual must include an opaque exterior slope over its framing');
+assert.ok(roofEntry.root.getObjectByName('SemanticRoofSlopeSouth'), 'Roof visual must include both gable slopes');
+const protectedWallEntry = roofRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'wall');
+const protectedWallPoint = new THREE.Vector3(protectedWallEntry.root.position.x, 0, protectedWallEntry.root.position.z);
+assert.equal(
+  roofRuntime.system.demolish(protectedWallPoint, protectedWallEntry.id),
+  null,
+  'A Roof support wall must refuse demolition until the Roof is removed'
+);
+const roofSnapshot = roofRuntime.system.snapshot();
+const restoredRoofRuntime = makeRuntime(0);
+assert.equal(restoredRoofRuntime.system.restore(roofSnapshot), true);
+assert.deepEqual(restoredRoofRuntime.system.snapshot(), roofSnapshot, 'Roof zone must round-trip through semantic persistence');
+const restoredRoofEntry = restoredRoofRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
+assert.equal(restoredRoofEntry?.roofCellCount, 1);
+assert.ok(restoredRoofEntry?.root.userData.semanticRoof, 'Continue must recreate the semantic Roof visual');
+assert.equal(restoredRoofRuntime.inventory.get('log'), 0, 'Roof restore must not consume Logs');
+const roofPoint = new THREE.Vector3(roofEntry.root.position.x, 0, roofEntry.root.position.z);
+const removedRoof = roofRuntime.system.demolish(roofPoint, roofEntry.id);
+assert.equal(removedRoof?.kind, 'roof');
+assert.equal(removedRoof?.refund?.[0]?.quantity, 5);
+assert.equal(roofRuntime.inventory.get('log'), 5, 'Roof demolition must refund its exact semantic cell budget');
+
 // Separate buildings have their own snapped local grid orientation rather than sharing a
 // single world-aligned construction grid.
 const orientationRuntime = makeRuntime(6);
@@ -275,7 +375,7 @@ const [controllerSource, gameAppSource, panelSystemSource] = await Promise.all([
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
-  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window'])",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   "mode === 'remove'",
   'ownsHammerInteraction()',
@@ -313,10 +413,12 @@ for (const requirement of [
   'wallVariantForBuildMode(this.buildMode)',
   'semanticDoorColliderSpecs({',
   'semanticWindowColliderSpecs({',
-  "entry.variant === 'door' || entry.variant === 'window'",
+  'semanticStairColliderSpecs(placement)',
+  'createSemanticRoofZoneVisual',
+  'panelBuildCost(mode',
   'collisionHandles'
 ]) {
-  assert.ok(panelSystemSource.includes(requirement), `Semantic wall-family system contract missing: ${requirement}`);
+  assert.ok(panelSystemSource.includes(requirement), `Semantic panel system contract missing: ${requirement}`);
 }
 
 const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Promise.all([
@@ -325,19 +427,13 @@ const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Pr
   readFile('src/camera-view.css', 'utf8'),
   readFile('src/world/GrassFieldSystem.js', 'utf8')
 ]);
-for (const mode of ['floor', 'wall', 'door', 'window', 'remove', 'close']) {
+for (const mode of ['floor', 'wall', 'door', 'window', 'stairs', 'roof', 'remove', 'close']) {
   assert.ok(menuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
-for (const liveMode of ['door', 'window']) {
+for (const liveMode of ['door', 'window', 'stairs', 'roof']) {
   assert.ok(
     !new RegExp(`data-build="${liveMode}"[^>]*disabled`).test(menuSource),
     `${liveMode} must be a live semantic build choice rather than a disabled future row`
-  );
-}
-for (const lockedMode of ['roof', 'stairs']) {
-  assert.ok(
-    new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(menuSource),
-    `Deferred ${lockedMode} control must stay visibly gated instead of entering legacy construction`
   );
 }
 for (const forbiddenMode of ['raw', 'frame', 'drop']) {
@@ -369,4 +465,4 @@ assert.ok(
 const indexSource = await readFile('index.html', 'utf8');
 assert.ok(indexSource.includes('./src/hammer-construction-menu.css'), 'Production shell must load the Hammer structure menu styling');
 
-console.log('Inventory-backed Floor/Wall/Door/Window placement, semantic opening collision, single-owner Hammer targeting, inward-facing walls, vegetation masking, compact Hammer UI, safe demolition and restore verified');
+console.log('Inventory-backed Floor/Wall/Door/Window/Stairs/Roof placement, semantic opening/stair collision, explicit roof support, single-owner Hammer targeting, inward-facing walls, vegetation masking, compact Hammer UI, safe demolition and restore verified');
