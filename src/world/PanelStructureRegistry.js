@@ -51,7 +51,12 @@ export class PanelStructureRegistry {
   removeIfEmpty(structureId) {
     const structure = this.get(structureId);
     if (!structure) return false;
-    if (structure.grid.floors.size || structure.grid.walls.size || structure.grid.roofZones.size) return false;
+    if (
+      structure.grid.floors.size ||
+      structure.grid.walls.size ||
+      structure.grid.stairs.size ||
+      structure.grid.roofZones.size
+    ) return false;
     return this.structures.delete(structureId);
   }
 
