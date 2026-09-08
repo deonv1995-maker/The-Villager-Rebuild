@@ -1,13 +1,10 @@
 import * as THREE from 'three';
-import {
-  PANEL_BUILD_COSTS,
-  PANEL_CONSTRUCTION_RESOURCE_ID
-} from '../data/PanelConstructionDefinitions.js';
+import { PANEL_CONSTRUCTION_RESOURCE_ID } from '../data/PanelConstructionDefinitions.js';
 import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js';
 import { PanelConstructionSystem } from '../world/PanelConstructionSystem.js';
 
 const PANEL_BUILD_ACTION_ID = 'panel-build';
-const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window']);
+const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof']);
 
 export class PanelConstructionRuntimeController {
   constructor({ game }) {
@@ -98,7 +95,7 @@ export class PanelConstructionRuntimeController {
       this.menuMode = 'remove';
       this.#syncHud();
       this.game.setStatus('HAMMER · REMOVE PANELS');
-      this.game.hud?.setObjective('Aim at a built panel · Hammer action disassembles it');
+      this.game.hud?.setObjective('Aim at a built module · Hammer action disassembles it');
       return true;
     }
 
@@ -194,7 +191,7 @@ export class PanelConstructionRuntimeController {
         onTrigger: () => this.confirmBuild()
       });
 
-      const statusKey = `${state.mode}:${state.previewValid}:${state.materialQuantity}`;
+      const statusKey = `${state.mode}:${state.previewValid}:${state.materialQuantity}:${cost}`;
       if (statusKey !== this.lastBuildStatusKey) {
         this.lastBuildStatusKey = statusKey;
         this.game.setStatus(
@@ -206,8 +203,8 @@ export class PanelConstructionRuntimeController {
         );
         hud.setObjective(
           state.previewValid
-            ? 'Green panel preview · Hammer action places the complete panel'
-            : 'Red panel preview · move, aim at another slot, or gather more Logs'
+            ? 'Green semantic preview · Hammer action places the complete module'
+            : 'Red semantic preview · move, aim at another slot, complete support, or gather more Logs'
         );
       }
       return;
@@ -319,7 +316,6 @@ export class PanelConstructionRuntimeController {
     this.targetOwners.clear();
 
     for (const entry of this.system.getDemolitionEntries()) {
-      if (Math.hypot(entry.root.position.x - this.playerPosition.x, entry.root.position.z - this.playerPosition.z) > 2.8) continue;
       const target = this.system.getDemolitionTarget(this.playerPosition, entry.id);
       if (!target) continue;
       entry.root.updateWorldMatrix(true, true);
@@ -349,7 +345,7 @@ export class PanelConstructionRuntimeController {
       return false;
     }
     this.game.equipmentRuntime?.recordUse?.('hammer');
-    const refunded = PANEL_BUILD_COSTS[target.variant === 'door' || target.variant === 'window' ? target.variant : target.kind]?.[0]?.quantity ?? 0;
+    const refunded = result.refund?.[0]?.quantity ?? 0;
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus(`${result.label.toUpperCase()} DISASSEMBLED · ${refunded} LOGS RETURNED`);
     return true;

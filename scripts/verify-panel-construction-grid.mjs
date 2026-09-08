@@ -7,7 +7,8 @@ import {
   PanelConstructionGrid,
   panelCellKey,
   panelEdgeDescriptor,
-  panelRoofZoneKey
+  panelRoofZoneKey,
+  panelStairKey
 } from '../src/world/PanelConstructionGrid.js';
 
 assert.equal(PANEL_CONSTRUCTION_RESOURCE_ID, 'log');
@@ -57,6 +58,39 @@ const upperWall = grid.placeWall({ x: 0, z: 0, storey: 1, direction: 'east' });
 assert.equal(upperWall.ok, true);
 assert.notEqual(upperWall.wall.key, wallResult.wall.key, 'Storeys must have distinct structural edge identities');
 
+const stairGrid = new PanelConstructionGrid();
+assert.equal(stairGrid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok, true);
+assert.equal(stairGrid.placeFloor({ x: 0, z: 1, levelY: 0.08 }).ok, true);
+const southStairKey = panelStairKey({ x: 0, z: 0, direction: 'south' });
+const northStairKey = panelStairKey({ x: 0, z: 1, direction: 'north' });
+assert.equal(southStairKey, northStairKey, 'A two-cell Stair flight must have one canonical pair identity');
+const stairResult = stairGrid.placeStair({ x: 0, z: 0, direction: 'south' });
+assert.equal(stairResult.ok, true);
+assert.equal(stairResult.stair.targetCellKey, panelCellKey({ x: 0, z: 1, storey: 0 }));
+assert.equal(
+  stairGrid.placeWall({ x: 0, z: 0, direction: 'south' }).reason,
+  'stair-edge',
+  'A Stair flight must own its shared opening edge instead of competing with a Wall Panel'
+);
+assert.equal(
+  stairGrid.placeFloor({ x: 0, z: 1, storey: 1, levelY: PANEL_GRID.storeyHeight + 0.08 }).reason,
+  'stair-opening',
+  'Upper-storey Floor state must not silently seal the Stair opening cell'
+);
+assert.equal(
+  stairGrid.removeFloor({ x: 0, z: 0 }),
+  false,
+  'A lower Floor supporting Stairs cannot be removed before the Stair flight'
+);
+const stairSnapshot = stairGrid.snapshot();
+assert.deepEqual(
+  PanelConstructionGrid.restore(stairSnapshot).snapshot(),
+  stairSnapshot,
+  'Semantic Stair direction/pair identity must round-trip without transform inference'
+);
+assert.equal(stairGrid.removeStair(stairResult.stair.key), true);
+assert.equal(stairGrid.placeWall({ x: 0, z: 0, direction: 'south' }).ok, true);
+
 const orderedRoofKey = panelRoofZoneKey({
   cells: [{ x: 0, z: 0 }, { x: 1, z: 0 }],
   storey: 0
@@ -73,6 +107,16 @@ const roofResult = grid.placeRoofZone({
   ridgeAxis: 'x'
 });
 assert.equal(roofResult.ok, true);
+assert.equal(
+  grid.placeRoofZone({ cells: [{ x: 1, z: 0 }], storey: 0, form: 'gable', ridgeAxis: 'x' }).reason,
+  'occupied-roof-cell',
+  'Explicit Roof zones must not overlap the same canonical Floor cell'
+);
+assert.equal(
+  grid.removeWall(wallResult.wall.key),
+  false,
+  'Roof-supported Wall edges must remain dependency-protected until the Roof is removed'
+);
 
 const snapshot = grid.snapshot();
 const restored = PanelConstructionGrid.restore(snapshot);
@@ -88,4 +132,4 @@ assert.equal(
   'A floor with dependent wall/roof modules cannot be removed out from under the structure'
 );
 
-console.log('Panel construction grid identity, wall ownership, variants, roof zones and persistence verified');
+console.log('Panel construction grid identity, wall ownership, wall variants, semantic Stairs, explicit Roof zones and persistence verified');

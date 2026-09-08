@@ -8,6 +8,8 @@ import {
   tintConstructionPreview
 } from './PhysicalLogVisual.js';
 import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
+import { createSemanticRoofZoneVisual } from './SemanticRoofZoneGeometry.js';
+import { createSemanticStairPanelVisual } from './SemanticStairPanelGeometry.js';
 import { createSemanticWindowPanelVisual } from './SemanticWindowPanelGeometry.js';
 
 export function createFloorPanelVisual(name = 'PanelFloor') {
@@ -36,14 +38,25 @@ export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
   return root;
 }
 
-export function createPanelPreview(mode, material) {
+export function createPanelPreview(mode, material, placement = null) {
   const variant = mode === 'door' || mode === 'window' ? mode : 'solid';
-  const root = mode === 'floor'
-    ? createFloorPanelVisual('PanelFloorPreview')
-    : createWallPanelVisual(
+  let root;
+  if (mode === 'floor') {
+    root = createFloorPanelVisual('PanelFloorPreview');
+  } else if (mode === 'stairs') {
+    root = createSemanticStairPanelVisual('PanelStairsPreview');
+  } else if (mode === 'roof') {
+    root = createSemanticRoofZoneVisual('PanelRoofPreview', {
+      width: placement?.width,
+      depth: placement?.depth,
+      ridgeAxis: placement?.ridgeAxis ?? 'x'
+    });
+  } else {
+    root = createWallPanelVisual(
       mode === 'door' ? 'PanelDoorPreview' : mode === 'window' ? 'PanelWindowPreview' : 'PanelWallPreview',
       variant
     );
+  }
   tintConstructionPreview(root, material);
   return root;
 }

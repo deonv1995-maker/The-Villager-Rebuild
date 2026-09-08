@@ -25,6 +25,8 @@ assert(PANEL_BUILD_COSTS.floor[0].itemId === 'log' && PANEL_BUILD_COSTS.floor[0]
 assert(PANEL_BUILD_COSTS.wall[0].itemId === 'log' && PANEL_BUILD_COSTS.wall[0].quantity === 3, 'A full Wall Panel must consume three Logs');
 assert(PANEL_BUILD_COSTS.door[0].itemId === 'log' && PANEL_BUILD_COSTS.door[0].quantity === 3, 'A full Door Panel must consume three Logs');
 assert(PANEL_BUILD_COSTS.window[0].itemId === 'log' && PANEL_BUILD_COSTS.window[0].quantity === 3, 'A full Window Panel must consume three Logs');
+assert(PANEL_BUILD_COSTS.stairs[0].itemId === 'log' && PANEL_BUILD_COSTS.stairs[0].quantity === 3, 'A full Stair flight must consume three Logs');
+assert(PANEL_BUILD_COSTS.roof[0].itemId === 'log' && PANEL_BUILD_COSTS.roof[0].quantity === 5, 'A one-cell semantic Roof budget must consume five Logs');
 assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
 assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');
 
@@ -127,12 +129,15 @@ assert(!floorSupportSource.includes('FoundationTerrainSystem'), 'Panel floors mu
 for (const requirement of [
   "this.buildMode = 'floor'",
   "this.buildMode === 'floor'",
-  "this.inventory.consume(cost)",
+  'this.inventory.consume(cost)',
   "type: 'panel-floor'",
   "type: 'panel-wall'",
+  "type: 'panel-stair'",
   'wallVariantForBuildMode(this.buildMode)',
   'semanticDoorColliderSpecs({',
   'semanticWindowColliderSpecs({',
+  'semanticStairColliderSpecs(placement)',
+  'createSemanticRoofZoneVisual',
   'this.floorSupports.createForFloor',
   'this.registry.createStructure({',
   'this.registry.edgePlacementWorld(structure',
@@ -146,7 +151,7 @@ for (const requirement of [
   "this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)",
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
-  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window'])",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   'this.confirmBuild()',
   "this.game.equipmentRuntime?.recordUse?.('hammer')"
@@ -157,19 +162,13 @@ assert(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs mu
 assert(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Hammer must stay equipped during semantic panel placement');
 assert(mainSource.includes('new PanelConstructionRuntimeController({ game })'), 'Gameplay startup must install the live panel construction runtime');
 
-for (const mode of ['floor', 'wall', 'door', 'window', 'remove', 'close']) {
+for (const mode of ['floor', 'wall', 'door', 'window', 'stairs', 'roof', 'remove', 'close']) {
   assert(hammerMenuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
-for (const liveMode of ['door', 'window']) {
+for (const liveMode of ['door', 'window', 'stairs', 'roof']) {
   assert(
     !new RegExp(`data-build="${liveMode}"[^>]*disabled`).test(hammerMenuSource),
     `${liveMode} must be a live semantic build choice`
-  );
-}
-for (const lockedMode of ['stairs', 'roof']) {
-  assert(
-    new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(hammerMenuSource),
-    `Deferred ${lockedMode} control must remain visibly locked until its semantic runtime exists`
   );
 }
 for (const legacyMode of ['raw', 'frame', 'drop']) {
@@ -195,4 +194,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door/Window construction, coherent floor support and unified mobile action contracts verified');
+console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door/Window/Stairs/Roof construction, coherent floor support and unified mobile action contracts verified');

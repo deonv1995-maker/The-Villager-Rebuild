@@ -1,6 +1,6 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
-const ACTIVE_MODES = new Set(['floor', 'wall', 'door', 'window', 'remove']);
+const ACTIVE_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof', 'remove']);
 const MENU_OPEN_BODY_CLASS = 'hammer-construction-open';
 const MENU_EXPANDED_BODY_CLASS = 'hammer-construction-expanded';
 
@@ -17,6 +17,8 @@ export class HammerConstructionMenu {
       wall: ui.build.wall,
       door: ui.build.wall,
       window: ui.build.wall,
+      stairs: ui.build.stairs,
+      roof: ui.build.roof,
       remove: ui.hammer
     });
     this.root = document.createElement('section');
@@ -59,24 +61,21 @@ export class HammerConstructionMenu {
           <span class="construction-list-placeholder" aria-hidden="true">W</span>
           <span><strong>WINDOW</strong><small>3 LOGS</small></span>
         </button>
+        <button class="construction-list-item" type="button" data-build="stairs" aria-label="Build stairs">
+          <img src="${ui.build.stairs}" alt="" aria-hidden="true">
+          <span><strong>STAIRS</strong><small>3 LOGS</small></span>
+        </button>
+        <button class="construction-list-item" type="button" data-build="roof" aria-label="Build roof">
+          <img src="${ui.build.roof}" alt="" aria-hidden="true">
+          <span><strong>ROOF</strong><small>5 LOGS / CELL</small></span>
+        </button>
         <button class="construction-list-item construction-list-remove" type="button" data-build="remove" aria-label="Remove built panel with hammer">
           <img src="${ui.hammer}" alt="" aria-hidden="true">
           <span><strong>REMOVE</strong><small>HAMMER</small></span>
         </button>
-
-        <div class="construction-list-divider" aria-hidden="true">LATER</div>
-
-        <button class="construction-list-item locked" type="button" data-build="stairs" disabled aria-label="Stairs, locked">
-          <img src="${ui.build.stairs}" alt="" aria-hidden="true">
-          <span><strong>STAIRS</strong><small>LATER</small></span>
-        </button>
-        <button class="construction-list-item locked" type="button" data-build="roof" disabled aria-label="Roof, locked">
-          <img src="${ui.build.roof}" alt="" aria-hidden="true">
-          <span><strong>ROOF</strong><small>LATER</small></span>
-        </button>
       </div>
 
-      <p class="hammer-construction-help" data-role="construction-help">Choose Floor, Wall, Door or Window</p>
+      <p class="hammer-construction-help" data-role="construction-help">Choose a semantic structure module</p>
     `;
 
     document.body.appendChild(this.root);
@@ -140,7 +139,7 @@ export class HammerConstructionMenu {
     if (this.compactMode) this.compactMode.textContent = this.mode.toUpperCase();
     if (this.compactIcon) this.compactIcon.src = this.modeIcons[this.mode] ?? this.modeIcons.floor;
     if (this.compactButton) {
-      const modeLabel = this.mode === 'remove' ? 'Remove selected' : `${this.mode} panel selected`;
+      const modeLabel = this.mode === 'remove' ? 'Remove selected' : `${this.mode} selected`;
       this.compactButton.setAttribute('aria-label', `Open building menu, ${modeLabel}`);
     }
 
@@ -155,11 +154,15 @@ export class HammerConstructionMenu {
     if (!this.open) {
       this.help.textContent = '';
     } else if (this.mode === 'remove') {
-      this.help.textContent = 'Aim at a built panel · Hammer action removes it';
+      this.help.textContent = 'Aim at a built module · Hammer action removes it';
     } else if (!canAfford) {
       this.help.textContent = `${this.mode.toUpperCase()} needs ${cost} Logs`;
     } else if (previewValid) {
       this.help.textContent = `Green ${this.mode} preview · Hammer action places it`;
+    } else if (this.mode === 'stairs') {
+      this.help.textContent = 'Stairs need two adjacent floor cells with an open shared edge';
+    } else if (this.mode === 'roof') {
+      this.help.textContent = 'Roof needs a wall-supported top-floor footprint';
     } else {
       this.help.textContent = `Move or aim for a valid ${this.mode} position`;
     }
