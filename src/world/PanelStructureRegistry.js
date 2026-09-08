@@ -108,15 +108,20 @@ export class PanelStructureRegistry {
       x: frame.xX * normal.x + frame.zX * normal.z,
       z: frame.xZ * normal.x + frame.zZ * normal.z
     });
+    const inwardNormal = rotateNormal(edge.inwardNormal);
+    const outwardNormal = rotateNormal(edge.outwardNormal);
     return {
       key: edge.key,
       ownerCellKey: edge.ownerCellKey,
       x: world.x,
       z: world.z,
       axis: edge.axis,
-      yaw: edge.axis === 'x' ? structure.yaw : structure.yaw - Math.PI / 2,
-      inwardNormal: rotateNormal(edge.inwardNormal),
-      outwardNormal: rotateNormal(edge.outwardNormal)
+      // Wall visuals expose their split-log cut face along local +Z. Derive the
+      // root yaw from the semantic inward normal so every edge keeps bark outside
+      // and the flat cut face inside, including the opposite edge of the same axis.
+      yaw: normalizeYaw(Math.atan2(inwardNormal.x, inwardNormal.z)),
+      inwardNormal,
+      outwardNormal
     };
   }
 

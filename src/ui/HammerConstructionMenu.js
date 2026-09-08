@@ -2,19 +2,35 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 
 const ACTIVE_MODES = new Set(['floor', 'wall', 'remove']);
 const MENU_OPEN_BODY_CLASS = 'hammer-construction-open';
+const MENU_EXPANDED_BODY_CLASS = 'hammer-construction-expanded';
 
 export class HammerConstructionMenu {
   constructor({ onSelect }) {
     this.onSelect = onSelect;
     this.open = false;
+    this.expanded = false;
     this.mode = 'floor';
 
     const ui = ASSET_PATHS.ui.mobile;
+    this.modeIcons = Object.freeze({
+      floor: ui.build.floor,
+      wall: ui.build.wall,
+      remove: ui.hammer
+    });
     this.root = document.createElement('section');
     this.root.className = 'hammer-construction-menu';
     this.root.setAttribute('aria-label', 'Hammer building menu');
     this.root.hidden = true;
     this.root.innerHTML = `
+      <button class="hammer-construction-compact" type="button" data-build="expand" aria-label="Open building menu" aria-expanded="false">
+        <img data-role="construction-compact-icon" src="${ui.build.floor}" alt="" aria-hidden="true">
+        <span>
+          <strong data-role="construction-compact-mode">FLOOR</strong>
+          <small>BUILD MENU</small>
+        </span>
+        <span class="hammer-construction-compact-chevron" aria-hidden="true">‹</span>
+      </button>
+
       <header class="hammer-construction-header">
         <img src="${ui.hammer}" alt="" aria-hidden="true">
         <div>
@@ -73,6 +89,9 @@ export class HammerConstructionMenu {
     document.body.appendChild(this.root);
     this.material = this.root.querySelector('[data-role="construction-material"]');
     this.help = this.root.querySelector('[data-role="construction-help"]');
+    this.compactButton = this.root.querySelector('[data-build="expand"]');
+    this.compactIcon = this.root.querySelector('[data-role="construction-compact-icon"]');
+    this.compactMode = this.root.querySelector('[data-role="construction-compact-mode"]');
     this.buttons = new Map(
       Array.from(this.root.querySelectorAll('[data-build]')).map(button => [button.dataset.build, button])
     );
@@ -82,12 +101,26 @@ export class HammerConstructionMenu {
       if (!button || button.disabled) return;
       event.preventDefault();
       event.stopPropagation();
-      this.onSelect?.(button.dataset.build);
+      const buildMode = button.dataset.build;
+      if (buildMode === 'expand') {
+        this.expanded = true;
+        this.#syncPresentationState();
+        return;
+      }
+      if (ACTIVE_MODES.has(buildMode)) {
+        this.expanded = false;
+        this.#syncPresentationState();
+      }
+      this.onSelect?.(buildMode);
     });
   }
 
   isOpen() {
     return this.open;
+  }
+
+  isExpanded() {
+    return this.open && this.expanded;
   }
 
   setState({
@@ -98,13 +131,20 @@ export class HammerConstructionMenu {
     materialQuantity = 0,
     cost = 3
   } = {}) {
+    const wasOpen = this.open;
     this.open = Boolean(open);
     if (ACTIVE_MODES.has(mode)) this.mode = mode;
-    this.root.hidden = !this.open;
-    document.body.classList.toggle(MENU_OPEN_BODY_CLASS, this.open);
+    if (!this.open || !wasOpen) this.expanded = false;
+    this.#syncPresentationState();
     this.root.classList.toggle('invalid', this.open && this.mode !== 'remove' && !previewValid);
 
     if (this.material) this.material.textContent = `LOGS ${materialQuantity}`;
+    if (this.compactMode) this.compactMode.textContent = this.mode.toUpperCase();
+    if (this.compactIcon) this.compactIcon.src = this.modeIcons[this.mode] ?? this.modeIcons.floor;
+    if (this.compactButton) {
+      const modeLabel = this.mode === 'remove' ? 'Remove selected' : `${this.mode} panel selected`;
+      this.compactButton.setAttribute('aria-label', `Open building menu, ${modeLabel}`);
+    }
 
     for (const [buttonMode, button] of this.buttons) {
       const selected = ACTIVE_MODES.has(buttonMode) && buttonMode === this.mode;
@@ -127,8 +167,17 @@ export class HammerConstructionMenu {
     }
   }
 
+  #syncPresentationState() {
+    this.root.hidden = !this.open;
+    this.root.classList.toggle('collapsed', this.open && !this.expanded);
+    document.body.classList.toggle(MENU_OPEN_BODY_CLASS, this.open);
+    document.body.classList.toggle(MENU_EXPANDED_BODY_CLASS, this.open && this.expanded);
+    if (this.compactButton) this.compactButton.setAttribute('aria-expanded', this.expanded ? 'true' : 'false');
+  }
+
   dispose() {
     document.body.classList.remove(MENU_OPEN_BODY_CLASS);
+    document.body.classList.remove(MENU_EXPANDED_BODY_CLASS);
     this.root.remove();
     this.buttons.clear();
   }

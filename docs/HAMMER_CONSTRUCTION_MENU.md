@@ -2,7 +2,7 @@
 
 ## Decision
 
-The Hammer is now the player-facing entry point for semantic construction.
+The Hammer is the player-facing entry point for semantic construction.
 
 The construction responsibility chain is:
 
@@ -12,16 +12,18 @@ Logs remain inventory material. Selecting or tapping the Log inventory row must 
 
 ## Mobile interaction
 
-Selecting an owned **Hammer** automatically opens the structure-style building menu.
+Selecting an owned **Hammer** activates semantic Floor placement and shows a compact top-right build dock. The compact dock keeps the active preview and aiming area visible instead of leaving the full structure chooser over the world while the player is positioning a panel.
 
-The menu is deliberately presented as a small house schematic rather than a generic list. It uses the existing Villager mobile visual language: dark forest-green surfaces, warm timber/gold accents, compact rounded controls and large touch targets.
+Tapping the compact dock expands the structure-style building menu. The expanded menu is deliberately presented as a small house schematic rather than a generic list. It uses the existing Villager mobile visual language: dark forest-green surfaces, warm timber/gold accents, compact rounded controls and large touch targets.
 
 The current active choices are:
 
 - **Floor** — complete semantic Floor Panel, 3 Logs;
 - **Wall** — complete semantic Solid Wall Panel, 3 Logs;
 - **Remove** — leaves placement mode while keeping the Hammer equipped, then uses the existing exact Hammer demolition target;
-- **Close** — closes the menu while leaving the Hammer equipped.
+- **Close** — closes the construction session while leaving the Hammer equipped.
+
+Choosing Floor, Wall or Remove automatically collapses the large selector back to the compact dock. The player can therefore aim, walk, rotate the camera and use the unified Hammer action without a large menu covering the placement target. Tapping the compact dock reopens the selector without changing the active construction mode.
 
 The following structure locations are visible but disabled so the player can understand the eventual building vocabulary without reconnecting unfinished legacy systems:
 
@@ -32,20 +34,23 @@ The following structure locations are visible but disabled so the player can und
 
 Those controls must remain disabled until their semantic runtime slices are implemented.
 
-While the Hammer structure menu is open, the normal camera view control must remain independently reachable. The menu publishes the `hammer-construction-open` page state and the camera control moves clear of the menu footprint in both portrait and landscape. This preserves direct 3P/1P switching while Floor, Wall or Remove is active instead of forcing the player to close construction before checking first-person targeting.
+The construction session publishes the `hammer-construction-open` page state. The full selector additionally publishes `hammer-construction-expanded`. These are presentation-only coordination states: sibling HUD controls use them to reserve separate screen lanes, but construction gameplay does not read them as structural state.
 
-The player-facing **Close** and **Remove** controls retain at least 44 CSS-pixel touch targets. The menu itself remains in the established top-right safe area so the bottom movement/action controls are not displaced.
+The normal camera view control remains independently reachable in both compact and expanded states. Beside the compact dock it uses a short offset; while the full selector is expanded it moves farther left of the selector footprint. The normal HUD objective is suppressed during the construction session because the build status/dock already communicate the active mode, and the top build status is temporarily hidden while the large selector is expanded so the two overlays cannot stack on top of each other.
+
+The player-facing **Close** and **Remove** controls retain at least 44 CSS-pixel touch targets. The selector and compact dock remain in the established top-right safe area so the bottom movement/action controls are not displaced.
 
 ## Hammer behavior
 
 The Hammer remains equipped while Floor or Wall placement is active. Construction must never silently switch the toolbelt back to Hand.
 
-When Floor or Wall is selected:
+When Floor or Wall is active:
 
 - the normal semantic panel preview remains authoritative;
 - green means the selected panel can be placed and the inventory can pay the cost;
 - red means the placement is invalid or there are not enough Logs;
 - the unified mobile Action button shows the Hammer and **PLACE**;
+- the large structure selector is collapsed during normal aiming/placement;
 - selecting Hammer is allowed even with fewer than three Logs so the player can see the intended slot and the missing material requirement.
 
 When Remove is selected:
@@ -60,11 +65,11 @@ When Remove is selected:
 
 `PanelConstructionSystem` remains the single structural authority for Floor and Wall validity, local grids, collision, demolition dependencies and persistence.
 
-`HammerConstructionMenu` owns only presentation and player choice. `PanelConstructionRuntimeController` owns the translation between Hammer/toolbelt state, menu state and the existing semantic construction runtime.
+`HammerConstructionMenu` owns only presentation and player choice, including whether its selector is expanded or collapsed. `PanelConstructionRuntimeController` owns the translation between Hammer/toolbelt state, selected semantic mode and the existing semantic construction runtime.
 
 The old `MobileHud` physical-log build tray remains transition infrastructure for deferred legacy systems but is explicitly hidden during semantic panel construction and is not a source of Floor/Wall choices.
 
-The Hammer menu page-state class is a presentation-only coordination boundary. It exists so sibling HUD controls can avoid the menu footprint; it must not become a source of gameplay or construction state.
+The Hammer menu page-state classes are presentation-only coordination boundaries. They exist so sibling HUD controls can avoid the active build control footprint; they must not become sources of gameplay or construction state.
 
 The change does not alter:
 
@@ -80,11 +85,13 @@ The change does not alter:
 
 ## Desktop compatibility
 
-`B` remains a construction shortcut. If the Hammer is not equipped, the shortcut routes through normal Hammer selection; once the menu is open, `B` cycles the live Floor/Wall choices. `E` / `V` confirms placement, while `G` / Escape closes the menu. In Remove mode, `E` / `V` removes the exact semantic panel target when one is selected.
+`B` remains a construction shortcut. If the Hammer is not equipped, the shortcut routes through normal Hammer selection; while Floor/Wall placement is active, `B` cycles the live Floor/Wall choices. `E` / `V` confirms placement, while `G` / Escape closes the construction session. In Remove mode, `E` / `V` removes the exact semantic panel target when one is selected.
+
+The compact/expanded menu behavior is a mobile presentation layer only and does not replace those keyboard controls.
 
 ## Verification
 
-`verify-panel-construction-runtime.mjs` additionally protects these UI/runtime boundaries:
+`verify-panel-construction-runtime.mjs` protects these UI/runtime boundaries:
 
 - Hammer selection is the build-menu entry contract;
 - inventory Logs are not a build-menu trigger;
@@ -92,12 +99,14 @@ The change does not alter:
 - the structure menu exposes Floor, Wall, Remove and Close;
 - Door, Window, Stairs and Roof remain visibly disabled;
 - RAW, FRAME and physical-log DROP are not exposed in the semantic structure menu;
+- active Floor/Wall/Remove choices collapse to the compact build dock;
+- the compact and expanded HUD footprints have separate layout rules;
 - the production shell loads the dedicated structure-menu styling.
 
-`verify-device-regressions-0.3.11.mjs` additionally protects the mobile Hammer layout contract:
+`verify-device-regressions-0.3.11.mjs` additionally protects the established mobile Hammer layout contract:
 
-- Hammer menu open state is published and cleaned up;
+- Hammer construction open state is published and cleaned up;
 - Close and Remove retain deliberate touch targets;
-- the 3P/1P camera control moves clear of the menu in landscape and portrait.
+- the 3P/1P camera control keeps an explicit construction-safe offset in landscape and portrait.
 
-Physical-device verification remains required for visual readability, Floor/Wall placement confirmation, Remove targeting, and first-person aim behavior on the installed Android PWA.
+Physical-device verification remains required for compact/expanded readability, Floor/Wall placement confirmation, Remove targeting, status/control separation, and first-person aim behavior on the installed Android PWA.
