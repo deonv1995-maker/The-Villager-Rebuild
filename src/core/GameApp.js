@@ -203,11 +203,18 @@ export class GameApp {
       return;
     }
 
+    const panelHammerOwned = toolId === 'hammer'
+      && (this.panelConstructionRuntime?.ownsHammerInteraction?.() ?? false);
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
     const rockTarget = this.rockHarvest?.update(this.playerPosition, toolId === 'pickaxe') ?? null;
-    const demolitionAim = toolId === 'hammer' ? this.#currentConstructionAim() : null;
-    const demolitionTarget = toolId === 'hammer'
+    const panelDemolitionTarget = panelHammerOwned
+      ? this.panelConstructionRuntime?.getHammerInteractionTarget?.() ?? null
+      : null;
+    const demolitionAim = toolId === 'hammer' && !panelHammerOwned
+      ? this.#currentConstructionAim()
+      : null;
+    const legacyDemolitionTarget = toolId === 'hammer' && !panelHammerOwned
       ? demolitionAim
         ? this.firstPersonDemolitionTargeting.select({
           physicalLogs: this.physicalLogs,
@@ -219,17 +226,23 @@ export class GameApp {
           ?? this.campfire?.getDemolitionTarget(this.playerPosition)
           ?? null
       : null;
-    const resourceTarget = this.gatherables?.update(this.playerPosition) ?? null;
+    const resourceTarget = panelHammerOwned
+      ? (this.gatherables?.update(this.playerPosition, () => false), null)
+      : this.gatherables?.update(this.playerPosition) ?? null;
 
-    this.currentInteractionTarget = carcassTarget
-      ?? treeTarget
-      ?? rockTarget
-      ?? demolitionTarget
-      ?? resourceTarget;
+    this.currentInteractionTarget = panelHammerOwned
+      ? panelDemolitionTarget
+      : carcassTarget
+        ?? treeTarget
+        ?? rockTarget
+        ?? legacyDemolitionTarget
+        ?? resourceTarget;
 
-    const highlightedDemolition = this.currentInteractionTarget === demolitionTarget
-      ? demolitionTarget
-      : null;
+    const highlightedDemolition = panelHammerOwned
+      ? panelDemolitionTarget
+      : this.currentInteractionTarget === legacyDemolitionTarget
+        ? legacyDemolitionTarget
+        : null;
     this.demolitionPreview?.setTarget(
       highlightedDemolition?.root ?? null,
       highlightedDemolition
