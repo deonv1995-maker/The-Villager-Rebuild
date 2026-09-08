@@ -155,12 +155,17 @@ assert.equal(poorState.previewing, true, 'Unaffordable construction should still
 assert.equal(poorState.canAfford, false);
 assert.equal(poorState.previewValid, false, 'Unaffordable panel previews must stay red and uncommittable');
 
-const controllerSource = await readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8');
+const [controllerSource, gameAppSource] = await Promise.all([
+  readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
+  readFile('src/core/GameApp.js', 'utf8')
+]);
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   "mode === 'remove'",
+  'ownsHammerInteraction()',
+  'getHammerInteractionTarget()',
   'this.raycaster.intersectObjects(this.targetMeshes, false)',
   "this.game.equipmentRuntime?.recordUse?.('hammer')",
   "event.code === 'KeyB'",
@@ -176,6 +181,20 @@ assert.ok(
   !controllerSource.includes("this.game.toolbelt?.select('hand')"),
   'Panel construction must keep the Hammer equipped instead of silently switching to Hand'
 );
+assert.ok(
+  !controllerSource.includes('hud.setInteractionTarget(target)') &&
+  !controllerSource.includes('this.game.demolitionPreview?.setTarget'),
+  'Panel runtime may resolve semantic targets but GameApp must remain the single HUD/highlight publisher'
+);
+for (const requirement of [
+  "const panelHammerOwned = toolId === 'hammer'",
+  'this.panelConstructionRuntime?.ownsHammerInteraction?.()',
+  'this.panelConstructionRuntime?.getHammerInteractionTarget?.()',
+  "toolId === 'hammer' && !panelHammerOwned",
+  '(this.gatherables?.update(this.playerPosition, () => false), null)'
+]) {
+  assert.ok(gameAppSource.includes(requirement), `GameApp semantic Hammer authority contract missing: ${requirement}`);
+}
 
 const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Promise.all([
   readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
@@ -221,4 +240,4 @@ assert.ok(
 const indexSource = await readFile('index.html', 'utf8');
 assert.ok(indexSource.includes('./src/hammer-construction-menu.css'), 'Production shell must load the Hammer structure menu styling');
 
-console.log('Inventory-backed Floor/Wall panel placement, inward-facing walls, semantic vegetation masking, compact Hammer UI, dependency-safe demolition, collision and semantic restore verified');
+console.log('Inventory-backed Floor/Wall placement, single-owner semantic Hammer targeting, inward-facing walls, vegetation masking, compact Hammer UI, safe demolition, collision and restore verified');
