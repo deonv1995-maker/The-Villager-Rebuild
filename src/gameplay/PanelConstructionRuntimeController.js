@@ -7,7 +7,7 @@ import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js';
 import { PanelConstructionSystem } from '../world/PanelConstructionSystem.js';
 
 const PANEL_BUILD_ACTION_ID = 'panel-build';
-const ACTIVE_BUILD_MODES = new Set(['floor', 'wall']);
+const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door']);
 
 export class PanelConstructionRuntimeController {
   constructor({ game }) {

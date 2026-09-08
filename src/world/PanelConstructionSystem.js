@@ -19,6 +19,7 @@ import {
 } from './PanelConstructionVisual.js';
 import { FloorSupportVisual } from './FloorSupportVisual.js';
 import { PanelStructureRegistry } from './PanelStructureRegistry.js';
+import { semanticDoorColliderSpecs } from './SemanticDoorPanelGeometry.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
@@ -172,7 +173,7 @@ export class PanelConstructionSystem {
         z: placement.cellZ,
         storey: placement.storey ?? 0,
         direction: placement.direction,
-        variant: 'solid'
+        variant: this.buildMode === 'door' ? 'door' : 'solid'
       });
     }
 
@@ -546,27 +547,41 @@ export class PanelConstructionSystem {
   #materializeWall(structure, wall) {
     const placement = this.registry.wallPlacementWorld(structure, wall.key);
     const id = `panel:${structure.id}:${wall.key}`;
-    const root = createWallPanelVisual(id);
+    const variant = wall.variant ?? 'solid';
+    const root = createWallPanelVisual(id, variant);
     root.position.set(placement.x, placement.baseY, placement.z);
     root.rotation.y = placement.yaw;
     root.userData.panelConstructionId = id;
     root.userData.panelConstructionKind = 'wall';
+    root.userData.panelWallVariant = variant;
     this.group.add(root);
 
-    const collisionHandle = this.collision.addBox({
-      x: placement.x,
-      z: placement.z,
-      halfX: PANEL_GRID.cellSize * 0.5,
-      halfZ: CONSTRUCTION_DIMENSIONS.wallThickness,
-      yaw: placement.yaw,
+    const collisionSpecs = variant === 'door'
+      ? semanticDoorColliderSpecs({
+        x: placement.x,
+        z: placement.z,
+        yaw: placement.yaw,
+        bottomY: placement.baseY - 0.02,
+        topY: placement.topY
+      })
+      : [{
+        x: placement.x,
+        z: placement.z,
+        halfX: PANEL_GRID.cellSize * 0.5,
+        halfZ: CONSTRUCTION_DIMENSIONS.wallThickness,
+        yaw: placement.yaw,
+        bottomY: placement.baseY - 0.02,
+        topY: placement.topY
+      }];
+    const collisionHandles = collisionSpecs.map((spec, index) => this.collision.addBox({
+      ...spec,
       type: 'panel-wall',
-      label: id,
-      bottomY: placement.baseY - 0.02,
-      topY: placement.topY
-    });
+      label: collisionSpecs.length === 1 ? id : `${id}:${variant}:${index}`
+    }));
     const entry = {
       id,
       kind: 'wall',
+      variant,
       structureId: structure.id,
       stateKey: wall.key,
       cellX: wall.x,
@@ -574,7 +589,8 @@ export class PanelConstructionSystem {
       storey: wall.storey,
       direction: wall.direction,
       root,
-      collisionHandle,
+      collisionHandle: collisionHandles[0] ?? null,
+      collisionHandles,
       supportHandles: [],
       active: true
     };
@@ -611,17 +627,25 @@ export class PanelConstructionSystem {
 
   #removeEntryRuntime(entry) {
     entry.active = false;
-    if (entry.collisionHandle) this.collision.removeObstacle(entry.collisionHandle);
+    const collisionHandles = entry.collisionHandles?.length
+      ? entry.collisionHandles
+      : entry.collisionHandle
+        ? [entry.collisionHandle]
+        : [];
+    for (const handle of collisionHandles) this.collision.removeObstacle(handle);
     for (const handle of entry.supportHandles ?? []) this.floorSupports.remove(handle);
     entry.root?.parent?.remove(entry.root);
   }
 
   #targetForEntry(entry) {
-    const label = PANEL_BUILD_LABELS[entry.kind] ?? 'Construction panel';
+    const label = entry.kind === 'wall' && entry.variant === 'door'
+      ? PANEL_BUILD_LABELS.door
+      : PANEL_BUILD_LABELS[entry.kind] ?? 'Construction panel';
     return {
       type: 'panel-construction',
       id: entry.id,
       kind: entry.kind,
+      variant: entry.variant ?? null,
       label,
       icon: 'hammer',
       actionLabel: `Demolish ${label.toLowerCase()}`,

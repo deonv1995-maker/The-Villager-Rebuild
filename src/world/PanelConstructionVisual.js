@@ -7,6 +7,7 @@ import {
   createConstructionLogVisual,
   tintConstructionPreview
 } from './PhysicalLogVisual.js';
+import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
 
 export function createFloorPanelVisual(name = 'PanelFloor') {
   const root = new THREE.Group();
@@ -19,9 +20,12 @@ export function createFloorPanelVisual(name = 'PanelFloor') {
   return root;
 }
 
-export function createWallPanelVisual(name = 'PanelWall') {
+export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
+  if (variant === 'door') return createSemanticDoorPanelVisual(name);
+
   const root = new THREE.Group();
   root.name = name;
+  root.userData.panelWallVariant = 'solid';
   for (let index = 0; index < 3; index += 1) {
     const section = createConstructionLogVisual('wall');
     section.position.y = 0.26 + CONSTRUCTION_DIMENSIONS.wallSectionStep * index;
@@ -33,7 +37,10 @@ export function createWallPanelVisual(name = 'PanelWall') {
 export function createPanelPreview(mode, material) {
   const root = mode === 'floor'
     ? createFloorPanelVisual('PanelFloorPreview')
-    : createWallPanelVisual('PanelWallPreview');
+    : createWallPanelVisual(
+      mode === 'door' ? 'PanelDoorPreview' : 'PanelWallPreview',
+      mode === 'door' ? 'door' : 'solid'
+    );
   tintConstructionPreview(root, material);
   return root;
 }
