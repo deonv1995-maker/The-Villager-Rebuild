@@ -7,6 +7,7 @@ import {
 } from '../src/data/PanelConstructionDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
+import { constructionFloorCoversVegetation } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const makeTerrain = () => ({
@@ -47,6 +48,46 @@ assert.equal(floorBuilt?.kind, 'floor');
 assert.equal(runtime.inventory.get('log'), 9, 'A complete Floor Panel must consume exactly three Logs');
 assert.equal(runtime.system.registry.structures.size, 1, 'First Floor Panel must establish one local structure grid');
 assert.equal(runtime.collision.getObstaclesByType('panel-floor').length, 1, 'Floor Panel must own one standable panel collider');
+
+const panelFloorObstacle = runtime.collision.getObstaclesByType('panel-floor')[0];
+assert.equal(
+  constructionFloorCoversVegetation(
+    { x: panelFloorObstacle.x, z: panelFloorObstacle.z },
+    panelFloorObstacle
+  ),
+  true,
+  'Semantic Floor Panels must hide grass and other reactive vegetation beneath their footprint'
+);
+assert.equal(
+  constructionFloorCoversVegetation(
+    { x: panelFloorObstacle.x + panelFloorObstacle.halfX + 0.3, z: panelFloorObstacle.z },
+    panelFloorObstacle,
+    0
+  ),
+  false,
+  'Semantic floor vegetation masking must remain bounded to the panel footprint'
+);
+
+const firstStructure = [...runtime.system.registry.structures.values()][0];
+const firstFloor = [...firstStructure.grid.floors.values()][0];
+for (const direction of ['north', 'south', 'east', 'west']) {
+  const edgePlacement = runtime.system.registry.edgePlacementWorld(firstStructure, {
+    x: firstFloor.x,
+    z: firstFloor.z,
+    storey: firstFloor.storey,
+    direction
+  });
+  const visualForward = {
+    x: Math.sin(edgePlacement.yaw),
+    z: Math.cos(edgePlacement.yaw)
+  };
+  const alignment = visualForward.x * edgePlacement.inwardNormal.x
+    + visualForward.z * edgePlacement.inwardNormal.z;
+  assert.ok(
+    alignment > 0.999999,
+    `${direction} wall visual local +Z must face the semantic interior so bark stays outside`
+  );
+}
 
 runtime.system.setBuildMode('wall');
 state = runtime.system.update(player, facing);
@@ -136,7 +177,12 @@ assert.ok(
   'Panel construction must keep the Hammer equipped instead of silently switching to Hand'
 );
 
-const menuSource = await readFile('src/ui/HammerConstructionMenu.js', 'utf8');
+const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Promise.all([
+  readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
+  readFile('src/hammer-construction-menu.css', 'utf8'),
+  readFile('src/camera-view.css', 'utf8'),
+  readFile('src/world/GrassFieldSystem.js', 'utf8')
+]);
 for (const mode of ['floor', 'wall', 'remove', 'close']) {
   assert.ok(menuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
@@ -149,8 +195,30 @@ for (const lockedMode of ['roof', 'door', 'window', 'stairs']) {
 for (const forbiddenMode of ['raw', 'frame', 'drop']) {
   assert.ok(!menuSource.includes(`data-build="${forbiddenMode}"`), `Hammer structure menu must not expose legacy ${forbiddenMode}`);
 }
+assert.ok(
+  menuSource.includes('data-build="expand"') &&
+  menuSource.includes("const MENU_EXPANDED_BODY_CLASS = 'hammer-construction-expanded'") &&
+  menuSource.includes('if (ACTIVE_MODES.has(buildMode))') &&
+  menuSource.includes('this.expanded = false;'),
+  'Hammer structure choices must collapse to a compact mode dock so the active placement preview stays visible'
+);
+assert.ok(
+  menuStylesSource.includes('.hammer-construction-menu.collapsed') &&
+  menuStylesSource.includes('body.hammer-construction-expanded #boot-status:not([data-error="true"])'),
+  'Compact construction styling must reserve the top HUD lane and prevent the expanded menu from overlapping status text'
+);
+assert.ok(
+  cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
+  cameraStylesSource.includes('max(156px, calc(env(safe-area-inset-right) + 152px))') &&
+  cameraStylesSource.includes('body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle'),
+  'Camera control must use separate compact and expanded Hammer offsets instead of overlapping build controls'
+);
+assert.ok(
+  grassSource.includes("...this.collision.getObstaclesByType('panel-floor')"),
+  'Reactive vegetation must observe semantic Floor Panel colliders as construction occluders'
+);
 
 const indexSource = await readFile('index.html', 'utf8');
 assert.ok(indexSource.includes('./src/hammer-construction-menu.css'), 'Production shell must load the Hammer structure menu styling');
 
-console.log('Inventory-backed Floor/Wall panel placement, Hammer-owned structure menu, local orientation, dependency-safe demolition, refunds, collision and semantic restore verified');
+console.log('Inventory-backed Floor/Wall panel placement, inward-facing walls, semantic vegetation masking, compact Hammer UI, dependency-safe demolition, collision and semantic restore verified');
