@@ -38,7 +38,6 @@ export class PanelConstructionRuntimeController {
     this.targetMeshes = [];
     this.targetOwners = new Map();
     this.lastBuildStatusKey = '';
-    this.lastPanelTargetId = null;
     this.onKeyDown = event => this.#handleKeyDown(event);
   }
 
@@ -74,6 +73,16 @@ export class PanelConstructionRuntimeController {
     }
 
     return this.#openHammerMenu('floor');
+  }
+
+  ownsHammerInteraction() {
+    if (this.game.toolbelt?.getEquippedToolId() !== 'hammer') return false;
+    return this.system.isActive() || (this.menu?.isOpen() && this.menuMode === 'remove');
+  }
+
+  getHammerInteractionTarget() {
+    if (!this.ownsHammerInteraction() || this.system.isActive() || this.menuMode !== 'remove') return null;
+    return this.#selectPanelDemolitionTarget();
   }
 
   setBuildMode(mode) {
@@ -168,7 +177,6 @@ export class PanelConstructionRuntimeController {
         materialQuantity: state.materialQuantity,
         cost
       });
-      this.#clearPanelDemolitionHighlight();
 
       const target = {
         type: 'panel-build',
@@ -176,7 +184,6 @@ export class PanelConstructionRuntimeController {
         icon: 'hammer',
         actionLabel: state.previewValid ? `Place ${state.label}` : `Cannot place ${state.label} here`
       };
-      hud.setInteractionTarget(target);
       hud.setAttackTarget(null, 'hammer');
       hud.setExternalAction(PANEL_BUILD_ACTION_ID, {
         available: state.previewValid,
@@ -216,12 +223,10 @@ export class PanelConstructionRuntimeController {
         materialQuantity: this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)
       });
       hud.setAttackTarget(null, 'hammer');
-      this.#syncPanelDemolitionTarget();
       return;
     }
 
     this.menu?.setState({ open: false });
-    this.#syncPanelDemolitionTarget();
   }
 
   #bindHudWhenReady() {
@@ -300,32 +305,6 @@ export class PanelConstructionRuntimeController {
     this.lastBuildStatusKey = '';
     if (announce && wasOpen) this.game.setStatus('BUILD MENU CLOSED · HAMMER EQUIPPED');
     this.#syncHud();
-  }
-
-  #clearPanelDemolitionHighlight() {
-    if (!this.lastPanelTargetId) return;
-    this.lastPanelTargetId = null;
-    this.game.demolitionPreview?.clear();
-  }
-
-  #syncPanelDemolitionTarget() {
-    const hud = this.game.hud;
-    if (!hud || this.game.toolbelt?.getEquippedToolId() !== 'hammer') {
-      this.#clearPanelDemolitionHighlight();
-      return;
-    }
-    const target = this.#selectPanelDemolitionTarget();
-    if (!target) {
-      if (this.lastPanelTargetId) {
-        this.lastPanelTargetId = null;
-        this.game.demolitionPreview?.clear();
-      }
-      return;
-    }
-    this.lastPanelTargetId = target.id;
-    this.game.currentInteractionTarget = target;
-    hud.setInteractionTarget(target);
-    this.game.demolitionPreview?.setTarget(target.root, `panel:${target.id}`);
   }
 
   #selectPanelDemolitionTarget() {
