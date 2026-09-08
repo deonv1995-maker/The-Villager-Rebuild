@@ -1,6 +1,6 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
-const ACTIVE_MODES = new Set(['floor', 'wall', 'remove']);
+const ACTIVE_MODES = new Set(['floor', 'wall', 'door', 'remove']);
 const MENU_OPEN_BODY_CLASS = 'hammer-construction-open';
 const MENU_EXPANDED_BODY_CLASS = 'hammer-construction-expanded';
 
@@ -15,6 +15,7 @@ export class HammerConstructionMenu {
     this.modeIcons = Object.freeze({
       floor: ui.build.floor,
       wall: ui.build.wall,
+      door: ui.build.wall,
       remove: ui.hammer
     });
     this.root = document.createElement('section');
@@ -49,6 +50,10 @@ export class HammerConstructionMenu {
           <img src="${ui.build.wall}" alt="" aria-hidden="true">
           <span><strong>WALL</strong><small>3 LOGS</small></span>
         </button>
+        <button class="construction-list-item" type="button" data-build="door" aria-label="Build door panel">
+          <span class="construction-list-placeholder" aria-hidden="true">D</span>
+          <span><strong>DOOR</strong><small>3 LOGS</small></span>
+        </button>
         <button class="construction-list-item construction-list-remove" type="button" data-build="remove" aria-label="Remove built panel with hammer">
           <img src="${ui.hammer}" alt="" aria-hidden="true">
           <span><strong>REMOVE</strong><small>HAMMER</small></span>
@@ -56,10 +61,6 @@ export class HammerConstructionMenu {
 
         <div class="construction-list-divider" aria-hidden="true">LATER</div>
 
-        <button class="construction-list-item locked" type="button" data-build="door" disabled aria-label="Door panel, locked">
-          <span class="construction-list-placeholder" aria-hidden="true">D</span>
-          <span><strong>DOOR</strong><small>LATER</small></span>
-        </button>
         <button class="construction-list-item locked" type="button" data-build="window" disabled aria-label="Window panel, locked">
           <span class="construction-list-placeholder" aria-hidden="true">W</span>
           <span><strong>WINDOW</strong><small>LATER</small></span>
@@ -74,7 +75,7 @@ export class HammerConstructionMenu {
         </button>
       </div>
 
-      <p class="hammer-construction-help" data-role="construction-help">Choose Floor or Wall</p>
+      <p class="hammer-construction-help" data-role="construction-help">Choose Floor, Wall or Door</p>
     `;
 
     document.body.appendChild(this.root);
