@@ -21,10 +21,12 @@ assert(
   PHYSICAL_LOG.yawStep === Math.PI / 4,
   'Panel construction must retain the established Log-proportional grid and 45-degree structure orientation step'
 );
-assert(PANEL_BUILD_COSTS.floor[0].itemId === 'log' && PANEL_BUILD_COSTS.floor[0].quantity === 3, 'A full Floor Panel must consume three Logs');
-assert(PANEL_BUILD_COSTS.wall[0].itemId === 'log' && PANEL_BUILD_COSTS.wall[0].quantity === 3, 'A full Wall Panel must consume three Logs');
-assert(PANEL_BUILD_COSTS.door[0].itemId === 'log' && PANEL_BUILD_COSTS.door[0].quantity === 3, 'A full Door Panel must consume three Logs');
-assert(PANEL_BUILD_COSTS.window[0].itemId === 'log' && PANEL_BUILD_COSTS.window[0].quantity === 3, 'A full Window Panel must consume three Logs');
+for (const mode of ['floor', 'wall', 'door', 'window', 'stairs']) {
+  assert(
+    PANEL_BUILD_COSTS[mode]?.[0]?.itemId === 'log' && PANEL_BUILD_COSTS[mode]?.[0]?.quantity === 3,
+    `${mode} semantic construction must consume three inventory Logs`
+  );
+}
 assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
 assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');
 
@@ -50,8 +52,10 @@ const [
   logVisualSource,
   floorSupportSource,
   feedbackSource,
-  panelSystemSource,
-  panelRuntimeSource,
+  panelExtensionSource,
+  panelCoreSource,
+  panelRuntimeExtensionSource,
+  panelRuntimeCoreSource,
   hammerMenuSource,
   mainSource,
   hudSource,
@@ -66,7 +70,9 @@ const [
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
   readFile('src/world/HarvestHitFeedback.js', 'utf8'),
   readFile('src/world/PanelConstructionSystem.js', 'utf8'),
+  readFile('src/world/PanelConstructionSystemCore.js', 'utf8'),
   readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
+  readFile('src/gameplay/PanelConstructionRuntimeControllerCore.js', 'utf8'),
   readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
@@ -75,6 +81,8 @@ const [
   readFile('src/styles.css', 'utf8'),
   readFile('src/hammer-construction-menu.css', 'utf8')
 ]);
+const panelSystemSource = `${panelCoreSource}\n${panelExtensionSource}`;
+const panelRuntimeSource = `${panelRuntimeCoreSource}\n${panelRuntimeExtensionSource}`;
 
 for (const requirement of [
   "getObstaclesByType('tree')",
@@ -90,8 +98,6 @@ assert(treeSource.includes('const radius = Math.max(0.22, tree.obstacle.radius);
 assert(treeSource.includes('new THREE.CylinderGeometry(radius, radius, 0.34, 7)'), 'Stump geometry must retain the source-tree footprint radius');
 assert(!treeSource.includes('tree.obstacle.radius * 0.7'), 'Stump presentation must not restore the old radius shrink factor');
 
-// Trees may still drop a visibly full-sized Log in the world. The storage transition happens
-// when GatherableSystem picks that presentation up, not when the tree creates it.
 for (const requirement of [
   "definition.storage !== 'inventory'",
   'const item = this.#takeItemTarget()',
@@ -127,12 +133,15 @@ assert(!floorSupportSource.includes('FoundationTerrainSystem'), 'Panel floors mu
 for (const requirement of [
   "this.buildMode = 'floor'",
   "this.buildMode === 'floor'",
-  "this.inventory.consume(cost)",
+  'this.inventory.consume(cost)',
   "type: 'panel-floor'",
   "type: 'panel-wall'",
   'wallVariantForBuildMode(this.buildMode)',
   'semanticDoorColliderSpecs({',
   'semanticWindowColliderSpecs({',
+  'createSemanticStairVisual',
+  "type: 'panel-stair'",
+  'semanticUpperFloor',
   'this.floorSupports.createForFloor',
   'this.registry.createStructure({',
   'this.registry.edgePlacementWorld(structure',
@@ -146,7 +155,7 @@ for (const requirement of [
   "this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)",
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
-  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window'])",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   'this.confirmBuild()',
   "this.game.equipmentRuntime?.recordUse?.('hammer')"
@@ -157,21 +166,19 @@ assert(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs mu
 assert(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Hammer must stay equipped during semantic panel placement');
 assert(mainSource.includes('new PanelConstructionRuntimeController({ game })'), 'Gameplay startup must install the live panel construction runtime');
 
-for (const mode of ['floor', 'wall', 'door', 'window', 'remove', 'close']) {
+for (const mode of ['floor', 'wall', 'door', 'window', 'stairs', 'remove', 'close']) {
   assert(hammerMenuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
-for (const liveMode of ['door', 'window']) {
+for (const liveMode of ['door', 'window', 'stairs']) {
   assert(
     !new RegExp(`data-build="${liveMode}"[^>]*disabled`).test(hammerMenuSource),
     `${liveMode} must be a live semantic build choice`
   );
 }
-for (const lockedMode of ['stairs', 'roof']) {
-  assert(
-    new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(hammerMenuSource),
-    `Deferred ${lockedMode} control must remain visibly locked until its semantic runtime exists`
-  );
-}
+assert(
+  new RegExp('data-build="roof"[^>]*disabled').test(hammerMenuSource),
+  'Deferred Roof control must remain visibly locked until its semantic runtime exists'
+);
 for (const legacyMode of ['raw', 'frame', 'drop']) {
   assert(!hammerMenuSource.includes(`data-build="${legacyMode}"`), `Hammer structure menu must not expose legacy ${legacyMode}`);
 }
@@ -195,4 +202,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door/Window construction, coherent floor support and unified mobile action contracts verified');
+console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door/Window/Stairs construction, coherent floor support and unified mobile action contracts verified');
