@@ -51,9 +51,10 @@ for (const resourceId of ['stick', 'stone', 'grass', 'log']) {
   assert.equal(RESOURCE_DEFINITIONS[resourceId].storage, 'inventory', `${resourceId} must enter inventory when picked up`);
 }
 assert.equal(PANEL_CONSTRUCTION_RESOURCE_ID, 'log');
-assert.deepEqual(PANEL_BUILD_MODES, ['floor', 'wall']);
+assert.deepEqual(PANEL_BUILD_MODES, ['floor', 'wall', 'door']);
 assert.deepEqual(PANEL_BUILD_COSTS.floor, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.wall, [{ itemId: 'log', quantity: 3 }]);
+assert.deepEqual(PANEL_BUILD_COSTS.door, [{ itemId: 'log', quantity: 3 }]);
 assert.equal(PHYSICAL_LOG.length, 2.9, 'Established Log length must remain the panel construction scale');
 assert.equal(PHYSICAL_LOG.yawStep, Math.PI / 4, 'Separate structure grids must retain 45-degree snapped yaw');
 
@@ -266,6 +267,7 @@ for (const requirement of [
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   "mode === 'remove'",
   'this.raycaster.intersectObjects(this.targetMeshes, false)',
@@ -280,6 +282,8 @@ for (const requirement of [
   'this.inventory.consume(cost)',
   "type: 'panel-floor'",
   "type: 'panel-wall'",
+  "variant: this.buildMode === 'door' ? 'door' : 'solid'",
+  'semanticDoorColliderSpecs({',
   'this.floorSupports.createForFloor',
   'restore(snapshot)'
 ]) {
@@ -303,4 +307,4 @@ assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpea
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"));
 assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'));
 
-console.log('Inventory Logs, Hammer-owned semantic Floor/Wall construction, six crafted tools, durability, campfire, harvesting and retrievable spear survival contracts verified');
+console.log('Inventory Logs, Hammer-owned semantic Floor/Wall/Door construction, six crafted tools, durability, campfire, harvesting and retrievable spear survival contracts verified');
