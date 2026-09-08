@@ -89,3 +89,56 @@ The persistent compact-dock fix does not alter:
 - first-person exact-ray or third-person proximity targeting rules;
 - PWA/install architecture;
 - deployment architecture.
+
+## Desktop compatibility
+
+`B` remains a construction shortcut. If the Hammer is not equipped, the shortcut routes through normal Hammer selection; while semantic placement is active, `B` cycles the live Floor / Wall / Door choices. `E` / `V` confirms placement, while `G` / Escape closes the construction session. In Remove mode, `E` / `V` removes the exact semantic panel target when one is selected.
+
+The compact/expanded menu behavior is a mobile presentation layer only and does not replace those keyboard controls.
+
+## Verification
+
+`verify-panel-construction-runtime.mjs` protects these UI/runtime boundaries:
+
+- Hammer selection is the build-menu entry contract;
+- inventory Logs are not a build-menu trigger;
+- the Hammer stays equipped during semantic placement;
+- the structure menu exposes Floor, Wall, Door, Remove and Close;
+- Window, Stairs and Roof remain visibly disabled;
+- RAW, FRAME and physical-log DROP are not exposed in the semantic structure menu;
+- active Floor/Wall/Door/Remove choices collapse to the compact build dock;
+- Door costs three Logs and records `variant: 'door'` in semantic wall state;
+- Door materialization uses an open centre with two side collision boxes;
+- Door save/restore recreates its visual variant and open collision without consuming inventory;
+- Door demolition removes both side colliders and refunds three Logs;
+- the compact and expanded HUD footprints have separate layout rules;
+- the panel controller exposes semantic Hammer ownership/target resolution without publishing a competing HUD target;
+- `GameApp` defers to semantic Hammer target authority while the panel session is active and keeps legacy demolition targeting isolated to the closed-session path;
+- the production shell loads the dedicated structure-menu styling.
+
+`verify-hammer-menu-persistence.mjs` protects the mobile drawer-specific persistence contract:
+
+- the drawer X is a presentation-only collapse control;
+- collapsing the drawer returns to the compact Hammer dock before any gameplay mode callback can run;
+- switching away from Hammer remains the runtime path that hides semantic construction UI.
+
+`verify-device-regressions-0.3.11.mjs` additionally protects the established mobile Hammer layout contract:
+
+- Hammer construction open state is published and cleaned up;
+- the expanded selector uses the narrow list presentation rather than the larger house schematic;
+- Close and Remove retain deliberate touch targets;
+- the 3P/1P camera control keeps an explicit construction-safe offset for the narrower list in landscape and portrait.
+
+## Physical-device status
+
+As of 2026-09-08, the installed Android PWA has physically verified the baseline semantic slice:
+
+- compact/expanded Hammer list readability;
+- third-person Floor and Wall placement;
+- vegetation masking beneath Floor Panels;
+- 3P/1P switching with the Hammer session open;
+- first-person Remove acquisition when the white dot is on a Wall;
+- target release when the dot moves off the Wall;
+- exact Wall removal with a three-Log refund.
+
+The new Door slice must receive the same physical Android acceptance before Window, Stairs or Roof is enabled: Door preview/snap in 3P and 1P, three-Log placement, walking through the opening, exact Remove targeting/refund, and save/Continue restoration of the open doorway.
