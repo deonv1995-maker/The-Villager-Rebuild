@@ -239,6 +239,11 @@ assert.ok(
   'Hammer menu open state must be published and cleaned up so sibling mobile controls can avoid its footprint'
 );
 assert.ok(
+  hammerMenuSource.includes('class="construction-list"') &&
+  hammerMenuStylesSource.includes('width: min(188px, calc(100vw - 28px));'),
+  'Expanded Hammer construction choices must use the narrow list presentation rather than the larger house schematic'
+);
+assert.ok(
   hammerMenuStylesSource.includes('.hammer-construction-close {') &&
   hammerMenuStylesSource.includes('width: 44px;') &&
   hammerMenuStylesSource.includes('height: 44px;') &&
@@ -247,9 +252,9 @@ assert.ok(
 );
 assert.ok(
   cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
-  cameraStylesSource.includes('max(268px, calc(env(safe-area-inset-right) + 264px))') &&
-  cameraStylesSource.includes('max(240px, calc(env(safe-area-inset-right) + 237px))'),
-  'Camera view toggle must move clear of the Hammer menu in landscape and portrait so first-person targeting remains reachable'
+  cameraStylesSource.includes('max(208px, calc(env(safe-area-inset-right) + 204px))') &&
+  cameraStylesSource.includes('max(196px, calc(env(safe-area-inset-right) + 193px))'),
+  'Camera view toggle must move clear of the narrower Hammer list in landscape and portrait so first-person targeting remains reachable'
 );
 
-console.log('Android frame traversal, floor support, roof occupancy, tree-shake and Hammer menu device regressions verified');
+console.log('Android frame traversal, floor support, roof occupancy, tree-shake and compact Hammer list device regressions verified');

@@ -171,8 +171,8 @@ assert(hudSource.includes('class="hud-button action"'), 'Mobile HUD must preserv
 assert(
   hammerMenuStylesSource.includes('.hammer-construction-menu {') &&
   hammerMenuStylesSource.includes('right: max(10px') &&
-  hammerMenuStylesSource.includes('.construction-house'),
-  'Hammer construction controls must use the dedicated compact right-side house schematic'
+  hammerMenuStylesSource.includes('.construction-list'),
+  'Hammer construction controls must use the dedicated compact right-side list selector'
 );
 assert(stylesSource.includes('.log-build-tray {'), 'Legacy transition tray styling must remain available for isolated physical-log systems');
 
