@@ -23,6 +23,10 @@
 }
 
 body.hammer-construction-open .camera-view-toggle {
+  right: max(156px, calc(env(safe-area-inset-right) + 152px));
+}
+
+body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
   right: min(
     max(268px, calc(env(safe-area-inset-right) + 264px)),
     calc(100vw - 56px)
@@ -73,6 +77,10 @@ body.hammer-construction-open .camera-view-toggle {
   }
 
   body.hammer-construction-open .camera-view-toggle {
+    right: max(142px, calc(env(safe-area-inset-right) + 139px));
+  }
+
+  body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
     right: min(
       max(240px, calc(env(safe-area-inset-right) + 237px)),
       calc(100vw - 54px)
