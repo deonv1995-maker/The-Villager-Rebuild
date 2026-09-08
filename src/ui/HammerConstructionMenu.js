@@ -40,50 +40,41 @@ export class HammerConstructionMenu {
         <button class="hammer-construction-close" type="button" data-build="close" aria-label="Close building menu">×</button>
       </header>
 
-      <div class="construction-house" aria-label="Select a structure panel">
-        <div class="construction-roof-row">
-          <button class="construction-piece construction-piece-roof locked" type="button" data-build="roof" disabled aria-label="Roof, locked">
-            <img src="${ui.build.roof}" alt="" aria-hidden="true">
-            <span>ROOF</span><small>LATER</small>
-          </button>
-        </div>
-
-        <div class="construction-house-body">
-          <button class="construction-piece construction-piece-wall" type="button" data-build="wall" aria-label="Build wall panel">
-            <img src="${ui.build.wall}" alt="" aria-hidden="true">
-            <span>WALL</span>
-          </button>
-
-          <div class="construction-openings" aria-label="Future wall openings">
-            <button class="construction-opening locked" type="button" data-build="door" disabled aria-label="Door panel, locked">
-              <span class="construction-door-shape" aria-hidden="true"></span>
-              <small>DOOR</small>
-            </button>
-            <button class="construction-opening locked" type="button" data-build="window" disabled aria-label="Window panel, locked">
-              <span class="construction-window-shape" aria-hidden="true"></span>
-              <small>WINDOW</small>
-            </button>
-          </div>
-
-          <button class="construction-piece construction-piece-stairs locked" type="button" data-build="stairs" disabled aria-label="Stairs, locked">
-            <img src="${ui.build.stairs}" alt="" aria-hidden="true">
-            <span>STAIRS</span><small>LATER</small>
-          </button>
-        </div>
-
-        <button class="construction-piece construction-piece-floor" type="button" data-build="floor" aria-label="Build floor panel">
+      <div class="construction-list" aria-label="Select a structure panel">
+        <button class="construction-list-item" type="button" data-build="floor" aria-label="Build floor panel">
           <img src="${ui.build.floor}" alt="" aria-hidden="true">
-          <span>FLOOR</span>
+          <span><strong>FLOOR</strong><small>3 LOGS</small></span>
+        </button>
+        <button class="construction-list-item" type="button" data-build="wall" aria-label="Build wall panel">
+          <img src="${ui.build.wall}" alt="" aria-hidden="true">
+          <span><strong>WALL</strong><small>3 LOGS</small></span>
+        </button>
+        <button class="construction-list-item construction-list-remove" type="button" data-build="remove" aria-label="Remove built panel with hammer">
+          <img src="${ui.hammer}" alt="" aria-hidden="true">
+          <span><strong>REMOVE</strong><small>HAMMER</small></span>
+        </button>
+
+        <div class="construction-list-divider" aria-hidden="true">LATER</div>
+
+        <button class="construction-list-item locked" type="button" data-build="door" disabled aria-label="Door panel, locked">
+          <span class="construction-list-placeholder" aria-hidden="true">D</span>
+          <span><strong>DOOR</strong><small>LATER</small></span>
+        </button>
+        <button class="construction-list-item locked" type="button" data-build="window" disabled aria-label="Window panel, locked">
+          <span class="construction-list-placeholder" aria-hidden="true">W</span>
+          <span><strong>WINDOW</strong><small>LATER</small></span>
+        </button>
+        <button class="construction-list-item locked" type="button" data-build="stairs" disabled aria-label="Stairs, locked">
+          <img src="${ui.build.stairs}" alt="" aria-hidden="true">
+          <span><strong>STAIRS</strong><small>LATER</small></span>
+        </button>
+        <button class="construction-list-item locked" type="button" data-build="roof" disabled aria-label="Roof, locked">
+          <img src="${ui.build.roof}" alt="" aria-hidden="true">
+          <span><strong>ROOF</strong><small>LATER</small></span>
         </button>
       </div>
 
-      <div class="hammer-construction-actions">
-        <button class="construction-remove" type="button" data-build="remove" aria-label="Remove built panel with hammer">
-          <img src="${ui.hammer}" alt="" aria-hidden="true">
-          <span>REMOVE</span>
-        </button>
-        <p data-role="construction-help">Choose Floor or Wall</p>
-      </div>
+      <p class="hammer-construction-help" data-role="construction-help">Choose Floor or Wall</p>
     `;
 
     document.body.appendChild(this.root);
