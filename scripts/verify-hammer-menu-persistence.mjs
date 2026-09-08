@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const [menuSource, controllerSource] = await Promise.all([
+const [menuSource, controllerExtensionSource, controllerCoreSource] = await Promise.all([
   readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
-  readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8')
+  readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
+  readFile('src/gameplay/PanelConstructionRuntimeControllerCore.js', 'utf8')
 ]);
+const controllerSource = `${controllerCoreSource}\n${controllerExtensionSource}`;
 
 assert.ok(
   menuSource.includes('aria-label="Collapse building menu"'),
