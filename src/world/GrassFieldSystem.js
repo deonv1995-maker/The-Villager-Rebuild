@@ -2,7 +2,9 @@ import * as THREE from 'three';
 
 export function constructionFloorCoversVegetation(entry, floor, padding = 0.12) {
   if (!entry || !floor || floor.shape !== 'box') return false;
-  if (floor.type !== 'placed-log' || !/-floor$/.test(floor.label ?? '')) return false;
+  const physicalLogFloor = floor.type === 'placed-log' && /-floor$/.test(floor.label ?? '');
+  const semanticPanelFloor = floor.type === 'panel-floor';
+  if (!physicalLogFloor && !semanticPanelFloor) return false;
 
   const dx = entry.x - floor.x;
   const dz = entry.z - floor.z;
@@ -228,9 +230,10 @@ export class ReactiveVegetationFieldSystem {
     this.lastCollisionRevision = collisionRevision;
     this.lastConstructionRevision = constructionRevision;
 
-    const floors = this.collision
-      .getObstaclesByType('placed-log')
-      .filter(obstacle => obstacle.shape === 'box' && /-floor$/.test(obstacle.label ?? ''));
+    const floors = [
+      ...this.collision.getObstaclesByType('placed-log'),
+      ...this.collision.getObstaclesByType('panel-floor')
+    ].filter(obstacle => obstacle.shape === 'box');
 
     for (const entry of this.entries) {
       const hidden = floors.some(floor =>
