@@ -38,7 +38,7 @@ export class HammerConstructionMenu {
           <strong>BUILD</strong>
           <span data-role="construction-material">LOGS 0</span>
         </div>
-        <button class="hammer-construction-close" type="button" data-build="close" aria-label="Close building menu">×</button>
+        <button class="hammer-construction-close" type="button" data-build="close" aria-label="Collapse building menu">×</button>
       </header>
 
       <div class="construction-list" aria-label="Select a structure panel">
@@ -96,6 +96,11 @@ export class HammerConstructionMenu {
       const buildMode = button.dataset.build;
       if (buildMode === 'expand') {
         this.expanded = true;
+        this.#syncPresentationState();
+        return;
+      }
+      if (buildMode === 'close') {
+        this.expanded = false;
         this.#syncPresentationState();
         return;
       }
