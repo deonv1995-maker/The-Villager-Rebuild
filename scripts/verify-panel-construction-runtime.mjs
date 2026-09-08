@@ -34,6 +34,7 @@ const makeRuntime = (logCount = 0) => {
 assert.deepEqual(PANEL_BUILD_COSTS.floor, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.wall, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.door, [{ itemId: 'log', quantity: 3 }]);
+assert.deepEqual(PANEL_BUILD_COSTS.window, [{ itemId: 'log', quantity: 3 }]);
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
@@ -192,6 +193,60 @@ assert.equal(removedDoor?.label, 'Door panel');
 assert.equal(doorRuntime.inventory.get('log'), 3, 'Door demolition must refund its three Logs');
 assert.equal(doorRuntime.collision.getObstaclesByType('panel-wall').length, 0, 'Door demolition must remove both side colliders');
 
+// Window is the next wall-family semantic module. It occupies one canonical edge directly,
+// keeps a bounded centre opening between sill and head, remains non-traversable at Ranger
+// height, and must restore/remove through the same structural authority as Door and Wall.
+const windowRuntime = makeRuntime(6);
+windowRuntime.system.setActive(true);
+assert.ok(windowRuntime.system.build(player, facing), 'Window test requires one semantic Floor Panel');
+windowRuntime.system.setBuildMode('window');
+const windowState = windowRuntime.system.update(player, facing);
+assert.equal(windowState.mode, 'window');
+assert.equal(windowState.previewValid, true, 'A clear Floor edge must expose a valid Window Panel preview');
+const windowBuilt = windowRuntime.system.build(player, facing);
+assert.equal(windowBuilt?.kind, 'wall', 'Window retains semantic wall dependency identity');
+assert.equal(windowBuilt?.variant, 'window');
+assert.equal(windowBuilt?.label, 'Window panel');
+assert.equal(windowRuntime.inventory.get('log'), 0, 'Window Panel must consume exactly three Logs');
+const windowStructure = [...windowRuntime.system.registry.structures.values()][0];
+const windowWall = [...windowStructure.grid.walls.values()][0];
+assert.equal(windowWall.variant, 'window', 'Window variant must live in the semantic wall record');
+
+const windowEntry = windowRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'wall');
+assert.equal(windowEntry?.variant, 'window');
+assert.equal(windowEntry?.root.userData.panelWallVariant, 'window');
+const windowColliders = windowRuntime.collision.getObstaclesByType('panel-wall');
+assert.equal(windowColliders.length, 4, 'Window Panel must materialize lower, two side and upper collision sections');
+assert.equal(
+  windowRuntime.collision.isCircleClear(windowEntry.root.position.x, windowEntry.root.position.z, 0.36, {
+    ignore: obstacle => obstacle.type === 'panel-floor'
+  }),
+  false,
+  'Window sill/lower wall must keep the Ranger from walking through the opening'
+);
+assert.equal(
+  windowColliders.filter(obstacle => obstacle.halfX < PANEL_GRID.cellSize * 0.4).length,
+  2,
+  'Window opening must have exactly two narrow side collision sections between sill and head'
+);
+
+const windowSnapshot = windowRuntime.system.snapshot();
+const restoredWindowRuntime = makeRuntime(0);
+assert.equal(restoredWindowRuntime.system.restore(windowSnapshot), true);
+assert.deepEqual(restoredWindowRuntime.system.snapshot(), windowSnapshot, 'Window variant must round-trip in semantic persistence');
+const restoredWindowEntry = restoredWindowRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'wall');
+assert.equal(restoredWindowEntry?.variant, 'window');
+assert.equal(restoredWindowEntry?.root.userData.panelWallVariant, 'window');
+assert.equal(restoredWindowRuntime.collision.getObstaclesByType('panel-wall').length, 4, 'Restored Window must recreate its composite collision shape');
+assert.equal(restoredWindowRuntime.inventory.get('log'), 0, 'Window restore must not consume construction materials');
+
+const windowPoint = new THREE.Vector3(windowEntry.root.position.x, 0, windowEntry.root.position.z);
+const removedWindow = windowRuntime.system.demolish(windowPoint, windowEntry.id);
+assert.equal(removedWindow?.variant, 'window');
+assert.equal(removedWindow?.label, 'Window panel');
+assert.equal(windowRuntime.inventory.get('log'), 3, 'Window demolition must refund its three Logs');
+assert.equal(windowRuntime.collision.getObstaclesByType('panel-wall').length, 0, 'Window demolition must remove every composite collider');
+
 // Separate buildings have their own snapped local grid orientation rather than sharing a
 // single world-aligned construction grid.
 const orientationRuntime = makeRuntime(6);
@@ -220,7 +275,7 @@ const [controllerSource, gameAppSource, panelSystemSource] = await Promise.all([
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
-  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door'])",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   "mode === 'remove'",
   'ownsHammerInteraction()',
@@ -255,12 +310,13 @@ for (const requirement of [
   assert.ok(gameAppSource.includes(requirement), `GameApp semantic Hammer authority contract missing: ${requirement}`);
 }
 for (const requirement of [
-  "variant: this.buildMode === 'door' ? 'door' : 'solid'",
+  'wallVariantForBuildMode(this.buildMode)',
   'semanticDoorColliderSpecs({',
-  "entry.variant === 'door'",
+  'semanticWindowColliderSpecs({',
+  "entry.variant === 'door' || entry.variant === 'window'",
   'collisionHandles'
 ]) {
-  assert.ok(panelSystemSource.includes(requirement), `Semantic Door system contract missing: ${requirement}`);
+  assert.ok(panelSystemSource.includes(requirement), `Semantic wall-family system contract missing: ${requirement}`);
 }
 
 const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Promise.all([
@@ -269,14 +325,16 @@ const [menuSource, menuStylesSource, cameraStylesSource, grassSource] = await Pr
   readFile('src/camera-view.css', 'utf8'),
   readFile('src/world/GrassFieldSystem.js', 'utf8')
 ]);
-for (const mode of ['floor', 'wall', 'door', 'remove', 'close']) {
+for (const mode of ['floor', 'wall', 'door', 'window', 'remove', 'close']) {
   assert.ok(menuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
-assert.ok(
-  !new RegExp('data-build="door"[^>]*disabled').test(menuSource),
-  'Door must be a live semantic build choice rather than a disabled future row'
-);
-for (const lockedMode of ['roof', 'window', 'stairs']) {
+for (const liveMode of ['door', 'window']) {
+  assert.ok(
+    !new RegExp(`data-build="${liveMode}"[^>]*disabled`).test(menuSource),
+    `${liveMode} must be a live semantic build choice rather than a disabled future row`
+  );
+}
+for (const lockedMode of ['roof', 'stairs']) {
   assert.ok(
     new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(menuSource),
     `Deferred ${lockedMode} control must stay visibly gated instead of entering legacy construction`
@@ -311,4 +369,4 @@ assert.ok(
 const indexSource = await readFile('index.html', 'utf8');
 assert.ok(indexSource.includes('./src/hammer-construction-menu.css'), 'Production shell must load the Hammer structure menu styling');
 
-console.log('Inventory-backed Floor/Wall/Door placement, open Door collision, single-owner semantic Hammer targeting, inward-facing walls, vegetation masking, compact Hammer UI, safe demolition and restore verified');
+console.log('Inventory-backed Floor/Wall/Door/Window placement, semantic opening collision, single-owner Hammer targeting, inward-facing walls, vegetation masking, compact Hammer UI, safe demolition and restore verified');
