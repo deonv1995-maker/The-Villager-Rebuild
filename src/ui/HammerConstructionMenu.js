@@ -1,6 +1,6 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 
-const ACTIVE_MODES = new Set(['floor', 'wall', 'door', 'window', 'remove']);
+const ACTIVE_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'remove']);
 const MENU_OPEN_BODY_CLASS = 'hammer-construction-open';
 const MENU_EXPANDED_BODY_CLASS = 'hammer-construction-expanded';
 
@@ -17,6 +17,7 @@ export class HammerConstructionMenu {
       wall: ui.build.wall,
       door: ui.build.wall,
       window: ui.build.wall,
+      stairs: ui.build.stairs,
       remove: ui.hammer
     });
     this.root = document.createElement('section');
@@ -59,6 +60,10 @@ export class HammerConstructionMenu {
           <span class="construction-list-placeholder" aria-hidden="true">W</span>
           <span><strong>WINDOW</strong><small>3 LOGS</small></span>
         </button>
+        <button class="construction-list-item" type="button" data-build="stairs" aria-label="Build stair flight">
+          <img src="${ui.build.stairs}" alt="" aria-hidden="true">
+          <span><strong>STAIRS</strong><small>3 LOGS</small></span>
+        </button>
         <button class="construction-list-item construction-list-remove" type="button" data-build="remove" aria-label="Remove built panel with hammer">
           <img src="${ui.hammer}" alt="" aria-hidden="true">
           <span><strong>REMOVE</strong><small>HAMMER</small></span>
@@ -66,17 +71,13 @@ export class HammerConstructionMenu {
 
         <div class="construction-list-divider" aria-hidden="true">LATER</div>
 
-        <button class="construction-list-item locked" type="button" data-build="stairs" disabled aria-label="Stairs, locked">
-          <img src="${ui.build.stairs}" alt="" aria-hidden="true">
-          <span><strong>STAIRS</strong><small>LATER</small></span>
-        </button>
         <button class="construction-list-item locked" type="button" data-build="roof" disabled aria-label="Roof, locked">
           <img src="${ui.build.roof}" alt="" aria-hidden="true">
           <span><strong>ROOF</strong><small>LATER</small></span>
         </button>
       </div>
 
-      <p class="hammer-construction-help" data-role="construction-help">Choose Floor, Wall, Door or Window</p>
+      <p class="hammer-construction-help" data-role="construction-help">Choose Floor, Wall, Door, Window or Stairs</p>
     `;
 
     document.body.appendChild(this.root);
@@ -140,7 +141,11 @@ export class HammerConstructionMenu {
     if (this.compactMode) this.compactMode.textContent = this.mode.toUpperCase();
     if (this.compactIcon) this.compactIcon.src = this.modeIcons[this.mode] ?? this.modeIcons.floor;
     if (this.compactButton) {
-      const modeLabel = this.mode === 'remove' ? 'Remove selected' : `${this.mode} panel selected`;
+      const modeLabel = this.mode === 'remove'
+        ? 'Remove selected'
+        : this.mode === 'stairs'
+          ? 'Stair flight selected'
+          : `${this.mode} panel selected`;
       this.compactButton.setAttribute('aria-label', `Open building menu, ${modeLabel}`);
     }
 
@@ -159,9 +164,13 @@ export class HammerConstructionMenu {
     } else if (!canAfford) {
       this.help.textContent = `${this.mode.toUpperCase()} needs ${cost} Logs`;
     } else if (previewValid) {
-      this.help.textContent = `Green ${this.mode} preview · Hammer action places it`;
+      this.help.textContent = this.mode === 'stairs'
+        ? 'Green stair preview · Hammer action places the full flight'
+        : `Green ${this.mode} preview · Hammer action places it`;
     } else {
-      this.help.textContent = `Move or aim for a valid ${this.mode} position`;
+      this.help.textContent = this.mode === 'stairs'
+        ? 'Aim from one Floor Panel toward an adjacent Floor Panel'
+        : `Move or aim for a valid ${this.mode} position`;
     }
   }
 

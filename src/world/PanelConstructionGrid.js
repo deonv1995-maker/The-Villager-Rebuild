@@ -6,6 +6,8 @@ import {
   PANEL_WALL_VARIANTS
 } from '../data/PanelConstructionDefinitions.js';
 
+const LEGACY_PANEL_SCHEMA_VERSION = 1;
+
 const requireInteger = (value, label) => {
   if (!Number.isInteger(value)) throw new Error(`${label} must be an integer`);
   return value;
@@ -89,6 +91,32 @@ export function panelEdgeDescriptor({ x, z, storey = 0, direction }) {
   };
 }
 
+export function panelStairDescriptor({ x, z, storey = 0, direction }) {
+  requireInteger(x, 'Cell x');
+  requireInteger(z, 'Cell z');
+  requireInteger(storey, 'Storey');
+  requireDirection(direction);
+  const step = PANEL_DIRECTIONS[direction];
+  const toX = x + step.dx;
+  const toZ = z + step.dz;
+  const fromCellKey = panelCellKey({ x, z, storey });
+  const toCellKey = panelCellKey({ x: toX, z: toZ, storey });
+  const pairCells = [fromCellKey, toCellKey].sort();
+  return {
+    key: `stair:${storey}:${x}:${z}:${direction}`,
+    pairKey: `stair-pair:${pairCells.join('|')}`,
+    x,
+    z,
+    toX,
+    toZ,
+    storey,
+    direction,
+    fromCellKey,
+    toCellKey,
+    sharedEdgeKey: panelEdgeDescriptor({ x, z, storey, direction }).key
+  };
+}
+
 export function panelRoofZoneKey({ cells, storey = 0 }) {
   requireInteger(storey, 'Storey');
   if (!Array.isArray(cells) || cells.length === 0) {
@@ -110,6 +138,7 @@ export class PanelConstructionGrid {
     if (this.cellSize <= 0) throw new Error('Grid cellSize must be positive');
     this.floors = new Map();
     this.walls = new Map();
+    this.stairs = new Map();
     this.roofZones = new Map();
   }
 
@@ -145,8 +174,12 @@ export class PanelConstructionGrid {
     const key = panelCellKey({ x, z, storey });
     if (!this.floors.has(key)) return false;
     const dependentWall = [...this.walls.values()].some(wall => wall.ownerCellKey === key);
+    const dependentStair = [...this.stairs.values()].some(stair => (
+      stair.fromCellKey === key || stair.toCellKey === key
+    ));
+    const dependentUpperFloor = this.floors.has(panelCellKey({ x, z, storey: storey + 1 }));
     const dependentRoof = [...this.roofZones.values()].some(zone => zone.cellKeys.includes(key));
-    if (dependentWall || dependentRoof) return false;
+    if (dependentWall || dependentStair || dependentUpperFloor || dependentRoof) return false;
     return this.floors.delete(key);
   }
 
@@ -213,6 +246,42 @@ export class PanelConstructionGrid {
     };
   }
 
+  placeStair({ x, z, storey = 0, direction }) {
+    const descriptor = panelStairDescriptor({ x, z, storey, direction });
+    const fromFloor = this.floors.get(descriptor.fromCellKey);
+    if (!fromFloor) {
+      return { ok: false, reason: 'missing-floor', cellKey: descriptor.fromCellKey };
+    }
+    const toFloor = this.floors.get(descriptor.toCellKey);
+    if (!toFloor) {
+      return { ok: false, reason: 'missing-floor', cellKey: descriptor.toCellKey };
+    }
+    if (Math.abs(fromFloor.levelY - toFloor.levelY) > PANEL_GRID.snapTolerance) {
+      return { ok: false, reason: 'floor-level-mismatch', pairKey: descriptor.pairKey };
+    }
+    if (this.walls.has(descriptor.sharedEdgeKey)) {
+      return { ok: false, reason: 'blocked-edge', edgeKey: descriptor.sharedEdgeKey };
+    }
+    if ([...this.stairs.values()].some(stair => stair.pairKey === descriptor.pairKey)) {
+      return { ok: false, reason: 'occupied-stair-pair', pairKey: descriptor.pairKey };
+    }
+
+    const baseY = (fromFloor.levelY + toFloor.levelY) * 0.5;
+    const stair = {
+      ...descriptor,
+      baseY,
+      topY: baseY + PANEL_GRID.storeyHeight,
+      upperStorey: storey + 1,
+      upperCellKey: panelCellKey({ x: descriptor.toX, z: descriptor.toZ, storey: storey + 1 })
+    };
+    this.stairs.set(stair.key, stair);
+    return { ok: true, stair: { ...stair } };
+  }
+
+  removeStair(key) {
+    return this.stairs.delete(key);
+  }
+
   placeRoofZone({ cells, storey = 0, form = 'gable', ridgeAxis = null }) {
     requireRoofForm(form);
     if (ridgeAxis !== null && ridgeAxis !== 'x' && ridgeAxis !== 'z') {
@@ -245,6 +314,7 @@ export class PanelConstructionGrid {
       cellSize: this.cellSize,
       floors: [...this.floors.values()].map(floor => ({ ...floor })).sort((a, b) => a.key.localeCompare(b.key)),
       walls: [...this.walls.values()].map(wall => this.#cloneWall(wall)).sort((a, b) => a.key.localeCompare(b.key)),
+      stairs: [...this.stairs.values()].map(stair => ({ ...stair })).sort((a, b) => a.key.localeCompare(b.key)),
       roofZones: [...this.roofZones.values()]
         .map(zone => ({ ...zone, cellKeys: [...zone.cellKeys] }))
         .sort((a, b) => a.key.localeCompare(b.key))
@@ -252,7 +322,10 @@ export class PanelConstructionGrid {
   }
 
   static restore(snapshot) {
-    if (!snapshot || snapshot.schemaVersion !== PANEL_CONSTRUCTION_SCHEMA_VERSION) {
+    if (
+      !snapshot ||
+      (snapshot.schemaVersion !== LEGACY_PANEL_SCHEMA_VERSION && snapshot.schemaVersion !== PANEL_CONSTRUCTION_SCHEMA_VERSION)
+    ) {
       throw new Error('Unsupported panel construction snapshot');
     }
     const grid = new PanelConstructionGrid({
@@ -268,6 +341,12 @@ export class PanelConstructionGrid {
     for (const wall of snapshot.walls ?? []) {
       const result = grid.placeWall(wall);
       if (!result.ok) throw new Error(`Invalid persisted wall: ${wall.key ?? 'unknown'}`);
+    }
+    if (snapshot.schemaVersion >= 2) {
+      for (const stair of snapshot.stairs ?? []) {
+        const result = grid.placeStair(stair);
+        if (!result.ok) throw new Error(`Invalid persisted stair: ${stair.key ?? 'unknown'}`);
+      }
     }
     for (const zone of snapshot.roofZones ?? []) {
       const cells = (zone.cellKeys ?? []).map(key => {

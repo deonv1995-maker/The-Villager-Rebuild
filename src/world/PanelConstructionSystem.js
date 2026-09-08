@@ -1,42 +1,28 @@
-import * as THREE from 'three';
 import {
   PANEL_BUILD_COSTS,
   PANEL_BUILD_LABELS,
-  PANEL_BUILD_MODES,
-  PANEL_CONSTRUCTION_RESOURCE_ID,
   PANEL_DIRECTIONS,
   PANEL_GRID
 } from '../data/PanelConstructionDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import {
-  CONSTRUCTION_DIMENSIONS,
-  PHYSICAL_LOG
-} from '../data/PhysicalLogDefinitions.js';
-import { panelCellKey } from './PanelConstructionGrid.js';
+  panelCellKey,
+  panelEdgeDescriptor,
+  panelStairDescriptor
+} from './PanelConstructionGrid.js';
+import { createFloorPanelVisual } from './PanelConstructionVisual.js';
+import { PanelConstructionSystem as PanelConstructionSystemCore } from './PanelConstructionSystemCore.js';
+import { tintConstructionPreview } from './PhysicalLogVisual.js';
 import {
-  createFloorPanelVisual,
-  createPanelPreview,
-  createWallPanelVisual
-} from './PanelConstructionVisual.js';
-import { FloorSupportVisual } from './FloorSupportVisual.js';
-import { PanelStructureRegistry } from './PanelStructureRegistry.js';
-import { semanticDoorColliderSpecs } from './SemanticDoorPanelGeometry.js';
-import { semanticWindowColliderSpecs } from './SemanticWindowPanelGeometry.js';
+  createSemanticStairVisual,
+  semanticStairColliderSpecs
+} from './SemanticStairGeometry.js';
 
-const PREVIEW_VALID = 0x65d879;
-const PREVIEW_INVALID = 0xd85d57;
-const INTERACTION_RADIUS = PHYSICAL_LOG.pickupRange;
 const FLOOR_TOP_LIFT = 0.028;
-const FLOOR_CLEARANCE_RADIUS = PANEL_GRID.cellSize * 0.36;
-const NEW_STRUCTURE_TARGET_DISTANCE = PHYSICAL_LOG.placeDistance + PANEL_GRID.cellSize * 0.12;
-const CANDIDATE_JOIN_SCORE = PANEL_GRID.cellSize * 0.82;
-const AIM_GROUND_STEP = 0.22;
+const UPPER_CONTEXT_RISE_FACTOR = 0.56;
+const STAIR_CLEARANCE_RADIUS = PHYSICAL_LOG.radius * 1.2;
 
 const directionEntries = Object.values(PANEL_DIRECTIONS);
-
-const finitePoint = point => (
-  Number.isFinite(point?.x) &&
-  Number.isFinite(point?.z)
-);
 
 const finiteAim = aim => (
   Number.isFinite(aim?.origin?.x) &&
@@ -47,453 +33,393 @@ const finiteAim = aim => (
   Number.isFinite(aim?.direction?.z)
 );
 
-const wallVariantForBuildMode = mode => (
-  mode === 'door' || mode === 'window' ? mode : 'solid'
-);
+const normalizedHorizontal = vector => {
+  const length = Math.hypot(vector?.x ?? 0, vector?.z ?? 0);
+  if (length <= 0.000001) return { x: 0, z: 1 };
+  return { x: vector.x / length, z: vector.z / length };
+};
 
-const buildModeForEntry = entry => (
-  entry?.kind === 'wall' && (entry.variant === 'door' || entry.variant === 'window')
-    ? entry.variant
-    : entry?.kind
-);
-
-export class PanelConstructionSystem {
-  constructor({ group, terrain, collision, inventory }) {
-    if (!group || !terrain || !collision || !inventory) {
-      throw new Error('PanelConstructionSystem requires group, terrain, collision and inventory');
-    }
-    this.group = group;
-    this.terrain = terrain;
-    this.collision = collision;
-    this.inventory = inventory;
-    this.registry = new PanelStructureRegistry();
-    this.floorSupports = new FloorSupportVisual({ group, terrain });
-    this.entries = new Map();
-    this.nextSupportId = 1;
-    this.active = false;
-    this.buildMode = 'floor';
-    this.previewRoot = null;
-    this.previewMode = null;
-    this.previewPlacement = null;
-    this.previewValid = false;
-    this.previewMaterial = new THREE.MeshBasicMaterial({
-      color: PREVIEW_VALID,
-      transparent: true,
-      opacity: 0.44,
-      depthWrite: false,
-      side: THREE.DoubleSide
-    });
-    this.tempAimDirection = new THREE.Vector3();
-    this.tempAimPoint = new THREE.Vector3();
-  }
-
-  isActive() {
-    return this.active;
-  }
-
-  setActive(active) {
-    this.active = Boolean(active);
-    if (!this.active) this.#clearPreview();
-    return this.active;
-  }
-
-  toggleActive() {
-    return this.setActive(!this.active);
-  }
-
-  setBuildMode(mode) {
-    if (!PANEL_BUILD_MODES.includes(mode)) return false;
-    this.buildMode = mode;
-    if (this.previewMode !== mode) this.#clearPreview();
-    return true;
-  }
-
-  cycleBuildMode() {
-    const index = PANEL_BUILD_MODES.indexOf(this.buildMode);
-    this.setBuildMode(PANEL_BUILD_MODES[(index + 1) % PANEL_BUILD_MODES.length]);
-    return this.buildMode;
-  }
-
-  getBuildState() {
-    const cost = PANEL_BUILD_COSTS[this.buildMode] ?? [];
-    return {
-      active: this.active,
-      carrying: false,
-      mode: this.buildMode,
-      label: PANEL_BUILD_LABELS[this.buildMode],
-      modes: [...PANEL_BUILD_MODES],
-      previewValid: this.previewValid,
-      previewing: Boolean(this.previewRoot && this.previewPlacement),
-      canAfford: this.#canAfford(this.buildMode),
-      cost: cost.map(entry => ({ ...entry })),
-      materialQuantity: this.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)
-    };
-  }
-
+/**
+ * Vertical semantic construction extension.
+ *
+ * PanelConstructionSystemCore remains the proven Floor/Wall/Door/Window authority.
+ * This class adds stairs and the stair-seeded upper-storey Floor path while sharing the
+ * exact same registry, entry map, collision system, inventory and demolition boundary.
+ */
+export class PanelConstructionSystem extends PanelConstructionSystemCore {
   update(playerPosition, facingDirection, constructionAim = null) {
-    if (!this.active || !finitePoint(playerPosition) || !finitePoint(facingDirection)) {
-      this.#clearPreview();
-      return this.getBuildState();
+    if (this.buildMode === 'stairs' && this.active) {
+      return this.#updateStairPreview(playerPosition, facingDirection, constructionAim);
     }
 
-    const placement = this.buildMode === 'floor'
-      ? this.#resolveFloorPlacement(playerPosition, facingDirection, constructionAim)
-      : this.#resolveWallPlacement(playerPosition, facingDirection, constructionAim);
-
-    this.previewPlacement = placement;
-    this.previewValid = Boolean(placement?.valid) && this.#canAfford(this.buildMode);
-    if (!placement) {
-      this.#clearPreview();
-      return this.getBuildState();
+    if (this.buildMode === 'floor' && this.active) {
+      const upperPlacement = this.#resolveUpperFloorPlacement(
+        playerPosition,
+        facingDirection,
+        constructionAim
+      );
+      if (upperPlacement) {
+        this.previewPlacement = upperPlacement;
+        this.previewValid = Boolean(upperPlacement.valid) && this.#canAfford('floor');
+        this.#showExtensionPreview('floor', upperPlacement, this.previewValid);
+        return super.getBuildState();
+      }
     }
 
-    this.#showPreview(this.buildMode, placement, this.previewValid);
-    return this.getBuildState();
+    return super.update(playerPosition, facingDirection, constructionAim);
   }
 
   build(playerPosition, facingDirection, constructionAim = null) {
     this.update(playerPosition, facingDirection, constructionAim);
-    const placement = this.previewPlacement;
-    if (!this.previewValid || !placement) return null;
-
-    const cost = PANEL_BUILD_COSTS[this.buildMode];
-    let structure = placement.structureId ? this.registry.get(placement.structureId) : null;
-    let createdStructure = false;
-
-    if (this.buildMode === 'floor' && placement.newStructure) {
-      structure = this.registry.createStructure({
-        originX: placement.x,
-        originZ: placement.z,
-        yaw: placement.yaw
-      });
-      createdStructure = true;
+    if (this.buildMode === 'stairs') {
+      return this.#commitStair(playerPosition, facingDirection, constructionAim);
     }
-    if (!structure) return null;
-
-    let stateResult = null;
-    if (this.buildMode === 'floor') {
-      stateResult = structure.grid.placeFloor({
-        x: placement.cellX ?? 0,
-        z: placement.cellZ ?? 0,
-        storey: placement.storey ?? 0,
-        levelY: placement.baseY
-      });
-    } else {
-      stateResult = structure.grid.placeWall({
-        x: placement.cellX,
-        z: placement.cellZ,
-        storey: placement.storey ?? 0,
-        direction: placement.direction,
-        variant: wallVariantForBuildMode(this.buildMode)
-      });
+    if (this.buildMode === 'floor' && this.previewPlacement?.semanticUpperFloor) {
+      return this.#commitUpperFloor(playerPosition, facingDirection, constructionAim);
     }
-
-    if (!stateResult?.ok) {
-      if (createdStructure) this.registry.removeIfEmpty(structure.id);
-      return null;
-    }
-
-    if (!this.inventory.consume(cost)) {
-      if (this.buildMode === 'floor') {
-        structure.grid.removeFloor({
-          x: placement.cellX ?? 0,
-          z: placement.cellZ ?? 0,
-          storey: placement.storey ?? 0
-        });
-      } else {
-        structure.grid.removeWall(stateResult.wall.key);
-      }
-      if (createdStructure) this.registry.removeIfEmpty(structure.id);
-      return null;
-    }
-
-    const entry = this.buildMode === 'floor'
-      ? this.#materializeFloor(structure, stateResult.floor)
-      : this.#materializeWall(structure, stateResult.wall);
-    this.update(playerPosition, facingDirection, constructionAim);
-    return {
-      ...this.#targetForEntry(entry),
-      cost: cost.map(item => ({ ...item })),
-      snapped: !placement.newStructure
-    };
-  }
-
-  getDemolitionEntries() {
-    return [...this.entries.values()].filter(entry => entry.active);
-  }
-
-  getDemolitionTarget(playerPosition, targetId = null) {
-    if (!finitePoint(playerPosition)) return null;
-    if (targetId) {
-      const entry = this.entries.get(targetId);
-      if (!entry?.active || !this.#inReach(entry, playerPosition)) return null;
-      return this.#targetForEntry(entry);
-    }
-
-    let best = null;
-    let bestDistance = INTERACTION_RADIUS;
-    for (const entry of this.entries.values()) {
-      if (!entry.active) continue;
-      const distance = Math.hypot(entry.root.position.x - playerPosition.x, entry.root.position.z - playerPosition.z);
-      if (distance >= bestDistance) continue;
-      bestDistance = distance;
-      best = entry;
-    }
-    return best ? this.#targetForEntry(best) : null;
+    return super.build(playerPosition, facingDirection, constructionAim);
   }
 
   demolish(playerPosition, targetId = null) {
-    const target = this.getDemolitionTarget(playerPosition, targetId);
-    if (!target) return null;
+    const target = super.getDemolitionTarget(playerPosition, targetId);
+    if (target?.kind !== 'stairs') return super.demolish(playerPosition, targetId);
+
     const entry = this.entries.get(target.id);
-    const structure = this.registry.get(entry.structureId);
-    if (!entry || !structure) return null;
+    const structure = entry ? this.registry.get(entry.structureId) : null;
+    if (!entry || !structure || !structure.grid.removeStair(entry.stateKey)) return null;
 
-    let removed = false;
-    if (entry.kind === 'wall') {
-      removed = structure.grid.removeWall(entry.stateKey);
-    } else {
-      removed = structure.grid.removeFloor({
-        x: entry.cellX,
-        z: entry.cellZ,
-        storey: entry.storey
-      });
-    }
-    if (!removed) return null;
-
-    this.#removeEntryRuntime(entry);
+    this.#removeStairRuntime(entry);
     this.entries.delete(entry.id);
-    this.registry.removeIfEmpty(structure.id);
-    for (const requirement of PANEL_BUILD_COSTS[buildModeForEntry(entry)] ?? []) {
+    for (const requirement of PANEL_BUILD_COSTS.stairs ?? []) {
       this.inventory.add(requirement.itemId, requirement.quantity);
     }
     return target;
   }
 
-  snapshot() {
-    return {
-      buildMode: this.buildMode,
-      registry: this.registry.snapshot()
-    };
-  }
-
   restore(snapshot) {
-    this.#clearRuntimeConstruction();
-    this.registry = snapshot?.registry
-      ? PanelStructureRegistry.restore(snapshot.registry)
-      : new PanelStructureRegistry();
-    this.buildMode = PANEL_BUILD_MODES.includes(snapshot?.buildMode) ? snapshot.buildMode : 'floor';
-    this.active = false;
+    const restored = super.restore(snapshot);
 
-    for (const structure of this.registry.structures.values()) {
-      for (const floor of structure.grid.floors.values()) this.#materializeFloor(structure, floor);
-      for (const wall of structure.grid.walls.values()) this.#materializeWall(structure, wall);
+    // The core Floor materializer deliberately still supports schema-1 ground floors.
+    // Upper-storey floors use the same visual/collider but must never grow terrain-to-floor
+    // foundation posts. Remove any temporary support handles created during core restore.
+    for (const entry of this.entries.values()) {
+      if (entry.kind !== 'floor' || entry.storey <= 0 || !entry.supportHandles?.length) continue;
+      for (const handle of entry.supportHandles) {
+        if (handle) this.floorSupports.remove(handle);
+      }
+      entry.supportHandles = [];
     }
-    this.#clearPreview();
-    return true;
-  }
-
-  #resolveFloorPlacement(playerPosition, facingDirection, constructionAim) {
-    const target = this.#placementTarget(playerPosition, facingDirection, constructionAim);
-    let best = null;
 
     for (const structure of this.registry.structures.values()) {
-      for (const floor of structure.grid.floors.values()) {
-        for (const direction of directionEntries) {
-          const cellX = floor.x + direction.dx;
-          const cellZ = floor.z + direction.dz;
-          const key = panelCellKey({ x: cellX, z: cellZ, storey: floor.storey });
-          if (structure.grid.floors.has(key)) continue;
-          const center = this.registry.cellCenterWorld(structure, { x: cellX, z: cellZ });
-          if (Math.hypot(center.x - playerPosition.x, center.z - playerPosition.z) > PANEL_GRID.placementReach) continue;
-          const terrain = this.#evaluateFloorTerrain(center.x, center.z, structure.yaw, floor.levelY);
-          const candidate = {
-            kind: 'floor',
-            structureId: structure.id,
-            newStructure: false,
-            cellX,
-            cellZ,
-            storey: floor.storey,
-            x: center.x,
-            z: center.z,
-            yaw: structure.yaw,
-            baseY: floor.levelY,
-            topY: floor.levelY + FLOOR_TOP_LIFT,
-            valid: terrain.valid && this.#floorClear(center.x, center.z),
-            score: this.#candidateScore(
-              { x: center.x, y: floor.levelY, z: center.z },
-              target,
-              constructionAim
-            )
-          };
-          if (!best || candidate.score < best.score) best = candidate;
-        }
+      for (const stair of structure.grid.stairs?.values?.() ?? []) {
+        this.#materializeStair(structure, stair);
       }
     }
-
-    if (best && best.score <= CANDIDATE_JOIN_SCORE) return best;
-
-    const yaw = this.#snapYaw(Math.atan2(facingDirection.x, facingDirection.z));
-    const x = this.#snapWorld(target.x);
-    const z = this.#snapWorld(target.z);
-    const centerGround = this.#baseHeightAt(x, z);
-    const baseY = centerGround + PHYSICAL_LOG.floorGroundClearance;
-    const terrain = this.#evaluateFloorTerrain(x, z, yaw, baseY);
-    const inReach = Math.hypot(x - playerPosition.x, z - playerPosition.z) <= PANEL_GRID.placementReach;
-    return {
-      kind: 'floor',
-      structureId: null,
-      newStructure: true,
-      cellX: 0,
-      cellZ: 0,
-      storey: 0,
-      x,
-      z,
-      yaw,
-      baseY,
-      topY: baseY + FLOOR_TOP_LIFT,
-      valid: inReach && terrain.valid && this.#floorClear(x, z),
-      score: best?.score ?? 0
-    };
+    return restored;
   }
 
-  #resolveWallPlacement(playerPosition, facingDirection, constructionAim) {
-    const target = this.#placementTarget(playerPosition, facingDirection, constructionAim);
+  #updateStairPreview(playerPosition, facingDirection, constructionAim) {
+    const placement = this.#resolveStairPlacement(playerPosition, facingDirection, constructionAim);
+    this.previewPlacement = placement;
+    this.previewValid = Boolean(placement?.valid) && this.#canAfford('stairs');
+    if (!placement) {
+      this.#clearExtensionPreview();
+      return super.getBuildState();
+    }
+    this.#showExtensionPreview('stairs', placement, this.previewValid);
+    return super.getBuildState();
+  }
+
+  #commitStair(playerPosition, facingDirection, constructionAim) {
+    const placement = this.previewPlacement;
+    if (!this.previewValid || !placement || placement.kind !== 'stairs') return null;
+    const structure = this.registry.get(placement.structureId);
+    if (!structure) return null;
+
+    const result = structure.grid.placeStair({
+      x: placement.cellX,
+      z: placement.cellZ,
+      storey: placement.storey,
+      direction: placement.direction
+    });
+    if (!result?.ok) return null;
+
+    const cost = PANEL_BUILD_COSTS.stairs ?? [];
+    if (!this.inventory.consume(cost)) {
+      structure.grid.removeStair(result.stair.key);
+      return null;
+    }
+
+    const entry = this.#materializeStair(structure, result.stair);
+    this.update(playerPosition, facingDirection, constructionAim);
+    return this.#buildResult(entry, cost);
+  }
+
+  #commitUpperFloor(playerPosition, facingDirection, constructionAim) {
+    const placement = this.previewPlacement;
+    if (!this.previewValid || !placement?.semanticUpperFloor) return null;
+    const structure = this.registry.get(placement.structureId);
+    if (!structure) return null;
+
+    const result = structure.grid.placeFloor({
+      x: placement.cellX,
+      z: placement.cellZ,
+      storey: placement.storey,
+      levelY: placement.baseY
+    });
+    if (!result?.ok) return null;
+
+    const cost = PANEL_BUILD_COSTS.floor ?? [];
+    if (!this.inventory.consume(cost)) {
+      structure.grid.removeFloor({
+        x: placement.cellX,
+        z: placement.cellZ,
+        storey: placement.storey
+      });
+      return null;
+    }
+
+    const entry = this.#materializeUpperFloor(structure, result.floor);
+    this.update(playerPosition, facingDirection, constructionAim);
+    return this.#buildResult(entry, cost);
+  }
+
+  #resolveStairPlacement(playerPosition, facingDirection, constructionAim) {
+    if (!Number.isFinite(playerPosition?.x) || !Number.isFinite(playerPosition?.z)) return null;
+    const facing = normalizedHorizontal(facingDirection);
     let best = null;
 
     for (const structure of this.registry.structures.values()) {
+      const stairs = [...(structure.grid.stairs?.values?.() ?? [])];
       for (const floor of structure.grid.floors.values()) {
         for (const direction of directionEntries) {
-          const edge = this.registry.edgePlacementWorld(structure, {
+          const descriptor = panelStairDescriptor({
             x: floor.x,
             z: floor.z,
             storey: floor.storey,
             direction: direction.id
           });
-          if (structure.grid.walls.has(edge.key)) continue;
-          if (Math.hypot(edge.x - playerPosition.x, edge.z - playerPosition.z) > PANEL_GRID.placementReach) continue;
-          const candidate = {
-            kind: 'wall',
+          const neighbour = structure.grid.floors.get(descriptor.toCellKey);
+          if (!neighbour) continue;
+          if (stairs.some(stair => stair.pairKey === descriptor.pairKey)) continue;
+
+          const from = this.registry.cellCenterWorld(structure, floor);
+          const to = this.registry.cellCenterWorld(structure, {
+            x: descriptor.toX,
+            z: descriptor.toZ
+          });
+          if (!from || !to) continue;
+          const midX = (from.x + to.x) * 0.5;
+          const midZ = (from.z + to.z) * 0.5;
+          if (
+            Math.hypot(midX - playerPosition.x, midZ - playerPosition.z) >
+            PANEL_GRID.placementReach + PANEL_GRID.cellSize * 0.22
+          ) continue;
+
+          const runX = to.x - from.x;
+          const runZ = to.z - from.z;
+          const runLength = Math.hypot(runX, runZ) || 1;
+          const run = { x: runX / runLength, z: runZ / runLength };
+          const yaw = Math.atan2(run.x, run.z);
+          const baseLevelY = (floor.levelY + neighbour.levelY) * 0.5;
+          const blockedEdge = structure.grid.walls.has(
+            panelEdgeDescriptor({
+              x: floor.x,
+              z: floor.z,
+              storey: floor.storey,
+              direction: direction.id
+            }).key
+          );
+          const levelValid = Math.abs(floor.levelY - neighbour.levelY) <= PANEL_GRID.snapTolerance;
+          const selectionPoint = {
+            x: from.x,
+            y: baseLevelY + FLOOR_TOP_LIFT + PANEL_GRID.storeyHeight * 0.18,
+            z: from.z
+          };
+          const score = this.#selectionScore(
+            selectionPoint,
+            playerPosition,
+            facing,
+            constructionAim,
+            run
+          );
+          const placement = {
+            kind: 'stairs',
             structureId: structure.id,
-            newStructure: false,
             cellX: floor.x,
             cellZ: floor.z,
+            toCellX: descriptor.toX,
+            toCellZ: descriptor.toZ,
             storey: floor.storey,
             direction: direction.id,
-            stateKey: edge.key,
-            x: edge.x,
-            z: edge.z,
-            yaw: edge.yaw,
-            baseY: floor.levelY,
-            topY: floor.levelY + PANEL_GRID.storeyHeight,
-            valid: this.#wallClear(edge, floor.levelY),
-            score: this.#candidateScore(
-              { x: edge.x, y: floor.levelY + PANEL_GRID.storeyHeight * 0.5, z: edge.z },
-              target,
-              constructionAim
-            )
+            pairKey: descriptor.pairKey,
+            x: midX,
+            z: midZ,
+            yaw,
+            levelY: baseLevelY,
+            baseY: baseLevelY + FLOOR_TOP_LIFT,
+            topY: baseLevelY + FLOOR_TOP_LIFT + PANEL_GRID.storeyHeight,
+            valid: levelValid && !blockedEdge && this.#stairClear({
+              x: midX,
+              z: midZ,
+              run,
+              baseLevelY
+            }),
+            score
           };
-          if (!best || candidate.score < best.score) best = candidate;
+          if (!best || placement.score < best.score) best = placement;
         }
       }
     }
-    return best && best.score <= PANEL_GRID.cellSize ? best : null;
+
+    return best && best.score <= PANEL_GRID.cellSize * 1.25 ? best : null;
   }
 
-  #placementTarget(playerPosition, facingDirection, constructionAim) {
+  #resolveUpperFloorPlacement(playerPosition, facingDirection, constructionAim) {
+    if (!Number.isFinite(playerPosition?.y)) return null;
+    const facing = normalizedHorizontal(facingDirection);
+    const candidates = new Map();
+
+    const addCandidate = (structure, { x, z, storey, baseY, stairSeed = false }) => {
+      if (storey <= 0) return;
+      const key = panelCellKey({ x, z, storey });
+      if (structure.grid.floors.has(key)) return;
+      const lowerKey = panelCellKey({ x, z, storey: storey - 1 });
+      if (!structure.grid.floors.has(lowerKey)) return;
+      if (playerPosition.y < baseY - PANEL_GRID.storeyHeight * UPPER_CONTEXT_RISE_FACTOR) return;
+
+      const center = this.registry.cellCenterWorld(structure, { x, z });
+      if (!center) return;
+      const distance = Math.hypot(center.x - playerPosition.x, center.z - playerPosition.z);
+      if (distance > PANEL_GRID.placementReach) return;
+      const score = this.#selectionScore(
+        { x: center.x, y: baseY, z: center.z },
+        playerPosition,
+        facing,
+        constructionAim,
+        null
+      ) - (stairSeed ? 0.12 : 0);
+      const candidate = {
+        kind: 'floor',
+        semanticUpperFloor: true,
+        structureId: structure.id,
+        newStructure: false,
+        cellX: x,
+        cellZ: z,
+        storey,
+        x: center.x,
+        z: center.z,
+        yaw: structure.yaw,
+        baseY,
+        topY: baseY + FLOOR_TOP_LIFT,
+        valid: this.#upperFloorClear(center.x, center.z, baseY),
+        score
+      };
+      const candidateId = `${structure.id}:${key}`;
+      const previous = candidates.get(candidateId);
+      if (!previous || candidate.score < previous.score) candidates.set(candidateId, candidate);
+    };
+
+    for (const structure of this.registry.structures.values()) {
+      for (const stair of structure.grid.stairs?.values?.() ?? []) {
+        addCandidate(structure, {
+          x: stair.toX,
+          z: stair.toZ,
+          storey: stair.upperStorey,
+          baseY: stair.topY,
+          stairSeed: true
+        });
+      }
+
+      for (const floor of structure.grid.floors.values()) {
+        if (floor.storey <= 0) continue;
+        for (const direction of directionEntries) {
+          addCandidate(structure, {
+            x: floor.x + direction.dx,
+            z: floor.z + direction.dz,
+            storey: floor.storey,
+            baseY: floor.levelY
+          });
+        }
+      }
+    }
+
+    let best = null;
+    for (const candidate of candidates.values()) {
+      if (!best || candidate.score < best.score) best = candidate;
+    }
+    return best && best.score <= PANEL_GRID.cellSize * 1.35 ? best : null;
+  }
+
+  #selectionScore(point, playerPosition, facing, constructionAim, run = null) {
     if (finiteAim(constructionAim)) {
-      const ground = this.#aimGroundTarget(constructionAim);
-      if (ground) return ground;
-    }
-    const length = Math.hypot(facingDirection.x, facingDirection.z) || 1;
-    return {
-      x: playerPosition.x + facingDirection.x / length * NEW_STRUCTURE_TARGET_DISTANCE,
-      z: playerPosition.z + facingDirection.z / length * NEW_STRUCTURE_TARGET_DISTANCE
-    };
-  }
-
-  #aimGroundTarget(aim) {
-    this.tempAimDirection.set(aim.direction.x, aim.direction.y, aim.direction.z);
-    if (this.tempAimDirection.lengthSq() <= 0.000001) return null;
-    this.tempAimDirection.normalize();
-    const maxDistance = PANEL_GRID.placementReach + 1.4;
-    for (let distance = 0.55; distance <= maxDistance; distance += AIM_GROUND_STEP) {
-      const x = aim.origin.x + this.tempAimDirection.x * distance;
-      const y = aim.origin.y + this.tempAimDirection.y * distance;
-      const z = aim.origin.z + this.tempAimDirection.z * distance;
-      const ground = this.#baseHeightAt(x, z);
-      if (y <= ground + 0.1) return { x, z };
-    }
-    return null;
-  }
-
-  #candidateScore(point, target, aim) {
-    if (finiteAim(aim)) {
-      this.tempAimDirection.set(aim.direction.x, aim.direction.y, aim.direction.z);
-      if (this.tempAimDirection.lengthSq() > 0.000001) {
-        this.tempAimDirection.normalize();
-        this.tempAimPoint.set(point.x, point.y, point.z);
-        const ox = this.tempAimPoint.x - aim.origin.x;
-        const oy = this.tempAimPoint.y - aim.origin.y;
-        const oz = this.tempAimPoint.z - aim.origin.z;
-        const along = ox * this.tempAimDirection.x + oy * this.tempAimDirection.y + oz * this.tempAimDirection.z;
+      const directionLength = Math.hypot(
+        constructionAim.direction.x,
+        constructionAim.direction.y,
+        constructionAim.direction.z
+      );
+      if (directionLength > 0.000001) {
+        const dx = constructionAim.direction.x / directionLength;
+        const dy = constructionAim.direction.y / directionLength;
+        const dz = constructionAim.direction.z / directionLength;
+        const ox = point.x - constructionAim.origin.x;
+        const oy = point.y - constructionAim.origin.y;
+        const oz = point.z - constructionAim.origin.z;
+        const along = ox * dx + oy * dy + oz * dz;
         if (along > 0) {
-          const cx = aim.origin.x + this.tempAimDirection.x * along;
-          const cy = aim.origin.y + this.tempAimDirection.y * along;
-          const cz = aim.origin.z + this.tempAimDirection.z * along;
-          return Math.hypot(point.x - cx, point.y - cy, point.z - cz);
+          const cx = constructionAim.origin.x + dx * along;
+          const cy = constructionAim.origin.y + dy * along;
+          const cz = constructionAim.origin.z + dz * along;
+          let score = Math.hypot(point.x - cx, point.y - cy, point.z - cz);
+          if (run) {
+            const aimHorizontalLength = Math.hypot(dx, dz);
+            if (aimHorizontalLength > 0.000001) {
+              const alignment = run.x * (dx / aimHorizontalLength) + run.z * (dz / aimHorizontalLength);
+              score += (1 - Math.max(-1, Math.min(1, alignment))) * 0.16;
+            }
+          }
+          return score;
         }
       }
     }
-    return Math.hypot(point.x - target.x, point.z - target.z);
+
+    const offsetX = point.x - playerPosition.x;
+    const offsetZ = point.z - playerPosition.z;
+    const distance = Math.hypot(offsetX, offsetZ);
+    if (distance <= 0.000001) return 0;
+    const alignment = facing.x * (offsetX / distance) + facing.z * (offsetZ / distance);
+    let score = distance - Math.max(0, alignment) * 0.55;
+    if (run) score -= Math.max(0, facing.x * run.x + facing.z * run.z) * 0.22;
+    return score;
   }
 
-  #evaluateFloorTerrain(x, z, yaw, baseY) {
-    const frame = {
-      xX: Math.cos(yaw),
-      xZ: -Math.sin(yaw),
-      zX: Math.sin(yaw),
-      zZ: Math.cos(yaw)
-    };
-    const half = PANEL_GRID.cellSize * 0.44;
-    const samples = [];
-    for (const sx of [-1, 0, 1]) {
-      for (const sz of [-1, 0, 1]) {
-        const px = x + frame.xX * half * sx + frame.zX * half * sz;
-        const pz = z + frame.xZ * half * sx + frame.zZ * half * sz;
-        if (this.terrain.isPlayable?.(px, pz, 0.3) === false) return { valid: false };
-        samples.push(this.#baseHeightAt(px, pz));
-      }
+  #stairClear({ x, z, run, baseLevelY }) {
+    for (const offset of [-0.34, 0, 0.34]) {
+      const sampleX = x + run.x * PANEL_GRID.cellSize * offset;
+      const sampleZ = z + run.z * PANEL_GRID.cellSize * offset;
+      const clear = this.collision.isCircleClear(sampleX, sampleZ, STAIR_CLEARANCE_RADIUS, {
+        ignore: obstacle => (
+          obstacle.type === 'panel-floor' ||
+          obstacle.type === 'panel-stair' ||
+          (Number.isFinite(obstacle.topY) && obstacle.topY <= baseLevelY + 0.04)
+        )
+      });
+      if (!clear) return false;
     }
-    const minimum = Math.min(...samples);
-    const maximum = Math.max(...samples);
-    const highCut = Math.max(0, maximum - (baseY + PHYSICAL_LOG.floorTerrainSurfaceClearance));
-    const supportDepth = Math.max(0, baseY - PHYSICAL_LOG.floorUndersideDepth - minimum);
-    return {
-      minimum,
-      maximum,
-      valid:
-        highCut <= PHYSICAL_LOG.floorMaxTerrainCutDepth &&
-        supportDepth <= PHYSICAL_LOG.floorMaxSupportDepth
-    };
+    return true;
   }
 
-  #floorClear(x, z) {
-    return this.collision.isCircleClear(x, z, FLOOR_CLEARANCE_RADIUS, {
-      ignore: obstacle => obstacle.type === 'panel-floor'
-    });
-  }
-
-  #wallClear(edge, baseY) {
-    return this.collision.isCircleClear(edge.x, edge.z, CONSTRUCTION_DIMENSIONS.wallThickness * 0.8, {
+  #upperFloorClear(x, z, baseY) {
+    return this.collision.isCircleClear(x, z, PANEL_GRID.cellSize * 0.36, {
       ignore: obstacle => (
         obstacle.type === 'panel-floor' ||
-        (obstacle.type === 'panel-wall' && obstacle.topY <= baseY + 0.02)
+        obstacle.type === 'panel-stair' ||
+        (Number.isFinite(obstacle.topY) && obstacle.topY <= baseY + 0.04)
       )
     });
   }
 
-  #materializeFloor(structure, floor) {
+  #materializeUpperFloor(structure, floor) {
     const placement = this.registry.floorPlacementWorld(structure, floor);
     const id = `panel:${structure.id}:${floor.key}`;
     const root = createFloorPanelVisual(id);
@@ -501,6 +427,7 @@ export class PanelConstructionSystem {
     root.rotation.y = placement.yaw;
     root.userData.panelConstructionId = id;
     root.userData.panelConstructionKind = 'floor';
+    root.userData.panelUpperStorey = true;
     this.group.add(root);
 
     const collisionHandle = this.collision.addBox({
@@ -522,22 +449,6 @@ export class PanelConstructionSystem {
       stepHeight: 0.18
     });
 
-    const supportHandles = [];
-    const frame = {
-      zX: Math.sin(placement.yaw),
-      zZ: Math.cos(placement.yaw)
-    };
-    for (const offset of [-PHYSICAL_LOG.floorWidth, 0, PHYSICAL_LOG.floorWidth]) {
-      supportHandles.push(this.floorSupports.createForFloor({
-        x: placement.x + frame.zX * offset,
-        z: placement.z + frame.zZ * offset,
-        yaw: placement.yaw,
-        baseY: placement.baseY,
-        topY: placement.topY
-      }, this.nextSupportId));
-      this.nextSupportId += 1;
-    }
-
     const entry = {
       id,
       kind: 'floor',
@@ -548,68 +459,51 @@ export class PanelConstructionSystem {
       storey: floor.storey,
       root,
       collisionHandle,
-      supportHandles,
+      supportHandles: [],
       active: true
     };
     this.entries.set(id, entry);
     return entry;
   }
 
-  #materializeWall(structure, wall) {
-    const placement = this.registry.wallPlacementWorld(structure, wall.key);
-    const id = `panel:${structure.id}:${wall.key}`;
-    const variant = wall.variant ?? 'solid';
-    const root = createWallPanelVisual(id, variant);
-    root.position.set(placement.x, placement.baseY, placement.z);
-    root.rotation.y = placement.yaw;
+  #materializeStair(structure, stair) {
+    const from = this.registry.cellCenterWorld(structure, { x: stair.x, z: stair.z });
+    const to = this.registry.cellCenterWorld(structure, { x: stair.toX, z: stair.toZ });
+    if (!from || !to) throw new Error(`Cannot materialize stair ${stair.key}`);
+    const runX = to.x - from.x;
+    const runZ = to.z - from.z;
+    const runLength = Math.hypot(runX, runZ) || 1;
+    const yaw = Math.atan2(runX / runLength, runZ / runLength);
+    const x = (from.x + to.x) * 0.5;
+    const z = (from.z + to.z) * 0.5;
+    const baseY = stair.baseY + FLOOR_TOP_LIFT;
+    const id = `panel:${structure.id}:${stair.key}`;
+    const root = createSemanticStairVisual(id);
+    root.position.set(x, baseY, z);
+    root.rotation.y = yaw;
     root.userData.panelConstructionId = id;
-    root.userData.panelConstructionKind = 'wall';
-    root.userData.panelWallVariant = variant;
+    root.userData.panelConstructionKind = 'stairs';
+    root.userData.panelStairKey = stair.key;
     this.group.add(root);
 
-    let collisionSpecs;
-    if (variant === 'door') {
-      collisionSpecs = semanticDoorColliderSpecs({
-        x: placement.x,
-        z: placement.z,
-        yaw: placement.yaw,
-        bottomY: placement.baseY - 0.02,
-        topY: placement.topY
-      });
-    } else if (variant === 'window') {
-      collisionSpecs = semanticWindowColliderSpecs({
-        x: placement.x,
-        z: placement.z,
-        yaw: placement.yaw,
-        baseY: placement.baseY,
-        topY: placement.topY
-      });
-    } else {
-      collisionSpecs = [{
-        x: placement.x,
-        z: placement.z,
-        halfX: PANEL_GRID.cellSize * 0.5,
-        halfZ: CONSTRUCTION_DIMENSIONS.wallThickness,
-        yaw: placement.yaw,
-        bottomY: placement.baseY - 0.02,
-        topY: placement.topY
-      }];
-    }
-    const collisionHandles = collisionSpecs.map((spec, index) => this.collision.addBox({
-      ...spec,
-      type: 'panel-wall',
-      label: collisionSpecs.length === 1 ? id : `${id}:${variant}:${index}`
-    }));
+    const collisionHandles = semanticStairColliderSpecs({ x, z, yaw, baseY })
+      .map((spec, index) => this.collision.addBox({
+        ...spec,
+        type: 'panel-stair',
+        label: `${id}:tread:${index}`
+      }));
+
     const entry = {
       id,
-      kind: 'wall',
-      variant,
+      kind: 'stairs',
       structureId: structure.id,
-      stateKey: wall.key,
-      cellX: wall.x,
-      cellZ: wall.z,
-      storey: wall.storey,
-      direction: wall.direction,
+      stateKey: stair.key,
+      cellX: stair.x,
+      cellZ: stair.z,
+      toCellX: stair.toX,
+      toCellZ: stair.toZ,
+      storey: stair.storey,
+      direction: stair.direction,
       root,
       collisionHandle: collisionHandles[0] ?? null,
       collisionHandles,
@@ -620,53 +514,21 @@ export class PanelConstructionSystem {
     return entry;
   }
 
-  #showPreview(mode, placement, valid) {
-    if (!this.previewRoot || this.previewMode !== mode) {
-      if (this.previewRoot) this.previewRoot.parent?.remove(this.previewRoot);
-      this.previewRoot = createPanelPreview(mode, this.previewMaterial);
-      this.previewMode = mode;
-      this.group.add(this.previewRoot);
-    }
-    this.previewMaterial.color.setHex(valid ? PREVIEW_VALID : PREVIEW_INVALID);
-    this.previewRoot.visible = true;
-    this.previewRoot.position.set(placement.x, placement.baseY, placement.z);
-    this.previewRoot.rotation.set(0, placement.yaw, 0);
-  }
-
-  #clearPreview() {
-    if (this.previewRoot) this.previewRoot.parent?.remove(this.previewRoot);
-    this.previewRoot = null;
-    this.previewMode = null;
-    this.previewPlacement = null;
-    this.previewValid = false;
-  }
-
-  #clearRuntimeConstruction() {
-    for (const entry of this.entries.values()) this.#removeEntryRuntime(entry);
-    this.entries.clear();
-    this.nextSupportId = 1;
-  }
-
-  #removeEntryRuntime(entry) {
+  #removeStairRuntime(entry) {
     entry.active = false;
-    const collisionHandles = entry.collisionHandles?.length
-      ? entry.collisionHandles
-      : entry.collisionHandle
-        ? [entry.collisionHandle]
-        : [];
-    for (const handle of collisionHandles) this.collision.removeObstacle(handle);
-    for (const handle of entry.supportHandles ?? []) this.floorSupports.remove(handle);
+    for (const handle of entry.collisionHandles ?? []) {
+      this.collision.removeObstacle(handle);
+    }
     entry.root?.parent?.remove(entry.root);
   }
 
-  #targetForEntry(entry) {
-    const mode = buildModeForEntry(entry);
-    const label = PANEL_BUILD_LABELS[mode] ?? 'Construction panel';
+  #buildResult(entry, cost) {
+    const label = PANEL_BUILD_LABELS[entry.kind] ?? 'Construction panel';
     return {
       type: 'panel-construction',
       id: entry.id,
       kind: entry.kind,
-      variant: entry.variant ?? null,
+      variant: null,
       label,
       icon: 'hammer',
       actionLabel: `Demolish ${label.toLowerCase()}`,
@@ -675,31 +537,39 @@ export class PanelConstructionSystem {
         x: entry.root.position.x,
         y: entry.root.position.y,
         z: entry.root.position.z
-      }
+      },
+      cost: cost.map(item => ({ ...item })),
+      snapped: true
     };
   }
 
-  #inReach(entry, playerPosition) {
-    return Math.hypot(
-      entry.root.position.x - playerPosition.x,
-      entry.root.position.z - playerPosition.z
-    ) <= INTERACTION_RADIUS;
+  #showExtensionPreview(mode, placement, valid) {
+    if (!this.previewRoot || this.previewMode !== mode) {
+      if (this.previewRoot) this.previewRoot.parent?.remove(this.previewRoot);
+      this.previewRoot = mode === 'stairs'
+        ? createSemanticStairVisual('PanelStairsPreview')
+        : createFloorPanelVisual('PanelUpperFloorPreview');
+      tintConstructionPreview(this.previewRoot, this.previewMaterial);
+      this.previewMode = mode;
+      this.group.add(this.previewRoot);
+    }
+    this.previewMaterial.color.setHex(valid ? 0x65d879 : 0xd85d57);
+    this.previewRoot.visible = true;
+    this.previewRoot.position.set(placement.x, placement.baseY, placement.z);
+    this.previewRoot.rotation.set(0, placement.yaw, 0);
+  }
+
+  #clearExtensionPreview() {
+    if (this.previewRoot) this.previewRoot.parent?.remove(this.previewRoot);
+    this.previewRoot = null;
+    this.previewMode = null;
+    this.previewPlacement = null;
+    this.previewValid = false;
   }
 
   #canAfford(mode) {
-    const requirements = PANEL_BUILD_COSTS[mode] ?? [];
-    return requirements.every(requirement => this.inventory.has(requirement.itemId, requirement.quantity));
-  }
-
-  #baseHeightAt(x, z) {
-    return this.terrain.baseHeightAt?.(x, z) ?? this.terrain.heightAt(x, z);
-  }
-
-  #snapWorld(value) {
-    return Math.round(value / PHYSICAL_LOG.gridStep) * PHYSICAL_LOG.gridStep;
-  }
-
-  #snapYaw(yaw) {
-    return Math.round(yaw / PHYSICAL_LOG.yawStep) * PHYSICAL_LOG.yawStep;
+    return (PANEL_BUILD_COSTS[mode] ?? []).every(requirement => (
+      this.inventory.has(requirement.itemId, requirement.quantity)
+    ));
   }
 }
