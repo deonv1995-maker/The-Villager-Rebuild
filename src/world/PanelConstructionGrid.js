@@ -163,9 +163,12 @@ export class PanelConstructionGrid {
     };
   }
 
+  // Canonical stored cells stay integer-only. Geometry queries may pass a fractional
+  // cell coordinate (for example the centre of an even-width Roof zone), so this helper
+  // deliberately accepts any finite grid coordinate without weakening stored identity.
   cellCenter({ x, z }) {
-    requireInteger(x, 'Cell x');
-    requireInteger(z, 'Cell z');
+    requireFinite(x, 'Cell/zone x');
+    requireFinite(z, 'Cell/zone z');
     return {
       x: this.originX + (x + 0.5) * this.cellSize,
       z: this.originZ + (z + 0.5) * this.cellSize
