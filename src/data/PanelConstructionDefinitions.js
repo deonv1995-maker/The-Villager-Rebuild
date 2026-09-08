@@ -18,21 +18,24 @@ export const PANEL_DIRECTIONS = Object.freeze({
   west: Object.freeze({ id: 'west', dx: -1, dz: 0, opposite: 'east' })
 });
 
-export const PANEL_BUILD_MODES = Object.freeze(['floor', 'wall', 'door']);
+export const PANEL_BUILD_MODES = Object.freeze(['floor', 'wall', 'door', 'window']);
 export const PANEL_BUILD_LABELS = Object.freeze({
   floor: 'Floor panel',
   wall: 'Wall panel',
-  door: 'Door panel'
+  door: 'Door panel',
+  window: 'Window panel'
 });
 
 // Costs preserve the material meaning of the replaced physical workflow. One square
 // floor combines the three former one-third-width floor strips. A completed wall bay
 // was three stacked wall sections before its Hammer customization became available.
-// Door is a semantic wall variant, so it carries the same three-Log structural cost.
+// Door and Window are complete semantic wall variants, so each carries the same
+// three-Log structural cost instead of being purchased as a second customization.
 export const PANEL_BUILD_COSTS = Object.freeze({
   floor: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }]),
   wall: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }]),
-  door: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }])
+  door: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }]),
+  window: Object.freeze([{ itemId: PANEL_CONSTRUCTION_RESOURCE_ID, quantity: 3 }])
 });
 
 export const PANEL_WALL_VARIANTS = Object.freeze(['solid', 'door', 'window']);

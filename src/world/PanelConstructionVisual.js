@@ -8,6 +8,7 @@ import {
   tintConstructionPreview
 } from './PhysicalLogVisual.js';
 import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
+import { createSemanticWindowPanelVisual } from './SemanticWindowPanelGeometry.js';
 
 export function createFloorPanelVisual(name = 'PanelFloor') {
   const root = new THREE.Group();
@@ -22,6 +23,7 @@ export function createFloorPanelVisual(name = 'PanelFloor') {
 
 export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
   if (variant === 'door') return createSemanticDoorPanelVisual(name);
+  if (variant === 'window') return createSemanticWindowPanelVisual(name);
 
   const root = new THREE.Group();
   root.name = name;
@@ -35,11 +37,12 @@ export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
 }
 
 export function createPanelPreview(mode, material) {
+  const variant = mode === 'door' || mode === 'window' ? mode : 'solid';
   const root = mode === 'floor'
     ? createFloorPanelVisual('PanelFloorPreview')
     : createWallPanelVisual(
-      mode === 'door' ? 'PanelDoorPreview' : 'PanelWallPreview',
-      mode === 'door' ? 'door' : 'solid'
+      mode === 'door' ? 'PanelDoorPreview' : mode === 'window' ? 'PanelWindowPreview' : 'PanelWallPreview',
+      variant
     );
   tintConstructionPreview(root, material);
   return root;

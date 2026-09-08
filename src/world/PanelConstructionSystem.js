@@ -20,6 +20,7 @@ import {
 import { FloorSupportVisual } from './FloorSupportVisual.js';
 import { PanelStructureRegistry } from './PanelStructureRegistry.js';
 import { semanticDoorColliderSpecs } from './SemanticDoorPanelGeometry.js';
+import { semanticWindowColliderSpecs } from './SemanticWindowPanelGeometry.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
@@ -44,6 +45,16 @@ const finiteAim = aim => (
   Number.isFinite(aim?.direction?.x) &&
   Number.isFinite(aim?.direction?.y) &&
   Number.isFinite(aim?.direction?.z)
+);
+
+const wallVariantForBuildMode = mode => (
+  mode === 'door' || mode === 'window' ? mode : 'solid'
+);
+
+const buildModeForEntry = entry => (
+  entry?.kind === 'wall' && (entry.variant === 'door' || entry.variant === 'window')
+    ? entry.variant
+    : entry?.kind
 );
 
 export class PanelConstructionSystem {
@@ -173,7 +184,7 @@ export class PanelConstructionSystem {
         z: placement.cellZ,
         storey: placement.storey ?? 0,
         direction: placement.direction,
-        variant: this.buildMode === 'door' ? 'door' : 'solid'
+        variant: wallVariantForBuildMode(this.buildMode)
       });
     }
 
@@ -253,7 +264,7 @@ export class PanelConstructionSystem {
     this.#removeEntryRuntime(entry);
     this.entries.delete(entry.id);
     this.registry.removeIfEmpty(structure.id);
-    for (const requirement of PANEL_BUILD_COSTS[entry.kind]) {
+    for (const requirement of PANEL_BUILD_COSTS[buildModeForEntry(entry)] ?? []) {
       this.inventory.add(requirement.itemId, requirement.quantity);
     }
     return target;
@@ -556,15 +567,25 @@ export class PanelConstructionSystem {
     root.userData.panelWallVariant = variant;
     this.group.add(root);
 
-    const collisionSpecs = variant === 'door'
-      ? semanticDoorColliderSpecs({
+    let collisionSpecs;
+    if (variant === 'door') {
+      collisionSpecs = semanticDoorColliderSpecs({
         x: placement.x,
         z: placement.z,
         yaw: placement.yaw,
         bottomY: placement.baseY - 0.02,
         topY: placement.topY
-      })
-      : [{
+      });
+    } else if (variant === 'window') {
+      collisionSpecs = semanticWindowColliderSpecs({
+        x: placement.x,
+        z: placement.z,
+        yaw: placement.yaw,
+        baseY: placement.baseY,
+        topY: placement.topY
+      });
+    } else {
+      collisionSpecs = [{
         x: placement.x,
         z: placement.z,
         halfX: PANEL_GRID.cellSize * 0.5,
@@ -573,6 +594,7 @@ export class PanelConstructionSystem {
         bottomY: placement.baseY - 0.02,
         topY: placement.topY
       }];
+    }
     const collisionHandles = collisionSpecs.map((spec, index) => this.collision.addBox({
       ...spec,
       type: 'panel-wall',
@@ -638,9 +660,8 @@ export class PanelConstructionSystem {
   }
 
   #targetForEntry(entry) {
-    const label = entry.kind === 'wall' && entry.variant === 'door'
-      ? PANEL_BUILD_LABELS.door
-      : PANEL_BUILD_LABELS[entry.kind] ?? 'Construction panel';
+    const mode = buildModeForEntry(entry);
+    const label = PANEL_BUILD_LABELS[mode] ?? 'Construction panel';
     return {
       type: 'panel-construction',
       id: entry.id,

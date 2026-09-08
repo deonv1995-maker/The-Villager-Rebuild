@@ -24,6 +24,7 @@ assert(
 assert(PANEL_BUILD_COSTS.floor[0].itemId === 'log' && PANEL_BUILD_COSTS.floor[0].quantity === 3, 'A full Floor Panel must consume three Logs');
 assert(PANEL_BUILD_COSTS.wall[0].itemId === 'log' && PANEL_BUILD_COSTS.wall[0].quantity === 3, 'A full Wall Panel must consume three Logs');
 assert(PANEL_BUILD_COSTS.door[0].itemId === 'log' && PANEL_BUILD_COSTS.door[0].quantity === 3, 'A full Door Panel must consume three Logs');
+assert(PANEL_BUILD_COSTS.window[0].itemId === 'log' && PANEL_BUILD_COSTS.window[0].quantity === 3, 'A full Window Panel must consume three Logs');
 assert(PHYSICAL_LOG.floorSupportThreshold > PHYSICAL_LOG.floorFillThreshold, 'Floor support and fill thresholds must remain ordered');
 assert(PHYSICAL_LOG.floorMaxSupportDepth > 1, 'Uneven-terrain floors need meaningful support depth');
 
@@ -129,8 +130,9 @@ for (const requirement of [
   "this.inventory.consume(cost)",
   "type: 'panel-floor'",
   "type: 'panel-wall'",
-  "variant: this.buildMode === 'door' ? 'door' : 'solid'",
+  'wallVariantForBuildMode(this.buildMode)',
   'semanticDoorColliderSpecs({',
+  'semanticWindowColliderSpecs({',
   'this.floorSupports.createForFloor',
   'this.registry.createStructure({',
   'this.registry.edgePlacementWorld(structure',
@@ -144,7 +146,7 @@ for (const requirement of [
   "this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)",
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
-  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door'])",
+  "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window'])",
   'hud.setExternalAction(PANEL_BUILD_ACTION_ID',
   'this.confirmBuild()',
   "this.game.equipmentRuntime?.recordUse?.('hammer')"
@@ -155,14 +157,16 @@ assert(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs mu
 assert(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Hammer must stay equipped during semantic panel placement');
 assert(mainSource.includes('new PanelConstructionRuntimeController({ game })'), 'Gameplay startup must install the live panel construction runtime');
 
-for (const mode of ['floor', 'wall', 'door', 'remove', 'close']) {
+for (const mode of ['floor', 'wall', 'door', 'window', 'remove', 'close']) {
   assert(hammerMenuSource.includes(`data-build="${mode}"`), `Hammer structure menu must expose ${mode}`);
 }
-assert(
-  !new RegExp('data-build="door"[^>]*disabled').test(hammerMenuSource),
-  'Door must be a live semantic build choice'
-);
-for (const lockedMode of ['window', 'stairs', 'roof']) {
+for (const liveMode of ['door', 'window']) {
+  assert(
+    !new RegExp(`data-build="${liveMode}"[^>]*disabled`).test(hammerMenuSource),
+    `${liveMode} must be a live semantic build choice`
+  );
+}
+for (const lockedMode of ['stairs', 'roof']) {
   assert(
     new RegExp(`data-build="${lockedMode}"[^>]*disabled`).test(hammerMenuSource),
     `Deferred ${lockedMode} control must remain visibly locked until its semantic runtime exists`
@@ -191,4 +195,4 @@ assert(toolSource.includes('this.player.playToolAction?.(toolId)'), 'Production 
 assert(toolSource.includes('#applySkeletalAccent(progress)'), 'Axe/Hammer/Pickaxe must retain the strengthened strike accent');
 assert(toolSource.includes("this.currentToolId === 'sword'") && toolSource.includes('const slash = -1.22 + eased * 2.44'), 'Sword must retain a dedicated lateral slash presentation');
 
-console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door construction, coherent floor support and unified mobile action contracts verified');
+console.log('Tree-to-inventory Log harvesting, Hammer-owned semantic Floor/Wall/Door/Window construction, coherent floor support and unified mobile action contracts verified');
