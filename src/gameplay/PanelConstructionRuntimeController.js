@@ -7,7 +7,7 @@ import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js';
 import { PanelConstructionSystem } from '../world/PanelConstructionSystem.js';
 
 const PANEL_BUILD_ACTION_ID = 'panel-build';
-const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door']);
+const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window']);
 
 export class PanelConstructionRuntimeController {
   constructor({ game }) {
@@ -349,7 +349,7 @@ export class PanelConstructionRuntimeController {
       return false;
     }
     this.game.equipmentRuntime?.recordUse?.('hammer');
-    const refunded = PANEL_BUILD_COSTS[target.kind]?.[0]?.quantity ?? 0;
+    const refunded = PANEL_BUILD_COSTS[target.variant === 'door' || target.variant === 'window' ? target.variant : target.kind]?.[0]?.quantity ?? 0;
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus(`${result.label.toUpperCase()} DISASSEMBLED · ${refunded} LOGS RETURNED`);
     return true;
