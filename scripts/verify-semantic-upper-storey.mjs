@@ -8,6 +8,7 @@ import {
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import {
   panelCellKey,
+  panelEdgeDescriptor,
   PanelConstructionGrid
 } from '../src/world/PanelConstructionGrid.js';
 import { SemanticStoreyPanelConstructionSystem } from '../src/world/SemanticStoreyPanelConstructionSystem.js';
@@ -59,7 +60,7 @@ const addSquareFloors = (grid, storey, levelY, size = 3, skip = new Set()) => {
   }
 };
 
-const addPerimeterWalls = (grid, storey, size = 3) => {
+const addPerimeterWalls = (grid, storey) => {
   const floors = [...grid.floors.values()].filter(floor => floor.storey === storey);
   const occupied = new Set(floors.map(floor => xzKey(floor.x, floor.z)));
   for (const floor of floors) {
@@ -72,6 +73,24 @@ const addPerimeterWalls = (grid, storey, size = 3) => {
         direction: direction.id
       });
       assert.equal(result.ok, true, `Perimeter ${storey}:${floor.x}:${floor.z}:${direction.id} must be seedable`);
+    }
+  }
+};
+
+const addOuterSquareWalls = (grid, storey, size = 3) => {
+  const floors = [...grid.floors.values()].filter(floor => floor.storey === storey);
+  for (const floor of floors) {
+    for (const direction of directionEntries) {
+      const nx = floor.x + direction.dx;
+      const nz = floor.z + direction.dz;
+      if (nx >= 0 && nx < size && nz >= 0 && nz < size) continue;
+      const result = grid.placeWall({
+        x: floor.x,
+        z: floor.z,
+        storey,
+        direction: direction.id
+      });
+      assert.equal(result.ok, true, `Outer perimeter ${storey}:${floor.x}:${floor.z}:${direction.id} must be seedable`);
     }
   }
 };
@@ -140,7 +159,8 @@ const seededSnapshot = runtime.system.snapshot();
 runtime.system.restore(seededSnapshot);
 runtime.system.setActive(true);
 
-const stairTop = runtime.system.registry.cellCenterWorld(structure, { x: stair.targetX, z: stair.targetZ });
+const liveSeedStructure = [...runtime.system.registry.structures.values()][0];
+const stairTop = runtime.system.registry.cellCenterWorld(liveSeedStructure, { x: stair.targetX, z: stair.targetZ });
 const upperPlayer = new THREE.Vector3(stairTop.x, UPPER_Y + 0.03, stairTop.z);
 const north = new THREE.Vector3(0, 0, -1);
 
@@ -251,24 +271,39 @@ addSquareFloors(
   3,
   new Set([xzKey(roofStair.targetX, roofStair.targetZ)])
 );
-addPerimeterWalls(roofStructure.grid, 1);
+addOuterSquareWalls(roofStructure.grid, 1);
+for (const direction of directionEntries) {
+  const openingEdge = panelEdgeDescriptor({
+    x: roofStair.targetX,
+    z: roofStair.targetZ,
+    storey: 1,
+    direction: direction.id
+  }).key;
+  assert.equal(
+    roofStructure.grid.walls.has(openingEdge),
+    false,
+    'The Stair opening must remain internally open; Roof support must not require a wall around it'
+  );
+}
 const roofSeedSnapshot = roofRuntime.system.snapshot();
 roofRuntime.system.restore(roofSeedSnapshot);
 roofRuntime.system.setActive(true);
 roofRuntime.system.setBuildMode('roof');
-const roofPlayerCenter = roofRuntime.system.registry.cellCenterWorld(roofStructure, { x: 1, z: 0 });
+const restoredRoofStructure = [...roofRuntime.system.registry.structures.values()][0];
+const roofPlayerCenter = roofRuntime.system.registry.cellCenterWorld(restoredRoofStructure, { x: 1, z: 0 });
 const roofPlayer = new THREE.Vector3(roofPlayerCenter.x, UPPER_Y + 0.03, roofPlayerCenter.z);
 const roofState = roofRuntime.system.update(roofPlayer, north);
 assert.equal(roofState.previewValid, true, 'Fully enclosed second storey must expose a valid highest-storey Roof preview');
 assert.equal(roofRuntime.system.previewPlacement?.storey, 1, 'Roof must target the highest semantic storey');
 assert.equal(roofRuntime.system.previewPlacement?.roofCellCount, 9, 'Roof footprint must include the projected Stair opening bay');
+const openingKey = panelCellKey({
+  x: roofStair.targetX,
+  z: roofStair.targetZ,
+  storey: 1
+});
 assert.ok(
-  roofRuntime.system.previewPlacement?.cellKeys?.includes(panelCellKey({
-    x: roofStair.targetX,
-    z: roofStair.targetZ,
-    storey: 1
-  })),
-  'Upper Roof state must span the Stair opening instead of treating it as an interior courtyard'
+  roofRuntime.system.previewPlacement?.cellKeys?.includes(openingKey),
+  'Upper Roof presentation must span the Stair opening instead of treating it as an interior courtyard'
 );
 assert.equal(roofState.cost[0].quantity, 45, 'Second-storey 3x3 Roof must charge five Logs for each covered roof bay including the Stair opening bay');
 const upperRoofBuilt = roofRuntime.system.build(roofPlayer, north);
@@ -276,7 +311,8 @@ assert.equal(upperRoofBuilt?.kind, 'roof');
 assert.equal(roofRuntime.inventory.get('log'), 0);
 const upperRoofZone = [...roofRuntime.system.registry.structures.values()][0].grid.roofZones.values().next().value;
 assert.equal(upperRoofZone.storey, 1);
-assert.equal(upperRoofZone.cellKeys.length, 9);
+assert.equal(upperRoofZone.cellKeys.length, 8, 'Roof state must keep only real upper Floors in its floor-backed cell set');
+assert.deepEqual(upperRoofZone.openingCellKeys, [openingKey], 'Roof state must explicitly store the one covered non-floor Stair opening bay');
 assert.equal(
   roofRuntime.system.registry.structures.values().next().value.grid.removeStair(roofStair.key),
   false,
@@ -286,7 +322,10 @@ const upperRoofSnapshot = roofRuntime.system.snapshot();
 const restoredRoof = makeRuntime(0);
 assert.equal(restoredRoof.system.restore(upperRoofSnapshot), true, 'Save/Continue must restore Roof state that spans a non-floor Stair opening');
 assert.deepEqual(restoredRoof.system.snapshot(), upperRoofSnapshot);
-assert.ok(restoredRoof.system.getDemolitionEntries().some(entry => entry.kind === 'roof' && entry.storey === 1));
+const restoredRoofEntry = restoredRoof.system.getDemolitionEntries().find(entry => entry.kind === 'roof' && entry.storey === 1);
+assert.ok(restoredRoofEntry);
+assert.equal(restoredRoofEntry.roofCellCount, 9, 'Restored semantic Roof must recover the total covered bay count including the opening');
+assert.ok(restoredRoofEntry.cellKeys.includes(openingKey), 'Restored complex Roof presentation must include the Stair opening bay');
 
 const controllerSource = await readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8');
 assert.ok(
