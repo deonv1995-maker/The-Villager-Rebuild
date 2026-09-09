@@ -7,18 +7,14 @@ import {
   createPhysicalLogVisual,
   createSplitHalfLogVisual
 } from './PhysicalLogVisual.js';
+import { semanticWallRowYs } from './SemanticWallPanelGeometry.js';
 
 const {
   wallThickness: WALL_THICKNESS,
-  wallSectionStep: WALL_SECTION_STEP,
-  wallRowRadius: WALL_ROW_RADIUS,
   doorClearWidth: DOOR_WIDTH,
   doorClearHeight: DOOR_HEIGHT,
   openingJambOutset: OPENING_JAMB_OUTSET
 } = CONSTRUCTION_DIMENSIONS;
-
-const WALL_SECTION_BASE_Y = 0.26;
-const WALL_SECTION_SECOND_ROW_OFFSET = 0.5;
 
 function addSplitSegment(root, y, minX, maxX) {
   const length = maxX - minX;
@@ -47,15 +43,7 @@ function addJamb(root, x, bottomY, topY) {
 }
 
 export function semanticDoorWallRows(storeyHeight = PHYSICAL_LOG.length) {
-  const rows = [];
-  for (let index = 0; index < 3; index += 1) {
-    const baseY = WALL_SECTION_BASE_Y + WALL_SECTION_STEP * index;
-    rows.push(baseY, baseY + WALL_SECTION_SECOND_ROW_OFFSET);
-  }
-
-  const closureY = storeyHeight - WALL_ROW_RADIUS;
-  if (closureY > Math.max(...rows) + 0.05) rows.push(closureY);
-  return rows.sort((left, right) => left - right);
+  return semanticWallRowYs(storeyHeight);
 }
 
 export function createSemanticDoorPanelVisual(name = 'PanelDoor', storeyHeight = PHYSICAL_LOG.length) {
