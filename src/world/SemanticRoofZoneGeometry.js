@@ -1,9 +1,7 @@
 import * as THREE from 'three';
-import {
-  CONSTRUCTION_DIMENSIONS,
-  PHYSICAL_LOG
-} from '../data/PhysicalLogDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { PANEL_GRID } from '../data/PanelConstructionDefinitions.js';
+import { semanticWallVisualTopY } from './SemanticWallPanelGeometry.js';
 
 const THATCH_COURSE_COUNT = 5;
 const THATCH_COURSE_OVERLAP = 0.1;
@@ -16,6 +14,11 @@ const THATCH_FRINGE_COLOR = 0xe0c071;
 const THATCH_WOOD_COLOR = 0x50351f;
 const THATCH_GABLE_COLOR = 0x6f472c;
 const THATCH_ROPE_COLOR = 0x74502d;
+
+// Semantic roofs are allowed a little more rise than the retained legacy physical-log
+// roof cap. Larger semantic wings should read as larger rooms rather than every narrow
+// wing terminating at one identical ridge height.
+const SEMANTIC_ROOF_MAX_RISE = PHYSICAL_LOG.roofMaxRise + PANEL_GRID.cellSize * 0.2;
 
 const finishedMaterial = (color, { flatShading = true } = {}) => new THREE.MeshStandardMaterial({
   color,
@@ -32,9 +35,17 @@ const woodMaterial = finishedMaterial(THATCH_WOOD_COLOR);
 const gableMaterial = finishedMaterial(THATCH_GABLE_COLOR);
 const ropeMaterial = finishedMaterial(THATCH_ROPE_COLOR, { flatShading: false });
 
-const clampRise = span => Math.min(
-  PHYSICAL_LOG.roofMaxRise,
-  Math.max(PHYSICAL_LOG.roofMinRise, span * 0.5 * Math.tan(PHYSICAL_LOG.roofPitch))
+const effectiveRoofSpan = (length, span) => Math.max(
+  span,
+  Math.sqrt(Math.max(0.01, length * span))
+);
+
+const clampRise = (length, span) => Math.min(
+  SEMANTIC_ROOF_MAX_RISE,
+  Math.max(
+    PHYSICAL_LOG.roofMinRise,
+    effectiveRoofSpan(length, span) * 0.5 * Math.tan(PHYSICAL_LOG.roofPitch)
+  )
 );
 
 const shadowMesh = (geometry, material, name) => {
@@ -57,8 +68,30 @@ const slopePoint = (side, amount, eaveY, rise, halfSpan) => new THREE.Vector3(
   side * halfSpan * (1 - amount)
 );
 
+const fullEaveSegments = length => [{
+  start: -length * 0.5,
+  end: length * 0.5
+}];
+
+const normalizedEaveSegments = (segments, length) => {
+  if (segments == null) return fullEaveSegments(length);
+  if (!Array.isArray(segments)) return fullEaveSegments(length);
+  const halfLength = length * 0.5;
+  return segments
+    .map(segment => ({
+      start: Math.max(-halfLength, Number(segment?.start)),
+      end: Math.min(halfLength, Number(segment?.end))
+    }))
+    .filter(segment => (
+      Number.isFinite(segment.start) &&
+      Number.isFinite(segment.end) &&
+      segment.end - segment.start > 0.05
+    ));
+};
+
 const slopeBox = ({
   length,
+  centerX = 0,
   gableOverhang,
   slopeLength,
   pitch,
@@ -79,6 +112,7 @@ const slopeBox = ({
   const segmentLength = Math.max(0.08, slopeLength * (boundedUpper - boundedLower));
   const center = slopePoint(side, centerAmount, eaveY, rise, halfSpan)
     .addScaledVector(slopeNormal(side, pitch), lift);
+  center.x = centerX;
   const mesh = shadowMesh(
     new THREE.BoxGeometry(length + gableOverhang * 2, depth, segmentLength),
     material,
@@ -91,6 +125,7 @@ const slopeBox = ({
 
 const fringeGeometry = ({
   length,
+  centerX = 0,
   gableOverhang,
   side,
   amount,
@@ -103,7 +138,7 @@ const fringeGeometry = ({
 }) => {
   const width = length + gableOverhang * 2;
   const tuftCount = Math.max(10, Math.round(width / 0.24));
-  const xMin = -width * 0.5;
+  const xMin = centerX - width * 0.5;
   const base = slopePoint(side, amount, eaveY, rise, halfSpan)
     .addScaledVector(slopeNormal(side, pitch), lift);
   const slopeLength = Math.hypot(halfSpan, rise);
@@ -239,20 +274,125 @@ const addRidgeFinish = (group, {
   }
 };
 
-export function semanticRoofWallSeatDrop() {
-  const visualWallTop = (
-    CONSTRUCTION_DIMENSIONS.wallRowRadius +
-    CONSTRUCTION_DIMENSIONS.wallSectionStep * 2 +
-    CONSTRUCTION_DIMENSIONS.wallSectionTopOffset
+const markExteriorEaveSegment = (object, side, segment) => {
+  object.userData.semanticRoofExteriorEave = true;
+  object.userData.semanticRoofEaveSide = side;
+  object.userData.semanticRoofEaveSegmentStart = segment.start;
+  object.userData.semanticRoofEaveSegmentEnd = segment.end;
+  return object;
+};
+
+const addExteriorEaveSegment = (group, {
+  segment,
+  segmentIndex,
+  segmentCount,
+  side,
+  sideLabel,
+  eaveY,
+  rise,
+  halfSpan,
+  pitch,
+  slopeLength,
+  eaveExtension,
+  eaveOverhang,
+  overlapExtension
+}) => {
+  const segmentLength = segment.end - segment.start;
+  const centerX = (segment.start + segment.end) * 0.5;
+  const suffix = segmentCount > 1 ? `${segmentIndex + 1}` : '';
+
+  const underlayExtension = slopeBox({
+    length: segmentLength,
+    centerX,
+    gableOverhang: 0,
+    slopeLength,
+    pitch,
+    side,
+    lower: -eaveExtension * 0.82,
+    upper: Math.max(0.02, overlapExtension * 0.25),
+    eaveY,
+    rise,
+    halfSpan,
+    lift: -0.012,
+    depth: 0.085,
+    material: underlayMaterial,
+    name: `SemanticRoofEaveUnderlay${sideLabel}${suffix}`
+  });
+  markExteriorEaveSegment(underlayExtension, side, segment);
+  underlayExtension.userData.semanticRoofEaveExtension = true;
+  group.add(underlayExtension);
+
+  const thatchExtension = slopeBox({
+    length: segmentLength,
+    centerX,
+    gableOverhang: 0,
+    slopeLength,
+    pitch,
+    side,
+    lower: -eaveExtension,
+    upper: Math.max(0.025, overlapExtension * 0.45),
+    eaveY,
+    rise,
+    halfSpan,
+    lift: 0.055,
+    depth: THATCH_COURSE_DEPTH + 0.04,
+    material: courseMaterials[0],
+    name: `SemanticRoofThatchEave${sideLabel}${suffix}`
+  });
+  markExteriorEaveSegment(thatchExtension, side, segment);
+  thatchExtension.userData.semanticRoofEaveExtension = true;
+  group.add(thatchExtension);
+
+  const fringe = shadowMesh(
+    fringeGeometry({
+      length: segmentLength,
+      centerX,
+      gableOverhang: 0,
+      side,
+      amount: -eaveExtension * 0.72,
+      eaveY,
+      rise,
+      halfSpan,
+      pitch,
+      lift: 0.055 + THATCH_COURSE_DEPTH * 0.52,
+      seed: 31 + segmentIndex + (side < 0 ? 0 : 17)
+    }),
+    fringeMaterial,
+    `SemanticRoofThatchFringe${sideLabel}1${suffix}`
   );
+  fringe.userData.semanticRoofThatchFringe = true;
+  markExteriorEaveSegment(fringe, side, segment);
+  group.add(fringe);
+
+  const downslope = new THREE.Vector3(
+    0,
+    -rise / slopeLength,
+    side * halfSpan / slopeLength
+  );
+  const fasciaPosition = new THREE.Vector3(centerX, eaveY, side * halfSpan)
+    .addScaledVector(downslope, eaveOverhang * 0.88);
+  const fascia = shadowMesh(
+    new THREE.BoxGeometry(segmentLength, 0.18, 0.19),
+    woodMaterial,
+    `SemanticRoofEaveFascia${sideLabel}${suffix}`
+  );
+  fascia.position.copy(fasciaPosition).add(new THREE.Vector3(0, -0.045, 0));
+  markExteriorEaveSegment(fascia, side, segment);
+  group.add(fascia);
+};
+
+export function semanticRoofWallSeatDrop() {
+  // Full-height wall-family visuals now reach the canonical storey top exactly.
+  // Roof roots therefore sit on that top line instead of dropping the thatch shell
+  // down into the occupied interior to compensate for a shorter Solid Wall.
   return Math.max(
     0,
-    PANEL_GRID.storeyHeight - visualWallTop + CONSTRUCTION_DIMENSIONS.wallTopTuck
+    PANEL_GRID.storeyHeight - semanticWallVisualTopY(PANEL_GRID.storeyHeight)
   );
 }
 
-const buildAlongX = (group, length, span, requestedOverhang) => {
-  const rise = clampRise(span);
+const buildAlongX = (group, length, span, requestedOverhang, eaveSegments = null) => {
+  const rise = clampRise(length, span);
   const halfSpan = span * 0.5;
   const slopeLength = Math.hypot(halfSpan, rise);
   const pitch = Math.atan2(rise, halfSpan);
@@ -266,13 +406,21 @@ const buildAlongX = (group, length, span, requestedOverhang) => {
 
   for (const side of [-1, 1]) {
     const sideLabel = side < 0 ? 'North' : 'South';
+    const exteriorSegments = normalizedEaveSegments(
+      side < 0 ? eaveSegments?.negative : eaveSegments?.positive,
+      length
+    );
+
+    // The occupied roof shell begins at the actual wall line. Exterior overhang is
+    // materialized separately per exposed run below; this stops one gable wing from
+    // projecting eave/fascia pieces across a neighbouring wing's occupied room.
     const underlay = slopeBox({
       length,
       gableOverhang,
       slopeLength,
       pitch,
       side,
-      lower: -eaveExtension * 0.82,
+      lower: 0,
       upper: 1.015,
       eaveY,
       rise,
@@ -287,7 +435,7 @@ const buildAlongX = (group, length, span, requestedOverhang) => {
 
     for (let index = 0; index < THATCH_COURSE_COUNT; index += 1) {
       const lower = index === 0
-        ? -eaveExtension
+        ? 0
         : index / THATCH_COURSE_COUNT - overlapExtension;
       const upper = Math.min(
         1.035,
@@ -313,7 +461,8 @@ const buildAlongX = (group, length, span, requestedOverhang) => {
       course.userData.semanticRoofThatch = true;
       group.add(course);
 
-      const fringeAmount = index === 0 ? -eaveExtension * 0.72 : Math.max(0, index / THATCH_COURSE_COUNT - 0.018);
+      if (index === 0) continue;
+      const fringeAmount = Math.max(0, index / THATCH_COURSE_COUNT - 0.018);
       const fringe = shadowMesh(
         fringeGeometry({
           length,
@@ -334,20 +483,23 @@ const buildAlongX = (group, length, span, requestedOverhang) => {
       group.add(fringe);
     }
 
-    const downslope = new THREE.Vector3(
-      0,
-      -rise / slopeLength,
-      side * halfSpan / slopeLength
-    );
-    const fasciaPosition = new THREE.Vector3(0, eaveY, side * halfSpan)
-      .addScaledVector(downslope, eaveOverhang * 0.88);
-    const fascia = shadowMesh(
-      new THREE.BoxGeometry(length + gableOverhang * 2.35, 0.18, 0.19),
-      woodMaterial,
-      `SemanticRoofEaveFascia${sideLabel}`
-    );
-    fascia.position.copy(fasciaPosition).add(new THREE.Vector3(0, -0.045, 0));
-    group.add(fascia);
+    for (const [segmentIndex, segment] of exteriorSegments.entries()) {
+      addExteriorEaveSegment(group, {
+        segment,
+        segmentIndex,
+        segmentCount: exteriorSegments.length,
+        side,
+        sideLabel,
+        eaveY,
+        rise,
+        halfSpan,
+        pitch,
+        slopeLength,
+        eaveExtension,
+        eaveOverhang,
+        overlapExtension
+      });
+    }
   }
 
   addGableClosure(group, {
@@ -374,15 +526,17 @@ const buildAlongX = (group, length, span, requestedOverhang) => {
 };
 
 export function semanticRoofRise({ width, depth, ridgeAxis = 'x' }) {
+  const length = ridgeAxis === 'z' ? depth : width;
   const span = ridgeAxis === 'z' ? width : depth;
-  return clampRise(span);
+  return clampRise(length, span);
 }
 
 export function createSemanticRoofZoneVisual(name = 'SemanticRoof', {
   width,
   depth,
   ridgeAxis = 'x',
-  overhang = PHYSICAL_LOG.radius * 1.2
+  overhang = PHYSICAL_LOG.radius * 1.2,
+  eaveSegments = null
 } = {}) {
   if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(depth) || depth <= 0) {
     throw new Error('Semantic roof geometry requires positive width and depth');
@@ -395,15 +549,21 @@ export function createSemanticRoofZoneVisual(name = 'SemanticRoof', {
   root.userData.thatchFinished = true;
   root.userData.closedGables = true;
   root.userData.wallSeatDrop = semanticRoofWallSeatDrop();
+  root.userData.eaveSegments = eaveSegments
+    ? {
+        negative: (eaveSegments.negative ?? []).map(segment => ({ ...segment })),
+        positive: (eaveSegments.positive ?? []).map(segment => ({ ...segment }))
+      }
+    : null;
 
   if (ridgeAxis === 'z') {
     const rotated = new THREE.Group();
     rotated.name = 'SemanticRoofRotatedZAxis';
     rotated.rotation.y = Math.PI / 2;
     root.add(rotated);
-    buildAlongX(rotated, depth, width, overhang);
+    buildAlongX(rotated, depth, width, overhang, eaveSegments);
   } else {
-    buildAlongX(root, width, depth, overhang);
+    buildAlongX(root, width, depth, overhang, eaveSegments);
   }
 
   return root;
