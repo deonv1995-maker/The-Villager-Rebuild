@@ -2,14 +2,13 @@ import * as THREE from 'three';
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import {
   createConstructionLogVisual,
+  createSplitHalfLogVisual,
   tintConstructionPreview
 } from './PhysicalLogVisual.js';
 import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
 import { createSemanticRoofZoneVisual } from './SemanticRoofZoneGeometry.js';
 import { createSemanticStairPanelVisual } from './SemanticStairPanelGeometry.js';
-import {
-  semanticWallSectionBaseYs
-} from './SemanticWallPanelGeometry.js';
+import { semanticWallRowYs } from './SemanticWallPanelGeometry.js';
 import { createSemanticWindowPanelVisual } from './SemanticWindowPanelGeometry.js';
 
 export function createFloorPanelVisual(name = 'PanelFloor') {
@@ -30,10 +29,12 @@ export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
   const root = new THREE.Group();
   root.name = name;
   root.userData.panelWallVariant = 'solid';
-  for (const baseY of semanticWallSectionBaseYs()) {
-    const section = createConstructionLogVisual('wall');
-    section.position.y = baseY;
-    root.add(section);
+  root.userData.wallFlatFaceInward = true;
+  for (const rowY of semanticWallRowYs()) {
+    const row = createSplitHalfLogVisual('SemanticSolidWallSplitLog');
+    row.rotation.x = Math.PI / 2;
+    row.position.y = rowY;
+    root.add(row);
   }
   return root;
 }
