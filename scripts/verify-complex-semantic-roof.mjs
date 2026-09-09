@@ -5,14 +5,18 @@ import { PANEL_DIRECTIONS, PANEL_GRID } from '../src/data/PanelConstructionDefin
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { panelCellKey } from '../src/world/PanelConstructionGrid.js';
 import { ComplexRoofPanelConstructionSystem } from '../src/world/ComplexRoofPanelConstructionSystem.js';
+import { createSemanticRoofFootprintVisual } from '../src/world/SemanticRoofFootprintGeometry.js';
 import {
   connectedSemanticRoofCells,
   planSemanticRoofFootprint
 } from '../src/world/SemanticRoofFootprintPlanner.js';
+import { semanticRoofRise } from '../src/world/SemanticRoofZoneGeometry.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const cellKey = cell => `${cell.x}:${cell.z}`;
 const cellSet = cells => new Set(cells.map(cellKey));
+const segmentLength = segments => segments.reduce((total, segment) => total + segment.end - segment.start, 0);
+const near = (left, right) => Math.abs(left - right) <= 0.000001;
 
 const assertExactPlanCoverage = (cells, plan, label) => {
   assert.ok(plan, `${label} must produce a roof plan`);
@@ -33,6 +37,56 @@ const lPlan = planSemanticRoofFootprint(lCells);
 assertExactPlanCoverage(lCells, lPlan, 'L footprint');
 assert.equal(lPlan.wings.length, 2, 'L footprint should resolve into two connected gable wings');
 assert.ok(!lPlan.wings.some(wing => wing.cells.some(cell => cell.x > 0 && cell.z > 0)), 'L roof must never bridge the empty inner bounding-box corner');
+
+const lLongWing = lPlan.wings.find(wing => wing.widthCells === 3 && wing.depthCells === 1);
+const lShortWing = lPlan.wings.find(wing => wing.widthCells === 1 && wing.depthCells === 2);
+assert.ok(lLongWing && lShortWing, 'L plan must retain one long cap wing and one shorter stem wing');
+assert.ok(
+  near(segmentLength(lLongWing.eaveSegments.negative), PANEL_GRID.cellSize * 3),
+  'The fully exterior long-wing eave must retain overhang across all three cap cells'
+);
+assert.ok(
+  near(segmentLength(lLongWing.eaveSegments.positive), PANEL_GRID.cellSize * 2),
+  'The cap eave run shared with the stem must trim the one internal cell of overhang'
+);
+assert.ok(
+  semanticRoofRise(lLongWing) > semanticRoofRise(lShortWing),
+  'The larger three-cell wing must resolve to a higher ridge than the smaller two-cell wing'
+);
+
+const lVisual = createSemanticRoofFootprintVisual('ComplexRoofInteriorTrimProbe', { plan: lPlan });
+assert.equal(lVisual.userData.internalEavesTrimmed, true);
+const lowJunctionMasks = [];
+lVisual.traverse(object => {
+  if (object.userData?.semanticRoofJunction === true) lowJunctionMasks.push(object);
+});
+assert.equal(
+  lowJunctionMasks.length,
+  0,
+  'Complex Roof must not recreate low horizontal junction masks that show as strips inside the room'
+);
+const lLongWingRoot = lVisual.children.find(child => child.userData.semanticRoofWingId === lLongWing.id);
+assert.ok(lLongWingRoot, 'Complex Roof visual must retain the planned long wing identity');
+assert.deepEqual(
+  lLongWingRoot.userData.eaveSegments,
+  lLongWing.eaveSegments,
+  'Wing geometry must consume the exact exterior eave runs planned from semantic cells'
+);
+const longWingPositiveEavePieces = [];
+lLongWingRoot.traverse(object => {
+  if (
+    object.userData?.semanticRoofExteriorEave === true &&
+    object.userData?.semanticRoofEaveSide === 1
+  ) longWingPositiveEavePieces.push(object);
+});
+assert.ok(longWingPositiveEavePieces.length >= 4, 'Exterior eave run must retain thatch, fringe and fascia finish');
+for (const piece of longWingPositiveEavePieces) {
+  assert.ok(
+    near(piece.userData.semanticRoofEaveSegmentStart, lLongWing.eaveSegments.positive[0].start) &&
+    near(piece.userData.semanticRoofEaveSegmentEnd, lLongWing.eaveSegments.positive[0].end),
+    'No positive-side eave presentation piece may extend across the internal L-wing junction cell'
+  );
+}
 
 const tCells = [
   { x: -1, z: 0 }, { x: 0, z: 0 }, { x: 1, z: 0 },
@@ -119,6 +173,7 @@ assert.equal(runtime.system.previewPlacement?.plan?.wings?.length, 2);
 assert.equal(runtime.system.previewRoot?.userData.semanticRoofFootprint, true);
 assert.equal(runtime.system.previewRoot?.userData.semanticRoofCellCount, 5);
 assert.equal(runtime.system.previewRoot?.userData.semanticRoofWingCount, 2);
+assert.equal(runtime.system.previewRoot?.userData.internalEavesTrimmed, true);
 
 const built = runtime.system.build(player, facing);
 assert.equal(built?.kind, 'roof');
@@ -132,6 +187,7 @@ for (const missing of [{ x: 1, z: 1 }, { x: 2, z: 1 }, { x: 1, z: 2 }, { x: 2, z
 
 const roofEntry = runtime.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
 assert.equal(roofEntry?.root.userData.semanticRoofFootprint, true);
+assert.equal(roofEntry?.root.userData.internalEavesTrimmed, true);
 assert.equal(roofEntry?.roofWingCount, 2);
 assert.ok(roofEntry.root.children.filter(child => child.userData.semanticRoofWing).length === 2, 'Committed L Roof must materialize both semantic wings');
 
@@ -141,6 +197,7 @@ assert.equal(restored.system.restore(snapshot), true);
 assert.deepEqual(restored.system.snapshot(), snapshot, 'Complex Roof state must round-trip without storing presentation-derived wing meshes');
 const restoredRoof = restored.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
 assert.equal(restoredRoof?.root.userData.semanticRoofFootprint, true, 'Continue must re-plan complex Roof presentation from semantic cell state');
+assert.equal(restoredRoof?.root.userData.internalEavesTrimmed, true, 'Continue must re-derive the cleaned interior eave presentation');
 assert.equal(restoredRoof?.root.userData.semanticRoofCellCount, 5);
 assert.equal(restoredRoof?.roofWingCount, 2);
 assert.equal(restored.inventory.get('log'), 0, 'Continue must never charge again for the restored complex Roof');
@@ -158,4 +215,4 @@ assert.ok(
   'Live Hammer runtime must use the complex Roof specialization while preserving the existing controller boundary'
 );
 
-console.log('Connected L/T/U semantic Roof planning, exact-cell cost/state, multi-wing presentation, save/Continue and near-cell demolition verified');
+console.log('Connected L/T/U Roof planning, scaled wing height, exterior-only eaves, exact cost/state, save/Continue and demolition verified');
