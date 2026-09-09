@@ -1,8 +1,5 @@
 import * as THREE from 'three';
-import {
-  CONSTRUCTION_DIMENSIONS,
-  PHYSICAL_LOG
-} from '../data/PhysicalLogDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import {
   createConstructionLogVisual,
   tintConstructionPreview
@@ -10,6 +7,9 @@ import {
 import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
 import { createSemanticRoofZoneVisual } from './SemanticRoofZoneGeometry.js';
 import { createSemanticStairPanelVisual } from './SemanticStairPanelGeometry.js';
+import {
+  semanticWallSectionBaseYs
+} from './SemanticWallPanelGeometry.js';
 import { createSemanticWindowPanelVisual } from './SemanticWindowPanelGeometry.js';
 
 export function createFloorPanelVisual(name = 'PanelFloor') {
@@ -30,9 +30,9 @@ export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
   const root = new THREE.Group();
   root.name = name;
   root.userData.panelWallVariant = 'solid';
-  for (let index = 0; index < 3; index += 1) {
+  for (const baseY of semanticWallSectionBaseYs()) {
     const section = createConstructionLogVisual('wall');
-    section.position.y = 0.26 + CONSTRUCTION_DIMENSIONS.wallSectionStep * index;
+    section.position.y = baseY;
     root.add(section);
   }
   return root;
