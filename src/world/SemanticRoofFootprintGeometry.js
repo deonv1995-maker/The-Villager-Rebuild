@@ -5,13 +5,6 @@ import {
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
 
-const junctionMaterial = new THREE.MeshStandardMaterial({
-  color: 0xb98a42,
-  roughness: 0.97,
-  metalness: 0,
-  flatShading: true
-});
-
 export function semanticRoofFootprintRise(plan) {
   if (!plan?.wings?.length) return 0;
   return Math.max(...plan.wings.map(wing => semanticRoofRise({
@@ -40,6 +33,7 @@ export function createSemanticRoofFootprintVisual(
   root.userData.thatchFinished = true;
   root.userData.closedGables = true;
   root.userData.wallSeatDrop = semanticRoofWallSeatDrop();
+  root.userData.internalEavesTrimmed = true;
 
   for (const wing of plan.wings) {
     const wingRoot = createSemanticRoofZoneVisual(
@@ -48,7 +42,8 @@ export function createSemanticRoofFootprintVisual(
         width: wing.width,
         depth: wing.depth,
         ridgeAxis: wing.ridgeAxis,
-        overhang
+        overhang,
+        eaveSegments: wing.eaveSegments
       }
     );
     wingRoot.position.set(wing.offsetX, 0, wing.offsetZ);
@@ -58,25 +53,9 @@ export function createSemanticRoofFootprintVisual(
     root.add(wingRoot);
   }
 
-  // Adjacent orthogonal rectangles intentionally overlap slightly through the existing
-  // thatch overhang. These low-profile seam masks cover any exposed gable edge at the
-  // shared cell boundary without inventing another structural/collision roof system.
-  const seamY = -semanticRoofWallSeatDrop() + 0.085;
-  for (const [index, junction] of plan.junctions.entries()) {
-    const length = junction.length * 1.06;
-    const seam = new THREE.Mesh(
-      junction.axis === 'x'
-        ? new THREE.BoxGeometry(length, 0.11, 0.26)
-        : new THREE.BoxGeometry(0.26, 0.11, length),
-      junctionMaterial
-    );
-    seam.name = `SemanticRoofJunctionMask${index + 1}`;
-    seam.position.set(junction.x, seamY, junction.z);
-    seam.castShadow = true;
-    seam.receiveShadow = true;
-    seam.userData.semanticRoofJunction = true;
-    root.add(seam);
-  }
-
+  // Do not add the old low horizontal junction masks here. On irregular footprints
+  // those masks and full-width wing eaves were visible from inside as stacked thatch/
+  // timber strips. Exact exterior eave runs now provide the seam boundary while the
+  // main slope shells still meet at the canonical shared wing edge.
   return root;
 }

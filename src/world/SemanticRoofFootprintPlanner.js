@@ -37,6 +37,11 @@ const contiguousRuns = values => {
   return runs;
 };
 
+const localSegmentsForRuns = (values, centerCoordinate, cellSize) => contiguousRuns(values).map(run => ({
+  start: (run.start - centerCoordinate - 0.5) * cellSize,
+  end: (run.end - centerCoordinate + 0.5) * cellSize
+}));
+
 const partitionAlongX = cells => {
   const rows = new Map();
   for (const cell of cells) {
@@ -180,6 +185,7 @@ export function planSemanticRoofFootprint(cells, {
   const partition = choosePartition(normalized, resolvedPreferredAxis);
   const centerX = (minX + maxX) * 0.5;
   const centerZ = (minZ + maxZ) * 0.5;
+  const occupied = new Set(normalized.map(keyFor));
   const wingByCell = new Map();
 
   const wings = partition.rectangles.map((rectangle, index) => {
@@ -192,6 +198,28 @@ export function planSemanticRoofFootprint(cells, {
         ? 'z'
         : partition.axis;
     for (const cell of cells) wingByCell.set(keyFor(cell), index);
+
+    let negativeEaveCoordinates;
+    let positiveEaveCoordinates;
+    let eaveCenterCoordinate;
+    if (ridgeAxis === 'x') {
+      negativeEaveCoordinates = cells
+        .filter(cell => cell.z === rectangle.minZ && !occupied.has(`${cell.x}:${cell.z - 1}`))
+        .map(cell => cell.x);
+      positiveEaveCoordinates = cells
+        .filter(cell => cell.z === rectangle.maxZ && !occupied.has(`${cell.x}:${cell.z + 1}`))
+        .map(cell => cell.x);
+      eaveCenterCoordinate = (rectangle.minX + rectangle.maxX) * 0.5;
+    } else {
+      negativeEaveCoordinates = cells
+        .filter(cell => cell.x === rectangle.minX && !occupied.has(`${cell.x - 1}:${cell.z}`))
+        .map(cell => cell.z);
+      positiveEaveCoordinates = cells
+        .filter(cell => cell.x === rectangle.maxX && !occupied.has(`${cell.x + 1}:${cell.z}`))
+        .map(cell => cell.z);
+      eaveCenterCoordinate = (rectangle.minZ + rectangle.maxZ) * 0.5;
+    }
+
     return {
       id: `wing-${index + 1}`,
       index,
@@ -207,7 +235,14 @@ export function planSemanticRoofFootprint(cells, {
       width: wingWidthCells * cellSize,
       depth: wingDepthCells * cellSize,
       offsetX: ((rectangle.minX + rectangle.maxX) * 0.5 - centerX) * cellSize,
-      offsetZ: ((rectangle.minZ + rectangle.maxZ) * 0.5 - centerZ) * cellSize
+      offsetZ: ((rectangle.minZ + rectangle.maxZ) * 0.5 - centerZ) * cellSize,
+      // The main roof slope always covers the complete wing rectangle. Only the
+      // presentation eave extension/fascia/fringe uses these exact exterior runs.
+      // Shared wing boundaries therefore cannot project thatch overhang into rooms.
+      eaveSegments: {
+        negative: localSegmentsForRuns(negativeEaveCoordinates, eaveCenterCoordinate, cellSize),
+        positive: localSegmentsForRuns(positiveEaveCoordinates, eaveCenterCoordinate, cellSize)
+      }
     };
   });
 
