@@ -21,6 +21,7 @@ import {
   connectedSemanticRoofCells,
   planSemanticRoofFootprint
 } from './SemanticRoofFootprintPlanner.js';
+import { semanticUpperStoreyOpeningCells } from './SemanticUpperStoreyRules.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
@@ -166,7 +167,7 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     const seenComponents = new Set();
 
     for (const structure of this.registry.structures.values()) {
-      const floors = [...structure.grid.floors.values()];
+      const floors = this.#roofSupportFloors(structure);
       for (const seed of floors) {
         if (!this.#floorIsRoofable(structure, seed)) continue;
 
@@ -217,6 +218,31 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     }
 
     return best && best.score <= PANEL_GRID.cellSize * 1.7 ? best : null;
+  }
+
+  #roofSupportFloors(structure) {
+    const actualFloors = [...structure.grid.floors.values()];
+    const projectedOpenings = semanticUpperStoreyOpeningCells(structure.grid)
+      .filter(opening => directionEntries.some(direction => (
+        structure.grid.floors.has(panelCellKey({
+          x: opening.x + direction.dx,
+          z: opening.z + direction.dz,
+          storey: opening.storey
+        }))
+      )))
+      .map(opening => {
+        const stair = structure.grid.stairs.get(opening.stairKey);
+        return {
+          key: opening.key,
+          x: opening.x,
+          z: opening.z,
+          storey: opening.storey,
+          levelY: stair?.topY ?? opening.storey * PANEL_GRID.storeyHeight,
+          semanticStairOpening: true,
+          stairKey: opening.stairKey
+        };
+      });
+    return [...actualFloors, ...projectedOpenings];
   }
 
   #floorIsRoofable(structure, floor) {
@@ -273,25 +299,49 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     return this.#placementForCells(structure, cells, roofZone.storey, plan);
   }
 
+  #roofSupportForCell(structure, cell, storey) {
+    const key = panelCellKey({ x: cell.x, z: cell.z, storey });
+    const floor = structure.grid.floors.get(key);
+    if (floor) return floor;
+    if (storey <= 0) return null;
+
+    const lowerKey = panelCellKey({
+      x: cell.x,
+      z: cell.z,
+      storey: storey - 1
+    });
+    const stair = [...structure.grid.stairs.values()].find(candidate => (
+      candidate.storey === storey - 1 && candidate.targetCellKey === lowerKey
+    ));
+    if (!stair) return null;
+    return {
+      key,
+      x: cell.x,
+      z: cell.z,
+      storey,
+      levelY: stair.topY,
+      semanticStairOpening: true,
+      stairKey: stair.key
+    };
+  }
+
   #placementForCells(structure, cells, storey, plan = null) {
     const resolvedPlan = plan ?? planSemanticRoofFootprint(cells, {
       cellSize: PANEL_GRID.cellSize
     });
     if (!resolvedPlan) return null;
 
-    const floors = cells.map(cell => structure.grid.floors.get(panelCellKey({
-      x: cell.x,
-      z: cell.z,
-      storey
-    }))).filter(Boolean);
-    if (floors.length !== cells.length) return null;
+    const supports = cells
+      .map(cell => this.#roofSupportForCell(structure, cell, storey))
+      .filter(Boolean);
+    if (supports.length !== cells.length) return null;
 
     const localCenter = structure.grid.cellCenter({
       x: resolvedPlan.centerX,
       z: resolvedPlan.centerZ
     });
     const worldCenter = this.registry.localToWorld(structure, localCenter.x, localCenter.z);
-    const floorLevel = Math.max(...floors.map(floor => floor.levelY));
+    const floorLevel = Math.max(...supports.map(support => support.levelY));
     const rise = semanticRoofFootprintRise(resolvedPlan);
     return {
       kind: 'roof',
