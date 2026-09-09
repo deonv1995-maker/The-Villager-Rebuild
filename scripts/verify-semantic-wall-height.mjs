@@ -11,7 +11,8 @@ import {
 import { createWallPanelVisual } from '../src/world/PanelConstructionVisual.js';
 import {
   semanticWallRowYs,
-  semanticWallSectionBaseYs
+  semanticWallSectionBaseYs,
+  semanticWallVisualTopY
 } from '../src/world/SemanticWallPanelGeometry.js';
 import {
   createSemanticWindowPanelVisual,
@@ -20,39 +21,32 @@ import {
 
 const rounded = values => values.map(value => Number(value.toFixed(4)));
 const expectedSectionBases = [0.26, 1.04, 1.82];
-const expectedRows = [0.26, 0.76, 1.04, 1.54, 1.82, 2.32];
+const closureRow = PHYSICAL_LOG.length - CONSTRUCTION_DIMENSIONS.wallRowRadius;
+const expectedRows = [0.26, 0.76, 1.04, 1.54, 1.82, 2.32, Number(closureRow.toFixed(4))];
 
 assert.deepEqual(
   rounded(semanticWallSectionBaseYs()),
   expectedSectionBases,
-  'Solid wall sections must retain the established three-section vertical schedule'
+  'The three established two-course wall sections must remain intact'
 );
 assert.deepEqual(
   rounded(semanticWallRowYs()),
   expectedRows,
-  'The shared semantic wall course schedule must match the established solid wall height'
+  'The shared semantic wall schedule must include the full-storey closure course'
 );
 assert.deepEqual(
   rounded(semanticDoorWallRows()),
   expectedRows,
-  'Door must use exactly the same horizontal Log course heights as Solid Wall'
+  'Door must use exactly the same full-height horizontal Log courses as Solid Wall'
 );
 assert.deepEqual(
   rounded(semanticWindowWallRows()),
   expectedRows,
-  'Window must use exactly the same horizontal Log course heights as Solid Wall'
+  'Window must use exactly the same full-height horizontal Log courses as Solid Wall'
 );
-
-const formerClosureRow = PHYSICAL_LOG.length - CONSTRUCTION_DIMENSIONS.wallRowRadius;
-assert.equal(
-  rounded(semanticDoorWallRows()).includes(Number(formerClosureRow.toFixed(4))),
-  false,
-  'Door must not add the former storey-height closure course above the solid wall'
-);
-assert.equal(
-  rounded(semanticWindowWallRows()).includes(Number(formerClosureRow.toFixed(4))),
-  false,
-  'Window must not add the former storey-height closure course above the solid wall'
+assert.ok(
+  Math.abs(semanticWallVisualTopY() - PHYSICAL_LOG.length) <= 0.000001,
+  'Shared semantic wall presentation must now reach the canonical storey top'
 );
 
 const visualTopY = root => {
@@ -73,10 +67,10 @@ assert.ok(
   `Window visible top (${windowTop}) must match Solid Wall visible top (${solidTop})`
 );
 assert.ok(
-  solidTop < PHYSICAL_LOG.length - 0.2,
-  'The shared wall-family visible top must remain safely below the semantic Roof eave base'
+  Math.abs(solidTop - PHYSICAL_LOG.length) <= 0.001,
+  `Shared wall-family visible top (${solidTop}) must finish at the 2.9-unit storey top`
 );
 
 console.log(
-  'Solid/Door/Window semantic wall course heights and visible roof clearance verified'
+  'Solid/Door/Window full-storey semantic wall height and shared closure course verified'
 );
