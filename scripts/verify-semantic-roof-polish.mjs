@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {
-  CONSTRUCTION_DIMENSIONS,
-  PHYSICAL_LOG
-} from '../src/data/PhysicalLogDefinitions.js';
+import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { PANEL_GRID } from '../src/data/PanelConstructionDefinitions.js';
 import {
   createSemanticRoofZoneVisual,
   semanticRoofRise,
   semanticRoofWallSeatDrop
 } from '../src/world/SemanticRoofZoneGeometry.js';
+import { semanticWallVisualTopY } from '../src/world/SemanticWallPanelGeometry.js';
 
 const objectsWith = (root, predicate) => {
   const matches = [];
@@ -19,17 +17,35 @@ const objectsWith = (root, predicate) => {
   return matches;
 };
 
-const expectedWallTop = (
-  CONSTRUCTION_DIMENSIONS.wallRowRadius +
-  CONSTRUCTION_DIMENSIONS.wallSectionStep * 2 +
-  CONSTRUCTION_DIMENSIONS.wallSectionTopOffset
-);
-const expectedSeatDrop = (
-  PANEL_GRID.storeyHeight - expectedWallTop + CONSTRUCTION_DIMENSIONS.wallTopTuck
-);
 const seatDrop = semanticRoofWallSeatDrop();
-assert.ok(Math.abs(seatDrop - expectedSeatDrop) < 0.000001, 'Roof wall seating must derive from canonical semantic wall dimensions');
-assert.ok(seatDrop > 0.3 && seatDrop < 0.5, 'Roof wall seating should close the current visible wall-to-roof gap without changing storey height');
+assert.ok(
+  Math.abs(semanticWallVisualTopY() - PANEL_GRID.storeyHeight) < 0.000001,
+  'Full-height semantic walls must reach the canonical storey top'
+);
+assert.ok(
+  Math.abs(seatDrop) < 0.000001,
+  'Semantic Roof must now sit on top of the full-height wall family instead of dropping into the room'
+);
+
+const oneCellRise = semanticRoofRise({
+  width: PHYSICAL_LOG.length,
+  depth: PHYSICAL_LOG.length,
+  ridgeAxis: 'x'
+});
+const twoCellRise = semanticRoofRise({
+  width: PHYSICAL_LOG.length * 2,
+  depth: PHYSICAL_LOG.length,
+  ridgeAxis: 'x'
+});
+const threeCellRise = semanticRoofRise({
+  width: PHYSICAL_LOG.length * 3,
+  depth: PHYSICAL_LOG.length,
+  ridgeAxis: 'x'
+});
+assert.ok(
+  oneCellRise < twoCellRise && twoCellRise < threeCellRise,
+  'Larger semantic roof wings must resolve to progressively higher ridges'
+);
 
 const roof = createSemanticRoofZoneVisual('SemanticRoofPolishTest', {
   width: PHYSICAL_LOG.length * 2,
@@ -49,9 +65,11 @@ assert.ok(roof.getObjectByName('SemanticRoofGableA'));
 assert.ok(roof.getObjectByName('SemanticRoofGableB'));
 
 const thatchCourses = objectsWith(roof, object => object.userData?.semanticRoofThatch === true);
-assert.equal(thatchCourses.length, 10, 'A gable Roof must have five overlapping thatch courses on each slope');
+assert.equal(thatchCourses.length, 10, 'A gable Roof must have five overlapping main thatch courses on each slope');
 const thatchFringes = objectsWith(roof, object => object.userData?.semanticRoofThatchFringe === true);
-assert.equal(thatchFringes.length, 10, 'Every semantic thatch course must carry a visible straw fringe');
+assert.equal(thatchFringes.length, 10, 'Every semantic slope must retain five visible straw fringe lines including the exterior eave');
+const exteriorEaves = objectsWith(roof, object => object.userData?.semanticRoofExteriorEave === true);
+assert.ok(exteriorEaves.length >= 6, 'A standalone rectangular Roof must keep finished exterior eave extensions on both sides');
 const gables = objectsWith(roof, object => object.userData?.semanticRoofGable === true);
 assert.equal(gables.length, 2, 'Both exposed gable ends must be visually closed');
 assert.equal(
@@ -62,12 +80,12 @@ assert.equal(
 
 const roofBounds = new THREE.Box3().setFromObject(roof);
 assert.ok(
-  roofBounds.min.y < -seatDrop,
-  'Thatched eaves must extend below the structural roof root so the shell tucks into the wall instead of floating above it'
+  roofBounds.min.y < 0,
+  'Exterior thatch eaves may project below the wall-top plane outside the occupied room'
 );
 assert.ok(
-  roofBounds.max.y > semanticRoofRise({ width: PHYSICAL_LOG.length * 2, depth: PHYSICAL_LOG.length, ridgeAxis: 'x' }) - seatDrop,
-  'Finished ridge cap must remain visibly proud of the roof slopes'
+  roofBounds.max.y > twoCellRise,
+  'Finished ridge cap must remain visibly proud of the scaled roof slopes'
 );
 
 const rotatedRoof = createSemanticRoofZoneVisual('SemanticRoofPolishRotatedTest', {
@@ -87,4 +105,4 @@ assert.equal(
   'Rotated semantic Roof must keep the complete two-slope thatch finish'
 );
 
-console.log('Semantic Roof thatch finish, wall seating, closed gables and interior-clean shell verified');
+console.log('Raised wall-top Roof seating, size-scaled ridge height, finished thatch and clean structural interior verified');
