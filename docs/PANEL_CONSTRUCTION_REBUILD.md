@@ -2,280 +2,191 @@
 
 ## Decision
 
-The Villager construction model is moving from log-for-log structural inference to explicit semantic building modules.
+The Villager construction model uses explicit semantic building modules rather than reconstructing structural identity from placed mesh transforms or individual physical Logs.
 
 The authoritative direction is:
 
 `semantic building state -> placement/rendering/collision -> persistence`
 
-instead of:
+A Floor is one canonical cell. Wall, Door and Window are variants of one semantic wall-family edge. Stairs are one semantic flight between two adjacent cells. Roofs are semantic covered zones over exact connected structural bays. Rendered Logs, thatch courses and roof-wing meshes are presentation only.
 
-`individual placed Logs -> geometric inference -> guessed structure -> repair on save/restore`
+Legacy physical FRAME/RAW/ANGLE/ROOF code remains compatibility and regression infrastructure. New player-facing construction must not reconnect semantic state to that inference graph.
 
-A Floor is one canonical building cell. Wall, Door and Window are semantic wall-family modules on canonical edges. Stairs are one semantic flight between an adjacent canonical cell pair. Roofs are explicit semantic roof zones over exact connected top-floor cells.
+## Current live Hammer vocabulary
 
-Rendered Logs, thatch courses, roof wings and junction trim remain presentation. They never become the source of truth for structural identity.
+The live semantic Hammer menu contains:
 
-## Current live slice
-
-The player-facing semantic construction vocabulary includes:
-
-- **Floor Panel**;
-- **Solid Wall Panel**;
-- **Door Wall Panel**;
-- **Window Wall Panel**;
+- **Floor**;
+- **Wall**;
+- **Door**;
+- **Window**;
 - **Stairs**;
 - **Roof**;
-- **Remove** through the same Hammer demolition path.
+- **Remove**.
 
-Floor, Wall, Door, Window and Stairs have passed their current device acceptance. Roof has progressed from the initial rectangular gable slice to exact connected irregular footprints so L-, T-, U- and stepped orthogonal buildings can be roofed without filling or charging for empty bounding-box cells.
+Current semantic material costs are:
 
-This milestone does **not** re-enable the legacy individual-Log structural workflow. General upper-storey editing and player-selected mono-pitch roofs remain separate later semantic slices.
+- Floor: **3 Logs**;
+- Wall: **3 Logs**;
+- Door: **3 Logs**;
+- Window: **3 Logs**;
+- Stairs: **3 Logs** per complete flight;
+- Roof: **5 Logs per covered roof bay**.
 
-## Log resource transition and costs
+A normal roof bay is backed by a Floor cell. On the second storey, the reserved Stair opening is also a roof-support bay even though it deliberately has no Floor. When the final Roof spans that opening, that covered bay uses the same 5-Log Roof cost.
 
-Trees still create a visibly full-sized Log world pickup. When the Ranger collects it, the Log enters `InventorySystem` and becomes semantic construction material.
+Successful Hammer demolition refunds the exact semantic module cost. Failed dependency checks do not refund resources or consume Hammer durability.
 
-The material flow remains:
+## Per-structure semantic grid
 
-`tree -> world Log pickup -> inventory Log -> semantic building module`
+`PanelStructureRegistry` owns separate local grids for separate buildings. One building therefore has one canonical origin/yaw, while unrelated buildings may face different directions without individual panels competing over rotation.
 
-Current semantic costs are:
+The canonical cell size and storey height are both derived from the authoritative **2.9-unit Log length**.
 
-- Floor Panel: **3 Logs**;
-- Solid Wall Panel: **3 Logs**;
-- Door Wall Panel: **3 Logs**;
-- Window Wall Panel: **3 Logs**;
-- Stairs: **3 Logs** for one complete flight;
-- Roof: **5 Logs per actual covered canonical Floor cell**.
+Stored structural identity remains integer cell/storey coordinates and canonical shared-edge keys. Fractional grid coordinates may be used only as derived geometry centres for multi-cell Roof presentation; they are never persisted as structural identity.
 
-The 3-Log Stair cost preserves the established complete stair-flight material budget. The semantic flight is no longer assembled or recognized from separately placed physical Logs.
+## Floors and wall family
 
-The 5-Log Roof cell budget preserves the old one-bay gable material meaning of four rafters plus one ridge member while removing the old member-by-member inference graph from structural authority. An irregular five-cell Roof therefore costs 25 Logs even when its rectangular bounds contain more than five cells.
+Floor records are keyed by `(x, z, storey)`.
 
-Successful demolition returns the exact semantic cost. Failed dependency checks return nothing and do not consume Hammer durability.
+Wall-family records use canonical shared edges, so the east edge of one cell and the west edge of its neighbour resolve to one structural edge rather than two overlapping wall objects.
 
-## Per-structure local grids
-
-Each building remains owned by `PanelStructureRegistry` and has its own local grid origin and snapped yaw. Separate buildings can therefore face different directions without individual modules inside one building acquiring competing rotation rules.
-
-The canonical cell size remains `2.9 x 2.9` world units, derived from the authoritative Log length.
-
-Stored Floor and Stair identities remain integer cell coordinates. Aggregate geometry queries may use fractional local coordinates only to find the geometric centre of an explicit multi-cell Roof assembly; those fractional coordinates are never persisted as canonical cell identity.
-
-## Floor and wall-family identity
-
-Floor Panels occupy integer cell coordinates plus storey.
-
-Wall-family Panels occupy canonical shared edges. The east edge of one cell and west edge of its neighbour resolve to the same structural edge key, preventing duplicate wall-family modules by state identity rather than mesh overlap.
-
-Each wall retains semantic owner/interior information, variant and inward/outward normals. Rendering derives world transforms from that data. Ranger facing, camera yaw and saved mesh transforms do not decide structural orientation.
-
-Door and Window remain semantic wall records with `variant: 'door'` or `variant: 'window'`. Door uses a traversable central opening with two side colliders. Window uses lower, side and upper collision sections around a bounded visible opening and remains non-traversable.
+Wall, Door and Window share one full-storey presentation height and one semantic support role. Door keeps a traversable opening; Window keeps a bounded non-traversable opening. Their visual differences never create separate structural systems.
 
 ## Semantic Stairs
 
-One Stair module is one complete flight between **two adjacent same-level Floor cells**.
+One semantic Stair module is one complete six-tread flight between two adjacent same-storey Floor cells.
 
-`PanelConstructionGrid` owns its canonical pair identity. Reversing the source/target cell pair resolves to the same Stair key, so the same physical flight cannot be duplicated from the opposite side.
+A Stair:
 
-A Stair flight:
+- requires both lower cells;
+- requires the cells to share the same structural level;
+- reserves their shared edge so a Wall cannot occupy it;
+- creates six standable `panel-stair` colliders through the common world-collision system;
+- keeps every rise within the Ranger step-up contract;
+- consumes/refunds exactly 3 Logs;
+- round-trips through semantic Save/Continue state.
 
-- requires two adjacent Floor cells on the same storey and structural level;
-- reserves their shared edge as a Stair opening, so a Wall cannot compete for that edge;
-- prevents either supporting Floor from being demolished while the flight exists;
-- creates six deterministic standable tread colliders using the shared Ranger collision system;
-- keeps every tread rise within the existing Ranger step-up contract;
-- materializes as a complete split-Log stair visual with side stringers;
-- consumes and refunds exactly 3 Logs;
-- round-trips through semantic save/Continue state without transform inference.
+The target cell also reserves the corresponding cell on the storey above as the **Stair opening**. That upper cell cannot receive a Floor while the Stair exists.
 
-The Stair target cell also reserves the corresponding upper-storey opening. Future upper-storey Floor expansion must respect that opening instead of silently laying a Floor across the top of the stairs.
+Stairs have passed their current Android traversal/placement acceptance gate.
 
-General upper-storey Floor placement is **not** activated by this milestone.
+## Semantic second storey
 
-## Explicit semantic Roof zones
+The first upper-storey slice is now live and is intentionally limited to **one additional storey**:
 
-Roof is not built by placing individual angled/ridge Logs and asking topology code to infer what structure they formed.
+- ground floor = storey `0`;
+- second storey = storey `1`;
+- third-storey construction remains deferred.
 
-The live Roof mode creates one explicit semantic Roof zone over an **exact connected set of eligible top-floor cells**. The zone stores:
+There is no separate “upper Floor” Hammer button. The existing Floor/Wall/Door/Window modes switch to upper-storey candidates from the Ranger's actual vertical context after the Ranger climbs the semantic Stair.
 
-- the canonical covered Floor cell set;
-- storey;
-- roof form;
-- a deterministic primary ridge-axis tie-break.
+A connected lower Floor component can support the second storey only when:
 
-The player-facing Roof form remains **gable**. `mono-pitch` remains a recognized schema form for future semantic expansion but is not yet a separate Hammer choice.
+- every exposed lower perimeter edge has a semantic Wall-family record;
+- the lower component has no Roof (remove the lower Roof before building upward);
+- a semantic Stair reaches storey `1`;
+- the new upper Floor lies above a real lower Floor cell;
+- the Stair target remains open;
+- the first upper Floor grows beside that opening, after which the frontier may expand beside existing upper Floors.
 
-### Connected footprint selection
+This preserves the established closed-perimeter support concept without reusing the legacy FRAME/RAW inference graph or inventing an interior support lattice.
 
-Roof targeting starts from eligible cells on one structural level and resolves the cardinally connected component containing the targeted area. Disconnected Floor islands are not merged into one purchase.
+Upper Floors materialize with the same `panel-floor` collision/support type as ground Floors. `WorldCollisionSystem` resolves stacked support relative to the Ranger's current vertical position, preventing a Ranger on the ground from snapping upward while allowing a Ranger who climbed the Stairs to stand on storey `1`.
 
-A candidate Floor cell is excluded when:
+While the Ranger is upstairs, third-person Hammer Remove prefers storey-one modules so stacked pieces at the same X/Z do not accidentally select the lower module. First-person exact mesh targeting remains unchanged.
 
-- it already belongs to another Roof zone;
-- a higher Floor exists directly above it;
-- it is reserved by the current Stair-opening contract.
+Structural dependencies prevent the lower building from being dismantled out from under the second storey:
 
-The exact connected set may be rectangular, L-shaped, T-shaped, U-shaped, stepped or another orthogonal polyomino.
+- the access Stair cannot be removed while upper Floors exist;
+- lower perimeter Wall-family support cannot be removed while the connected second storey depends on that closed shell;
+- direct lower-Floor/upper-Floor dependencies remain protected by `PanelConstructionGrid`;
+- a Stair cannot be removed while an upper Roof spans its reserved opening.
 
-### Complex roof-wing planning
+See `docs/SEMANTIC_SECOND_STOREY.md` for the complete player workflow, implementation boundary and Android acceptance contract.
 
-`SemanticRoofFootprintPlanner` converts the exact semantic cell set into deterministic, non-overlapping rectangular gable wings for presentation.
+## Semantic Roof
 
-It compares row-run and column-run partitions and chooses a stable low-complexity plan. Each wing uses the longer dimension for its ridge; square ties use the selected partition axis.
+Roof remains explicit semantic state rather than individual angled Logs inferred after placement.
 
-The planner is deliberately **exact-cell**:
+The live Roof planner:
 
-- no wing may contain a Floor cell that is absent from the Roof zone;
-- an L-shaped Roof does not fill its missing inner corner;
-- a U-shaped Roof does not cover its courtyard;
-- stepped notches remain open;
-- cost is never derived from a bounding rectangle.
+- starts from the highest eligible connected structural footprint;
+- supports rectangular, L-, T-, U- and stepped orthogonal footprints;
+- partitions exact cells into deterministic gable wings for presentation;
+- never fills or charges ordinary empty notches/courtyards merely because they lie inside a bounding rectangle;
+- derives larger ridge heights for larger wings;
+- trims exterior thatch/eave presentation away from shared internal wing boundaries;
+- keeps the raised full-height wall seating and polished thatch finish already device-accepted.
 
-The wing plan is presentation derived from semantic state. It is not serialized as a second roof topology.
+Normal Roof state stores floor-backed `cellKeys`. When a storey-one Roof covers the reserved Stair opening, it additionally stores `openingCellKeys`. This distinction is deliberate:
 
-### Roof support
+- the Stair opening remains non-standable and has no Floor collider;
+- Roof presentation still treats it as part of the covered footprint;
+- Save/Continue can restore that coverage without inventing a fake Floor;
+- ordinary L/T/U notches remain genuinely open because only an actual semantic Stair opening qualifies for `openingCellKeys`.
 
-A Roof preview is valid only when:
+Roof support requires Wall-family support on the exposed perimeter of the exact covered footprint. Internal shared Roof edges do not require dividing Walls.
 
-- every covered canonical Floor cell exists at the same structural level;
-- no covered cell already belongs to another Roof zone;
-- no covered cell is reserved by the current Stair opening contract;
-- there is no higher Floor directly above the candidate cells;
-- every exposed perimeter edge of the exact candidate footprint has a semantic Wall-family support.
+Roof removal refunds `5 x total covered roof bays`, including any explicit Stair-opening bay.
 
-Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support.
-
-When extending beside an already-roofed neighbour, the shared Roof-to-Roof edge is treated as internal rather than requiring an artificial dividing Wall.
-
-### Roof presentation
-
-The polished Roof presentation reuses the established semantic thatch finish:
-
-- five overlapping thatch courses per slope;
-- irregular straw fringe;
-- thick eave/fascia treatment;
-- rounded ridge finish;
-- wall seating that removes the former floating daylight gap;
-- closed exposed gable presentation;
-- no loose semantic rafter pieces visibly hanging inside.
-
-Irregular footprints create multiple polished gable wings under one Roof assembly root. Normal thatch overlap plus low-profile presentation-only junction masks hide exposed shared-edge seams. These junction meshes do not own collision or structural identity.
-
-This slice still does not add walkable sloped-roof collision. Roof traversal remains a separate gameplay decision.
-
-### Roof dependencies, removal and cost
-
-Roof support Walls cannot be demolished while the Roof depends on them. The Roof must be removed first.
-
-Roof removal returns `5 x coveredCellCount` Logs exactly.
-
-For large irregular Roofs, Hammer Remove measures interaction reach to the nearest covered semantic Roof cell rather than requiring the Ranger to reach the aggregate bounding-centre point. The whole connected Roof is still removed as one semantic zone.
+The semantic Roof still does not provide walkable sloped-roof collision.
 
 ## Placement and targeting
 
-The Hammer remains the only player-facing entry point for semantic construction. Inventory Logs are material only.
+The Hammer is the only player-facing construction entry point. Inventory Logs are material, not separately placeable structural authority.
 
-Selecting Hammer opens the compact semantic build dock. The live choices are Floor, Wall, Door, Window, Stairs, Roof and Remove. Choosing any live construction mode collapses the expanded selector so the world preview remains visible.
+Third person uses Ranger-relative semantic candidate selection. First person scores semantic candidates against the centre-camera aim ray. Green means placement and material requirements are valid; red means support, occupancy, clearance or inventory requirements are not met.
 
-Third person uses Ranger-relative semantic candidates. First person scores semantic candidates against the centre-camera aim ray. Roof uses the nearest covered cell for large-footprint reach/scoring rather than forcing interaction through the aggregate centre.
+Desktop compatibility controls remain:
 
-Green means the candidate and inventory cost are valid; red means support/occupancy/clearance/material requirements are not satisfied.
+- `B` cycles live semantic modes;
+- `E` / `V` confirms placement;
+- `G` / Escape closes the semantic construction session.
 
-The legacy physical-log build tray remains isolated transition infrastructure and is hidden during semantic panel construction.
+## Persistence
 
-Desktop `B` cycles all live semantic build modes. `E` / `V` confirms placement and `G` / Escape closes the semantic construction session.
+The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves.
 
-## Demolition
+Storey-one Floor and Wall-family modules use the existing storey-indexed records. Stair state already stores source/target/storey information. Roof zones already persist semantic cell keys and now optionally persist explicit Stair-opening coverage keys.
 
-Hammer Remove targets the materialized semantic module ID. First person raycasts exact module meshes; third person resolves the nearest in-range semantic target.
+Save/Continue recreates visuals and collision from semantic state without re-consuming Logs. Three.js transforms, thatch meshes, roof-wing meshes and preview data are not structural save authority.
 
-The system removes semantic state first. If dependency rules reject removal, runtime collision, visuals, inventory and Hammer durability remain unchanged.
-
-After successful removal:
-
-- every owned collider is removed;
-- Floor supports are removed where applicable;
-- the exact semantic material cost is refunded;
-- one normal Hammer durability use is recorded.
-
-Roof uses its stored exact covered-cell count when resolving the refund, so irregular and multi-cell Roof zones cannot refund a rectangular estimate or one-cell base price.
-
-## Persistence boundary
-
-The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves. Complex Roof footprints require no new stored mesh fields and no panel-grid schema bump because `roofZones` already store arbitrary canonical cell-key sets.
-
-`PanelConstructionSystem.snapshot()` stores semantic registry/grid state. Save/Continue recreates runtime visuals and collision from that state without re-consuming Logs.
-
-A restored Stair recreates all six walkable tread colliders. A restored Roof re-runs the deterministic footprint planner from its stored cell keys and recreates the gable-wing presentation. No Three.js transforms, wing meshes or junction masks are serialized as structural authority.
-
-Older rectangular semantic Roof saves remain valid: their exact cell set simply re-plans as one rectangular wing.
+Older one-storey semantic saves remain valid.
 
 ## Verification
 
-`npm run check` protects the semantic Floor/Wall/Door/Window/Stairs/Roof contracts and complex Roof footprint behavior.
+The full `npm run check` suite protects both semantic and established legacy regression boundaries.
 
-`verify-panel-construction-grid.mjs` covers:
+Key semantic verification scripts are:
 
-- canonical Floor/edge identity;
-- wall ownership and variants;
-- canonical two-cell Stair identity;
-- Stair shared-edge ownership and Floor dependency rules;
-- upper Stair-opening reservation;
-- explicit Roof-zone identity and overlap rejection;
-- Roof support-Wall demolition dependency;
-- semantic snapshot/restore.
+- `verify-panel-construction-grid.mjs` — canonical Floor/edge/Stair/Roof identity and persistence;
+- `verify-panel-construction-runtime.mjs` — semantic costs, runtime collision, build/remove/refund and restore;
+- `verify-semantic-wall-height.mjs` — shared full-storey Wall/Door/Window height;
+- `verify-semantic-roof-polish.mjs` — raised wall seating, thatch finish, ridge scaling and clean interior presentation;
+- `verify-complex-semantic-roof.mjs` — exact L/T/U footprints, exterior-only eaves, complex Roof state and restoration;
+- `verify-semantic-upper-storey.mjs` — closed-shell upper support, Stair opening, stacked collision, upper wall-family targeting, support dependencies, highest-storey Roof coverage and Save/Continue.
 
-`verify-panel-construction-runtime.mjs` covers:
+## Current Android acceptance gate
 
-- all semantic material costs;
-- six Stair tread colliders using the same Ranger support resolver;
-- exact Stair placement/remove/refund and restore;
-- wall-supported basic gable Roof preview;
-- exact Roof placement/remove/refund and restore;
-- Roof support-Wall protection;
-- semantic Roof materialization;
-- the established single-owner Hammer targeting boundary.
+Stairs and the current complex/polished Roof have passed the user's latest device checks. The active construction gate is now the semantic second storey.
 
-`verify-semantic-roof-polish.mjs` protects the finished thatch appearance, wall seating, closed gables and clean interior shell.
+Verify on Android:
 
-`verify-complex-semantic-roof.mjs` protects:
+- build or use a closed ground-floor structure with an interior Stair and no lower Roof;
+- climb the Stair and select Floor;
+- upper Floor previews appear at storey `1`, not on the ground;
+- the Stair target remains open and cannot be filled;
+- upper Floors are walkable without level snapping or falling through seams;
+- Wall, Door and Window place at the upper level with the established full-storey height;
+- third-person Remove while upstairs targets upper modules rather than stacked lower ones;
+- the lower Stair and supporting lower perimeter walls reject demolition while upper Floors depend on them;
+- a completed upper perimeter can receive the Roof at the highest storey;
+- the Roof covers above the Stair opening without creating a Floor there or leaving a courtyard-sized thatch hole;
+- save -> close -> Continue restores both storeys, Stair and Roof.
 
-- exact L/T/U footprint partitioning;
-- absence of bounding-box bridging or charging for void cells;
-- disconnected Floor-island isolation;
-- exact 5-Logs-per-real-cell cost;
-- one semantic Roof zone owning the exact irregular cell set;
-- multi-wing materialization;
-- Save/Continue re-planning from semantic state;
-- near-covered-cell demolition targeting and exact refund;
-- live Hammer use of the complex Roof specialization.
-
-`verify-tree-harvest.mjs` protects the shared inventory-Log material contract and asserts Stairs/Roof remain inside semantic Hammer construction rather than returning to the legacy physical-log tray.
-
-## Android acceptance gate
-
-Stairs have passed the current physical acceptance gate. The active device gate is now the complex semantic Roof.
-
-Using an irregular building such as an L-, T-, U- or stepped footprint, verify:
-
-- Roof appears as the same live Hammer choice;
-- 3P and 1P previews follow the actual connected top-floor footprint;
-- the preview does **not** bridge empty/notched/courtyard cells inside the footprint bounds;
-- missing outer or inner perimeter support produces an invalid/red preview;
-- the HUD total equals exactly **5 Logs x actual covered Floor cells**;
-- separate building wings receive sensible deterministic gable directions;
-- thatch junctions look coherent without obvious floating gaps or open accidental seams;
-- the polished wall seating and external gable finish remain intact;
-- support Walls refuse removal while the Roof depends on them;
-- Hammer Remove can target the large Roof from a nearby covered edge and refunds the exact total;
-- save -> close -> Continue restores the same irregular footprint and wing arrangement.
-
-Do not progress into general upper-storey construction or player-selected mono-pitch roofs until this complex Roof device gate passes.
+Do not activate third-storey construction until this storey-one gate is physically verified.
 
 ## Preserved systems
 
-This milestone intentionally preserves terrain/world generation, ecology, Ranger locomotion/camera, general inventory/crafting, tools/durability, combat, campfire behavior, common collision, PWA/install architecture and deployment architecture.
-
-Legacy physical construction code remains transition infrastructure only. Complex semantic Roof gameplay must not reconnect structural authority to it.
+This milestone intentionally preserves terrain/world generation, ecology, Ranger locomotion/camera, inventory/crafting, tools/durability, combat, campfire behavior, world collision ownership, complex Roof appearance, PWA/install architecture and deployment architecture except where the second-storey semantic path explicitly extends existing construction state.
