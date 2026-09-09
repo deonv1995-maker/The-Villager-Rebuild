@@ -131,6 +131,19 @@ const stairUsesCell = (stair, cellKey) => (
   stair.sourceCellKey === cellKey || stair.targetCellKey === cellKey
 );
 
+const stairOpeningForUpperCell = (stairs, cellKey) => {
+  const cell = parsePanelCellKey(cellKey);
+  if (!cell || cell.storey <= 0) return null;
+  const lowerCellKey = panelCellKey({
+    x: cell.x,
+    z: cell.z,
+    storey: cell.storey - 1
+  });
+  return [...stairs.values()].find(stair => (
+    stair.storey === cell.storey - 1 && stair.targetCellKey === lowerCellKey
+  )) ?? null;
+};
+
 const roofZoneUsesEdge = (zone, edgeKey) => {
   for (const cellKey of zone.cellKeys ?? []) {
     const cell = parsePanelCellKey(cellKey);
@@ -316,6 +329,17 @@ export class PanelConstructionGrid {
   }
 
   removeStair(key) {
+    const stair = this.stairs.get(key);
+    if (!stair) return false;
+    const upperOpeningKey = panelCellKey({
+      x: stair.targetX,
+      z: stair.targetZ,
+      storey: stair.storey + 1
+    });
+    const dependentUpperRoof = [...this.roofZones.values()].some(zone => (
+      zone.storey === stair.storey + 1 && zone.cellKeys.includes(upperOpeningKey)
+    ));
+    if (dependentUpperRoof) return false;
     return this.stairs.delete(key);
   }
 
@@ -331,7 +355,11 @@ export class PanelConstructionGrid {
       .map(cell => panelCellKey({ x: cell.x, z: cell.z, storey }))
       .sort();
     for (const cellKey of cellKeys) {
-      if (!this.floors.has(cellKey)) return { ok: false, reason: 'missing-floor', cellKey };
+      const supportedByFloor = this.floors.has(cellKey);
+      const supportedByStairOpening = Boolean(stairOpeningForUpperCell(this.stairs, cellKey));
+      if (!supportedByFloor && !supportedByStairOpening) {
+        return { ok: false, reason: 'missing-floor', cellKey };
+      }
       if ([...this.roofZones.values()].some(zone => zone.cellKeys.includes(cellKey))) {
         return { ok: false, reason: 'occupied-roof-cell', cellKey };
       }
