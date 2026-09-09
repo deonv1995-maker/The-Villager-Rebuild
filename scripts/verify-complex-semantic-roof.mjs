@@ -209,10 +209,12 @@ assert.equal(removed?.refund?.[0]?.quantity, 25);
 assert.equal(runtime.inventory.get('log'), 25, 'Complex Roof demolition must refund exact covered-cell cost');
 
 const controllerSource = await readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8');
+const storeySource = await readFile('src/world/SemanticStoreyPanelConstructionSystem.js', 'utf8');
 assert.ok(
-  controllerSource.includes("import { ComplexRoofPanelConstructionSystem } from '../world/ComplexRoofPanelConstructionSystem.js'") &&
-  controllerSource.includes('this.system = new ComplexRoofPanelConstructionSystem({'),
-  'Live Hammer runtime must use the complex Roof specialization while preserving the existing controller boundary'
+  controllerSource.includes("import { SemanticStoreyPanelConstructionSystem } from '../world/SemanticStoreyPanelConstructionSystem.js'") &&
+  controllerSource.includes('this.system = new SemanticStoreyPanelConstructionSystem({') &&
+  storeySource.includes('extends ComplexRoofPanelConstructionSystem'),
+  'Live Hammer runtime must retain the complex Roof specialization through the semantic storey extension boundary'
 );
 
 console.log('Connected L/T/U Roof planning, scaled wing height, exterior-only eaves, exact cost/state, save/Continue and demolition verified');
