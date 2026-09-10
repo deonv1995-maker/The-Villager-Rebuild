@@ -33,9 +33,9 @@ assert.ok(
 );
 
 assert.ok(
-  assetPathsSource.includes("door: asset('ui/mobile/icon-build-door.svg')") &&
-  assetPathsSource.includes("window: asset('ui/mobile/icon-build-window.svg')"),
-  'Door and Window construction icons must be registered through the shared ASSET_PATHS authority'
+  assetPathsSource.includes("door: asset('ui/cosy/icon-build-door.svg')") &&
+  assetPathsSource.includes("window: asset('ui/cosy/icon-build-window.svg')"),
+  'Door and Window construction icons must be registered through the shared cosy ASSET_PATHS authority'
 );
 assert.ok(
   menuSource.includes('door: ui.build.door') &&
@@ -55,4 +55,4 @@ assert.equal(
   'Window must not regress to a letter placeholder'
 );
 
-console.log('Persistent Hammer compact dock and dedicated Door/Window build icons verified');
+console.log('Persistent Hammer compact dock and dedicated cosy Door/Window build icons verified');
