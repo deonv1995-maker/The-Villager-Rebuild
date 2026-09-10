@@ -1,12 +1,22 @@
-.tool-slot img[src*="/ui/cosy/"],
 .inventory-resource-icon[src*="/ui/cosy/"],
-.craft-menu-toggle img[src*="/ui/cosy/"],
-.craft-recipe-icon[src*="/ui/cosy/"],
-.hud-button .button-icon[src*="/ui/cosy/"],
-.build-mode-button img[src*="/ui/cosy/"],
-.build-tray-current-icon[src*="/ui/cosy/"],
-.hammer-construction-menu img[src*="/ui/cosy/"] {
+.tool-slot img[src*="/ui/cosy/"],
+.action-button img[src*="/ui/cosy/"],
+.log-build-button img[src*="/ui/cosy/"],
+.hammer-construction-option img[src*="/ui/cosy/"] {
   image-rendering: auto;
   object-fit: contain;
   filter: none;
+}
+
+/* Locked state remains visibly unavailable, but generated artwork must still read
+   at the 28px toolbelt image size on mobile. */
+.tool-slot.locked {
+  opacity: 0.62;
+}
+
+.tool-slot[data-tool="spear"] img[src*="/ui/cosy/"],
+.tool-slot[data-tool="pickaxe"] img[src*="/ui/cosy/"],
+.tool-slot[data-tool="sword"] img[src*="/ui/cosy/"] {
+  transform: scale(1.12);
+  transform-origin: center;
 }

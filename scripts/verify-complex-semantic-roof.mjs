@@ -281,6 +281,61 @@ const removed = runtime.system.demolish(player, roofEntry.id);
 assert.equal(removed?.refund?.[0]?.quantity, 25);
 assert.equal(runtime.inventory.get('log'), 25, 'Complex Roof demolition must refund exact covered-cell cost');
 
+
+// Incremental roof expansion is a single connected semantic shell. A previously
+// finished 3x2 main roof plus a later one-cell door projection must re-plan as the
+// same seven-cell cross-gable footprint without charging for the six old cells again.
+const mainDoorRoofCells = oneCellDoorProjection.filter(cell => cell.z < 2);
+const incrementalRuntime = makeRuntime(5);
+const incrementalStructure = incrementalRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
+for (const cell of oneCellDoorProjection) {
+  assert.equal(incrementalStructure.grid.placeFloor({ ...cell, levelY: 0.08 }).ok, true);
+}
+addPerimeterWalls(incrementalStructure.grid, oneCellDoorProjection);
+assert.equal(incrementalStructure.grid.placeRoofZone({
+  cells: mainDoorRoofCells,
+  form: 'gable',
+  ridgeAxis: 'x'
+}).ok, true);
+incrementalRuntime.system.restore(incrementalRuntime.system.snapshot());
+incrementalRuntime.system.setBuildMode('roof');
+incrementalRuntime.system.setActive(true);
+const porchPlayer = new THREE.Vector3(PANEL_GRID.cellSize, 0, PANEL_GRID.cellSize * 2);
+const incrementalPreview = incrementalRuntime.system.update(porchPlayer, facing);
+assert.equal(incrementalPreview.previewValid, true, 'An enclosed later projection must expose a valid integrated Roof preview');
+assert.equal(incrementalPreview.cost[0].quantity, 5, 'Extending a Roof must charge only the newly covered Floor cell');
+assert.equal(incrementalRuntime.system.previewPlacement?.roofCellCount, 1, 'Incremental cost identity must contain only the new cell');
+assert.equal(incrementalRuntime.system.previewPlacement?.integratedRoofCellCount, 7, 'Preview presentation must integrate the six existing cells plus the new projection');
+assert.equal(incrementalRuntime.system.previewPlacement?.plan?.wings?.length, 2, 'Integrated preview must re-plan the main wing and joined cross-gable together');
+const incrementalBuilt = incrementalRuntime.system.build(porchPlayer, facing);
+assert.equal(incrementalBuilt?.cost?.[0]?.quantity, 5, 'Committed extension must consume only the new-cell cost');
+assert.equal(incrementalRuntime.inventory.get('log'), 0);
+const incrementalRoofZones = [...incrementalRuntime.system.registry.structures.values()][0].grid.roofZones;
+assert.equal(incrementalRoofZones.size, 1, 'Connected Roof passes must coalesce to one semantic Roof zone');
+const incrementalRoofEntry = incrementalRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
+assert.equal(incrementalRoofEntry?.roofCellCount, 7, 'Merged Roof demolition/refund identity must own the complete paid footprint');
+assert.equal(incrementalRoofEntry?.roofWingCount, 2);
+assert.equal(incrementalRoofEntry?.root.userData.semanticRoofIntegratedJunctions, 1, 'Merged cross-gable must use one real valley junction instead of overlapping finished roofs');
+assert.equal(incrementalRuntime.system.getDemolitionTarget(porchPlayer, incrementalRoofEntry.id)?.cost?.[0]?.quantity, 35, 'Merged Roof removal must preserve cumulative 5 Logs per covered cell');
+
+const splitSaveRuntime = makeRuntime(0);
+const splitSaveStructure = splitSaveRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
+for (const cell of oneCellDoorProjection) {
+  assert.equal(splitSaveStructure.grid.placeFloor({ ...cell, levelY: 0.08 }).ok, true);
+}
+addPerimeterWalls(splitSaveStructure.grid, oneCellDoorProjection);
+assert.equal(splitSaveStructure.grid.placeRoofZone({ cells: mainDoorRoofCells, form: 'gable', ridgeAxis: 'x' }).ok, true);
+assert.equal(splitSaveStructure.grid.placeRoofZone({ cells: [{ x: 1, z: 2 }], form: 'gable', ridgeAxis: 'z' }).ok, true);
+const repairedSave = makeRuntime(0);
+assert.equal(repairedSave.system.restore(splitSaveRuntime.system.snapshot()), true);
+const repairedStructure = [...repairedSave.system.registry.structures.values()][0];
+assert.equal(repairedStructure.grid.roofZones.size, 1, 'Continue must canonicalize adjacent legacy Roof zones into one connected zone');
+const repairedRoofEntries = repairedSave.system.getDemolitionEntries().filter(entry => entry.kind === 'roof');
+assert.equal(repairedRoofEntries.length, 1, 'Continue must rebuild only one integrated Roof root after canonicalization');
+assert.equal(repairedRoofEntries[0].roofCellCount, 7);
+assert.equal(repairedRoofEntries[0].roofWingCount, 2);
+assert.equal(repairedRoofEntries[0].root.userData.semanticRoofIntegratedJunctions, 1);
+
 const controllerSource = await readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8');
 assert.ok(
   controllerSource.includes("import { ComplexRoofPanelConstructionSystem } from '../world/ComplexRoofPanelConstructionSystem.js'") &&

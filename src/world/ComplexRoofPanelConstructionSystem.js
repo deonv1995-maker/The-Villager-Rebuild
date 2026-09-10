@@ -40,8 +40,10 @@ const finiteAim = aim => (
   Number.isFinite(aim?.direction?.z)
 );
 
+const cellKey = cell => `${cell.x}:${cell.z}`;
+
 const cellSignature = cells => cells
-  .map(cell => `${cell.x}:${cell.z}`)
+  .map(cellKey)
   .sort()
   .join('|');
 
@@ -88,19 +90,32 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     const structure = this.registry.get(placement.structureId);
     if (!structure) return null;
     const cost = panelBuildCost('roof', { roofCellCount: placement.roofCellCount });
+    const absorbedRoofZones = (placement.absorbedRoofZoneKeys ?? [])
+      .map(key => structure.grid.roofZones.get(key))
+      .filter(Boolean)
+      .map(zone => ({ ...zone, cellKeys: [...zone.cellKeys] }));
+
+    for (const zone of absorbedRoofZones) structure.grid.removeRoofZone(zone.key);
     const stateResult = structure.grid.placeRoofZone({
       cells: placement.cells,
       storey: placement.storey,
       form: 'gable',
       ridgeAxis: placement.plan.primaryAxis
     });
-    if (!stateResult?.ok) return null;
-
-    if (!this.inventory.consume(cost)) {
-      structure.grid.removeRoofZone(stateResult.roofZone.key);
+    if (!stateResult?.ok) {
+      this.#restoreRoofZones(structure, absorbedRoofZones);
       return null;
     }
 
+    if (!this.inventory.consume(cost)) {
+      structure.grid.removeRoofZone(stateResult.roofZone.key);
+      this.#restoreRoofZones(structure, absorbedRoofZones);
+      return null;
+    }
+
+    for (const zone of absorbedRoofZones) {
+      this.#removeRoofEntryRuntime(structure.id, zone.key);
+    }
     const entry = this.#materializeComplexRoof(structure, stateResult.roofZone, placement);
     this.update(playerPosition, facingDirection, constructionAim);
     return {
@@ -111,7 +126,13 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
   }
 
   restore(snapshot) {
-    const restored = super.restore(snapshot);
+    let restored = super.restore(snapshot);
+    // Older semantic saves may contain adjacent Roof zones created in separate
+    // build passes. Canonicalize those zones before rebuilding presentation so
+    // Continue repairs the split shell instead of preserving overlapping gables.
+    if (this.#coalesceRestoredRoofZones()) {
+      restored = super.restore(this.snapshot());
+    }
     for (const structure of this.registry.structures.values()) {
       for (const roofZone of structure.grid.roofZones.values()) {
         const id = `panel:${structure.id}:${roofZone.key}`;
@@ -181,11 +202,27 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
         if (seenComponents.has(componentId)) continue;
         seenComponents.add(componentId);
 
-        const plan = planSemanticRoofFootprint(component, {
+        const connectedRoofZones = this.#connectedRoofZones(
+          structure,
+          component,
+          seed.storey,
+          seed.levelY
+        );
+        const integratedCells = [
+          ...component,
+          ...connectedRoofZones.flatMap(zone => (zone.cellKeys ?? [])
+            .map(parsePanelCellKey)
+            .filter(Boolean)
+            .map(cell => ({ x: cell.x, z: cell.z })))
+        ];
+        const plan = planSemanticRoofFootprint(integratedCells, {
           cellSize: PANEL_GRID.cellSize
         });
-        const placement = this.#placementForCells(structure, component, seed.storey, plan);
+        const placement = this.#placementForCells(structure, integratedCells, seed.storey, plan);
         if (!placement) continue;
+        placement.roofCellCount = component.length;
+        placement.integratedRoofCellCount = plan.cellCount;
+        placement.absorbedRoofZoneKeys = connectedRoofZones.map(zone => zone.key);
 
         let nearestDistance = Number.POSITIVE_INFINITY;
         let nearestScore = Number.POSITIVE_INFINITY;
@@ -210,13 +247,125 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
         }
         if (nearestDistance > PANEL_GRID.placementReach + PANEL_GRID.cellSize * 0.3) continue;
 
-        placement.valid = this.#roofSupported(structure, component, seed.storey);
+        placement.valid = this.#roofSupported(structure, integratedCells, seed.storey);
         placement.score = nearestScore;
         if (!best || placement.score < best.score) best = placement;
       }
     }
 
     return best && best.score <= PANEL_GRID.cellSize * 1.7 ? best : null;
+  }
+
+  #connectedRoofZones(structure, seedCells, storey, levelY) {
+    const accepted = new Set(seedCells.map(cellKey));
+    const pending = [...structure.grid.roofZones.values()]
+      .filter(zone => zone.storey === storey);
+    const connected = [];
+
+    let found = true;
+    while (found) {
+      found = false;
+      for (let index = 0; index < pending.length; index += 1) {
+        const zone = pending[index];
+        const cells = (zone.cellKeys ?? []).map(parsePanelCellKey).filter(Boolean);
+        const sameLevel = cells.length > 0 && cells.every(cell => {
+          const floor = structure.grid.floors.get(panelCellKey({
+            x: cell.x,
+            z: cell.z,
+            storey
+          }));
+          return floor && Math.abs(floor.levelY - levelY) <= LEVEL_TOLERANCE;
+        });
+        if (!sameLevel) continue;
+
+        const touches = cells.some(cell => (
+          accepted.has(cellKey(cell)) ||
+          directionEntries.some(direction => accepted.has(cellKey({
+            x: cell.x + direction.dx,
+            z: cell.z + direction.dz
+          })))
+        ));
+        if (!touches) continue;
+
+        connected.push(zone);
+        for (const cell of cells) accepted.add(cellKey(cell));
+        pending.splice(index, 1);
+        found = true;
+        break;
+      }
+    }
+    return connected;
+  }
+
+  #coalesceRestoredRoofZones() {
+    let changed = false;
+    for (const structure of this.registry.structures.values()) {
+      const processed = new Set();
+      for (const seedZone of [...structure.grid.roofZones.values()]) {
+        if (processed.has(seedZone.key) || !structure.grid.roofZones.has(seedZone.key)) continue;
+        const seedCells = (seedZone.cellKeys ?? []).map(parsePanelCellKey).filter(Boolean);
+        if (!seedCells.length) continue;
+        const seedFloor = structure.grid.floors.get(panelCellKey({
+          x: seedCells[0].x,
+          z: seedCells[0].z,
+          storey: seedZone.storey
+        }));
+        if (!seedFloor) continue;
+        const cluster = this.#connectedRoofZones(
+          structure,
+          seedCells.map(cell => ({ x: cell.x, z: cell.z })),
+          seedZone.storey,
+          seedFloor.levelY
+        );
+        for (const zone of cluster) processed.add(zone.key);
+        if (cluster.length <= 1) continue;
+
+        const cells = cluster.flatMap(zone => (zone.cellKeys ?? [])
+          .map(parsePanelCellKey)
+          .filter(Boolean)
+          .map(cell => ({ x: cell.x, z: cell.z })));
+        const plan = planSemanticRoofFootprint(cells, { cellSize: PANEL_GRID.cellSize });
+        if (!plan) continue;
+        const backups = cluster.map(zone => ({ ...zone, cellKeys: [...zone.cellKeys] }));
+        for (const zone of cluster) structure.grid.removeRoofZone(zone.key);
+        const merged = structure.grid.placeRoofZone({
+          cells: plan.cells,
+          storey: seedZone.storey,
+          form: 'gable',
+          ridgeAxis: plan.primaryAxis
+        });
+        if (!merged.ok) {
+          this.#restoreRoofZones(structure, backups);
+          continue;
+        }
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  #restoreRoofZones(structure, zones) {
+    for (const zone of zones) {
+      const cells = (zone.cellKeys ?? []).map(parsePanelCellKey).filter(Boolean);
+      const result = structure.grid.placeRoofZone({
+        cells: cells.map(cell => ({ x: cell.x, z: cell.z })),
+        storey: zone.storey,
+        form: zone.form ?? 'gable',
+        ridgeAxis: zone.ridgeAxis ?? null
+      });
+      if (!result.ok) {
+        throw new Error(`Could not restore semantic Roof zone ${zone.key}`);
+      }
+    }
+  }
+
+  #removeRoofEntryRuntime(structureId, stateKey) {
+    const id = `panel:${structureId}:${stateKey}`;
+    const entry = this.entries.get(id);
+    if (!entry) return;
+    entry.active = false;
+    entry.root?.parent?.remove(entry.root);
+    this.entries.delete(id);
   }
 
   #floorIsRoofable(structure, floor) {
@@ -300,6 +449,7 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
       cells: resolvedPlan.cells.map(cell => ({ ...cell })),
       cellKeys: resolvedPlan.cells.map(cell => panelCellKey({ ...cell, storey })),
       roofCellCount: resolvedPlan.cellCount,
+      integratedRoofCellCount: resolvedPlan.cellCount,
       storey,
       x: worldCenter.x,
       z: worldCenter.z,
@@ -375,7 +525,7 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     root.rotation.y = placement.yaw;
     root.userData.panelConstructionId = id;
     root.userData.panelConstructionKind = 'roof';
-    root.userData.panelRoofCellCount = placement.roofCellCount;
+    root.userData.panelRoofCellCount = placement.integratedRoofCellCount ?? placement.roofCellCount;
     root.userData.panelRoofRidgeAxis = placement.plan.primaryAxis;
     root.userData.panelRoofWingCount = placement.plan.wings.length;
     root.userData.panelRoofShapeKey = placement.plan.shapeKey;
@@ -394,7 +544,7 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
       structureId: structure.id,
       stateKey: roofZone.key,
       cellKeys: [...roofZone.cellKeys],
-      roofCellCount: resolvedPlacement.roofCellCount,
+      roofCellCount: roofZone.cellKeys.length,
       storey: roofZone.storey,
       ridgeAxis: resolvedPlacement.plan.primaryAxis,
       roofWingCount: resolvedPlacement.plan.wings.length,

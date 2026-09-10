@@ -49,6 +49,20 @@ assert.deepEqual(panelBuildCost('roof', { roofCellCount: 2 }), [{ itemId: 'log',
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
+const joinedFloorRuntime = makeRuntime(6);
+joinedFloorRuntime.system.setActive(true);
+assert.ok(joinedFloorRuntime.system.build(player, facing), 'Floor join regression requires a first Floor Panel');
+const joinedFloorState = joinedFloorRuntime.system.update(player, facing);
+assert.equal(joinedFloorState.previewValid, true, 'Repeated Floor placement must find the adjacent slot on the current structure');
+assert.equal(joinedFloorRuntime.system.previewPlacement?.newStructure, false, 'A nearby Floor must not start a competing structure lattice');
+const joinedFloorBuilt = joinedFloorRuntime.system.build(player, facing);
+assert.equal(joinedFloorBuilt?.snapped, true, 'The second Floor must report a semantic structure snap');
+assert.equal(joinedFloorRuntime.system.registry.structures.size, 1, 'Connected Floors must remain in one PanelStructureRegistry structure');
+const joinedStructure = [...joinedFloorRuntime.system.registry.structures.values()][0];
+const joinedLevels = [...joinedStructure.grid.floors.values()].map(floor => floor.levelY);
+assert.equal(joinedLevels.length, 2);
+assert.equal(new Set(joinedLevels).size, 1, 'Connected ground Floors must inherit one exact structural levelY');
+
 const runtime = makeRuntime(12);
 runtime.system.setActive(true);
 
