@@ -84,7 +84,7 @@ const [
   assetSource,
   collisionSource,
   playerSource,
-  campfireSvg,
+  campfireIcon,
   campfireSource
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
@@ -96,7 +96,7 @@ const [
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('src/world/WorldCollisionSystem.js', 'utf8'),
   readFile('src/player/RangerController.js', 'utf8'),
-  readFile('public/assets/ui/cosy/icon-campfire.svg', 'utf8'),
+  readFile('public/assets/ui/cosy/icon-campfire.webp'),
   readFile('src/world/CampfireSystem.js', 'utf8')
 ]);
 
@@ -134,14 +134,17 @@ assert(equipmentSource.includes('hud.onCampfire();'), 'Campfire recipe selection
 assert(equipmentSource.includes('hud.setCrafting(this.#craftingSnapshot())'), 'Craft menu must receive tools and campfire from one runtime snapshot');
 assert(craftingDefinitionsSource.includes("kind: 'structure'"), 'Campfire recipe must be marked as a placeable structure');
 assert(structureDefinitionsSource.includes('ingredients: CRAFTING_RECIPES.campfire.ingredients'), 'World placement must reuse the crafting recipe ingredients');
-assert(assetSource.includes("campfire: asset('ui/cosy/icon-campfire.svg')"), 'Campfire icon must remain in the shared cosy asset registry');
+assert(assetSource.includes("campfire: asset('ui/cosy/icon-campfire.webp')"), 'Campfire icon must remain in the shared cosy asset registry');
 assert(collisionSource.includes('isCircleClear(x, z, radius'), 'Structure placement must use shared collision clearance');
 assert(playerSource.includes('getFacingDirection('), 'World placement must use the Ranger facing boundary rather than reading internals');
 assert(campfireSource.includes("this.previewRoot.name = 'campfire-placement-preview'"), 'Campfire must create a dedicated pre-build world template');
 assert(campfireSource.includes('color: 0x58ff7b'), 'Campfire placement template must be visibly green');
 assert(campfireSource.includes('confirmBuild()'), 'Campfire materials must only be consumed through an explicit placement confirmation');
 assert(campfireSource.includes('for (let index = 0; index < 6; index += 1)'), 'Campfire presentation must use small crossed sticks rather than physical building logs');
-assert(campfireSvg.includes('<svg'), 'Campfire HUD icon must remain valid SVG artwork');
-assert(campfireSvg.includes('viewBox="0 0 96 96"'), 'Campfire HUD icon must remain normalized to the cosy 96x96 icon contract');
+assert(campfireIcon.subarray(0, 4).toString('ascii') === 'RIFF', 'Campfire HUD icon must remain valid RIFF artwork');
+assert(campfireIcon.subarray(8, 12).toString('ascii') === 'WEBP', 'Campfire HUD icon must remain valid WebP artwork');
+assert(campfireIcon.subarray(12, 16).toString('ascii') === 'VP8X', 'Campfire HUD icon must retain the generated extended WebP canvas');
+assert((campfireIcon[20] & 0x10) !== 0, 'Campfire HUD icon must retain transparency');
+assert(campfireIcon.readUIntLE(24, 3) + 1 === 96 && campfireIcon.readUIntLE(27, 3) + 1 === 96, 'Campfire HUD icon must remain normalized to the cosy 96x96 icon contract');
 
-console.log('Campfire crafting, preview/confirmation, shared recipe, cosy HUD icon and Action-button separation verified');
+console.log('Campfire crafting, preview/confirmation, shared recipe, generated cosy HUD icon and Action-button separation verified');
