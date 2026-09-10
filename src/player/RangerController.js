@@ -17,6 +17,14 @@ const CAMERA_PITCH_RESPONSE = 0.7;
 const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
 const FIRST_PERSON_EYE_HEIGHT = 1.72;
+const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 3.8;
+const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 3.2;
+const FIRST_PERSON_BOB_WALK_VERTICAL = 0.055;
+const FIRST_PERSON_BOB_RUN_VERTICAL = 0.085;
+const FIRST_PERSON_BOB_WALK_SWAY = 0.024;
+const FIRST_PERSON_BOB_RUN_SWAY = 0.038;
+const FIRST_PERSON_BOB_ACTIVE_RESPONSE = 18;
+const FIRST_PERSON_BOB_RECENTER_RESPONSE = 12;
 const CAMERA_MODES = Object.freeze(['third-person', 'first-person']);
 const TOOL_ACTION_TARGET_DURATION = Object.freeze({
   axe: 0.66,
@@ -47,6 +55,10 @@ export class RangerController {
     this.jumpVelocity = 0;
     this.grounded = true;
     this.walkPhase = 0;
+    this.firstPersonMoveDistance = 0;
+    this.firstPersonMoveRunning = false;
+    this.firstPersonBobPhase = 0;
+    this.firstPersonBobOffset = new THREE.Vector3();
     this.assetMode = 'placeholder';
     this.animationState = null;
     this.actions = new Map();
@@ -71,6 +83,7 @@ export class RangerController {
     this.tempRootQuaternion = new THREE.Quaternion();
     this.tempFirstPersonDirection = new THREE.Vector3();
     this.tempFirstPersonTarget = new THREE.Vector3();
+    this.tempFirstPersonBobTarget = new THREE.Vector3();
     this.cinematicDriver = null;
     this.#bindKeyboard();
   }
@@ -311,6 +324,10 @@ export class RangerController {
     this.manualLookActive = false;
     this.cameraReturnDelay = 0;
     this.cameraRecovering = mode === 'third-person';
+    this.firstPersonMoveDistance = 0;
+    this.firstPersonMoveRunning = false;
+    this.firstPersonBobPhase = 0;
+    this.firstPersonBobOffset.set(0, 0, 0);
     this.#syncCameraPresentation();
     this.#updateCamera(true);
     for (const listener of this.cameraModeListeners) listener(this.cameraMode);
@@ -460,6 +477,9 @@ export class RangerController {
   update(dt) {
     if (!this.model) return;
 
+    this.firstPersonMoveDistance = 0;
+    this.firstPersonMoveRunning = false;
+
     if (this.cinematicDriver) {
       this.cinematicDriver.update?.(dt, this);
       this.root.position.y = this.terrain.heightAt(this.root.position.x, this.root.position.z);
@@ -506,9 +526,11 @@ export class RangerController {
         : { x: desired.x, z: desired.z };
       const movedX = resolved.x - this.root.position.x;
       const movedZ = resolved.z - this.root.position.z;
+      this.firstPersonMoveDistance = Math.hypot(movedX, movedZ);
+      this.firstPersonMoveRunning = runningAnimation;
       this.root.position.x = resolved.x;
       this.root.position.z = resolved.z;
-      if (Math.hypot(movedX, movedZ) > 0.0001) this.root.rotation.y = Math.atan2(movedX, movedZ);
+      if (this.firstPersonMoveDistance > 0.0001) this.root.rotation.y = Math.atan2(movedX, movedZ);
 
       if (this.assetMode === 'placeholder') {
         this.walkPhase += dt * speed * 2.6;
@@ -737,13 +759,48 @@ export class RangerController {
     }
   }
 
+  #updateFirstPersonHeadBob(dt) {
+    const moving = this.grounded && this.firstPersonMoveDistance > 0.0001;
+    if (moving) {
+      const running = this.firstPersonMoveRunning;
+      const phasePerMeter = running
+        ? FIRST_PERSON_BOB_RUN_PHASE_PER_METER
+        : FIRST_PERSON_BOB_WALK_PHASE_PER_METER;
+      const verticalAmplitude = running
+        ? FIRST_PERSON_BOB_RUN_VERTICAL
+        : FIRST_PERSON_BOB_WALK_VERTICAL;
+      const swayAmplitude = running
+        ? FIRST_PERSON_BOB_RUN_SWAY
+        : FIRST_PERSON_BOB_WALK_SWAY;
+      this.firstPersonBobPhase += this.firstPersonMoveDistance * phasePerMeter;
+
+      const sway = Math.sin(this.firstPersonBobPhase) * swayAmplitude;
+      const vertical = Math.sin(this.firstPersonBobPhase * 2) * verticalAmplitude;
+      this.tempFirstPersonBobTarget.set(
+        Math.cos(this.yaw) * sway,
+        vertical,
+        -Math.sin(this.yaw) * sway
+      );
+    } else {
+      this.tempFirstPersonBobTarget.set(0, 0, 0);
+    }
+
+    const response = moving ? FIRST_PERSON_BOB_ACTIVE_RESPONSE : FIRST_PERSON_BOB_RECENTER_RESPONSE;
+    this.firstPersonBobOffset.lerp(
+      this.tempFirstPersonBobTarget,
+      1 - Math.exp(-response * dt)
+    );
+  }
+
   #updateCamera(immediate = false, dt = 1 / 60) {
     if (this.isFirstPerson() && !this.cinematicDriver) {
+      if (immediate) this.firstPersonBobOffset.set(0, 0, 0);
+      else this.#updateFirstPersonHeadBob(dt);
       const eye = this.tempFirstPersonTarget.set(
         this.root.position.x,
         this.root.position.y + FIRST_PERSON_EYE_HEIGHT,
         this.root.position.z
-      );
+      ).add(this.firstPersonBobOffset);
       const horizontal = Math.cos(this.pitch);
       this.tempFirstPersonDirection.set(
         -Math.sin(this.yaw) * horizontal,
