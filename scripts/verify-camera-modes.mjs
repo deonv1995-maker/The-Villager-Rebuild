@@ -36,6 +36,20 @@ assert.ok(
   Math.hypot(camera.position.x - player.root.position.x, camera.position.z - player.root.position.z) > 5,
   'Third-person camera must retain its established follow distance'
 );
+camera.updateMatrixWorld(true);
+camera.updateProjectionMatrix();
+const thirdPersonFrame = player.root.position
+  .clone()
+  .add(new THREE.Vector3(0, 1.35, 0))
+  .project(camera);
+assert.ok(
+  Math.abs(thirdPersonFrame.x) < 0.001,
+  'Third-person forward bias must not introduce a lateral framing offset'
+);
+assert.ok(
+  thirdPersonFrame.y < -0.05,
+  'Third-person Ranger must sit below screen centre so more forward landscape stays visible'
+);
 
 const notifiedModes = [];
 const unsubscribe = player.onCameraModeChange(mode => notifiedModes.push(mode));
@@ -213,4 +227,4 @@ assert.equal(positionReads, 2, 'Third person must continue using the same curren
 assert.equal(firstPersonUpdates, 1);
 assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('First/third-person camera toggle, grounded walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
+console.log('Forward-biased third-person framing, first/third-person camera toggle, grounded walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
