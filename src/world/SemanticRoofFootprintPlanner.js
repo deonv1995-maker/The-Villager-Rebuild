@@ -139,6 +139,50 @@ const choosePartition = (cells, preferredAxis) => {
   return candidates[0];
 };
 
+const SIDE_DEFINITIONS = Object.freeze({
+  west: Object.freeze({ dx: -1, dz: 0, axis: 'x', sign: 'negative' }),
+  east: Object.freeze({ dx: 1, dz: 0, axis: 'x', sign: 'positive' }),
+  north: Object.freeze({ dx: 0, dz: -1, axis: 'z', sign: 'negative' }),
+  south: Object.freeze({ dx: 0, dz: 1, axis: 'z', sign: 'positive' })
+});
+
+const wingBoundaryCells = (wing, side) => {
+  if (side === 'west') return wing.cells.filter(cell => cell.x === wing.minX);
+  if (side === 'east') return wing.cells.filter(cell => cell.x === wing.maxX);
+  if (side === 'north') return wing.cells.filter(cell => cell.z === wing.minZ);
+  return wing.cells.filter(cell => cell.z === wing.maxZ);
+};
+
+const fullSideAttachment = (wing, side, wingByCell) => {
+  const definition = SIDE_DEFINITIONS[side];
+  const boundary = wingBoundaryCells(wing, side);
+  if (!definition || !boundary.length) return null;
+
+  const attachedWingIndices = new Set();
+  for (const cell of boundary) {
+    const neighbourWingIndex = wingByCell.get(`${cell.x + definition.dx}:${cell.z + definition.dz}`);
+    if (!Number.isInteger(neighbourWingIndex) || neighbourWingIndex === wing.index) return null;
+    attachedWingIndices.add(neighbourWingIndex);
+  }
+  if (attachedWingIndices.size !== 1) return null;
+
+  return {
+    side,
+    axis: definition.axis,
+    sign: definition.sign,
+    wingIndex: [...attachedWingIndices][0],
+    cellCount: boundary.length
+  };
+};
+
+const fullSideAttachments = (wing, wingByCell) => Object.keys(SIDE_DEFINITIONS)
+  .map(side => fullSideAttachment(wing, side, wingByCell))
+  .filter(Boolean);
+
+const attachmentRidgeAxis = attachment => (
+  attachment?.axis === 'z' ? 'z' : 'x'
+);
+
 export function connectedSemanticRoofCells(cells, seed) {
   const normalized = normalizeCells(cells);
   if (!normalized.length) return [];
@@ -199,27 +243,6 @@ export function planSemanticRoofFootprint(cells, {
         : partition.axis;
     for (const cell of cells) wingByCell.set(keyFor(cell), index);
 
-    let negativeEaveCoordinates;
-    let positiveEaveCoordinates;
-    let eaveCenterCoordinate;
-    if (ridgeAxis === 'x') {
-      negativeEaveCoordinates = cells
-        .filter(cell => cell.z === rectangle.minZ && !occupied.has(`${cell.x}:${cell.z - 1}`))
-        .map(cell => cell.x);
-      positiveEaveCoordinates = cells
-        .filter(cell => cell.z === rectangle.maxZ && !occupied.has(`${cell.x}:${cell.z + 1}`))
-        .map(cell => cell.x);
-      eaveCenterCoordinate = (rectangle.minX + rectangle.maxX) * 0.5;
-    } else {
-      negativeEaveCoordinates = cells
-        .filter(cell => cell.x === rectangle.minX && !occupied.has(`${cell.x - 1}:${cell.z}`))
-        .map(cell => cell.z);
-      positiveEaveCoordinates = cells
-        .filter(cell => cell.x === rectangle.maxX && !occupied.has(`${cell.x + 1}:${cell.z}`))
-        .map(cell => cell.z);
-      eaveCenterCoordinate = (rectangle.minZ + rectangle.maxZ) * 0.5;
-    }
-
     return {
       id: `wing-${index + 1}`,
       index,
@@ -235,16 +258,62 @@ export function planSemanticRoofFootprint(cells, {
       width: wingWidthCells * cellSize,
       depth: wingDepthCells * cellSize,
       offsetX: ((rectangle.minX + rectangle.maxX) * 0.5 - centerX) * cellSize,
-      offsetZ: ((rectangle.minZ + rectangle.maxZ) * 0.5 - centerZ) * cellSize,
-      // The main roof slope always covers the complete wing rectangle. Only the
-      // presentation eave extension/fascia/fringe uses these exact exterior runs.
-      // Shared wing boundaries therefore cannot project thatch overhang into rooms.
-      eaveSegments: {
-        negative: localSegmentsForRuns(negativeEaveCoordinates, eaveCenterCoordinate, cellSize),
-        positive: localSegmentsForRuns(positiveEaveCoordinates, eaveCenterCoordinate, cellSize)
-      }
+      offsetZ: ((rectangle.minZ + rectangle.maxZ) * 0.5 - centerZ) * cellSize
     };
   });
+
+  // Small full-edge appendages read as attached cross-gables rather than isolated
+  // caps. Point their ridge into the single larger wing they project from. Ambiguous
+  // or equal-size junctions retain the established dimension/partition-axis rule.
+  for (const wing of wings) {
+    const largerAttachments = fullSideAttachments(wing, wingByCell).filter(attachment => (
+      wings[attachment.wingIndex]?.cellCount > wing.cellCount
+    ));
+    if (largerAttachments.length !== 1) continue;
+    const attachment = largerAttachments[0];
+    wing.ridgeAxis = attachmentRidgeAxis(attachment);
+    wing.joinedToWing = attachment.wingIndex;
+    wing.joinSide = attachment.side;
+  }
+
+  for (const wing of wings) {
+    const attachments = fullSideAttachments(wing, wingByCell);
+    const attachmentBySide = new Map(attachments.map(attachment => [attachment.side, attachment]));
+
+    let negativeEaveCoordinates;
+    let positiveEaveCoordinates;
+    let eaveCenterCoordinate;
+    if (wing.ridgeAxis === 'x') {
+      negativeEaveCoordinates = wing.cells
+        .filter(cell => cell.z === wing.minZ && !occupied.has(`${cell.x}:${cell.z - 1}`))
+        .map(cell => cell.x);
+      positiveEaveCoordinates = wing.cells
+        .filter(cell => cell.z === wing.maxZ && !occupied.has(`${cell.x}:${cell.z + 1}`))
+        .map(cell => cell.x);
+      eaveCenterCoordinate = (wing.minX + wing.maxX) * 0.5;
+      wing.gableEnds = {
+        negative: !attachmentBySide.has('west'),
+        positive: !attachmentBySide.has('east')
+      };
+    } else {
+      negativeEaveCoordinates = wing.cells
+        .filter(cell => cell.x === wing.minX && !occupied.has(`${cell.x - 1}:${cell.z}`))
+        .map(cell => cell.z);
+      positiveEaveCoordinates = wing.cells
+        .filter(cell => cell.x === wing.maxX && !occupied.has(`${cell.x + 1}:${cell.z}`))
+        .map(cell => cell.z);
+      eaveCenterCoordinate = (wing.minZ + wing.maxZ) * 0.5;
+      wing.gableEnds = {
+        negative: !attachmentBySide.has('north'),
+        positive: !attachmentBySide.has('south')
+      };
+    }
+
+    wing.eaveSegments = {
+      negative: localSegmentsForRuns(negativeEaveCoordinates, eaveCenterCoordinate, cellSize),
+      positive: localSegmentsForRuns(positiveEaveCoordinates, eaveCenterCoordinate, cellSize)
+    };
+  }
 
   const junctions = [];
   for (const cell of normalized) {
@@ -266,7 +335,7 @@ export function planSemanticRoofFootprint(cells, {
 
   const cellSignature = normalized.map(cell => `${cell.x},${cell.z}`).join(';');
   const wingSignature = wings.map(wing => (
-    `${wing.minX},${wing.minZ},${wing.maxX},${wing.maxZ},${wing.ridgeAxis}`
+    `${wing.minX},${wing.minZ},${wing.maxX},${wing.maxZ},${wing.ridgeAxis},${wing.gableEnds.negative ? 'c' : 'o'}${wing.gableEnds.positive ? 'c' : 'o'}`
   )).join(';');
 
   return {

@@ -28,6 +28,14 @@ const assertExactPlanCoverage = (cells, plan, label) => {
   assert.equal(plan.cellCount, cells.length, `${label} cost identity must use real covered Floor cells only`);
 };
 
+const semanticGables = root => {
+  const gables = [];
+  root.traverse(object => {
+    if (object.userData?.semanticRoofGable === true) gables.push(object);
+  });
+  return gables;
+};
+
 const lCells = [
   { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 },
   { x: 0, z: 1 },
@@ -53,9 +61,13 @@ assert.ok(
   semanticRoofRise(lLongWing) > semanticRoofRise(lShortWing),
   'The larger three-cell wing must resolve to a higher ridge than the smaller two-cell wing'
 );
+assert.equal(lShortWing.ridgeAxis, 'z', 'The L stem ridge must point into the larger cap wing');
+assert.equal(lShortWing.gableEnds.negative, false, 'The L stem must leave its joined gable end open into the cap roof');
+assert.equal(lShortWing.gableEnds.positive, true, 'The exposed L stem end must retain its exterior gable closure');
 
 const lVisual = createSemanticRoofFootprintVisual('ComplexRoofInteriorTrimProbe', { plan: lPlan });
 assert.equal(lVisual.userData.internalEavesTrimmed, true);
+assert.equal(lVisual.userData.internalGablesJoined, true);
 const lowJunctionMasks = [];
 lVisual.traverse(object => {
   if (object.userData?.semanticRoofJunction === true) lowJunctionMasks.push(object);
@@ -87,6 +99,64 @@ for (const piece of longWingPositiveEavePieces) {
     'No positive-side eave presentation piece may extend across the internal L-wing junction cell'
   );
 }
+
+const oneCellDoorProjection = [
+  { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 },
+  { x: 0, z: 1 }, { x: 1, z: 1 }, { x: 2, z: 1 },
+  { x: 1, z: 2 }
+];
+const oneCellDoorPlan = planSemanticRoofFootprint(oneCellDoorProjection);
+assertExactPlanCoverage(oneCellDoorProjection, oneCellDoorPlan, 'Single-cell door projection');
+assert.equal(oneCellDoorPlan.wings.length, 2, 'Single-cell door projection should remain one main wing plus one joined porch wing');
+const oneCellDoorWing = oneCellDoorPlan.wings.find(wing => wing.cellCount === 1);
+assert.ok(oneCellDoorWing, 'Single-cell door projection must retain its own roof wing');
+assert.equal(
+  oneCellDoorWing.ridgeAxis,
+  'z',
+  'Single-cell door projection must rotate its ridge toward the main building instead of inheriting an arbitrary square tie axis'
+);
+assert.equal(oneCellDoorWing.joinSide, 'north', 'Single-cell door projection must identify its full north-side attachment to the main wing');
+assert.equal(oneCellDoorWing.gableEnds.negative, false, 'Joined door-projection gable must open into the main roof');
+assert.equal(oneCellDoorWing.gableEnds.positive, true, 'Outside door-projection gable must stay closed');
+const oneCellDoorVisual = createSemanticRoofFootprintVisual('OneCellDoorCrossGableProbe', {
+  plan: oneCellDoorPlan
+});
+const oneCellDoorRoot = oneCellDoorVisual.children.find(child => (
+  child.userData.semanticRoofWingId === oneCellDoorWing.id
+));
+assert.ok(oneCellDoorRoot, 'Single-cell door projection visual must preserve the appendage wing identity');
+assert.equal(semanticGables(oneCellDoorRoot).length, 1, 'Joined single-cell door roof must render only its exposed exterior gable');
+assert.equal(oneCellDoorRoot.getObjectByName('SemanticRoofGableB'), undefined, 'Rotated Z-axis joined end must remove the internal local-B gable presentation');
+assert.ok(oneCellDoorRoot.getObjectByName('SemanticRoofGableA'), 'Rotated Z-axis exterior end must retain the local-A gable presentation');
+assert.deepEqual(oneCellDoorRoot.userData.semanticRoofJoinedGableEnds, ['negative']);
+
+const twoCellProjection = [
+  { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 },
+  { x: 0, z: 1 }, { x: 1, z: 1 }, { x: 2, z: 1 },
+  { x: 1, z: 2 }, { x: 2, z: 2 }
+];
+const twoCellProjectionPlan = planSemanticRoofFootprint(twoCellProjection);
+assertExactPlanCoverage(twoCellProjection, twoCellProjectionPlan, 'Two-cell projection');
+assert.equal(twoCellProjectionPlan.wings.length, 2, 'Two-cell projection should remain one main wing plus one joined cross-gable wing');
+const twoCellProjectionWing = twoCellProjectionPlan.wings.find(wing => wing.cellCount === 2);
+assert.ok(twoCellProjectionWing, 'Two-cell projection must retain its own roof wing');
+assert.equal(
+  twoCellProjectionWing.ridgeAxis,
+  'z',
+  'A two-wide, one-deep projection must prefer a cross-gable ridge into the larger main roof instead of a detached ridge parallel to the wall'
+);
+assert.equal(twoCellProjectionWing.joinSide, 'north');
+assert.equal(twoCellProjectionWing.gableEnds.negative, false, 'Two-cell cross-gable must remove the internal gable closure at the main-roof intersection');
+assert.equal(twoCellProjectionWing.gableEnds.positive, true);
+const twoCellProjectionVisual = createSemanticRoofFootprintVisual('TwoCellCrossGableProbe', {
+  plan: twoCellProjectionPlan
+});
+const twoCellProjectionRoot = twoCellProjectionVisual.children.find(child => (
+  child.userData.semanticRoofWingId === twoCellProjectionWing.id
+));
+assert.ok(twoCellProjectionRoot);
+assert.equal(semanticGables(twoCellProjectionRoot).length, 1, 'Two-cell cross-gable must visually merge at its internal end instead of drawing a closed roof face against the main roof');
+assert.deepEqual(twoCellProjectionRoot.userData.semanticRoofJoinedGableEnds, ['negative']);
 
 const tCells = [
   { x: -1, z: 0 }, { x: 0, z: 0 }, { x: 1, z: 0 },
@@ -174,6 +244,7 @@ assert.equal(runtime.system.previewRoot?.userData.semanticRoofFootprint, true);
 assert.equal(runtime.system.previewRoot?.userData.semanticRoofCellCount, 5);
 assert.equal(runtime.system.previewRoot?.userData.semanticRoofWingCount, 2);
 assert.equal(runtime.system.previewRoot?.userData.internalEavesTrimmed, true);
+assert.equal(runtime.system.previewRoot?.userData.internalGablesJoined, true);
 
 const built = runtime.system.build(player, facing);
 assert.equal(built?.kind, 'roof');
@@ -188,6 +259,7 @@ for (const missing of [{ x: 1, z: 1 }, { x: 2, z: 1 }, { x: 1, z: 2 }, { x: 2, z
 const roofEntry = runtime.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
 assert.equal(roofEntry?.root.userData.semanticRoofFootprint, true);
 assert.equal(roofEntry?.root.userData.internalEavesTrimmed, true);
+assert.equal(roofEntry?.root.userData.internalGablesJoined, true);
 assert.equal(roofEntry?.roofWingCount, 2);
 assert.ok(roofEntry.root.children.filter(child => child.userData.semanticRoofWing).length === 2, 'Committed L Roof must materialize both semantic wings');
 
@@ -198,6 +270,7 @@ assert.deepEqual(restored.system.snapshot(), snapshot, 'Complex Roof state must 
 const restoredRoof = restored.system.getDemolitionEntries().find(entry => entry.kind === 'roof');
 assert.equal(restoredRoof?.root.userData.semanticRoofFootprint, true, 'Continue must re-plan complex Roof presentation from semantic cell state');
 assert.equal(restoredRoof?.root.userData.internalEavesTrimmed, true, 'Continue must re-derive the cleaned interior eave presentation');
+assert.equal(restoredRoof?.root.userData.internalGablesJoined, true, 'Continue must re-derive topology-aware joined gable presentation');
 assert.equal(restoredRoof?.root.userData.semanticRoofCellCount, 5);
 assert.equal(restoredRoof?.roofWingCount, 2);
 assert.equal(restored.inventory.get('log'), 0, 'Continue must never charge again for the restored complex Roof');
@@ -215,4 +288,4 @@ assert.ok(
   'Live Hammer runtime must use the complex Roof specialization while preserving the existing controller boundary'
 );
 
-console.log('Connected L/T/U Roof planning, scaled wing height, exterior-only eaves, exact cost/state, save/Continue and demolition verified');
+console.log('Connected L/T/U Roof planning, cross-gable appendage joins, exterior-only eaves, exact cost/state, save/Continue and demolition verified');
