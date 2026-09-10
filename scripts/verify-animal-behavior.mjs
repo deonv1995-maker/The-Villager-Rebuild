@@ -69,8 +69,8 @@ const rabbitPresentation = new DayOneAnimalPresentation({
 });
 const rabbitEar = rabbitPresentation.fallback.getObjectByName('rabbit-ear-left');
 const rabbitHaunch = rabbitPresentation.fallback.getObjectByName('rabbit-haunch-left');
-assert.ok(rabbitEar, 'rabbit presentation must keep articulated ear pivots for floppy-ear motion');
-assert.ok(rabbitHaunch, 'rabbit presentation must keep pronounced hindquarters instead of generic four-legged proportions');
+assert.ok(rabbitEar, 'rabbit presentation must keep articulated ear pivots for fallback floppy-ear motion');
+assert.ok(rabbitHaunch, 'rabbit fallback must keep pronounced hindquarters instead of generic four-legged proportions');
 const rabbitEarRest = rabbitEar.rotation.x;
 let rabbitHopPeak = 0;
 let rabbitEarFlopped = false;
@@ -79,8 +79,8 @@ for (let step = 0; step < 16; step += 1) {
   rabbitHopPeak = Math.max(rabbitHopPeak, rabbitPresentation.fallback.position.y);
   if (Math.abs(rabbitEar.rotation.x - rabbitEarRest) > 0.08) rabbitEarFlopped = true;
 }
-assert.ok(rabbitHopPeak > 0.1, 'moving rabbit must reach a readable hop peak instead of sliding with a tiny generic bob');
-assert.equal(rabbitEarFlopped, true, 'rabbit ears must visibly follow through across the hop cycle');
+assert.ok(rabbitHopPeak > 0.1, 'fallback moving rabbit must reach a readable hop peak instead of sliding with a tiny generic bob');
+assert.equal(rabbitEarFlopped, true, 'fallback rabbit ears must visibly follow through across the hop cycle');
 
 const fox = new WildAnimalActor({
   scene: new THREE.Scene(),
@@ -134,7 +134,9 @@ assert.ok(
 assert.equal(ANIMAL_DEFINITIONS.deer.presentation.format, 'gltf', 'deer must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.fox.presentation.format, 'gltf', 'fox must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.wolf.presentation.format, 'gltf', 'wolf must use the licensed animated production asset');
-assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.proceduralKind, 'rabbit', 'rabbit keeps its lightweight articulated runtime presentation');
+assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.format, 'gltf', 'rabbit must use the custom cozy production asset');
+assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.assetKey, 'cozyRabbit', 'rabbit production presentation must resolve through the centralized cozy rabbit asset key');
+assert.equal(ANIMAL_DEFINITIONS.rabbit.presentation.fallbackKind, 'rabbit', 'rabbit must retain its lightweight articulated runtime fallback');
 assert.ok(ANIMAL_DEFINITIONS.wildPig.presentation.targetLength >= 1.85, 'shoreline pig presentation must remain readable against the beach at gameplay camera distance');
 assert.ok(ANIMAL_DEFINITIONS.fox.presentation.targetLength >= 1.35, 'forest fox presentation must remain readable through vegetation at gameplay camera distance');
 assert.ok(ANIMAL_DEFINITIONS.wolf.presentation.targetLength >= 2.6, 'wolf must read as an adult-sized territorial threat beside the Ranger');
