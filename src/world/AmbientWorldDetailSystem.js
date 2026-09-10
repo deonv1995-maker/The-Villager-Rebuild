@@ -398,6 +398,7 @@ function buildMushroomGeometry() {
         mushroomIndex === 2 ? 0xc9b99d : 0xe0d2b8
       );
     }
+
     const peak = [x, height, z];
     for (let side = 0; side < sides; side += 1) {
       const a0 = side * Math.PI * 2 / sides;
