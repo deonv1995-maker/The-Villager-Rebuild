@@ -10,3 +10,16 @@
   object-fit: contain;
   filter: none;
 }
+
+/* Locked state remains visibly unavailable, but generated artwork must still read
+   at the 28px toolbelt image size on mobile. */
+.tool-slot.locked {
+  opacity: 0.62;
+}
+
+.tool-slot[data-tool="spear"] img[src*="/ui/cosy/"],
+.tool-slot[data-tool="pickaxe"] img[src*="/ui/cosy/"],
+.tool-slot[data-tool="sword"] img[src*="/ui/cosy/"] {
+  transform: scale(1.12);
+  transform-origin: center;
+}

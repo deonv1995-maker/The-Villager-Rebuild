@@ -18,6 +18,10 @@ The family uses rounded, chunky silhouettes and a restrained island-survival pal
 
 The active icon artwork was generated in ChatGPT as one cohesive cosy-game icon sheet and normalized into the existing 96×96 runtime icon contract. Transparent alpha extraction and small semantic composites were used only where the generated sheet supplied the correct visual language but not a one-to-one runtime symbol. The existing `ASSET_PATHS` keys were intentionally preserved, with only the active cosy asset extension changing from SVG to WebP, so this remains a presentation-only replacement rather than a gameplay/UI-logic rewrite.
 
+## 2026-09-10 device legibility correction
+
+Landscape Android review showed the generated Spear, Pickaxe and Sword silhouettes becoming too small when combined with the old `0.42` locked-slot opacity. The runtime assets remain the approved generated WebPs; the correction is presentation-only. Locked tool slots now retain enough opacity to identify the item while remaining visibly unavailable, and the three slender tool silhouettes receive a small uniform scale normalization inside the existing toolbelt slot. Owned/equipped logic, crafting requirements and icon source paths are unchanged.
+
 ## Covered player-facing icons
 
 Tools/actions: Hand, Axe, Hammer, Pickaxe, Shovel, Spear, Sword, Campfire, Jump.

@@ -59,7 +59,7 @@ Successful demolition returns the exact semantic cost. Failed dependency checks 
 
 Each building remains owned by `PanelStructureRegistry` and has its own local grid origin and snapped yaw. Separate buildings can therefore face different directions without individual modules inside one building acquiring competing rotation rules.
 
-The canonical cell size remains `2.9 x 2.9` world units, derived from the authoritative Log length.
+The canonical cell size remains `2.9 x 2.9` world units, derived from the authoritative Log length. Floor acquisition uses the same `structureJoinRange` as structure ownership: when a Floor is close enough to belong to an existing building, it must resolve onto that building's lattice and inherit the neighbouring Floor's exact `levelY`. A second terrain-derived structure cannot be started inside that join radius. This prevents shallow floor steps at Door openings and keeps later Roof ownership on one coherent structure.
 
 Stored Floor and Stair identities remain integer cell coordinates. Aggregate geometry queries may use fractional local coordinates only to find the geometric centre of an explicit multi-cell Roof assembly; those fractional coordinates are never persisted as canonical cell identity.
 
@@ -111,7 +111,7 @@ The player-facing Roof form remains **gable**. `mono-pitch` remains a recognized
 
 Roof targeting starts from eligible cells on one structural level and resolves the cardinally connected component containing the targeted area. Disconnected Floor islands are not merged into one purchase.
 
-A candidate Floor cell is excluded when:
+A candidate **new** Floor cell is excluded when:
 
 - it already belongs to another Roof zone;
 - a higher Floor exists directly above it;
@@ -147,7 +147,7 @@ A Roof preview is valid only when:
 
 Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support.
 
-When extending beside an already-roofed neighbour, the shared Roof-to-Roof edge is treated as internal rather than requiring an artificial dividing Wall.
+When extending beside an already-roofed neighbour, the shared Roof-to-Roof edge is internal rather than requiring an artificial dividing Wall. The connected old and new Roof cells are coalesced into one semantic Roof zone and the entire connected footprint is re-planned as one integrated visual shell. Only newly covered cells are charged during extension; the merged zone retains the full cumulative covered-cell count for later demolition/refund. This same canonicalization runs during Continue so older same-structure saves with adjacent Roof zones repair overlapping gables/eaves instead of restoring competing finished Roof roots.
 
 ### Roof presentation
 
@@ -247,6 +247,8 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - disconnected Floor-island isolation;
 - exact 5-Logs-per-real-cell cost;
 - one semantic Roof zone owning the exact irregular cell set;
+- incremental Roof extension coalescing with existing connected zones while charging only new cells;
+- Continue-time repair of older adjacent same-structure Roof zones;
 - multi-wing materialization;
 - Save/Continue re-planning from semantic state;
 - near-covered-cell demolition targeting and exact refund;
@@ -258,7 +260,7 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 
 Stairs have passed the current physical acceptance gate. The active device gate is now the complex semantic Roof.
 
-Using an irregular building such as an L-, T-, U- or stepped footprint, verify:
+Using an irregular building such as an L-, T-, U- or stepped footprint, also verify a later Floor/Roof extension against an already-finished wing:
 
 - Roof appears as the same live Hammer choice;
 - 3P and 1P previews follow the actual connected top-floor footprint;
@@ -266,6 +268,9 @@ Using an irregular building such as an L-, T-, U- or stepped footprint, verify:
 - missing outer or inner perimeter support produces an invalid/red preview;
 - the HUD total equals exactly **5 Logs x actual covered Floor cells**;
 - separate building wings receive sensible deterministic gable directions;
+- repeated Floor placement remains on one level through Door openings without requiring Jump;
+- adding a later Roof wing reflows the connected old/new footprint into one joined valley/cross-gable instead of overlapping complete Roof caps;
+- looking up from inside shows one coherent roof underside with no floating internal gable/eave pieces;
 - thatch junctions look coherent without obvious floating gaps or open accidental seams;
 - the polished wall seating and external gable finish remain intact;
 - support Walls refuse removal while the Roof depends on them;

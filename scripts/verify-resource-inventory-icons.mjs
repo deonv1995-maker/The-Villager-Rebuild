@@ -116,5 +116,10 @@ assert.match(
   /src\*="\/ui\/cosy\/"[\s\S]*?image-rendering: auto;[\s\S]*?filter: none;/,
   'Cosy icons must keep smooth full-colour presentation without legacy pixel filtering'
 );
+assert.match(cosyIconStyles, /\.tool-slot\.locked\s*\{[\s\S]*?opacity: 0\.62;/, 'Locked generated tools must remain readable on mobile');
+for (const toolId of ['spear', 'pickaxe', 'sword']) {
+  assert.match(cosyIconStyles, new RegExp(`data-tool=\"${toolId}\"`), `${toolId} must receive slender-tool mobile normalization`);
+}
+assert.match(cosyIconStyles, /transform: scale\(1\.12\);/, 'Slender cosy tool silhouettes must be enlarged without replacing their approved assets');
 
 console.log('Approved generated cosy resource, tool, action and complete semantic build icon set verified');

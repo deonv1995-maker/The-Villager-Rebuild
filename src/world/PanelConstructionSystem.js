@@ -42,7 +42,10 @@ const INTERACTION_RADIUS = PHYSICAL_LOG.pickupRange;
 const FLOOR_TOP_LIFT = 0.028;
 const FLOOR_CLEARANCE_RADIUS = PANEL_GRID.cellSize * 0.36;
 const NEW_STRUCTURE_TARGET_DISTANCE = PHYSICAL_LOG.placeDistance + PANEL_GRID.cellSize * 0.12;
-const CANDIDATE_JOIN_SCORE = PANEL_GRID.cellSize * 0.82;
+// Floor acquisition and structure ownership must use the same join boundary.
+// A tighter aiming-only threshold allowed repeated Floor placement to fall through
+// into a second local grid at a separately terrain-derived elevation.
+const CANDIDATE_JOIN_SCORE = PANEL_GRID.structureJoinRange;
 const AIM_GROUND_STEP = 0.22;
 const LEVEL_TOLERANCE = PANEL_GRID.snapTolerance + 0.001;
 
@@ -456,6 +459,11 @@ export class PanelConstructionSystem {
     const baseY = centerGround + PHYSICAL_LOG.floorGroundClearance;
     const terrain = this.#evaluateFloorTerrain(x, z, yaw, baseY);
     const inReach = Math.hypot(x - playerPosition.x, z - playerPosition.z) <= PANEL_GRID.placementReach;
+    const nearbyStructure = this.registry.nearestStructure(
+      x,
+      z,
+      PANEL_GRID.structureJoinRange
+    );
     return {
       kind: 'floor',
       structureId: null,
@@ -468,7 +476,11 @@ export class PanelConstructionSystem {
       yaw,
       baseY,
       topY: baseY + FLOOR_TOP_LIFT,
-      valid: inReach && terrain.valid && this.#floorClear(x, z),
+      // Starting a second structure inside the canonical join radius creates
+      // competing floor levels and roof ownership. Stay red until the player
+      // targets the existing lattice, whose adjacent Floors inherit exact levelY.
+      valid: inReach && !nearbyStructure && terrain.valid && this.#floorClear(x, z),
+      invalidReason: nearbyStructure ? 'join-existing-structure' : null,
       score: best?.score ?? 0
     };
   }
