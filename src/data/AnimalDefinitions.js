@@ -73,7 +73,14 @@ const RABBIT = Object.freeze({
   maxRoamRadius: 15,
   harvestRange: 2.2,
   ecology: Object.freeze({ ...prey, idleBehavior: 'graze' }),
-  presentation: Object.freeze({ proceduralKind: 'rabbit', fallbackKind: 'rabbit' }),
+  presentation: Object.freeze({
+    assetKey: 'cozyRabbit',
+    format: 'gltf',
+    fallbackKind: 'rabbit',
+    targetLength: 1.02,
+    maxHeight: 1.28,
+    yawOffset: 0
+  }),
   loot: Object.freeze({ itemId: 'meat', label: 'Raw Meat', quantity: 1 })
 });
 
