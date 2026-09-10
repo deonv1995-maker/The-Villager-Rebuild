@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { PANEL_CONSTRUCTION_RESOURCE_ID } from '../data/PanelConstructionDefinitions.js';
 import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js';
-import { ComplexRoofPanelConstructionSystem } from '../world/ComplexRoofPanelConstructionSystem.js';
+import { SemanticStoreyPanelConstructionSystem } from '../world/SemanticStoreyPanelConstructionSystem.js';
 
 const PANEL_BUILD_ACTION_ID = 'panel-build';
 const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof']);
@@ -12,7 +12,7 @@ export class PanelConstructionRuntimeController {
       throw new Error('PanelConstructionRuntimeController requires a started game');
     }
     this.game = game;
-    this.system = new ComplexRoofPanelConstructionSystem({
+    this.system = new SemanticStoreyPanelConstructionSystem({
       group: game.island.group,
       terrain: game.island,
       collision: game.island.collision,

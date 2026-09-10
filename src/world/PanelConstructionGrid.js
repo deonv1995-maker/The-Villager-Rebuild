@@ -131,8 +131,26 @@ const stairUsesCell = (stair, cellKey) => (
   stair.sourceCellKey === cellKey || stair.targetCellKey === cellKey
 );
 
+const stairOpeningForUpperCell = (stairs, cellKey) => {
+  const cell = parsePanelCellKey(cellKey);
+  if (!cell || cell.storey <= 0) return null;
+  const lowerCellKey = panelCellKey({
+    x: cell.x,
+    z: cell.z,
+    storey: cell.storey - 1
+  });
+  return [...stairs.values()].find(stair => (
+    stair.storey === cell.storey - 1 && stair.targetCellKey === lowerCellKey
+  )) ?? null;
+};
+
+const roofZoneAllCellKeys = zone => [
+  ...(zone.cellKeys ?? []),
+  ...(zone.openingCellKeys ?? [])
+];
+
 const roofZoneUsesEdge = (zone, edgeKey) => {
-  for (const cellKey of zone.cellKeys ?? []) {
+  for (const cellKey of roofZoneAllCellKeys(zone)) {
     const cell = parsePanelCellKey(cellKey);
     if (!cell) continue;
     for (const direction of Object.keys(PANEL_DIRECTIONS)) {
@@ -198,7 +216,7 @@ export class PanelConstructionGrid {
     if (!this.floors.has(key)) return false;
     const dependentWall = [...this.walls.values()].some(wall => wall.ownerCellKey === key);
     const dependentStair = [...this.stairs.values()].some(stair => stairUsesCell(stair, key));
-    const dependentRoof = [...this.roofZones.values()].some(zone => zone.cellKeys.includes(key));
+    const dependentRoof = [...this.roofZones.values()].some(zone => roofZoneAllCellKeys(zone).includes(key));
     const dependentUpperFloor = this.floors.has(panelCellKey({ x, z, storey: storey + 1 }));
     if (dependentWall || dependentStair || dependentRoof || dependentUpperFloor) return false;
     return this.floors.delete(key);
@@ -316,33 +334,86 @@ export class PanelConstructionGrid {
   }
 
   removeStair(key) {
+    const stair = this.stairs.get(key);
+    if (!stair) return false;
+    const upperOpeningKey = panelCellKey({
+      x: stair.targetX,
+      z: stair.targetZ,
+      storey: stair.storey + 1
+    });
+    const dependentUpperRoof = [...this.roofZones.values()].some(zone => (
+      zone.storey === stair.storey + 1 && (zone.openingCellKeys ?? []).includes(upperOpeningKey)
+    ));
+    if (dependentUpperRoof) return false;
     return this.stairs.delete(key);
   }
 
-  placeRoofZone({ cells, storey = 0, form = 'gable', ridgeAxis = null }) {
+  placeRoofZone({
+    cells,
+    openingCells = [],
+    storey = 0,
+    form = 'gable',
+    ridgeAxis = null
+  }) {
     requireRoofForm(form);
     if (ridgeAxis !== null && ridgeAxis !== 'x' && ridgeAxis !== 'z') {
       throw new Error(`Unknown roof ridge axis: ${ridgeAxis}`);
     }
-    const key = panelRoofZoneKey({ cells, storey });
+    if (!Array.isArray(cells) || cells.length === 0) {
+      return { ok: false, reason: 'missing-floor' };
+    }
+    if (!Array.isArray(openingCells)) throw new Error('Roof opening cells must be an array');
+
+    const allCells = [...cells, ...openingCells];
+    const key = panelRoofZoneKey({ cells: allCells, storey });
     if (this.roofZones.has(key)) return { ok: false, reason: 'occupied-roof-zone', key };
 
     const cellKeys = cells
       .map(cell => panelCellKey({ x: cell.x, z: cell.z, storey }))
       .sort();
+    const openingCellKeys = openingCells
+      .map(cell => panelCellKey({ x: cell.x, z: cell.z, storey }))
+      .sort();
+    const allCellKeys = [...cellKeys, ...openingCellKeys];
+    if (new Set(allCellKeys).size !== allCellKeys.length) {
+      return { ok: false, reason: 'duplicate-roof-cell' };
+    }
+
     for (const cellKey of cellKeys) {
       if (!this.floors.has(cellKey)) return { ok: false, reason: 'missing-floor', cellKey };
-      if ([...this.roofZones.values()].some(zone => zone.cellKeys.includes(cellKey))) {
-        return { ok: false, reason: 'occupied-roof-cell', cellKey };
-      }
       if ([...this.stairs.values()].some(stair => stairUsesCell(stair, cellKey))) {
         return { ok: false, reason: 'stair-opening', cellKey };
       }
     }
+    for (const cellKey of openingCellKeys) {
+      if (this.floors.has(cellKey)) return { ok: false, reason: 'opening-has-floor', cellKey };
+      if (!stairOpeningForUpperCell(this.stairs, cellKey)) {
+        return { ok: false, reason: 'missing-stair-opening', cellKey };
+      }
+    }
+    for (const cellKey of allCellKeys) {
+      if ([...this.roofZones.values()].some(zone => roofZoneAllCellKeys(zone).includes(cellKey))) {
+        return { ok: false, reason: 'occupied-roof-cell', cellKey };
+      }
+    }
 
-    const zone = { key, storey, cellKeys, form, ridgeAxis };
+    const zone = {
+      key,
+      storey,
+      cellKeys,
+      ...(openingCellKeys.length ? { openingCellKeys } : {}),
+      form,
+      ridgeAxis
+    };
     this.roofZones.set(key, zone);
-    return { ok: true, roofZone: { ...zone, cellKeys: [...cellKeys] } };
+    return {
+      ok: true,
+      roofZone: {
+        ...zone,
+        cellKeys: [...cellKeys],
+        ...(openingCellKeys.length ? { openingCellKeys: [...openingCellKeys] } : {})
+      }
+    };
   }
 
   removeRoofZone(key) {
@@ -359,7 +430,11 @@ export class PanelConstructionGrid {
       walls: [...this.walls.values()].map(wall => this.#cloneWall(wall)).sort((a, b) => a.key.localeCompare(b.key)),
       stairs: [...this.stairs.values()].map(stair => ({ ...stair })).sort((a, b) => a.key.localeCompare(b.key)),
       roofZones: [...this.roofZones.values()]
-        .map(zone => ({ ...zone, cellKeys: [...zone.cellKeys] }))
+        .map(zone => ({
+          ...zone,
+          cellKeys: [...zone.cellKeys],
+          ...(zone.openingCellKeys ? { openingCellKeys: [...zone.openingCellKeys] } : {})
+        }))
         .sort((a, b) => a.key.localeCompare(b.key))
     };
   }
@@ -392,8 +467,14 @@ export class PanelConstructionGrid {
         if (!cell || cell.storey !== zone.storey) throw new Error(`Invalid persisted roof cell: ${cellKey}`);
         return { x: cell.x, z: cell.z };
       });
+      const openingCells = (zone.openingCellKeys ?? []).map(cellKey => {
+        const cell = parsePanelCellKey(cellKey);
+        if (!cell || cell.storey !== zone.storey) throw new Error(`Invalid persisted roof opening cell: ${cellKey}`);
+        return { x: cell.x, z: cell.z };
+      });
       const result = grid.placeRoofZone({
         cells,
+        openingCells,
         storey: zone.storey,
         form: zone.form,
         ridgeAxis: zone.ridgeAxis ?? null

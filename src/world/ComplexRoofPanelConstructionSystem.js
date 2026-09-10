@@ -21,6 +21,7 @@ import {
   connectedSemanticRoofCells,
   planSemanticRoofFootprint
 } from './SemanticRoofFootprintPlanner.js';
+import { semanticUpperStoreyOpeningCells } from './SemanticUpperStoreyRules.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
@@ -44,6 +45,11 @@ const cellSignature = cells => cells
   .map(cell => `${cell.x}:${cell.z}`)
   .sort()
   .join('|');
+
+const roofZoneCellKeys = zone => [
+  ...(zone?.cellKeys ?? []),
+  ...(zone?.openingCellKeys ?? [])
+];
 
 /**
  * Semantic Roof specialization for arbitrary connected orthogonal Floor footprints.
@@ -88,8 +94,16 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     const structure = this.registry.get(placement.structureId);
     if (!structure) return null;
     const cost = panelBuildCost('roof', { roofCellCount: placement.roofCellCount });
+    const floorCells = [];
+    const openingCells = [];
+    for (const cell of placement.cells) {
+      const key = panelCellKey({ x: cell.x, z: cell.z, storey: placement.storey });
+      if (structure.grid.floors.has(key)) floorCells.push(cell);
+      else openingCells.push(cell);
+    }
     const stateResult = structure.grid.placeRoofZone({
-      cells: placement.cells,
+      cells: floorCells,
+      openingCells,
       storey: placement.storey,
       form: 'gable',
       ridgeAxis: placement.plan.primaryAxis
@@ -123,7 +137,8 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
         const root = this.#createRoofRoot(id, placement);
         this.group.add(root);
         entry.root = root;
-        entry.cellKeys = [...roofZone.cellKeys];
+        entry.cellKeys = roofZoneCellKeys(roofZone);
+        entry.openingCellKeys = [...(roofZone.openingCellKeys ?? [])];
         entry.roofCellCount = placement.roofCellCount;
         entry.ridgeAxis = placement.plan.primaryAxis;
         entry.roofWingCount = placement.plan.wings.length;
@@ -166,7 +181,7 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     const seenComponents = new Set();
 
     for (const structure of this.registry.structures.values()) {
-      const floors = [...structure.grid.floors.values()];
+      const floors = this.#roofSupportFloors(structure);
       for (const seed of floors) {
         if (!this.#floorIsRoofable(structure, seed)) continue;
 
@@ -219,6 +234,31 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     return best && best.score <= PANEL_GRID.cellSize * 1.7 ? best : null;
   }
 
+  #roofSupportFloors(structure) {
+    const actualFloors = [...structure.grid.floors.values()];
+    const projectedOpenings = semanticUpperStoreyOpeningCells(structure.grid)
+      .filter(opening => directionEntries.some(direction => (
+        structure.grid.floors.has(panelCellKey({
+          x: opening.x + direction.dx,
+          z: opening.z + direction.dz,
+          storey: opening.storey
+        }))
+      )))
+      .map(opening => {
+        const stair = structure.grid.stairs.get(opening.stairKey);
+        return {
+          key: opening.key,
+          x: opening.x,
+          z: opening.z,
+          storey: opening.storey,
+          levelY: stair?.topY ?? opening.storey * PANEL_GRID.storeyHeight,
+          semanticStairOpening: true,
+          stairKey: opening.stairKey
+        };
+      });
+    return [...actualFloors, ...projectedOpenings];
+  }
+
   #floorIsRoofable(structure, floor) {
     if (structure.grid.floors.has(panelCellKey({
       x: floor.x,
@@ -234,14 +274,14 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
 
   #roofCellOccupied(structure, cellKey) {
     return [...structure.grid.roofZones.values()].some(zone => (
-      zone.cellKeys.includes(cellKey)
+      roofZoneCellKeys(zone).includes(cellKey)
     ));
   }
 
   #roofSupported(structure, cells, storey) {
     const candidateKeys = new Set(cells.map(cell => panelCellKey({ ...cell, storey })));
     const existingRoofKeys = new Set(
-      [...structure.grid.roofZones.values()].flatMap(zone => zone.cellKeys)
+      [...structure.grid.roofZones.values()].flatMap(zone => roofZoneCellKeys(zone))
     );
 
     for (const cell of cells) {
@@ -265,12 +305,38 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
   }
 
   #placementForRoofZone(structure, roofZone) {
-    const cells = (roofZone.cellKeys ?? []).map(parsePanelCellKey).filter(Boolean);
+    const cells = roofZoneCellKeys(roofZone).map(parsePanelCellKey).filter(Boolean);
     const plan = planSemanticRoofFootprint(cells, {
       cellSize: PANEL_GRID.cellSize,
       preferredAxis: roofZone.ridgeAxis ?? null
     });
     return this.#placementForCells(structure, cells, roofZone.storey, plan);
+  }
+
+  #roofSupportForCell(structure, cell, storey) {
+    const key = panelCellKey({ x: cell.x, z: cell.z, storey });
+    const floor = structure.grid.floors.get(key);
+    if (floor) return floor;
+    if (storey <= 0) return null;
+
+    const lowerKey = panelCellKey({
+      x: cell.x,
+      z: cell.z,
+      storey: storey - 1
+    });
+    const stair = [...structure.grid.stairs.values()].find(candidate => (
+      candidate.storey === storey - 1 && candidate.targetCellKey === lowerKey
+    ));
+    if (!stair) return null;
+    return {
+      key,
+      x: cell.x,
+      z: cell.z,
+      storey,
+      levelY: stair.topY,
+      semanticStairOpening: true,
+      stairKey: stair.key
+    };
   }
 
   #placementForCells(structure, cells, storey, plan = null) {
@@ -279,19 +345,17 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
     });
     if (!resolvedPlan) return null;
 
-    const floors = cells.map(cell => structure.grid.floors.get(panelCellKey({
-      x: cell.x,
-      z: cell.z,
-      storey
-    }))).filter(Boolean);
-    if (floors.length !== cells.length) return null;
+    const supports = cells
+      .map(cell => this.#roofSupportForCell(structure, cell, storey))
+      .filter(Boolean);
+    if (supports.length !== cells.length) return null;
 
     const localCenter = structure.grid.cellCenter({
       x: resolvedPlan.centerX,
       z: resolvedPlan.centerZ
     });
     const worldCenter = this.registry.localToWorld(structure, localCenter.x, localCenter.z);
-    const floorLevel = Math.max(...floors.map(floor => floor.levelY));
+    const floorLevel = Math.max(...supports.map(support => support.levelY));
     const rise = semanticRoofFootprintRise(resolvedPlan);
     return {
       kind: 'roof',
@@ -393,7 +457,8 @@ export class ComplexRoofPanelConstructionSystem extends PanelConstructionSystem 
       kind: 'roof',
       structureId: structure.id,
       stateKey: roofZone.key,
-      cellKeys: [...roofZone.cellKeys],
+      cellKeys: roofZoneCellKeys(roofZone),
+      openingCellKeys: [...(roofZone.openingCellKeys ?? [])],
       roofCellCount: resolvedPlacement.roofCellCount,
       storey: roofZone.storey,
       ridgeAxis: resolvedPlacement.plan.primaryAxis,
