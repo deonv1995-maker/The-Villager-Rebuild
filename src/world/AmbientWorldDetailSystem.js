@@ -251,9 +251,10 @@ export class AmbientWorldDetailSystem {
 
     this.lastCollisionRevision = collisionRevision;
     this.lastConstructionRevision = constructionRevision;
-    const floors = this.collision
-      .getObstaclesByType('placed-log')
-      .filter(obstacle => obstacle.shape === 'box' && /-floor$/.test(obstacle.label ?? ''));
+    const floors = [
+      ...this.collision.getObstaclesByType('placed-log'),
+      ...this.collision.getObstaclesByType('panel-floor')
+    ].filter(obstacle => obstacle.shape === 'box');
     const changedMeshes = new Set();
 
     for (const entry of this.entries) {
@@ -397,7 +398,6 @@ function buildMushroomGeometry() {
         mushroomIndex === 2 ? 0xc9b99d : 0xe0d2b8
       );
     }
-
     const peak = [x, height, z];
     for (let side = 0; side < sides; side += 1) {
       const a0 = side * Math.PI * 2 / sides;
