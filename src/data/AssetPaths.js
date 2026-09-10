@@ -35,7 +35,8 @@ export const ASSET_PATHS = Object.freeze({
     qiwiiTexture: asset('animals/qiwii/Texture.png'),
     quaterniusDeer: asset('animals/quaternius/Deer.gltf'),
     quaterniusFox: asset('animals/quaternius/Fox.gltf'),
-    quaterniusWolf: asset('animals/quaternius/Wolf.gltf')
+    quaterniusWolf: asset('animals/quaternius/Wolf.gltf'),
+    cozyRabbit: asset('animals/custom/cozy-rabbit.gltf')
   }),
   ui: Object.freeze({
     mobile: Object.freeze({
