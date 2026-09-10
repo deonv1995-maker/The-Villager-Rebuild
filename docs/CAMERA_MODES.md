@@ -9,6 +9,8 @@ Third person remains the default mode and preserves the established follow camer
 - movement is camera-relative;
 - right-side touch/mouse drag orbits the camera;
 - after manual look is released, the camera can recover behind the Ranger;
+- the camera keeps its established follow position and distance but aims 2 m ahead along the current horizontal view direction, placing the Ranger below screen centre so more of the forward landscape remains visible;
+- the forward framing bias is presentation-only: it does not alter horizontal movement direction, orbit controls or cinematic camera targeting;
 - the Ranger body and equipped third-person tool presentation remain visible;
 - structure occlusion/transparency remains active to keep the Ranger readable around buildings.
 
@@ -52,7 +54,7 @@ Camera mode is presentation/session state, not gameplay progression, and is not 
 
 ## Verification
 
-`scripts/verify-camera-modes.mjs` verifies default third-person behavior, first-person eye placement, resolved-motion walk bob, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
+`scripts/verify-camera-modes.mjs` verifies the forward-biased third-person composition and established follow distance, default third-person behavior, first-person eye placement, resolved-motion walk bob, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
 `scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.
 
