@@ -4,6 +4,7 @@ import {
   semanticRoofRise,
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
+import { applySemanticRoofJunctionGeometry } from './SemanticRoofJunctionGeometry.js';
 
 export function semanticRoofFootprintRise(plan) {
   if (!plan?.wings?.length) return 0;
@@ -66,6 +67,7 @@ export function createSemanticRoofFootprintVisual(
   root.userData.internalEavesTrimmed = true;
   root.userData.internalGablesJoined = true;
 
+  const wingRootsByIndex = new Map();
   for (const wing of plan.wings) {
     const wingRoot = createSemanticRoofZoneVisual(
       `${name}-${wing.id}`,
@@ -87,11 +89,20 @@ export function createSemanticRoofFootprintVisual(
       : null;
     removeJoinedGablePresentation(wingRoot, wing.ridgeAxis, wing.gableEnds);
     root.add(wingRoot);
+    wingRootsByIndex.set(wing.index, wingRoot);
   }
 
-  // Shared wing edges are joined by topology-aware ridge orientation plus the
-  // existing slight roof-shell/gable overhang. Internal gable triangles and their
-  // decorative rake/log finish are removed, while low horizontal seam masks stay
-  // absent so no timber/thatch strips become visible inside the occupied room.
+  // Cross-gable appendages need a real valley intersection, not merely two complete
+  // roof prisms overlapping at one wall edge. Extend the child slopes/ridge into the
+  // parent roof until the two pitches meet, and cut the matching triangular valley
+  // opening out of the parent slope. The same edited meshes are double-sided, so the
+  // joined topology is visible from the room interior as well as from outside.
+  const junctionProfiles = applySemanticRoofJunctionGeometry(plan, wingRootsByIndex);
+  root.userData.semanticRoofIntegratedJunctions = junctionProfiles.length;
+  root.userData.semanticRoofValleyJoined = junctionProfiles.length > 0;
+
+  // Low horizontal seam masks remain intentionally absent. Junction continuity now
+  // comes from the actual sloped roof geometry, so there is no separate mask system
+  // that can leak through the ceiling when the player looks up from inside.
   return root;
 }
