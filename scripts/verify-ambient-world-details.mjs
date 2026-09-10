@@ -18,15 +18,15 @@ const detailTerrain = {
 };
 
 let collisionRevision = 0;
-let floorActive = false;
+let activeFloorType = null;
 const collision = {
   getRevision: () => collisionRevision,
   getObstaclesByType: type => {
-    if (type !== 'placed-log' || !floorActive) return [];
+    if (!activeFloorType || type !== activeFloorType) return [];
     return [{
-      type: 'placed-log',
+      type: activeFloorType,
       shape: 'box',
-      label: 'ambient-test-floor',
+      label: activeFloorType === 'placed-log' ? 'ambient-test-floor' : 'semantic-floor-test',
       x: 0,
       z: 0,
       halfX: 10,
@@ -65,16 +65,26 @@ assert.equal(group.children.every(child => child.isInstancedMesh), true, 'ambien
 assert.equal(group.children.every(child => child.castShadow === false), true, 'ambient details must not add per-instance shadow cost');
 assert.equal(details.entries.every(entry => entry.constructionHidden === false), true, 'ambient details must start visible when no floor covers them');
 
-floorActive = true;
+activeFloorType = 'panel-floor';
 collisionRevision += 1;
 details.update();
-assert.equal(details.entries.every(entry => entry.constructionHidden), true, 'placed construction floors must hide ambient details through the shared vegetation coverage rule');
+assert.equal(details.entries.every(entry => entry.constructionHidden), true, 'semantic Floor Panels must hide flowers, mushrooms and coastal grass through the shared vegetation coverage rule');
 
 const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
 const firstEntry = details.entries[0];
 firstEntry.mesh.getMatrixAt(firstEntry.index, matrix);
 position.setFromMatrixPosition(matrix);
-assert.equal(position.y < -900, true, 'construction-hidden ambient detail instances must leave the visible world');
+assert.equal(position.y < -900, true, 'ambient details hidden by semantic Floor Panels must leave the visible world');
+
+activeFloorType = null;
+collisionRevision += 1;
+details.update();
+assert.equal(details.entries.every(entry => entry.constructionHidden === false), true, 'ambient details must return when the covering semantic Floor Panel is removed');
+
+activeFloorType = 'placed-log';
+collisionRevision += 1;
+details.update();
+assert.equal(details.entries.every(entry => entry.constructionHidden), true, 'legacy placed construction floors must retain ambient-detail occlusion compatibility');
 
 console.log('ambient world detail contracts verified');
