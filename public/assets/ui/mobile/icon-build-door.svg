@@ -1,0 +1,10 @@
+<svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Door frame">
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 40V10H36V40" stroke="#7A3F20" stroke-width="7"/>
+    <path d="M12 11H36" stroke="#7A3F20" stroke-width="7"/>
+    <path d="M12 40V10H36V40" stroke="#D58B45" stroke-width="3"/>
+    <path d="M12 11H36" stroke="#E0A45C" stroke-width="3"/>
+    <path d="M16 39V16H32V39" stroke="#F0CF76" stroke-width="2" opacity=".9"/>
+    <path d="M9 40H17M31 40H39" stroke="#6A351C" stroke-width="4"/>
+  </g>
+</svg>
