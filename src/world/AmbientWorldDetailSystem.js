@@ -251,9 +251,10 @@ export class AmbientWorldDetailSystem {
 
     this.lastCollisionRevision = collisionRevision;
     this.lastConstructionRevision = constructionRevision;
-    const floors = this.collision
-      .getObstaclesByType('placed-log')
-      .filter(obstacle => obstacle.shape === 'box' && /-floor$/.test(obstacle.label ?? ''));
+    const floors = [
+      ...this.collision.getObstaclesByType('placed-log'),
+      ...this.collision.getObstaclesByType('panel-floor')
+    ].filter(obstacle => obstacle.shape === 'box');
     const changedMeshes = new Set();
 
     for (const entry of this.entries) {
