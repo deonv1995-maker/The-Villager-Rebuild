@@ -16,6 +16,7 @@ const CAMERA_RETURN_RESPONSE = 0.5;
 const CAMERA_PITCH_RESPONSE = 0.7;
 const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
+const THIRD_PERSON_LOOK_AHEAD = 2;
 const FIRST_PERSON_EYE_HEIGHT = 1.72;
 const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 3.8;
 const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 3.2;
@@ -84,6 +85,8 @@ export class RangerController {
     this.tempFirstPersonDirection = new THREE.Vector3();
     this.tempFirstPersonTarget = new THREE.Vector3();
     this.tempFirstPersonBobTarget = new THREE.Vector3();
+    this.tempThirdPersonLookTarget = new THREE.Vector3();
+    this.tempThirdPersonViewForward = new THREE.Vector3();
     this.cinematicDriver = null;
     this.#bindKeyboard();
   }
@@ -842,7 +845,14 @@ export class RangerController {
     );
     if (immediate) this.camera.position.copy(desired);
     else this.camera.position.lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
-    this.camera.lookAt(target);
+
+    const lookAhead = this.cinematicDriver ? 0 : THIRD_PERSON_LOOK_AHEAD;
+    const lookTarget = this.tempThirdPersonLookTarget.copy(target).add(
+      this.tempThirdPersonViewForward
+        .set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
+        .multiplyScalar(lookAhead)
+    );
+    this.camera.lookAt(lookTarget);
   }
 
   #bindKeyboard() {
