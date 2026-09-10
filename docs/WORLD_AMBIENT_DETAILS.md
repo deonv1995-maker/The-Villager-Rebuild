@@ -45,7 +45,7 @@ The details do not cast shadows. Placement uses a fixed seed so visual density i
 
 ## Construction behavior
 
-Ambient details must not remain visible through player-built floors. The system listens to the existing collision/construction revisions and hides covered instances using the same floor-coverage rule used by the vegetation layer.
+Ambient details must not remain visible through player-built floors. The system listens to the existing collision/construction revisions and hides covered instances using the same floor-coverage rule used by the vegetation layer. Both legacy `placed-log` floor obstacles and current semantic `panel-floor` obstacles feed that shared presentation mask.
 
 This is presentation cleanup only. It does not alter the floor, terrain, collision, construction snap rules or resource economy.
 
@@ -67,7 +67,8 @@ This pass intentionally does not change:
 - all three ambient categories populate deterministically under valid habitat;
 - decorative categories remain instanced;
 - they do not add shadow cost;
-- placed construction floors hide covered detail instances through the shared vegetation coverage rule.
+- semantic Floor Panels hide covered detail instances and removal restores them;
+- legacy placed-log floors retain the same ambient-detail occlusion behavior.
 
 The verifier is part of the full `npm run check` suite.
 
