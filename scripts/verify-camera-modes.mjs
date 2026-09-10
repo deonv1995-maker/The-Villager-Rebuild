@@ -72,6 +72,60 @@ assert.ok(
   'First-person interaction/build facing must match the horizontal camera view direction'
 );
 
+player.setMove(0, 0.45);
+const walkBobOffsets = [];
+for (let frame = 0; frame < 50; frame += 1) {
+  player.update(1 / 60);
+  walkBobOffsets.push(camera.position.y - (player.root.position.y + 1.72));
+}
+player.setMove(0, 0);
+const walkBobRange = Math.max(...walkBobOffsets) - Math.min(...walkBobOffsets);
+const walkBobPeak = Math.max(...walkBobOffsets.map(value => Math.abs(value)));
+assert.ok(walkBobRange > 0.035, 'Grounded first-person walking must visibly bounce the camera');
+
+for (let frame = 0; frame < 50; frame += 1) player.update(1 / 60);
+assert.ok(
+  Math.abs(camera.position.y - (player.root.position.y + 1.72)) < 0.001,
+  'First-person head bob must settle back to neutral eye height while idle'
+);
+
+player.setSprint(true);
+player.setMove(0, 1);
+const runBobOffsets = [];
+for (let frame = 0; frame < 50; frame += 1) {
+  player.update(1 / 60);
+  runBobOffsets.push(camera.position.y - (player.root.position.y + 1.72));
+}
+player.setMove(0, 0);
+player.setSprint(false);
+const runBobPeak = Math.max(...runBobOffsets.map(value => Math.abs(value)));
+assert.ok(
+  runBobPeak > walkBobPeak + 0.01,
+  'First-person running must use a stronger camera bounce than walking'
+);
+
+const blockedCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const blockedPlayer = new RangerController({
+  scene,
+  camera: blockedCamera,
+  terrain,
+  collision: {
+    resolveMove(current) {
+      return { x: current.x, z: current.z };
+    }
+  }
+});
+blockedPlayer.model = new THREE.Group();
+blockedPlayer.root.add(blockedPlayer.model);
+blockedPlayer.assetMode = 'kaykit';
+blockedPlayer.setCameraMode('first-person');
+blockedPlayer.setMove(0, 1);
+for (let frame = 0; frame < 30; frame += 1) blockedPlayer.update(1 / 60);
+assert.ok(
+  Math.abs(blockedCamera.position.y - (blockedPlayer.root.position.y + 1.72)) < 0.000001,
+  'First-person head bob must use resolved travel and remain still when collision blocks movement'
+);
+
 const startPosition = player.getPosition(new THREE.Vector3());
 player.setMove(0, 1);
 player.update(0.2);
@@ -159,4 +213,4 @@ assert.equal(positionReads, 2, 'Third person must continue using the same curren
 assert.equal(firstPersonUpdates, 1);
 assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('First/third-person camera toggle, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
+console.log('First/third-person camera toggle, grounded walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
