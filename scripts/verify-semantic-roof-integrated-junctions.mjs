@@ -140,9 +140,9 @@ const rotatedProjection = assertIntegratedCrossGable({
   label: 'Rotated two-cell L projection',
   childCellCount: 2,
   cells: [
-    { x: 0, z: 0 }, { x: 0, z: 1 }, { x: 0, z: 2 },
-    { x: 1, z: 0 }, { x: 1, z: 1 }, { x: 1, z: 2 },
-    { x: 2, z: 1 }, { x: 2, z: 2 }
+    { x: 0, z: 0 }, { x: 0, z: 1 }, { x: 0, z: 2 }, { x: 0, z: 3 },
+    { x: 1, z: 0 }, { x: 1, z: 1 }, { x: 1, z: 2 }, { x: 1, z: 3 },
+    { x: 2, z: 2 }, { x: 2, z: 3 }
   ]
 });
 assert.equal(rotatedProjection.child.ridgeAxis, 'x');
