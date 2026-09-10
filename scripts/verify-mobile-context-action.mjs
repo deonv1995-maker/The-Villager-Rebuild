@@ -122,8 +122,8 @@ assert.match(contextActionSource, /STUMP_ACTION_ID = 'shovel-stump'/, 'Context a
 assert.match(equipmentRuntimeSource, /#wrapToolUse\(this\.game\.treeHarvest, 'removeStump', 'shovel'\)/, 'Shovel stump removal must consume standard tool durability');
 assert.match(equipmentRuntimeSource, /caption: 'DIG'/, 'Shovel must route through the unified Action button as DIG');
 assert.match(mobileHudSource, /shovel: ui\.shovel/, 'Mobile HUD must render a dedicated shovel icon');
-assert.match(assetPathsSource, /shovel: asset\('ui\/survival\/icon-shovel\.webp'\)/, 'Shovel icon path must remain centralized');
-assert.ok(fs.existsSync(new URL('../public/assets/ui/survival/icon-shovel.webp', import.meta.url)), 'Shovel icon asset must exist in public assets');
+assert.match(assetPathsSource, /shovel: asset\('ui\/cosy\/icon-shovel\.svg'\)/, 'Shovel icon path must remain centralized');
+assert.ok(fs.existsSync(new URL('../public/assets/ui/cosy/icon-shovel.svg', import.meta.url)), 'Shovel icon asset must exist in public assets');
 assert.match(mobileHudSource, /!TOOL_ORDER\.includes\(entry\.id\)/, 'Resource strip must exclude all current and future toolbelt tools from the shared tool order');
 assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
@@ -131,9 +131,9 @@ assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu
 assert.match(mobileHudSource, /aria-expanded/, 'Build menu collapse control must expose expansion state');
 for (const mode of ['raw', 'floor', 'frame', 'wall', 'stairs', 'roof', 'drop']) {
   assert.match(mobileHudSource, new RegExp(`data-build="${mode}"`), `Build grid must expose ${mode}`);
-  assert.match(assetPathsSource, new RegExp(`${mode}: asset\\('ui/survival/icon-build-${mode}\\.webp'\\)`), `${mode} must use a dedicated build icon asset`);
+  assert.match(assetPathsSource, new RegExp(`${mode}: asset\\('ui/cosy/icon-build-${mode}\\.svg'\\)`), `${mode} must use a dedicated build icon asset`);
   assert.ok(
-    fs.existsSync(new URL(`../public/assets/ui/survival/icon-build-${mode}.webp`, import.meta.url)),
+    fs.existsSync(new URL(`../public/assets/ui/cosy/icon-build-${mode}.svg`, import.meta.url)),
     `${mode} build icon must exist in public assets`
   );
   assert.match(mobileHudSource, new RegExp(`data-build="${mode}"[^>]*[\\s\\S]*?<img src="\\$\\{this\\.buildIcons\\.${mode}\\}"`), `${mode} must render its icon instead of a text label`);
@@ -200,4 +200,4 @@ assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 0\.5/, 'Manual ca
 assert.match(rangerControllerSource, /CAMERA_PITCH_RESPONSE = 0\.7/, 'Manual camera pitch recovery must remain relaxed rather than snapping back');
 assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
+console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, cosy icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
