@@ -63,6 +63,8 @@ export const ASSET_PATHS = Object.freeze({
         floor: asset('ui/survival/icon-build-floor.webp'),
         frame: asset('ui/survival/icon-build-frame.webp'),
         wall: asset('ui/survival/icon-build-wall.webp'),
+        door: asset('ui/mobile/icon-build-door.svg'),
+        window: asset('ui/mobile/icon-build-window.svg'),
         angle: asset('ui/mobile/icon-build-angle.svg'),
         stairs: asset('ui/survival/icon-build-stairs.webp'),
         roof: asset('ui/survival/icon-build-roof.webp'),
