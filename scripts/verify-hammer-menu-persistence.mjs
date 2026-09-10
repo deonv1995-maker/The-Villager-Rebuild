@@ -33,8 +33,8 @@ assert.ok(
 );
 
 assert.ok(
-  assetPathsSource.includes("door: asset('ui/cosy/icon-build-door.svg')") &&
-  assetPathsSource.includes("window: asset('ui/cosy/icon-build-window.svg')"),
+  assetPathsSource.includes("door: asset('ui/cosy/icon-build-door.webp')") &&
+  assetPathsSource.includes("window: asset('ui/cosy/icon-build-window.webp')"),
   'Door and Window construction icons must be registered through the shared cosy ASSET_PATHS authority'
 );
 assert.ok(

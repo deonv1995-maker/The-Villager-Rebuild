@@ -9,36 +9,47 @@ const cosyIconStyles = fs.readFileSync(new URL('../src/cosy-icons.css', import.m
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 const cosyToolIcons = Object.freeze({
-  hand: 'icon-hand.svg',
-  axe: 'icon-axe.svg',
-  hammer: 'icon-hammer.svg',
-  pickaxe: 'icon-pickaxe.svg',
-  shovel: 'icon-shovel.svg',
-  sword: 'icon-sword.svg',
-  campfire: 'icon-campfire.svg',
-  jump: 'icon-jump.svg',
-  spear: 'icon-spear.svg'
+  hand: 'icon-hand.webp',
+  axe: 'icon-axe.webp',
+  hammer: 'icon-hammer.webp',
+  pickaxe: 'icon-pickaxe.webp',
+  shovel: 'icon-shovel.webp',
+  sword: 'icon-sword.webp',
+  campfire: 'icon-campfire.webp',
+  jump: 'icon-jump.webp',
+  spear: 'icon-spear.webp'
 });
 
 const cosyResourceIcons = Object.freeze({
-  stick: 'icon-resource-stick.svg',
-  stone: 'icon-resource-stone.svg',
-  grass: 'icon-resource-grass.svg',
-  meat: 'icon-resource-meat.svg',
-  log: 'icon-build-raw.svg'
+  stick: 'icon-resource-stick.webp',
+  stone: 'icon-resource-stone.webp',
+  grass: 'icon-resource-grass.webp',
+  meat: 'icon-resource-meat.webp',
+  log: 'icon-build-raw.webp'
 });
 
 const cosyBuildIcons = Object.freeze({
-  raw: 'icon-build-raw.svg',
-  floor: 'icon-build-floor.svg',
-  frame: 'icon-build-frame.svg',
-  wall: 'icon-build-wall.svg',
-  door: 'icon-build-door.svg',
-  window: 'icon-build-window.svg',
-  stairs: 'icon-build-stairs.svg',
-  roof: 'icon-build-roof.svg',
-  drop: 'icon-build-drop.svg'
+  raw: 'icon-build-raw.webp',
+  floor: 'icon-build-floor.webp',
+  frame: 'icon-build-frame.webp',
+  wall: 'icon-build-wall.webp',
+  door: 'icon-build-door.webp',
+  window: 'icon-build-window.webp',
+  stairs: 'icon-build-stairs.webp',
+  roof: 'icon-build-roof.webp',
+  drop: 'icon-build-drop.webp'
 });
+
+function assertGeneratedWebp(buffer, context) {
+  assert.equal(buffer.subarray(0, 4).toString('ascii'), 'RIFF', `${context} must use a valid RIFF WebP container`);
+  assert.equal(buffer.subarray(8, 12).toString('ascii'), 'WEBP', `${context} must use WebP artwork`);
+  assert.equal(buffer.subarray(12, 16).toString('ascii'), 'VP8X', `${context} must retain the generated extended WebP canvas`);
+  assert.ok((buffer[20] & 0x10) !== 0, `${context} must retain transparency`);
+
+  const width = buffer.readUIntLE(24, 3) + 1;
+  const height = buffer.readUIntLE(27, 3) + 1;
+  assert.deepEqual([width, height], [96, 96], `${context} must remain normalized to 96x96`);
+}
 
 function assertCosyIcon(id, fileName, context) {
   const iconPath = `ui/cosy/${fileName}`;
@@ -49,9 +60,7 @@ function assertCosyIcon(id, fileName, context) {
   );
   const fileUrl = new URL(`../public/assets/${iconPath}`, import.meta.url);
   assert.ok(fs.existsSync(fileUrl), `${context} ${id} icon must exist in public assets`);
-  const source = fs.readFileSync(fileUrl, 'utf8');
-  assert.match(source, /<svg[^>]*viewBox="0 0 96 96"/, `${context} ${id} must be a normalized 96x96 SVG`);
-  assert.doesNotMatch(source, /<text\b/i, `${context} ${id} must remain language-independent artwork`);
+  assertGeneratedWebp(fs.readFileSync(fileUrl), `${context} ${id}`);
 }
 
 for (const [id, fileName] of Object.entries(cosyToolIcons)) {
@@ -105,7 +114,7 @@ assert.match(inventoryStyles, /\.inventory-row strong\s*\{[\s\S]*?position: abso
 assert.match(
   cosyIconStyles,
   /src\*="\/ui\/cosy\/"[\s\S]*?image-rendering: auto;[\s\S]*?filter: none;/,
-  'Cosy icons must keep smooth full-colour vector presentation without legacy pixel filtering'
+  'Cosy icons must keep smooth full-colour presentation without legacy pixel filtering'
 );
 
-console.log('Approved cosy resource, tool, action and complete semantic build icon set verified');
+console.log('Approved generated cosy resource, tool, action and complete semantic build icon set verified');

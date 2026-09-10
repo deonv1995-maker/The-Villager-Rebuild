@@ -6,13 +6,17 @@ The player-facing HUD, toolbelt, inventory, crafting actions, contextual action 
 
 - Source of truth: `src/data/AssetPaths.js`
 - Runtime assets: `public/assets/ui/cosy/`
-- Format: transparent SVG artwork normalized to a `0 0 96 96` viewBox
-- Presentation: smooth full-colour vector artwork; no nearest-neighbour or fantasy pixel-art filtering
+- Format: transparent 96×96 WebP artwork for the active generated icon set; legacy SVG source files may remain for provenance/migration only
+- Presentation: smooth full-colour generated artwork; no nearest-neighbour or fantasy pixel-art filtering
 - Mobile target: silhouettes and interior details must remain readable at the existing 24–48 px HUD sizes
 
 ## Visual language
 
 The family uses rounded, chunky silhouettes and a restrained island-survival palette: warm brown outlines and timber, muted sage greens, softened stone/metal greys, cream highlights, and small warm amber/orange accents. Pure black, stark white, neon colours, photorealism and fine linework are intentionally avoided so the icons sit naturally beside the game's cosy low-poly world.
+
+## 2026-09-10 generated-art pass
+
+The active icon artwork was generated in ChatGPT as one cohesive cosy-game icon sheet and normalized into the existing 96×96 runtime icon contract. Transparent alpha extraction and small semantic composites were used only where the generated sheet supplied the correct visual language but not a one-to-one runtime symbol. The existing `ASSET_PATHS` keys were intentionally preserved, with only the active cosy asset extension changing from SVG to WebP, so this remains a presentation-only replacement rather than a gameplay/UI-logic rewrite.
 
 ## Covered player-facing icons
 
