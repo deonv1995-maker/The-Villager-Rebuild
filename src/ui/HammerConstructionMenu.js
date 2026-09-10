@@ -15,8 +15,8 @@ export class HammerConstructionMenu {
     this.modeIcons = Object.freeze({
       floor: ui.build.floor,
       wall: ui.build.wall,
-      door: ui.build.wall,
-      window: ui.build.wall,
+      door: ui.build.door,
+      window: ui.build.window,
       stairs: ui.build.stairs,
       roof: ui.build.roof,
       remove: ui.hammer
@@ -54,11 +54,11 @@ export class HammerConstructionMenu {
           <span><strong>WALL</strong><small>3 LOGS</small></span>
         </button>
         <button class="construction-list-item" type="button" data-build="door" aria-label="Build door panel">
-          <span class="construction-list-placeholder" aria-hidden="true">D</span>
+          <img src="${ui.build.door}" alt="" aria-hidden="true">
           <span><strong>DOOR</strong><small>3 LOGS</small></span>
         </button>
         <button class="construction-list-item" type="button" data-build="window" aria-label="Build window panel">
-          <span class="construction-list-placeholder" aria-hidden="true">W</span>
+          <img src="${ui.build.window}" alt="" aria-hidden="true">
           <span><strong>WINDOW</strong><small>3 LOGS</small></span>
         </button>
         <button class="construction-list-item" type="button" data-build="stairs" aria-label="Build stairs">
