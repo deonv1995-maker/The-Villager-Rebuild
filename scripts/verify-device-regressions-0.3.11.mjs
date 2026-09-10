@@ -251,6 +251,12 @@ assert.ok(
   'Hammer menu Close and Remove actions must retain deliberate mobile touch targets'
 );
 assert.ok(
+  hammerMenuStylesSource.includes('@media (orientation: landscape) and (max-height: 520px)') &&
+  hammerMenuStylesSource.includes('grid-template-columns: repeat(2, minmax(0, 1fr));') &&
+  hammerMenuStylesSource.includes('grid-template-columns: 22px minmax(0, 1fr);'),
+  'Short landscape Hammer menu must keep every construction action, including Remove, visible without shrinking the 44px action rows'
+);
+assert.ok(
   cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
   cameraStylesSource.includes('max(208px, calc(env(safe-area-inset-right) + 204px))') &&
   cameraStylesSource.includes('max(196px, calc(env(safe-area-inset-right) + 193px))'),
