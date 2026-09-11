@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { GroundCoverPresentationSystem } from '../src/world/GroundCoverPresentationSystem.js';
 import {
   GROUND_SURFACE_COLORS,
   terrainSurfaceColorAt,
@@ -81,5 +82,68 @@ const steepB = sample({ slope: 0.9, grassPatchStrength: 1, forestCover: 1 });
 assert.equal(distance(steepA, steepB) < 0.00001, true, 'steep terrain must remain rock-toned instead of inheriting meadow tinting');
 
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.trailSoil), true, 'worn trail soil colour must remain a shared palette value');
+const trail = new THREE.Color(GROUND_SURFACE_COLORS.trailSoil);
+assert.equal(trail.r > trail.g && trail.g > trail.b, true, 'worn trail soil should stay visibly warm brown over meadow green');
 
-console.log('ground surface palette and deterministic low-poly patch contracts verified');
+const coverTerrain = {
+  getScatterBounds: () => ({ halfX: 4, halfZ: 4, centerZ: 0 }),
+  vegetationSuitabilityAt: () => 1,
+  grassDensityAt: () => 1,
+  grassPatchStrengthAt: () => 1,
+  trailWearAt: () => 0,
+  pathCenterX: () => 0,
+  heightAt: () => 0
+};
+const coverGroup = new THREE.Group();
+const coverCollision = {
+  getRevision: () => 1,
+  getObstaclesByType: type => type === 'panel-floor'
+    ? [{
+        type: 'panel-floor',
+        label: 'Panel Floor',
+        shape: 'box',
+        x: 0,
+        z: 0,
+        yaw: 0,
+        halfX: 10,
+        halfZ: 10
+      }]
+    : []
+};
+const cover = new GroundCoverPresentationSystem({
+  group: coverGroup,
+  terrain: coverTerrain,
+  scatter: { isGrassClear: () => true },
+  collision: coverCollision,
+  constructionTerrain: {
+    getRevision: () => 0,
+    heightAt: () => 0
+  },
+  spacing: 1.2
+});
+const coverCount = cover.populate();
+assert.equal(coverCount > 20, true, 'ground-cover presentation must create dense short meadow clumps');
+assert.equal(cover.meshes.length > 0, true, 'ground cover must build batched render meshes');
+assert.equal(cover.meshes.every(mesh => mesh.isInstancedMesh), true, 'ground cover must remain instanced for mobile rendering');
+assert.ok(cover.geometry.getAttribute('color'), 'ground-cover blades must carry low-poly green colour variation');
+assert.equal(cover.material.vertexColors, true, 'ground-cover material must consume blade colour variation');
+cover.update();
+assert.equal(
+  cover.entries.every(entry => entry.constructionHidden === true),
+  true,
+  'construction floors must hide dense ground cover instead of allowing grass through buildings'
+);
+
+const secondCover = new GroundCoverPresentationSystem({
+  group: new THREE.Group(),
+  terrain: coverTerrain,
+  scatter: { isGrassClear: () => true },
+  spacing: 1.2
+});
+assert.equal(
+  secondCover.populate(),
+  coverCount,
+  'ground-cover population must stay deterministic across rebuilds'
+);
+
+console.log('ground surface palette, deterministic low-poly patches and dense construction-aware ground cover verified');
