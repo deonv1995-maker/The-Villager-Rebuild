@@ -4,42 +4,52 @@ import {
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
 
-// Production thatch keeps the structural five-course shell intact and adds two low-draw-call
-// detail layers: staggered surface bundles plus tapered edge tufts. The denser surface rows
-// break up the flat demo-panel look while the edge layer gives every course a soft, irregular
-// straw silhouette without creating one Mesh per reed.
+// The structural five-course shell remains the semantic roof authority. The production
+// finish is deliberately a separate presentation layer: dense fine straw breaks up the
+// broad course faces, longer pointed tips soften every lap/eave, and sparse flattened moss
+// clumps add the small green roof accents used by the approved village art direction.
 const STRAW_ROW_AMOUNTS = Object.freeze([
-  0.045,
-  0.155,
-  0.265,
+  0.025,
+  0.095,
+  0.165,
+  0.235,
+  0.305,
   0.375,
-  0.485,
-  0.595,
-  0.705,
-  0.815,
-  0.925
+  0.445,
+  0.515,
+  0.585,
+  0.655,
+  0.725,
+  0.795,
+  0.865,
+  0.935,
+  0.985
 ]);
-const STRAW_EDGE_AMOUNTS = Object.freeze([0.025, 0.205, 0.405, 0.605, 0.805]);
-const STRAW_COLUMN_SPACING = 0.135;
-const STRAW_EDGE_SPACING = 0.105;
-const STRAW_BUNDLE_RADIUS = 0.033;
-const STRAW_EDGE_RADIUS = 0.026;
-const STRAW_BUNDLE_LIFT = 0.142;
-const STRAW_EDGE_LIFT = 0.165;
+const STRAW_EDGE_AMOUNTS = Object.freeze([0.012, 0.202, 0.402, 0.602, 0.802]);
+const STRAW_COLUMN_SPACING = 0.085;
+const STRAW_EDGE_SPACING = 0.072;
+const STRAW_BUNDLE_RADIUS = 0.019;
+const STRAW_EDGE_RADIUS = 0.015;
+const STRAW_BUNDLE_LIFT = 0.135;
+const STRAW_EDGE_LIFT = 0.154;
 const STRAW_BUNDLE_COLORS = Object.freeze([
-  0xe9c875,
-  0xddb157,
-  0xf0d287,
-  0xd29b42,
-  0xe2ba61,
-  0xc98f38
+  0xd8ad5a,
+  0xe3bd6b,
+  0xc9903d,
+  0xedca7a,
+  0xbf8132,
+  0xd09c48,
+  0xe6c273
 ]);
 const STRAW_EDGE_COLORS = Object.freeze([
-  0xe6bd62,
-  0xd8a64d,
-  0xefce7b,
-  0xcc913a
+  0xe5bc65,
+  0xd3a24d,
+  0xefcc78,
+  0xc78c37,
+  0xdbad56
 ]);
+const MOSS_COLORS = Object.freeze([0x66874a, 0x789553, 0x557a43]);
+const MOSS_AMOUNTS = Object.freeze([0.24, 0.49, 0.73]);
 const JUNCTION_STRAW_CLEARANCE = 0.055;
 
 const reverseIndexedTriangleWinding = geometry => {
@@ -84,7 +94,14 @@ export function makeSemanticRoofGablesExteriorOnly(wingRoot) {
 
 const finishedStrawMaterial = () => new THREE.MeshStandardMaterial({
   color: 0xffffff,
-  roughness: 0.98,
+  roughness: 0.99,
+  metalness: 0,
+  flatShading: true
+});
+
+const finishedMossMaterial = () => new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  roughness: 1,
   metalness: 0,
   flatShading: true
 });
@@ -154,13 +171,13 @@ const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
     -rise / slopeLength,
     side * halfSpan / slopeLength
   );
-  const columns = Math.max(12, Math.ceil(width / STRAW_COLUMN_SPACING));
+  const columns = Math.max(18, Math.ceil(width / STRAW_COLUMN_SPACING));
   const capacity = columns * STRAW_ROW_AMOUNTS.length;
   const geometry = new THREE.CylinderGeometry(
-    STRAW_BUNDLE_RADIUS * 0.34,
+    STRAW_BUNDLE_RADIUS * 0.12,
     STRAW_BUNDLE_RADIUS,
     1,
-    5,
+    4,
     1,
     false
   );
@@ -168,11 +185,14 @@ const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
   bundle.name = `SemanticRoofStrawBundles${side < 0 ? 'North' : 'South'}`;
   bundle.userData.semanticRoofStrawBundles = true;
   bundle.userData.semanticRoofProductionThatch = true;
+  bundle.userData.semanticRoofFineStraw = true;
   bundle.castShadow = true;
   bundle.receiveShadow = true;
 
   const up = new THREE.Vector3(0, 1, 0);
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(up, downslope);
+  const baseQuaternion = new THREE.Quaternion().setFromUnitVectors(up, downslope);
+  const surfaceTwist = new THREE.Quaternion();
+  const quaternion = new THREE.Quaternion();
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const scale = new THREE.Vector3();
@@ -186,26 +206,29 @@ const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
       const acrossVariation = deterministicVariation(rowIndex, column, side < 0 ? 3 : 11) - 0.5;
       const lengthVariation = deterministicVariation(rowIndex, column, side < 0 ? 7 : 17);
       const radialVariation = deterministicVariation(rowIndex, column, side < 0 ? 5 : 13);
-      const rowStagger = rowIndex % 2 === 0 ? -0.025 : 0.025;
+      const leanVariation = deterministicVariation(rowIndex, column, side < 0 ? 43 : 53) - 0.5;
+      const rowStagger = rowIndex % 2 === 0 ? -0.018 : 0.018;
       const x = -width * 0.5
         + width * (column + 0.5) / columns
-        + acrossVariation * 0.052
+        + acrossVariation * 0.04
         + rowStagger;
       if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) {
         skippedForJunction += 1;
         continue;
       }
-      const bundleLength = 0.25 + lengthVariation * 0.13;
+      const bundleLength = 0.29 + lengthVariation * 0.17;
       position.copy(rowPoint);
       position.x = x;
       position
-        .addScaledVector(surfaceNormal, STRAW_BUNDLE_LIFT + (column % 4) * 0.005)
-        .addScaledVector(downslope, bundleLength * (0.08 + (rowIndex % 3) * 0.018));
-      const radialScale = 0.78 + radialVariation * 0.38;
+        .addScaledVector(surfaceNormal, STRAW_BUNDLE_LIFT + (column % 5) * 0.003)
+        .addScaledVector(downslope, bundleLength * (0.1 + (rowIndex % 3) * 0.02));
+      surfaceTwist.setFromAxisAngle(surfaceNormal, leanVariation * 0.11);
+      quaternion.copy(baseQuaternion).premultiply(surfaceTwist);
+      const radialScale = 0.68 + radialVariation * 0.44;
       scale.set(radialScale, bundleLength, radialScale);
       matrix.compose(position, quaternion, scale);
       bundle.setMatrixAt(instanceIndex, matrix);
-      color.setHex(STRAW_BUNDLE_COLORS[(rowIndex * 2 + column) % STRAW_BUNDLE_COLORS.length]);
+      color.setHex(STRAW_BUNDLE_COLORS[(rowIndex * 3 + column) % STRAW_BUNDLE_COLORS.length]);
       bundle.setColorAt(instanceIndex, color);
       instanceIndex += 1;
     }
@@ -235,10 +258,10 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
     -rise / slopeLength,
     side * halfSpan / slopeLength
   );
-  const columns = Math.max(14, Math.ceil(width / STRAW_EDGE_SPACING));
+  const columns = Math.max(20, Math.ceil(width / STRAW_EDGE_SPACING));
   const capacity = columns * STRAW_EDGE_AMOUNTS.length;
   const geometry = new THREE.CylinderGeometry(
-    STRAW_EDGE_RADIUS * 0.16,
+    STRAW_EDGE_RADIUS * 0.08,
     STRAW_EDGE_RADIUS,
     1,
     4,
@@ -249,6 +272,7 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
   tufts.name = `SemanticRoofStrawEdgeTufts${side < 0 ? 'North' : 'South'}`;
   tufts.userData.semanticRoofStrawEdgeTufts = true;
   tufts.userData.semanticRoofProductionThatch = true;
+  tufts.userData.semanticRoofFineStraw = true;
   tufts.castShadow = true;
   tufts.receiveShadow = true;
 
@@ -271,21 +295,22 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
       const leanVariation = deterministicVariation(rowIndex, column, side < 0 ? 37 : 41) - 0.5;
       const x = -width * 0.5
         + width * (column + 0.5) / columns
-        + acrossVariation * 0.045;
+        + acrossVariation * 0.038;
       if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) {
         skippedForJunction += 1;
         continue;
       }
 
-      const tuftLength = 0.18 + lengthVariation * 0.12;
+      const eaveBoost = rowIndex === 0 ? 0.105 : 0;
+      const tuftLength = 0.2 + eaveBoost + lengthVariation * 0.13;
       position.copy(rowPoint);
       position.x = x;
       position
-        .addScaledVector(surfaceNormal, STRAW_EDGE_LIFT + (column % 3) * 0.004)
-        .addScaledVector(downslope, tuftLength * 0.46);
-      twist.setFromAxisAngle(surfaceNormal, leanVariation * 0.15);
+        .addScaledVector(surfaceNormal, STRAW_EDGE_LIFT + (column % 4) * 0.003)
+        .addScaledVector(downslope, tuftLength * 0.5);
+      twist.setFromAxisAngle(surfaceNormal, leanVariation * 0.18);
       quaternion.copy(baseQuaternion).premultiply(twist);
-      const radialScale = 0.78 + lengthVariation * 0.28;
+      const radialScale = 0.68 + lengthVariation * 0.3;
       scale.set(radialScale, tuftLength, radialScale);
       matrix.compose(position, quaternion, scale);
       tufts.setMatrixAt(instanceIndex, matrix);
@@ -304,13 +329,71 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
   return { count: instanceIndex, skippedForJunction };
 };
 
+const addMossAccents = (buildGroup, wing, junctionProfiles) => {
+  const {
+    rise,
+    halfSpan,
+    pitch,
+    eaveY,
+    width
+  } = slopeMetrics(wing);
+  const candidates = [];
+
+  for (const side of [-1, 1]) {
+    const surfaceNormal = slopeNormal(side, pitch);
+    for (const [index, amount] of MOSS_AMOUNTS.entries()) {
+      const xVariation = deterministicVariation(index, wing.index ?? 0, side < 0 ? 61 : 67) - 0.5;
+      const x = xVariation * width * 0.62;
+      if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) continue;
+      candidates.push({ side, surfaceNormal, amount, x, index });
+    }
+  }
+
+  if (!candidates.length) return 0;
+  const geometry = new THREE.DodecahedronGeometry(1, 0);
+  const accents = new THREE.InstancedMesh(geometry, finishedMossMaterial(), candidates.length);
+  accents.name = 'SemanticRoofMossAccents';
+  accents.userData.semanticRoofMossAccents = true;
+  accents.userData.semanticRoofProductionThatch = true;
+  accents.castShadow = false;
+  accents.receiveShadow = true;
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const quaternion = new THREE.Quaternion();
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const scale = new THREE.Vector3();
+  const color = new THREE.Color();
+
+  candidates.forEach((entry, instanceIndex) => {
+    position.copy(slopePoint(entry.side, entry.amount, eaveY, rise, halfSpan));
+    position.x = entry.x;
+    position.addScaledVector(entry.surfaceNormal, 0.155);
+    quaternion.setFromUnitVectors(up, entry.surfaceNormal);
+    const sizeVariation = deterministicVariation(entry.index, wing.index ?? 0, entry.side < 0 ? 73 : 79);
+    scale.set(0.18 + sizeVariation * 0.16, 0.025, 0.12 + sizeVariation * 0.11);
+    matrix.compose(position, quaternion, scale);
+    accents.setMatrixAt(instanceIndex, matrix);
+    color.setHex(MOSS_COLORS[(entry.index + (entry.side < 0 ? 0 : 1)) % MOSS_COLORS.length]);
+    accents.setColorAt(instanceIndex, color);
+  });
+
+  accents.count = candidates.length;
+  accents.userData.semanticRoofMossAccentCount = candidates.length;
+  accents.instanceMatrix.needsUpdate = true;
+  if (accents.instanceColor) accents.instanceColor.needsUpdate = true;
+  buildGroup.add(accents);
+  return candidates.length;
+};
+
 /**
  * Add a low-draw-call production finish over the existing structural thatch courses.
- * The courses remain the weather-tight shell. Dense tapered surface bundles break up the
- * broad faces and a second instanced edge layer gives each course a pointed hand-laid
- * silhouette. Neither layer changes roof topology, collision, save identity, placement
- * cost or demolition ownership. Parent-valley openings remain clear because both detail
- * layers consume the canonical junction profiles and omit instances inside those cutouts.
+ * The courses remain the weather-tight shell. Fine tapered straw now carries most of the
+ * visible surface so the roof reads as hand-laid material instead of stacked solid slabs.
+ * A second instanced edge layer gives each lap a pointed silhouette, while sparse moss
+ * accents provide the small green breakup used by the village visual target. None of these
+ * layers change roof topology, collision, save identity, placement cost or demolition
+ * ownership. Canonical junction profiles keep every decorative layer out of real valleys.
  */
 export function applySemanticRoofThatchFinish(wingRoot, wing, {
   junctionProfiles = []
@@ -324,18 +407,21 @@ export function applySemanticRoofThatchFinish(wingRoot, wing, {
   let courseCount = 0;
   buildGroup.traverse(object => {
     if (object.userData?.semanticRoofThatch !== true || !object.isMesh) return;
-    object.scale.y *= 1.28;
-    object.translateY(0.024);
+    // Keep the shell substantial enough to close the roof, but let the fine straw carry the
+    // visible thickness. The previous 1.28 depth multiplier made each lap read like a block.
+    object.scale.y *= 1.08;
+    object.translateY(0.016);
     object.userData.semanticRoofThatchFullDepth = true;
     object.userData.semanticRoofProductionThatch = true;
+    object.userData.semanticRoofFineStrawShell = true;
     courseCount += 1;
   });
 
   const ridge = buildGroup.getObjectByName('SemanticRoofThatchRidge');
   if (ridge?.isMesh) {
-    ridge.scale.x *= 1.22;
-    ridge.scale.z *= 1.22;
-    ridge.position.y += 0.018;
+    ridge.scale.x *= 1.18;
+    ridge.scale.z *= 1.18;
+    ridge.position.y += 0.022;
     ridge.userData.semanticRoofFullRidgeBundle = true;
     ridge.userData.semanticRoofProductionThatch = true;
   }
@@ -344,15 +430,18 @@ export function applySemanticRoofThatchFinish(wingRoot, wing, {
   const south = addStrawBundles(buildGroup, wing, 1, junctionProfiles);
   const northEdges = addStrawEdgeTufts(buildGroup, wing, -1, junctionProfiles);
   const southEdges = addStrawEdgeTufts(buildGroup, wing, 1, junctionProfiles);
+  const mossAccentCount = addMossAccents(buildGroup, wing, junctionProfiles);
   const bundleCount = north.count + south.count;
   const edgeTuftCount = northEdges.count + southEdges.count;
   const skippedForJunction = north.skippedForJunction + south.skippedForJunction;
   const edgeTuftsSkippedForJunction = northEdges.skippedForJunction + southEdges.skippedForJunction;
   wingRoot.userData.semanticRoofLayeredThatch = true;
   wingRoot.userData.semanticRoofProductionThatch = true;
+  wingRoot.userData.semanticRoofFineStraw = true;
   wingRoot.userData.semanticRoofFullDepthCourseCount = courseCount;
   wingRoot.userData.semanticRoofStrawBundleCount = bundleCount;
   wingRoot.userData.semanticRoofStrawEdgeTuftCount = edgeTuftCount;
+  wingRoot.userData.semanticRoofMossAccentCount = mossAccentCount;
   wingRoot.userData.semanticRoofStrawBundlesSkippedForJunction = skippedForJunction;
   wingRoot.userData.semanticRoofStrawEdgeTuftsSkippedForJunction = edgeTuftsSkippedForJunction;
   return bundleCount;
