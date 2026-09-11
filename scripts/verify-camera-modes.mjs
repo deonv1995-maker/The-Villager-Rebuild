@@ -88,14 +88,27 @@ assert.ok(
 
 player.setMove(0, 0.45);
 const walkBobOffsets = [];
-for (let frame = 0; frame < 50; frame += 1) {
+for (let frame = 0; frame < 120; frame += 1) {
   player.update(1 / 60);
   walkBobOffsets.push(camera.position.y - (player.root.position.y + 1.72));
 }
 player.setMove(0, 0);
 const walkBobRange = Math.max(...walkBobOffsets) - Math.min(...walkBobOffsets);
 const walkBobPeak = Math.max(...walkBobOffsets.map(value => Math.abs(value)));
+const walkBobCrossings = [];
+for (let frame = 1; frame < walkBobOffsets.length; frame += 1) {
+  if (walkBobOffsets[frame - 1] <= 0 && walkBobOffsets[frame] > 0) walkBobCrossings.push(frame);
+}
+const walkBobCycleFrames = walkBobCrossings.slice(1).map((frame, index) => frame - walkBobCrossings[index]);
 assert.ok(walkBobRange > 0.035, 'Grounded first-person walking must visibly bounce the camera');
+assert.ok(
+  walkBobCycleFrames.length >= 2 && Math.min(...walkBobCycleFrames) >= 24,
+  'First-person walking head bob must keep a relaxed cadence instead of cycling too quickly'
+);
+assert.ok(
+  Math.max(...walkBobCycleFrames) - Math.min(...walkBobCycleFrames) >= 2,
+  'First-person walking head bob must include subtle cadence drift instead of repeating metronomically'
+);
 
 for (let frame = 0; frame < 50; frame += 1) player.update(1 / 60);
 assert.ok(
@@ -227,4 +240,4 @@ assert.equal(positionReads, 2, 'Third person must continue using the same curren
 assert.equal(firstPersonUpdates, 1);
 assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('Forward-biased third-person framing, first/third-person camera toggle, grounded walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
+console.log('Forward-biased third-person framing, natural relaxed walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
