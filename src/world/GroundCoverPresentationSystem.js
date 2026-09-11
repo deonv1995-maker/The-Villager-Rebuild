@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { constructionFloorCoversVegetation } from './GrassFieldSystem.js';
+import { terrainSurfacePatchFieldsAt } from './TerrainSurfacePresentation.js';
 
-const COVER_SPACING = 1.7;
+const COVER_SPACING = 1.55;
 const COVER_HEIGHT_OFFSET = 0.012;
 const COVER_COLORS = Object.freeze([
   0x4d9144,
@@ -100,9 +101,9 @@ export class GroundCoverPresentationSystem {
           naturalY,
           z,
           yaw: hash01(column, row, 13) * Math.PI * 2,
-          scaleX: 0.98 + scaleVariation * 0.5,
-          scaleY: 0.66 + heightVariation * 0.42,
-          scaleZ: 0.98 + (1 - scaleVariation) * 0.46,
+          scaleX: 0.94 + scaleVariation * 0.4,
+          scaleY: 0.64 + heightVariation * 0.4,
+          scaleZ: 0.94 + (1 - scaleVariation) * 0.38,
           chunkKey: this.chunks?.keyForPosition(x, z) ?? null,
           mesh: null,
           index: -1,
@@ -126,9 +127,16 @@ export class GroundCoverPresentationSystem {
     const reactive = this.terrain.grassDensityAt?.(x, z) ?? 0;
     const patch = this.terrain.grassPatchStrengthAt?.(x, z) ?? reactive;
     let density = Math.max(
-      reactive * 0.86,
-      suitability * (0.38 + patch * 0.58)
+      reactive * 0.89,
+      suitability * (0.42 + patch * 0.57)
     );
+
+    // Leave small deterministic openings over the same dry-field signal used by the terrain
+    // presentation. This lets the dedicated soil patches remain readable without returning the
+    // whole meadow to broad bare planes.
+    const { dryPatch } = terrainSurfacePatchFieldsAt(x, z);
+    const dryOpening = THREE.MathUtils.smoothstep(dryPatch, 0.5, 0.9);
+    density *= 1 - dryOpening * 0.18;
 
     const trailWear = this.terrain.trailWearAt?.(z) ?? 0;
     if (trailWear > 0 && this.terrain.pathCenterX) {
@@ -138,7 +146,7 @@ export class GroundCoverPresentationSystem {
       density *= pathFade;
     }
 
-    return THREE.MathUtils.clamp(density * 0.95 + suitability * 0.05, 0, 0.94);
+    return THREE.MathUtils.clamp(density * 0.96 + suitability * 0.04, 0, 0.96);
   }
 
   #buildMeshes() {
@@ -227,7 +235,7 @@ function buildGroundCoverGeometry() {
   const colors = [];
   const indices = [];
   const color = new THREE.Color();
-  const bladeCount = 12;
+  const bladeCount = 14;
 
   const pushVertex = (x, y, z, hex) => {
     const index = positions.length / 3;
@@ -239,16 +247,16 @@ function buildGroundCoverGeometry() {
 
   for (let blade = 0; blade < bladeCount; blade += 1) {
     const angle = blade * 2.399963229728653 + (blade % 4) * 0.09;
-    const ring = blade % 6;
-    const radius = blade === 0 ? 0 : 0.14 + ring * 0.086;
+    const ring = blade % 7;
+    const radius = blade === 0 ? 0 : 0.14 + ring * 0.073;
     const cx = Math.cos(angle) * radius;
     const cz = Math.sin(angle) * radius;
     const facing = angle + Math.PI * 0.37 + (blade % 2) * 0.48;
     const acrossX = Math.cos(facing);
     const acrossZ = Math.sin(facing);
-    const height = 0.2 + (blade % 5) * 0.042;
-    const width = 0.068 + (blade % 4) * 0.012;
-    const lean = 0.04 + (blade % 4) * 0.014;
+    const height = 0.19 + (blade % 5) * 0.04;
+    const width = 0.039 + (blade % 4) * 0.007;
+    const lean = 0.042 + (blade % 4) * 0.013;
     const dirX = Math.cos(angle);
     const dirZ = Math.sin(angle);
     const baseHex = COVER_COLORS[blade % COVER_COLORS.length];

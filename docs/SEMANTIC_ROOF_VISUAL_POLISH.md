@@ -27,6 +27,8 @@ Each semantic gable Roof presents:
 
 The old production pass increased the solid course depth aggressively. Device feedback showed that this still made the roof read as stacked blocks. The shell-depth multiplier is now restrained; visual thickness comes primarily from the dense straw and edge layers. `semanticRoofThatchFullDepth` remains the compatibility marker for the retained structural course layer, not a requirement to exaggerate the box geometry.
 
+The approved meadow/cabin reference tightened this further: surface bundle spacing is now 0.075 m, edge spacing is 0.066 m, individual bundle radii are smaller, and bundle/tip lengths overlap farther down-slope. The straw palette is also lighter and warmer. The structural shell multiplier is reduced to 1.04 and the ridge enlargement is restrained so the roof reads as layered straw with a clean bundled crown rather than thick stacked slabs. These values are presentation-only and do not modify semantic roof topology or cost.
+
 ## Junction and interior contract
 
 Decorative finish is always applied after `SemanticRoofJunctionGeometry` has created the real cross-gable valley. The same canonical junction profiles are passed into `SemanticRoofThatchFinish`, and fine straw/edge instances that would occupy a valley opening are omitted. Moss accents are also rejected inside those profiles.
@@ -70,8 +72,9 @@ Both regressions are part of the full `npm run check` gate.
 Before advancing the building milestone, verify on the deployed Android build that:
 
 - the Roof reads as dense hand-laid straw at normal third-person distance rather than solid stacked blocks;
+- the new lighter golden surface matches the approved cabin reference without becoming washed out;
 - individual straw breakup is visible without becoming noisy/fuzzy;
-- the eave and course edges have an irregular pointed silhouette;
+- the eave and course edges have an irregular pointed silhouette with clearly layered overlap;
 - green/moss accents stay sparse and decorative rather than covering the roof;
 - cross-gable valleys remain clean and joined;
 - there is no wall-to-roof gap;

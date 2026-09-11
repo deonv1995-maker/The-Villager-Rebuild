@@ -12,7 +12,7 @@ export const GROUND_SURFACE_COLORS = Object.freeze({
   ridge: 0x72745a,
   meadowLight: 0x9acb6b,
   meadowLush: 0x438f43,
-  meadowDry: 0xa8ad64,
+  meadowDry: 0x9b784f,
   forest: 0x386d40,
   trailSoil: 0x6f4d2f
 });
@@ -108,7 +108,7 @@ export function terrainSurfaceColorAt({
 
   if (slope > 0.56) {
     target.copy(COLORS.rockSlope);
-    target.lerp(COLORS.meadowDry, broad * 0.055 + dryPatch * 0.03);
+    target.lerp(COLORS.meadowDry, broad * 0.07 + dryPatch * 0.045);
     target.offsetHSL(0, 0, (detail - 0.5) * 0.045);
     return target;
   }
@@ -121,7 +121,7 @@ export function terrainSurfaceColorAt({
   const patch = clamp01(grassPatchStrength);
   const forest = clamp01(forestCover);
   const lushStrength = clamp01(patch * 0.34 + lawnPatch * 0.2 + broad * 0.09);
-  const dryStrength = clamp01(dry * 0.16 + dryPatch * (0.08 - patch * 0.035));
+  const dryStrength = clamp01(dry * 0.2 + dryPatch * (0.16 - patch * 0.055));
 
   target.lerp(COLORS.meadowLight, broad * 0.16 + lawnPatch * 0.08);
   target.lerp(COLORS.meadowDry, dryStrength);

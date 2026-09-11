@@ -90,3 +90,23 @@ On the deployed Android build verify that:
 - worn paths still cut through the turf cleanly;
 - no short grass appears on sand, steep rock or through completed floors;
 - grass density does not introduce visible frame-rate or chunk-culling regressions while walking and rotating the camera.
+
+## 2026-09-11 — Fine turf, harvestable contrast and visible dirt
+
+The approved follow-up reference corrected three readability problems from the broad-carpet pass without adding a second terrain or ecology system.
+
+`GroundCoverPresentationSystem` now uses a slightly tighter 1.55 m placement grid, fourteen finer blades per clump and narrower blade geometry. The clump footprint remains broad enough to overlap at gameplay distance, but the individual leaves should read as thin dense turf rather than chunky ground plants. The same deterministic dry-patch field opens the turf only slightly in dry areas so soil can show through while the surrounding meadow stays dense.
+
+`TerrainSurfacePresentation` remains the single ground-colour authority. `meadowDry` is now a warm earthy brown and dry-patch blending is stronger, so the existing deterministic low-poly fields create readable dirt interruptions instead of olive-green variation. This still changes colour only; terrain height, collision, construction support and ecology remain untouched.
+
+Harvestable grass remains owned by the existing `GrassFieldSystem` + `GatherableSystem` relationship. `GatherableSystem` now allows up to 210 deterministic harvestable patch centres, reduces non-starter centre spacing from 13.5 m to 10.8 m, and applies one muted yellow-green presentation colour to the shared tall-grass material. The colour difference is intentionally modest: harvestable clumps should be identifiable against the short turf without becoming neon resource markers. Harvest quantity, interaction radius, harvesting mechanics and per-patch yield calculation are unchanged.
+
+### Device acceptance
+
+On the deployed Android build verify that:
+
+- ordinary ground turf is visibly thinner and denser than the previous broad-blade pass;
+- harvestable grass clumps appear more often and read as slightly yellow-green without looking highlighted or artificial;
+- dirt patches are clearly visible between turf regions but do not dominate the meadow;
+- harvest interaction still selects the intended tall clump and removes the full patch cleanly;
+- the tighter ground-cover grid does not introduce frame-rate or chunk-culling regressions while walking and rotating the camera.

@@ -26,27 +26,27 @@ const STRAW_ROW_AMOUNTS = Object.freeze([
   0.985
 ]);
 const STRAW_EDGE_AMOUNTS = Object.freeze([0.012, 0.202, 0.402, 0.602, 0.802]);
-const STRAW_COLUMN_SPACING = 0.085;
-const STRAW_EDGE_SPACING = 0.072;
-const STRAW_BUNDLE_RADIUS = 0.019;
-const STRAW_EDGE_RADIUS = 0.015;
-const STRAW_BUNDLE_LIFT = 0.135;
-const STRAW_EDGE_LIFT = 0.154;
+const STRAW_COLUMN_SPACING = 0.075;
+const STRAW_EDGE_SPACING = 0.066;
+const STRAW_BUNDLE_RADIUS = 0.016;
+const STRAW_EDGE_RADIUS = 0.0125;
+const STRAW_BUNDLE_LIFT = 0.138;
+const STRAW_EDGE_LIFT = 0.156;
 const STRAW_BUNDLE_COLORS = Object.freeze([
-  0xd8ad5a,
-  0xe3bd6b,
-  0xc9903d,
-  0xedca7a,
-  0xbf8132,
-  0xd09c48,
-  0xe6c273
+  0xe0b95f,
+  0xebca75,
+  0xd3a04a,
+  0xf0d486,
+  0xc8913d,
+  0xd9aa52,
+  0xe8c875
 ]);
 const STRAW_EDGE_COLORS = Object.freeze([
-  0xe5bc65,
-  0xd3a24d,
-  0xefcc78,
-  0xc78c37,
-  0xdbad56
+  0xe9c86f,
+  0xd9ae55,
+  0xf1d581,
+  0xce9943,
+  0xe1b760
 ]);
 const MOSS_COLORS = Object.freeze([0x66874a, 0x789553, 0x557a43]);
 const MOSS_AMOUNTS = Object.freeze([0.24, 0.49, 0.73]);
@@ -171,10 +171,10 @@ const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
     -rise / slopeLength,
     side * halfSpan / slopeLength
   );
-  const columns = Math.max(18, Math.ceil(width / STRAW_COLUMN_SPACING));
+  const columns = Math.max(20, Math.ceil(width / STRAW_COLUMN_SPACING));
   const capacity = columns * STRAW_ROW_AMOUNTS.length;
   const geometry = new THREE.CylinderGeometry(
-    STRAW_BUNDLE_RADIUS * 0.12,
+    STRAW_BUNDLE_RADIUS * 0.1,
     STRAW_BUNDLE_RADIUS,
     1,
     4,
@@ -207,24 +207,24 @@ const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
       const lengthVariation = deterministicVariation(rowIndex, column, side < 0 ? 7 : 17);
       const radialVariation = deterministicVariation(rowIndex, column, side < 0 ? 5 : 13);
       const leanVariation = deterministicVariation(rowIndex, column, side < 0 ? 43 : 53) - 0.5;
-      const rowStagger = rowIndex % 2 === 0 ? -0.018 : 0.018;
+      const rowStagger = rowIndex % 2 === 0 ? -0.024 : 0.024;
       const x = -width * 0.5
         + width * (column + 0.5) / columns
-        + acrossVariation * 0.04
+        + acrossVariation * 0.038
         + rowStagger;
       if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) {
         skippedForJunction += 1;
         continue;
       }
-      const bundleLength = 0.29 + lengthVariation * 0.17;
+      const bundleLength = 0.31 + lengthVariation * 0.18;
       position.copy(rowPoint);
       position.x = x;
       position
         .addScaledVector(surfaceNormal, STRAW_BUNDLE_LIFT + (column % 5) * 0.003)
-        .addScaledVector(downslope, bundleLength * (0.1 + (rowIndex % 3) * 0.02));
-      surfaceTwist.setFromAxisAngle(surfaceNormal, leanVariation * 0.11);
+        .addScaledVector(downslope, bundleLength * (0.11 + (rowIndex % 3) * 0.02));
+      surfaceTwist.setFromAxisAngle(surfaceNormal, leanVariation * 0.12);
       quaternion.copy(baseQuaternion).premultiply(surfaceTwist);
-      const radialScale = 0.68 + radialVariation * 0.44;
+      const radialScale = 0.62 + radialVariation * 0.38;
       scale.set(radialScale, bundleLength, radialScale);
       matrix.compose(position, quaternion, scale);
       bundle.setMatrixAt(instanceIndex, matrix);
@@ -258,7 +258,7 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
     -rise / slopeLength,
     side * halfSpan / slopeLength
   );
-  const columns = Math.max(20, Math.ceil(width / STRAW_EDGE_SPACING));
+  const columns = Math.max(22, Math.ceil(width / STRAW_EDGE_SPACING));
   const capacity = columns * STRAW_EDGE_AMOUNTS.length;
   const geometry = new THREE.CylinderGeometry(
     STRAW_EDGE_RADIUS * 0.08,
@@ -295,14 +295,14 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
       const leanVariation = deterministicVariation(rowIndex, column, side < 0 ? 37 : 41) - 0.5;
       const x = -width * 0.5
         + width * (column + 0.5) / columns
-        + acrossVariation * 0.038;
+        + acrossVariation * 0.034;
       if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) {
         skippedForJunction += 1;
         continue;
       }
 
-      const eaveBoost = rowIndex === 0 ? 0.105 : 0;
-      const tuftLength = 0.2 + eaveBoost + lengthVariation * 0.13;
+      const eaveBoost = rowIndex === 0 ? 0.14 : 0;
+      const tuftLength = 0.21 + eaveBoost + lengthVariation * 0.14;
       position.copy(rowPoint);
       position.x = x;
       position
@@ -310,7 +310,7 @@ const addStrawEdgeTufts = (buildGroup, wing, side, junctionProfiles) => {
         .addScaledVector(downslope, tuftLength * 0.5);
       twist.setFromAxisAngle(surfaceNormal, leanVariation * 0.18);
       quaternion.copy(baseQuaternion).premultiply(twist);
-      const radialScale = 0.68 + lengthVariation * 0.3;
+      const radialScale = 0.62 + lengthVariation * 0.28;
       scale.set(radialScale, tuftLength, radialScale);
       matrix.compose(position, quaternion, scale);
       tufts.setMatrixAt(instanceIndex, matrix);
@@ -407,10 +407,10 @@ export function applySemanticRoofThatchFinish(wingRoot, wing, {
   let courseCount = 0;
   buildGroup.traverse(object => {
     if (object.userData?.semanticRoofThatch !== true || !object.isMesh) return;
-    // Keep the shell substantial enough to close the roof, but let the fine straw carry the
-    // visible thickness. The previous 1.28 depth multiplier made each lap read like a block.
-    object.scale.y *= 1.08;
-    object.translateY(0.016);
+    // Keep the shell just substantial enough to close the roof. The finer, longer straw now
+    // carries the visible thickness so the five structural courses read as soft layered thatch.
+    object.scale.y *= 1.04;
+    object.translateY(0.012);
     object.userData.semanticRoofThatchFullDepth = true;
     object.userData.semanticRoofProductionThatch = true;
     object.userData.semanticRoofFineStrawShell = true;
@@ -419,9 +419,9 @@ export function applySemanticRoofThatchFinish(wingRoot, wing, {
 
   const ridge = buildGroup.getObjectByName('SemanticRoofThatchRidge');
   if (ridge?.isMesh) {
-    ridge.scale.x *= 1.18;
-    ridge.scale.z *= 1.18;
-    ridge.position.y += 0.022;
+    ridge.scale.x *= 1.12;
+    ridge.scale.z *= 1.12;
+    ridge.position.y += 0.015;
     ridge.userData.semanticRoofFullRidgeBundle = true;
     ridge.userData.semanticRoofProductionThatch = true;
   }

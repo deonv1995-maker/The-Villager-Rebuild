@@ -81,6 +81,13 @@ const steepA = sample({ slope: 0.9, grassPatchStrength: 0, forestCover: 0 });
 const steepB = sample({ slope: 0.9, grassPatchStrength: 1, forestCover: 1 });
 assert.equal(distance(steepA, steepB) < 0.00001, true, 'steep terrain must remain rock-toned instead of inheriting meadow tinting');
 
+assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.meadowDry), true, 'meadow soil colour must remain a shared palette value');
+const meadowSoil = new THREE.Color(GROUND_SURFACE_COLORS.meadowDry);
+assert.equal(
+  meadowSoil.r > meadowSoil.g && meadowSoil.g > meadowSoil.b,
+  true,
+  'dry meadow interruptions must stay visibly earthy brown rather than olive green'
+);
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.trailSoil), true, 'worn trail soil colour must remain a shared palette value');
 const trail = new THREE.Color(GROUND_SURFACE_COLORS.trailSoil);
 assert.equal(trail.r > trail.g && trail.g > trail.b, true, 'worn trail soil should stay visibly warm brown over meadow green');
@@ -130,16 +137,38 @@ assert.equal(cover.material.vertexColors, true, 'ground-cover material must cons
 
 const coverPositions = cover.geometry.getAttribute('position');
 let maxHorizontalRadius = 0;
+let maxBladeHalfWidth = 0;
 for (let index = 0; index < coverPositions.count; index += 1) {
   maxHorizontalRadius = Math.max(
     maxHorizontalRadius,
     Math.hypot(coverPositions.getX(index), coverPositions.getZ(index))
   );
 }
+for (let blade = 0; blade < coverPositions.count / 5; blade += 1) {
+  const left = blade * 5;
+  const right = left + 1;
+  maxBladeHalfWidth = Math.max(
+    maxBladeHalfWidth,
+    Math.hypot(
+      coverPositions.getX(right) - coverPositions.getX(left),
+      coverPositions.getZ(right) - coverPositions.getZ(left)
+    ) * 0.5
+  );
+}
 assert.equal(
   maxHorizontalRadius > 0.55,
   true,
   'short-grass clumps must span enough ground to read as a continuous carpet without multiplying instances'
+);
+assert.equal(
+  maxBladeHalfWidth < 0.065,
+  true,
+  'short ground-cover blades must stay fine instead of returning to broad chunky leaves'
+);
+assert.equal(
+  coverPositions.count >= 70,
+  true,
+  'fine ground-cover clumps must retain enough blades to read as dense turf'
 );
 
 cover.update();
@@ -177,4 +206,4 @@ assert.equal(
   'lush meadow fields must remain denser than open suitable ground'
 );
 
-console.log('ground surface palette, deterministic low-poly patches and dense wide-footprint construction-aware ground cover verified');
+console.log('ground surface palette, earthy low-poly patches and dense fine construction-aware ground cover verified');
