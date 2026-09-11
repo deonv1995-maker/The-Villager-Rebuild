@@ -131,8 +131,9 @@ export function createSemanticRoofFootprintVisual(
     mossAccentCount += wingRoot?.userData.semanticRoofMossAccentCount ?? 0;
 
     // Interior finish clones the already-integrated underlay geometry, so the visible
-    // timber ceiling keeps real valley openings and joined child extensions. Eave soffits
-    // shield exterior straw from below, while joined ends receive a timber seam frame.
+    // timber ceiling keeps the exact parent valley cutouts and child penetration boundary.
+    // Eave soffits shield exterior straw from below; joined seams are not patched with a
+    // second rake/top-plate frame because the canonical roof geometry owns the junction.
     const interior = applySemanticRoofInteriorFinish(wingRoot, wing, {
       junctionProfiles
     });
@@ -155,9 +156,10 @@ export function createSemanticRoofFootprintVisual(
   root.userData.semanticRoofInteriorRafterCount = interiorRafterCount;
   root.userData.semanticRoofInteriorBeamCount = interiorBeamCount;
   root.userData.semanticRoofInteriorThatchShielded = interiorSoffitCount > 0;
+  root.userData.semanticRoofInteriorJunctionAligned = junctionProfiles.length > 0;
 
-  // Low horizontal seam masks remain intentionally absent. Junction continuity now
-  // comes from the actual sloped roof geometry, while the interior finish follows that
-  // same geometry rather than adding a competing topology layer.
+  // Low horizontal seam masks remain intentionally absent. Junction continuity comes from
+  // the actual sloped roof geometry, and the interior finish now preserves that geometry
+  // exactly instead of adding an offset seam system at the old wall line.
   return root;
 }

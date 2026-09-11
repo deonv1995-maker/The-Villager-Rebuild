@@ -12,12 +12,14 @@ const RAFTER_SPACING = 1.0;
 const RAFTER_RADIUS = 0.055;
 const RIDGE_BEAM_RADIUS = 0.082;
 const TIE_BEAM_RADIUS = 0.06;
-const JOIN_TRIM_RADIUS = 0.082;
-const JOIN_TOP_PLATE_RADIUS = 0.07;
-const LINER_INSET = 0.072;
-const SOFFIT_INSET = 0.115;
-const LINER_JOIN_SETBACK = 0.12;
-const FRAME_JOIN_SETBACK = 0.08;
+const LINER_INSET = 0.038;
+const LINER_DEPTH_SCALE = 0.72;
+const SOFFIT_INSET = 0.07;
+const SOFFIT_DEPTH_SCALE = 0.72;
+const SOFFIT_RUN_SCALE = 1.45;
+const SOFFIT_DOWNSLOPE_SHIFT = 0.08;
+const RIDGE_JOIN_CLEARANCE = 0.035;
+const RIDGE_VALLEY_CLEARANCE = 0.13;
 const EPSILON = 0.00001;
 
 const linerMaterial = new THREE.MeshStandardMaterial({
@@ -92,6 +94,12 @@ const slopePoint = (side, amount, { eaveY, rise, halfSpan }) => new THREE.Vector
   side * halfSpan * (1 - amount)
 );
 
+const downslopeVector = (side, { rise, halfSpan, slopeLength }) => new THREE.Vector3(
+  0,
+  -rise / slopeLength,
+  side * halfSpan / slopeLength
+);
+
 const cylinderBetween = (start, end, radius, name) => {
   const direction = end.clone().sub(start);
   const length = direction.length();
@@ -120,48 +128,51 @@ const childJoinProfilesForWing = (wing, junctionProfiles) => (
   (junctionProfiles ?? []).filter(profile => profile.childWingIndex === wing.index)
 );
 
-const interiorFrameRunBounds = (wing, junctionProfiles) => {
-  const core = coreRunBounds(wing);
-  let min = core.min;
-  let max = core.max;
+const parentRidgeProfilesForWing = (wing, junctionProfiles) => (
+  (junctionProfiles ?? []).filter(profile => (
+    profile.parentWingIndex === wing.index &&
+    profile.apexAmount >= 1 - EPSILON
+  ))
+);
 
+const joinedRidgeRunBounds = (wing, junctionProfiles) => {
+  const run = coreRunBounds(wing);
   for (const profile of childJoinProfilesForWing(wing, junctionProfiles)) {
-    if (profile.childLocalJoinEnd === 'negative') min += FRAME_JOIN_SETBACK;
-    if (profile.childLocalJoinEnd === 'positive') max -= FRAME_JOIN_SETBACK;
+    const extension = Math.max(0, profile.joinInset - RIDGE_JOIN_CLEARANCE);
+    if (profile.childLocalJoinEnd === 'negative') run.min -= extension;
+    if (profile.childLocalJoinEnd === 'positive') run.max += extension;
   }
-
-  if (max - min <= 0.2) return core;
-  return { min, max };
+  return run;
 };
 
-const setBackJoinedLinerGeometry = (geometry, wing, junctionProfiles) => {
-  const positions = geometry?.getAttribute?.('position');
-  if (!positions) return false;
-
-  const { min, max } = coreRunBounds(wing);
-  const coreHalfLength = (max - min) * 0.5;
-  let changed = false;
-
-  for (const profile of childJoinProfilesForWing(wing, junctionProfiles)) {
-    const sign = profile.childLocalJoinEnd === 'negative' ? -1 : 1;
-    for (let index = 0; index < positions.count; index += 1) {
-      const x = positions.getX(index);
-      const directedX = sign * x;
-      const excess = directedX - coreHalfLength;
-      if (excess <= EPSILON) continue;
-
-      const trimmedExcess = Math.max(0, excess - LINER_JOIN_SETBACK);
-      positions.setX(index, sign * (coreHalfLength + trimmedExcess));
-      changed = true;
+const subtractInterval = (intervals, cutMin, cutMax) => {
+  const result = [];
+  for (const interval of intervals) {
+    if (cutMax <= interval.min || cutMin >= interval.max) {
+      result.push(interval);
+      continue;
+    }
+    if (cutMin - interval.min > 0.05) {
+      result.push({ min: interval.min, max: Math.min(interval.max, cutMin) });
+    }
+    if (interval.max - cutMax > 0.05) {
+      result.push({ min: Math.max(interval.min, cutMax), max: interval.max });
     }
   }
+  return result;
+};
 
-  if (!changed) return false;
-  positions.needsUpdate = true;
-  geometry.computeVertexNormals();
-  geometry.computeBoundingBox();
-  geometry.computeBoundingSphere();
-  return true;
+const interiorRidgeRunSegments = (wing, junctionProfiles) => {
+  const run = joinedRidgeRunBounds(wing, junctionProfiles);
+  let segments = [run];
+  for (const profile of parentRidgeProfilesForWing(wing, junctionProfiles)) {
+    segments = subtractInterval(
+      segments,
+      profile.cutoutCenter - RIDGE_VALLEY_CLEARANCE,
+      profile.cutoutCenter + RIDGE_VALLEY_CLEARANCE
+    );
+  }
+  return segments;
 };
 
 const rafterCrossesValley = (x, side, wing, junctionProfiles) => {
@@ -182,30 +193,34 @@ const anyValleyAt = (x, wing, junctionProfiles) => (
 
 const addInteriorLiners = (buildGroup, wing, junctionProfiles, metrics) => {
   let count = 0;
+  const childJoined = childJoinProfilesForWing(wing, junctionProfiles).length > 0;
+
   for (const side of [-1, 1]) {
     const sideLabel = side < 0 ? 'North' : 'South';
     const underlay = buildGroup.getObjectByName(`SemanticRoofSlope${sideLabel}`);
     if (!underlay?.isMesh || !underlay.geometry) continue;
 
-    const linerGeometry = underlay.geometry.clone();
-    const jointSetback = setBackJoinedLinerGeometry(
-      linerGeometry,
-      wing,
-      junctionProfiles
-    );
-    const liner = new THREE.Mesh(linerGeometry, linerMaterial);
+    // The integrated underlay already owns the exact cross-gable valley topology. The
+    // interior liner must keep that same geometry instead of shortening the child wing
+    // a second time. Pulling the joined liner back created a visible slot where exterior
+    // thatch and course end-caps could be seen from inside on multi-wing roofs.
+    const liner = new THREE.Mesh(underlay.geometry.clone(), linerMaterial);
     liner.name = `SemanticRoofInteriorLiner${sideLabel}`;
     liner.position.copy(underlay.position);
     liner.rotation.copy(underlay.rotation);
     liner.scale.copy(underlay.scale);
-    liner.scale.y *= 0.34;
+    liner.scale.y *= LINER_DEPTH_SCALE;
     liner.position.addScaledVector(slopeNormal(side, metrics.pitch), -LINER_INSET);
     liner.castShadow = false;
     liner.receiveShadow = true;
     liner.userData.semanticRoofInteriorLiner = true;
     liner.userData.semanticRoofInteriorJoinedSlope = underlay.userData?.semanticRoofJoinedSlope === true;
     liner.userData.semanticRoofInteriorJunctionCutout = underlay.userData?.semanticRoofJunctionCutout === true;
-    liner.userData.semanticRoofInteriorJointSetback = jointSetback;
+    liner.userData.semanticRoofInteriorJunctionAligned = (
+      childJoined || underlay.userData?.semanticRoofJunctionCutout === true
+    );
+    liner.userData.semanticRoofInteriorJointSetback = false;
+    liner.userData.semanticRoofInteriorShellContact = true;
     buildGroup.add(liner);
     count += 1;
   }
@@ -232,12 +247,16 @@ const addInteriorSoffits = (buildGroup, metrics) => {
     soffit.position.copy(source.position);
     soffit.rotation.copy(source.rotation);
     soffit.scale.copy(source.scale);
-    soffit.scale.y *= 0.22;
-    soffit.position.addScaledVector(slopeNormal(side, metrics.pitch), -SOFFIT_INSET);
+    soffit.scale.y *= SOFFIT_DEPTH_SCALE;
+    soffit.scale.z *= SOFFIT_RUN_SCALE;
+    soffit.position
+      .addScaledVector(slopeNormal(side, metrics.pitch), -SOFFIT_INSET)
+      .addScaledVector(downslopeVector(side, metrics), SOFFIT_DOWNSLOPE_SHIFT);
     soffit.castShadow = false;
     soffit.receiveShadow = true;
     soffit.userData.semanticRoofInteriorSoffit = true;
     soffit.userData.semanticRoofInteriorThatchShield = true;
+    soffit.userData.semanticRoofInteriorExtendedEaveShield = true;
     soffit.userData.semanticRoofEaveSide = side;
     soffit.userData.semanticRoofEaveSegmentStart = source.userData.semanticRoofEaveSegmentStart;
     soffit.userData.semanticRoofEaveSegmentEnd = source.userData.semanticRoofEaveSegmentEnd;
@@ -267,58 +286,9 @@ const addInteriorGables = buildGroup => {
   return gables.length;
 };
 
-const addInteriorJointTrim = (buildGroup, wing, junctionProfiles, metrics) => {
-  const profiles = childJoinProfilesForWing(wing, junctionProfiles);
-  if (!profiles.length) return 0;
-
-  const core = coreRunBounds(wing);
-  const coreHalfLength = (core.max - core.min) * 0.5;
-  let count = 0;
-
-  for (const [profileIndex, profile] of profiles.entries()) {
-    const sign = profile.childLocalJoinEnd === 'negative' ? -1 : 1;
-    const joinX = sign * coreHalfLength;
-    const ridge = new THREE.Vector3(joinX, metrics.ridgeY - 0.11, 0);
-
-    for (const side of [-1, 1]) {
-      const eave = new THREE.Vector3(
-        joinX,
-        metrics.eaveY - 0.08,
-        side * Math.max(0.08, metrics.halfSpan - 0.045)
-      );
-      const trim = cylinderBetween(
-        eave,
-        ridge,
-        JOIN_TRIM_RADIUS,
-        `SemanticRoofInteriorJoinRake${profileIndex + 1}${side < 0 ? 'North' : 'South'}`
-      );
-      if (!trim) continue;
-      trim.userData.semanticRoofInteriorJointTrim = true;
-      trim.userData.semanticRoofInteriorJointThatchShield = true;
-      buildGroup.add(trim);
-      count += 1;
-    }
-
-    const plate = cylinderBetween(
-      new THREE.Vector3(joinX, metrics.eaveY - 0.105, -Math.max(0.08, metrics.halfSpan - 0.06)),
-      new THREE.Vector3(joinX, metrics.eaveY - 0.105, Math.max(0.08, metrics.halfSpan - 0.06)),
-      JOIN_TOP_PLATE_RADIUS,
-      `SemanticRoofInteriorJoinTopPlate${profileIndex + 1}`
-    );
-    if (plate) {
-      plate.userData.semanticRoofInteriorJointTrim = true;
-      plate.userData.semanticRoofInteriorJointThatchShield = true;
-      buildGroup.add(plate);
-      count += 1;
-    }
-  }
-
-  return count;
-};
-
 const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
-  const run = interiorFrameRunBounds(wing, junctionProfiles);
-  const runLength = Math.max(0.1, run.max - run.min);
+  const rafterRun = coreRunBounds(wing);
+  const runLength = Math.max(0.1, rafterRun.max - rafterRun.min);
   const rafterStations = Math.max(3, Math.ceil(runLength / RAFTER_SPACING) + 1);
   const childJoined = childJoinProfilesForWing(wing, junctionProfiles).length > 0;
   let rafterCount = 0;
@@ -326,8 +296,8 @@ const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
 
   for (let index = 0; index < rafterStations; index += 1) {
     const x = rafterStations === 1
-      ? (run.min + run.max) * 0.5
-      : THREE.MathUtils.lerp(run.min, run.max, index / (rafterStations - 1));
+      ? (rafterRun.min + rafterRun.max) * 0.5
+      : THREE.MathUtils.lerp(rafterRun.min, rafterRun.max, index / (rafterStations - 1));
 
     for (const side of [-1, 1]) {
       if (rafterCrossesValley(x, side, wing, junctionProfiles)) continue;
@@ -352,16 +322,25 @@ const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
     }
   }
 
-  const ridgeBeam = cylinderBetween(
-    new THREE.Vector3(run.min, metrics.ridgeY - 0.15, 0),
-    new THREE.Vector3(run.max, metrics.ridgeY - 0.15, 0),
-    RIDGE_BEAM_RADIUS,
-    'SemanticRoofInteriorRidgeBeam'
-  );
-  if (ridgeBeam) {
+  const ridgeSegments = interiorRidgeRunSegments(wing, junctionProfiles);
+  for (const [segmentIndex, segment] of ridgeSegments.entries()) {
+    const ridgeBeam = cylinderBetween(
+      new THREE.Vector3(segment.min, metrics.ridgeY - 0.15, 0),
+      new THREE.Vector3(segment.max, metrics.ridgeY - 0.15, 0),
+      RIDGE_BEAM_RADIUS,
+      ridgeSegments.length === 1
+        ? 'SemanticRoofInteriorRidgeBeam'
+        : `SemanticRoofInteriorRidgeBeam${segmentIndex + 1}`
+    );
+    if (!ridgeBeam) continue;
     ridgeBeam.userData.semanticRoofInteriorBeam = true;
     ridgeBeam.userData.semanticRoofInteriorRidgeBeam = true;
     ridgeBeam.userData.semanticRoofInteriorJointTrimmed = childJoined;
+    ridgeBeam.userData.semanticRoofInteriorJunctionAligned = (
+      childJoined || parentRidgeProfilesForWing(wing, junctionProfiles).length > 0
+    );
+    ridgeBeam.userData.semanticRoofInteriorRidgeRunMin = segment.min;
+    ridgeBeam.userData.semanticRoofInteriorRidgeRunMax = segment.max;
     buildGroup.add(ridgeBeam);
     beamCount += 1;
   }
@@ -369,7 +348,7 @@ const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
   const desiredTieCount = THREE.MathUtils.clamp(Math.floor(runLength / 2.35), 1, 3);
   for (let index = 0; index < desiredTieCount; index += 1) {
     const fraction = (index + 1) / (desiredTieCount + 1);
-    const x = THREE.MathUtils.lerp(run.min, run.max, fraction);
+    const x = THREE.MathUtils.lerp(rafterRun.min, rafterRun.max, fraction);
     if (anyValleyAt(x, wing, junctionProfiles)) continue;
 
     const amount = 0.23;
@@ -394,14 +373,16 @@ const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
 };
 
 /**
- * Add an interior-only presentation layer to a completed semantic Roof wing. Parent
- * valley openings still come directly from the canonical integrated roof underlay. At a
- * child-wing join, the inward liner is set back slightly from the exterior intersection,
- * then a timber join frame masks the exposed seam without sealing the real opening.
- * Exterior eave-thatch geometry is covered from below by matching timber soffits, so straw
- * remains an exterior material while the occupied room reads as a finished timber shell.
- * Exposed gable infill receives a BackSide timber lining. All added members remain visual
- * only and do not participate in support, collision, cost, save identity or demolition.
+ * Add an interior-only presentation layer to a completed semantic Roof wing. The
+ * integrated structural underlay is the sole junction-topology authority: interior slope
+ * liners clone it exactly, so parent valley cutouts and child penetration geometry meet
+ * at the same seam instead of being shortened or masked by a second competing shape.
+ * Exterior eave thatch is shielded from below by a deeper timber soffit that extends past
+ * the fine straw tips. Decorative framing stays inside the occupied wing, while a joined
+ * child ridge follows the canonical ridge penetration and a parent ridge is interrupted
+ * only when a full-height cross-gable actually reaches it. Exposed gable infill receives
+ * a BackSide timber lining. All added members remain visual only and do not participate
+ * in support, collision, cost, save identity or demolition.
  */
 export function applySemanticRoofInteriorFinish(wingRoot, wing, {
   junctionProfiles = []
@@ -437,12 +418,6 @@ export function applySemanticRoofInteriorFinish(wingRoot, wing, {
   );
   const soffitCount = addInteriorSoffits(buildGroup, metrics);
   const gableCount = addInteriorGables(buildGroup);
-  const jointTrimCount = addInteriorJointTrim(
-    buildGroup,
-    wing,
-    junctionProfiles,
-    metrics
-  );
   const { rafterCount, beamCount } = addInteriorFraming(
     buildGroup,
     wing,
@@ -454,20 +429,21 @@ export function applySemanticRoofInteriorFinish(wingRoot, wing, {
   wingRoot.userData.semanticRoofInteriorLinerCount = linerCount;
   wingRoot.userData.semanticRoofInteriorSoffitCount = soffitCount;
   wingRoot.userData.semanticRoofInteriorGableCount = gableCount;
-  wingRoot.userData.semanticRoofInteriorJointTrimCount = jointTrimCount;
+  wingRoot.userData.semanticRoofInteriorJointTrimCount = 0;
   wingRoot.userData.semanticRoofInteriorRafterCount = rafterCount;
   wingRoot.userData.semanticRoofInteriorBeamCount = beamCount;
   wingRoot.userData.semanticRoofInteriorThatchShielded = soffitCount > 0;
-  wingRoot.userData.semanticRoofInteriorJointTrimmed = childJoinProfilesForWing(
-    wing,
-    junctionProfiles
-  ).length > 0;
+  wingRoot.userData.semanticRoofInteriorJunctionAligned = (
+    childJoinProfilesForWing(wing, junctionProfiles).length > 0 ||
+    (junctionProfiles ?? []).some(profile => profile.parentWingIndex === wing.index)
+  );
+  wingRoot.userData.semanticRoofInteriorJointTrimmed = false;
 
   return {
     linerCount,
     soffitCount,
     gableCount,
-    jointTrimCount,
+    jointTrimCount: 0,
     rafterCount,
     beamCount
   };
