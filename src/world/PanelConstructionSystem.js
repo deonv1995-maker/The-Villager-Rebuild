@@ -18,6 +18,7 @@ import {
   panelStairKey,
   parsePanelCellKey
 } from './PanelConstructionGrid.js';
+import { collectPanelUpperStoreySupports } from './PanelUpperStoreyRules.js';
 import {
   createFloorPanelVisual,
   createPanelPreview,
@@ -415,7 +416,55 @@ export class PanelConstructionSystem {
     let best = null;
 
     for (const structure of this.registry.structures.values()) {
+      const upperSupports = collectPanelUpperStoreySupports(
+        [...structure.grid.walls.values()],
+        { levelTolerance: LEVEL_TOLERANCE }
+      );
+
+      for (const support of upperSupports) {
+        const key = panelCellKey({ x: support.x, z: support.z, storey: support.storey });
+        if (structure.grid.floors.has(key)) continue;
+        const lowerKey = panelCellKey({
+          x: support.x,
+          z: support.z,
+          storey: support.supportingStorey
+        });
+        if (this.#roofCellOccupied(structure, lowerKey)) continue;
+        const reservedByStair = [...structure.grid.stairs.values()].some(stair => (
+          stair.storey === support.supportingStorey && stair.targetCellKey === lowerKey
+        ));
+        if (reservedByStair) continue;
+
+        const center = this.registry.cellCenterWorld(structure, support);
+        if (Math.hypot(center.x - playerPosition.x, center.z - playerPosition.z) > PANEL_GRID.placementReach) continue;
+        const candidate = {
+          kind: 'floor',
+          structureId: structure.id,
+          newStructure: false,
+          cellX: support.x,
+          cellZ: support.z,
+          storey: support.storey,
+          x: center.x,
+          z: center.z,
+          yaw: structure.yaw,
+          baseY: support.levelY,
+          topY: support.levelY + FLOOR_TOP_LIFT,
+          snapKind: support.snapKind,
+          valid: this.#floorClear(center.x, center.z),
+          score: this.#candidateScore(
+            { x: center.x, y: support.levelY, z: center.z },
+            target,
+            constructionAim
+          )
+        };
+        if (!best || candidate.score < best.score) best = candidate;
+      }
+
       for (const floor of structure.grid.floors.values()) {
+        // Upper floors are enumerated from closed semantic wall support above. Keeping
+        // storey-zero expansion here prevents an existing upstairs panel from creating
+        // unsupported cantilever slots outside the wall enclosure.
+        if (floor.storey !== 0) continue;
         for (const direction of directionEntries) {
           const cellX = floor.x + direction.dx;
           const cellZ = floor.z + direction.dz;
@@ -423,9 +472,7 @@ export class PanelConstructionSystem {
           if (structure.grid.floors.has(key)) continue;
           const center = this.registry.cellCenterWorld(structure, { x: cellX, z: cellZ });
           if (Math.hypot(center.x - playerPosition.x, center.z - playerPosition.z) > PANEL_GRID.placementReach) continue;
-          const terrain = floor.storey === 0
-            ? this.#evaluateFloorTerrain(center.x, center.z, structure.yaw, floor.levelY)
-            : { valid: true };
+          const terrain = this.#evaluateFloorTerrain(center.x, center.z, structure.yaw, floor.levelY);
           const candidate = {
             kind: 'floor',
             structureId: structure.id,
