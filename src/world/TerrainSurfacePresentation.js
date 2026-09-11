@@ -11,8 +11,8 @@ export const GROUND_SURFACE_COLORS = Object.freeze({
   grassHigh: 0x5a894a,
   ridge: 0x74765b,
   meadowLight: 0x98c96c,
-  meadowLush: 0x5b9d4c,
-  meadowDry: 0xa2ad63,
+  meadowLush: 0x4b9144,
+  meadowDry: 0xa7b166,
   forest: 0x3d7044,
   trailSoil: 0x88704c
 });
@@ -85,10 +85,10 @@ export function terrainSurfaceColorAt({
 
   const patch = clamp01(grassPatchStrength);
   const forest = clamp01(forestCover);
-  target.lerp(COLORS.meadowLight, broad * 0.16);
-  target.lerp(COLORS.meadowDry, dry * (0.13 - patch * 0.055));
-  target.lerp(COLORS.meadowLush, patch * 0.16);
+  target.lerp(COLORS.meadowLight, broad * 0.22);
+  target.lerp(COLORS.meadowDry, dry * (0.15 - patch * 0.06));
+  target.lerp(COLORS.meadowLush, patch * 0.24);
   target.lerp(COLORS.forest, forest * 0.2);
-  target.offsetHSL(0, 0, (detail - 0.5) * 0.038);
+  target.offsetHSL(0, 0, (detail - 0.5) * 0.045);
   return target;
 }
