@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
+import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const MAINLAND_SCALE = 2;
 const BASE_COAST_X = 172;
@@ -190,7 +191,6 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         const position = geometry.attributes.position;
         const colors = [];
         const color = new THREE.Color();
-        const forestColor = new THREE.Color(0x3f7045);
 
         for (let index = 0; index < position.count; index += 1) {
           const worldX = centerX + position.getX(index);
@@ -200,16 +200,15 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
           const sand = this.isSandAt(worldX, worldZ);
           position.setY(index, y);
 
-          if (sand) color.set(0xdfc993);
-          else if (slope > 0.82) color.set(0x776d5d);
-          else if (slope > 0.56) color.set(0x827861);
-          else if (y < 0.9) color.set(0x88b861);
-          else if (y < 3.1) color.set(0x60994f);
-          else if (y < 5.6) color.set(0x5a864a);
-          else color.set(0x77775d);
-
-          if (!sand) color.lerp(forestColor, this.forestCoverAt(worldX, worldZ) * 0.18);
-          color.offsetHSL(0, 0, Math.sin(worldX * 0.19) * Math.cos(worldZ * 0.17) * 0.035);
+          terrainSurfaceColorAt({
+            x: worldX,
+            z: worldZ,
+            y,
+            slope,
+            sand,
+            forestCover: sand ? 0 : this.forestCoverAt(worldX, worldZ),
+            grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ)
+          }, color);
           colors.push(color.r, color.g, color.b);
         }
 
@@ -247,10 +246,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const geometry = new THREE.CircleGeometry(1, 9);
     geometry.rotateX(-Math.PI / 2);
     const material = new THREE.MeshStandardMaterial({
-      color: 0x81825f,
+      color: GROUND_SURFACE_COLORS.trailSoil,
       roughness: 1,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.34,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -1,
