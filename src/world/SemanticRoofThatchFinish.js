@@ -14,6 +14,7 @@ const STRAW_BUNDLE_COLORS = Object.freeze([
   0xe9c875,
   0xd3a04a
 ]);
+const JUNCTION_STRAW_CLEARANCE = 0.055;
 
 const reverseIndexedTriangleWinding = geometry => {
   const clone = geometry.clone();
@@ -78,7 +79,18 @@ const deterministicVariation = (row, column, salt) => (
   ((row * 31 + column * 17 + salt * 13) % 19) / 18
 );
 
-const addStrawBundles = (buildGroup, wing, side) => {
+const bundleIntersectsJunction = (x, amount, side, wing, junctionProfiles) => {
+  const sideLabel = side < 0 ? 'negative' : 'positive';
+  return (junctionProfiles ?? []).some(profile => {
+    if (profile.parentWingIndex !== wing.index || profile.parentSlopeSide !== sideLabel) return false;
+    if (!(profile.apexAmount > 0) || amount >= profile.apexAmount) return false;
+    const taper = 1 - amount / profile.apexAmount;
+    const halfWidth = profile.cutoutHalfWidth * taper + JUNCTION_STRAW_CLEARANCE;
+    return Math.abs(x - profile.cutoutCenter) <= halfWidth;
+  });
+};
+
+const addStrawBundles = (buildGroup, wing, side, junctionProfiles) => {
   const length = wing.ridgeAxis === 'z' ? wing.depth : wing.width;
   const span = wing.ridgeAxis === 'z' ? wing.width : wing.depth;
   const rise = semanticRoofRise({
@@ -98,7 +110,7 @@ const addStrawBundles = (buildGroup, wing, side) => {
   );
   const width = length + 0.3;
   const columns = Math.max(10, Math.ceil(width / STRAW_COLUMN_SPACING));
-  const instanceCount = columns * STRAW_ROW_AMOUNTS.length;
+  const capacity = columns * STRAW_ROW_AMOUNTS.length;
   const geometry = new THREE.CylinderGeometry(
     STRAW_BUNDLE_RADIUS * 0.68,
     STRAW_BUNDLE_RADIUS,
@@ -107,10 +119,9 @@ const addStrawBundles = (buildGroup, wing, side) => {
     1,
     false
   );
-  const bundle = new THREE.InstancedMesh(geometry, finishedStrawMaterial(), instanceCount);
+  const bundle = new THREE.InstancedMesh(geometry, finishedStrawMaterial(), capacity);
   bundle.name = `SemanticRoofStrawBundles${side < 0 ? 'North' : 'South'}`;
   bundle.userData.semanticRoofStrawBundles = true;
-  bundle.userData.semanticRoofStrawBundleCount = instanceCount;
   bundle.castShadow = true;
   bundle.receiveShadow = true;
 
@@ -121,6 +132,7 @@ const addStrawBundles = (buildGroup, wing, side) => {
   const scale = new THREE.Vector3();
   const color = new THREE.Color();
   let instanceIndex = 0;
+  let skippedForJunction = 0;
 
   for (const [rowIndex, amount] of STRAW_ROW_AMOUNTS.entries()) {
     const rowPoint = slopePoint(side, amount, eaveY, rise, halfSpan);
@@ -129,6 +141,10 @@ const addStrawBundles = (buildGroup, wing, side) => {
       const lengthVariation = deterministicVariation(rowIndex, column, side < 0 ? 7 : 17);
       const radialVariation = deterministicVariation(rowIndex, column, side < 0 ? 5 : 13);
       const x = -width * 0.5 + width * (column + 0.5) / columns + acrossVariation * 0.055;
+      if (bundleIntersectsJunction(x, amount, side, wing, junctionProfiles)) {
+        skippedForJunction += 1;
+        continue;
+      }
       const bundleLength = 0.29 + lengthVariation * 0.12;
       position.copy(rowPoint);
       position.x = x;
@@ -145,19 +161,25 @@ const addStrawBundles = (buildGroup, wing, side) => {
     }
   }
 
+  bundle.count = instanceIndex;
+  bundle.userData.semanticRoofStrawBundleCount = instanceIndex;
+  bundle.userData.semanticRoofStrawBundlesSkippedForJunction = skippedForJunction;
   bundle.instanceMatrix.needsUpdate = true;
   if (bundle.instanceColor) bundle.instanceColor.needsUpdate = true;
   buildGroup.add(bundle);
-  return instanceCount;
+  return { count: instanceIndex, skippedForJunction };
 };
 
 /**
  * Add a low-draw-call layer of tapered straw bundles over the existing structural thatch
  * courses. The courses remain the weather-tight shell; the instanced bundles provide the
  * thicker, hand-laid silhouette and surface breakup without changing roof topology,
- * collision, save identity, placement cost or demolition ownership.
+ * collision, save identity, placement cost or demolition ownership. Parent-valley
+ * openings remain clear so the new finish cannot refill an integrated cross-gable cutout.
  */
-export function applySemanticRoofThatchFinish(wingRoot, wing) {
+export function applySemanticRoofThatchFinish(wingRoot, wing, {
+  junctionProfiles = []
+} = {}) {
   if (!wingRoot || !wing) return 0;
   const buildGroup = wing.ridgeAxis === 'z'
     ? wingRoot.getObjectByName('SemanticRoofRotatedZAxis')
@@ -180,9 +202,13 @@ export function applySemanticRoofThatchFinish(wingRoot, wing) {
     ridge.userData.semanticRoofFullRidgeBundle = true;
   }
 
-  const bundleCount = addStrawBundles(buildGroup, wing, -1) + addStrawBundles(buildGroup, wing, 1);
+  const north = addStrawBundles(buildGroup, wing, -1, junctionProfiles);
+  const south = addStrawBundles(buildGroup, wing, 1, junctionProfiles);
+  const bundleCount = north.count + south.count;
+  const skippedForJunction = north.skippedForJunction + south.skippedForJunction;
   wingRoot.userData.semanticRoofLayeredThatch = true;
   wingRoot.userData.semanticRoofFullDepthCourseCount = courseCount;
   wingRoot.userData.semanticRoofStrawBundleCount = bundleCount;
+  wingRoot.userData.semanticRoofStrawBundlesSkippedForJunction = skippedForJunction;
   return bundleCount;
 }
