@@ -5,6 +5,10 @@ import {
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
 import { applySemanticRoofJunctionGeometry } from './SemanticRoofJunctionGeometry.js';
+import {
+  applySemanticRoofThatchFinish,
+  makeSemanticRoofGablesExteriorOnly
+} from './SemanticRoofThatchFinish.js';
 
 export function semanticRoofFootprintRise(plan) {
   if (!plan?.wings?.length) return 0;
@@ -66,8 +70,11 @@ export function createSemanticRoofFootprintVisual(
   root.userData.wallSeatDrop = semanticRoofWallSeatDrop();
   root.userData.internalEavesTrimmed = true;
   root.userData.internalGablesJoined = true;
+  root.userData.exteriorOnlyGables = true;
+  root.userData.layeredThatchPolish = true;
 
   const wingRootsByIndex = new Map();
+  let strawBundleCount = 0;
   for (const wing of plan.wings) {
     const wingRoot = createSemanticRoofZoneVisual(
       `${name}-${wing.id}`,
@@ -88,9 +95,12 @@ export function createSemanticRoofFootprintVisual(
       ? wing.joinedToWing
       : null;
     removeJoinedGablePresentation(wingRoot, wing.ridgeAxis, wing.gableEnds);
+    makeSemanticRoofGablesExteriorOnly(wingRoot);
+    strawBundleCount += applySemanticRoofThatchFinish(wingRoot, wing);
     root.add(wingRoot);
     wingRootsByIndex.set(wing.index, wingRoot);
   }
+  root.userData.semanticRoofStrawBundleCount = strawBundleCount;
 
   // Cross-gable appendages need a real valley intersection, not merely two complete
   // roof prisms overlapping at one wall edge. Extend the child slopes/ridge into the
