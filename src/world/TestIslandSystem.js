@@ -3,6 +3,7 @@ import { ExpandedIslandTerrainSystem } from './ExpandedIslandTerrainSystem.js';
 import { ConstructionTerrainAdaptationSystem } from './ConstructionTerrainAdaptationSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
+import { GroundCoverPresentationSystem } from './GroundCoverPresentationSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
 import { AmbientWorldDetailSystem } from './AmbientWorldDetailSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
@@ -43,6 +44,14 @@ export class TestIslandSystem {
       group: this.group,
       terrain: this.terrain,
       collision: this.collision
+    });
+    this.groundCover = new GroundCoverPresentationSystem({
+      group: this.group,
+      terrain: this.terrain,
+      scatter: this.scatter,
+      chunks: this.chunks,
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
     });
     this.grass = new GrassFieldSystem({
       group: this.group,
@@ -158,12 +167,13 @@ export class TestIslandSystem {
     }
 
     const ambientStats = this.ambientDetails.populate();
+    const groundCoverCount = this.groundCover.populate();
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
     const chunkStats = this.chunks.getStats();
     const coastalRockCount = this.scatter.coastalRockCount ?? 0;
-    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${coastalRockCount} coastal rocks · ${grassCount} grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${coastalRockCount} coastal rocks · ${groundCoverCount} ground-cover clumps · ${grassCount} reactive grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
@@ -178,6 +188,7 @@ export class TestIslandSystem {
 
   update(dt, playerPosition, camera = null) {
     this.chunks.update(camera, playerPosition);
+    this.groundCover.update();
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
     this.ambientDetails.update();

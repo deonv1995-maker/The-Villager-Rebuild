@@ -14,7 +14,7 @@ export const GROUND_SURFACE_COLORS = Object.freeze({
   meadowLush: 0x438f43,
   meadowDry: 0xa8ad64,
   forest: 0x386d40,
-  trailSoil: 0x8a6d47
+  trailSoil: 0x6f4d2f
 });
 
 const COLORS = Object.freeze(
