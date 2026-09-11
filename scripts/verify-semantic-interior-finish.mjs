@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createWallPanelVisual } from '../src/world/PanelConstructionVisual.js';
 import { createSemanticRoofFootprintVisual } from '../src/world/SemanticRoofFootprintGeometry.js';
 import { planSemanticRoofFootprint } from '../src/world/SemanticRoofFootprintPlanner.js';
+import { planSemanticRoofJunctionProfiles } from '../src/world/SemanticRoofJunctionGeometry.js';
 
 const objectsWith = (root, predicate) => {
   const matches = [];
@@ -16,6 +17,11 @@ for (const variant of ['solid', 'door', 'window']) {
   const wall = createWallPanelVisual(`Interior${variant}`, variant);
   assert.equal(wall.userData.wallFlatFaceInward, true, `${variant} wall must preserve inward split-face orientation`);
   assert.equal(wall.userData.semanticWallInteriorWood, true, `${variant} wall must expose the timber interior finish`);
+  assert.equal(
+    wall.userData.semanticWallInteriorWoodUnifiedTone,
+    true,
+    `${variant} wall must use the coherent interior timber-tone contract`
+  );
   assert.ok(
     wall.userData.semanticWallInteriorWoodFaceCount > 0,
     `${variant} wall must style at least one inward split-log face`
@@ -33,11 +39,14 @@ for (const variant of ['solid', 'door', 'window']) {
 }
 
 const solidWall = createWallPanelVisual('InteriorSolidToneProbe', 'solid');
-const solidTones = new Set(
-  objectsWith(solidWall, object => object.userData?.semanticWallInteriorWoodFace === true)
-    .map(face => face.userData.semanticWallInteriorWoodTone)
+const solidFaces = objectsWith(
+  solidWall,
+  object => object.userData?.semanticWallInteriorWoodFace === true
 );
-assert.ok(solidTones.size >= 2, 'Solid wall rows must use subtle timber-tone variation instead of one flat beige face');
+const solidTones = new Set(solidFaces.map(face => face.userData.semanticWallInteriorWoodTone));
+const solidColors = new Set(solidFaces.map(face => face.material?.color?.getHex?.()));
+assert.equal(solidTones.size, 1, 'Solid wall rows must use one coherent timber tone instead of patchwork row colours');
+assert.equal(solidColors.size, 1, 'All inward wall faces must share the same lit timber material colour');
 
 const simplePlan = planSemanticRoofFootprint([
   { x: 0, z: 0 },
@@ -83,6 +92,8 @@ const joinedPlan = planSemanticRoofFootprint([
   { x: 1, z: 2 }
 ]);
 assert.ok(joinedPlan?.wings?.length > 1, 'Cross-gable probe must create multiple semantic roof wings');
+const joinedProfiles = planSemanticRoofJunctionProfiles(joinedPlan);
+assert.ok(joinedProfiles.length > 0, 'Cross-gable probe must expose at least one integrated roof junction');
 const joinedRoof = createSemanticRoofFootprintVisual('JoinedInteriorRoofProbe', { plan: joinedPlan });
 const joinedLiners = objectsWith(joinedRoof, object => object.userData?.semanticRoofInteriorLiner === true);
 assert.equal(
@@ -96,11 +107,63 @@ assert.ok(
 );
 assert.ok(
   joinedLiners.some(liner => liner.userData.semanticRoofInteriorJoinedSlope === true),
-  'Child interior lining must inherit the structural slope extension into the parent roof'
+  'Child interior lining must still derive from the canonical joined slope geometry'
 );
+
+const joinedProfile = joinedProfiles[0];
+const childWing = joinedPlan.wings[joinedProfile.childWingIndex];
+const childRoot = joinedRoof.children.find(child => (
+  child.userData?.semanticRoofWingId === childWing.id
+));
+assert.ok(childRoot, 'Joined child roof wing must remain addressable in the finished footprint');
+assert.equal(
+  childRoot.userData.semanticRoofInteriorJointTrimmed,
+  true,
+  'Joined child wing must advertise trimmed interior presentation at the roof seam'
+);
+
+const childLiners = objectsWith(
+  childRoot,
+  object => object.userData?.semanticRoofInteriorLiner === true
+);
+assert.ok(
+  childLiners.every(liner => liner.userData.semanticRoofInteriorJointSetback === true),
+  'Both child ceiling liners must be set back from the exterior roof intersection'
+);
+const childCoreHalfLength = (
+  childWing.ridgeAxis === 'z' ? childWing.depth : childWing.width
+) * 0.5;
+for (const liner of childLiners) {
+  liner.geometry.computeBoundingBox();
+  const bound = joinedProfile.childLocalJoinEnd === 'negative'
+    ? -liner.geometry.boundingBox.min.x
+    : liner.geometry.boundingBox.max.x;
+  assert.ok(
+    bound <= childCoreHalfLength + Math.max(0, joinedProfile.joinInset - 0.08),
+    'Child interior liner must terminate before the exterior joined-slope endpoint'
+  );
+}
+
+const childRafters = objectsWith(
+  childRoot,
+  object => object.userData?.semanticRoofInteriorRafter === true
+);
+const joinSign = joinedProfile.childLocalJoinEnd === 'negative' ? -1 : 1;
+assert.ok(
+  childRafters.every(rafter => (
+    joinSign * rafter.position.x <= childCoreHalfLength - 0.05
+  )),
+  'Child decorative rafters must stay inside the joined wall line instead of projecting through the parent roof'
+);
+assert.ok(
+  objectsWith(childRoot, object => object.userData?.semanticRoofInteriorRidgeBeam === true)
+    .every(beam => beam.userData.semanticRoofInteriorJointTrimmed === true),
+  'Joined child ridge beams must use the trimmed interior framing run'
+);
+
 assert.ok(
   objectsWith(joinedRoof, object => object.userData?.semanticRoofJunction === true).length === 0,
   'Interior framing must not reintroduce the retired horizontal seam-mask system'
 );
 
-console.log('Semantic roof timber lining/rafters and warm wood wall interiors verified');
+console.log('Coherent wall timber tone and cleanly trimmed semantic roof interiors verified');

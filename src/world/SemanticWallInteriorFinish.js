@@ -1,20 +1,13 @@
 import * as THREE from 'three';
 
-const INTERIOR_WOOD_FACE_COLORS = Object.freeze([
-  0x9b6840,
-  0xa87346,
-  0x8e5c37,
-  0xb17b4c
-]);
+const INTERIOR_WOOD_FACE_COLOR = 0x98653f;
 
-const interiorWoodFaceMaterials = INTERIOR_WOOD_FACE_COLORS.map(color => (
-  new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.94,
-    metalness: 0,
-    flatShading: true
-  })
-));
+const interiorWoodFaceMaterial = new THREE.MeshStandardMaterial({
+  color: INTERIOR_WOOD_FACE_COLOR,
+  roughness: 0.94,
+  metalness: 0,
+  flatShading: true
+});
 
 const splitLogGroups = root => {
   const groups = [];
@@ -31,11 +24,10 @@ const splitLogFlatFace = group => group.children.find(child => (
 
 /**
  * Semantic walls already use split half-logs with their flat face directed toward the
- * occupied room. This presentation pass keeps the bark exterior untouched and only
- * replaces those inward flat faces with deterministic warm timber tones. The row-to-row
- * variation makes the inside read as dressed wood instead of one broad beige surface,
- * without introducing textures, extra wall geometry, collision, persistence or draw-call
- * heavy decorative meshes.
+ * occupied room. Keep the bark exterior untouched and give every inward flat face one
+ * shared warm timber material. Lighting and the split-log geometry provide enough natural
+ * variation; row-by-row colour changes made adjacent walls compete visually and produced
+ * a patchwork interior on mobile.
  */
 export function applySemanticWallInteriorWoodFinish(root) {
   if (!root) return 0;
@@ -45,16 +37,14 @@ export function applySemanticWallInteriorWoodFinish(root) {
     const face = splitLogFlatFace(group);
     if (!face) continue;
 
-    const rowKey = Math.round((group.position?.y ?? 0) * 20);
-    const segmentKey = Math.round((group.position?.x ?? 0) * 10);
-    const materialIndex = Math.abs(rowKey + segmentKey) % interiorWoodFaceMaterials.length;
-    face.material = interiorWoodFaceMaterials[materialIndex];
+    face.material = interiorWoodFaceMaterial;
     face.userData.semanticWallInteriorWoodFace = true;
-    face.userData.semanticWallInteriorWoodTone = materialIndex;
+    face.userData.semanticWallInteriorWoodTone = 0;
     faceCount += 1;
   }
 
   root.userData.semanticWallInteriorWood = faceCount > 0;
+  root.userData.semanticWallInteriorWoodUnifiedTone = faceCount > 0;
   root.userData.semanticWallInteriorWoodFaceCount = faceCount;
   return faceCount;
 }
