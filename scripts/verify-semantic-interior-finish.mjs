@@ -13,6 +13,8 @@ const objectsWith = (root, predicate) => {
   return matches;
 };
 
+const near = (left, right, epsilon = 0.000001) => Math.abs(left - right) <= epsilon;
+
 for (const variant of ['solid', 'door', 'window']) {
   const wall = createWallPanelVisual(`Interior${variant}`, variant);
   assert.equal(wall.userData.wallFlatFaceInward, true, `${variant} wall must preserve inward split-face orientation`);
@@ -87,6 +89,10 @@ assert.ok(
   liners.every(liner => liner.material?.side === THREE.FrontSide),
   'Slope lining must render as an inside ceiling surface without showing through the exterior'
 );
+assert.ok(
+  liners.every(liner => liner.userData.semanticRoofInteriorShellContact === true),
+  'Interior slope lining must remain close enough to the canonical shell to hide course end-caps at roof seams'
+);
 const soffits = objectsWith(simpleRoof, object => object.userData?.semanticRoofInteriorSoffit === true);
 const exteriorEaves = objectsWith(simpleRoof, object => (
   object.userData?.semanticRoofExteriorEave === true &&
@@ -100,6 +106,10 @@ assert.equal(
 assert.ok(
   soffits.every(soffit => soffit.userData.semanticRoofInteriorThatchShield === true),
   'Interior eave soffits must explicitly own the thatch-occlusion presentation contract'
+);
+assert.ok(
+  soffits.every(soffit => soffit.userData.semanticRoofInteriorExtendedEaveShield === true),
+  'Interior eave soffits must extend under the exposed straw-tip run rather than stopping at the solid course box'
 );
 const interiorGables = objectsWith(simpleRoof, object => object.userData?.semanticRoofInteriorGable === true);
 assert.equal(interiorGables.length, 2);
@@ -151,13 +161,19 @@ const childRoot = joinedRoof.children.find(child => (
 ));
 assert.ok(childRoot, 'Joined child roof wing must remain addressable in the finished footprint');
 assert.equal(
-  childRoot.userData.semanticRoofInteriorJointTrimmed,
+  childRoot.userData.semanticRoofInteriorJunctionAligned,
   true,
-  'Joined child wing must advertise trimmed interior presentation at the roof seam'
+  'Joined child wing must advertise canonical interior-junction alignment'
 );
-assert.ok(
-  childRoot.userData.semanticRoofInteriorJointTrimCount >= 3,
-  'Joined child wing must frame the open roof seam with two rakes and one top plate'
+assert.equal(
+  childRoot.userData.semanticRoofInteriorJointTrimmed,
+  false,
+  'Joined child wing must not depend on a second seam-mask frame'
+);
+assert.equal(
+  childRoot.userData.semanticRoofInteriorJointTrimCount,
+  0,
+  'Canonical junction alignment must retire the extra rake/top-plate seam masks'
 );
 
 const childLiners = objectsWith(
@@ -165,34 +181,40 @@ const childLiners = objectsWith(
   object => object.userData?.semanticRoofInteriorLiner === true
 );
 assert.ok(
-  childLiners.every(liner => liner.userData.semanticRoofInteriorJointSetback === true),
-  'Both child ceiling liners must be set back from the exterior roof intersection'
+  childLiners.every(liner => liner.userData.semanticRoofInteriorJunctionAligned === true),
+  'Both child ceiling liners must keep the canonical joined geometry'
+);
+assert.ok(
+  childLiners.every(liner => liner.userData.semanticRoofInteriorJointSetback === false),
+  'Joined child liners must not be shortened away from the structural valley'
 );
 const childCoreHalfLength = (
   childWing.ridgeAxis === 'z' ? childWing.depth : childWing.width
 ) * 0.5;
 for (const liner of childLiners) {
+  const sideLabel = liner.name.endsWith('North') ? 'North' : 'South';
+  const underlay = childRoot.getObjectByName(`SemanticRoofSlope${sideLabel}`);
+  assert.ok(underlay?.geometry, 'Joined child liner must retain its matching structural underlay source');
   liner.geometry.computeBoundingBox();
+  underlay.geometry.computeBoundingBox();
+  assert.ok(
+    near(liner.geometry.boundingBox.min.x, underlay.geometry.boundingBox.min.x) &&
+    near(liner.geometry.boundingBox.max.x, underlay.geometry.boundingBox.max.x),
+    'Joined child liner must share the exact canonical run boundary with its structural slope'
+  );
   const bound = joinedProfile.childLocalJoinEnd === 'negative'
     ? -liner.geometry.boundingBox.min.x
     : liner.geometry.boundingBox.max.x;
   assert.ok(
-    bound <= childCoreHalfLength + Math.max(0, joinedProfile.joinInset - 0.08),
-    'Child interior liner must terminate before the exterior joined-slope endpoint'
+    bound > childCoreHalfLength + 0.05,
+    'Joined child liner must continue through the old wall line to the real valley intersection'
   );
 }
 
-const childJointTrim = objectsWith(
-  childRoot,
-  object => object.userData?.semanticRoofInteriorJointTrim === true
-);
-assert.ok(
-  childJointTrim.length >= 3,
-  'Joined child roof must expose explicit timber trim around the interior opening'
-);
-assert.ok(
-  childJointTrim.every(trim => trim.userData.semanticRoofInteriorJointThatchShield === true),
-  'Joined seam trim must explicitly shield exterior straw from the interior view'
+assert.equal(
+  objectsWith(childRoot, object => object.userData?.semanticRoofInteriorJointTrim === true).length,
+  0,
+  'Joined roof interior must not add competing rake/top-plate cover geometry at the wall line'
 );
 
 const childRafters = objectsWith(
@@ -202,19 +224,63 @@ const childRafters = objectsWith(
 const joinSign = joinedProfile.childLocalJoinEnd === 'negative' ? -1 : 1;
 assert.ok(
   childRafters.every(rafter => (
-    joinSign * rafter.position.x <= childCoreHalfLength - 0.05
+    joinSign * rafter.position.x <= childCoreHalfLength + 0.000001
   )),
-  'Child decorative rafters must stay inside the joined wall line instead of projecting through the parent roof'
+  'Child decorative rafters must remain within the occupied wing while the liner owns the valley penetration'
 );
+
+const childRidgeBeams = objectsWith(
+  childRoot,
+  object => object.userData?.semanticRoofInteriorRidgeBeam === true
+);
+assert.ok(childRidgeBeams.length >= 1, 'Joined child roof must retain an interior ridge beam');
 assert.ok(
-  objectsWith(childRoot, object => object.userData?.semanticRoofInteriorRidgeBeam === true)
-    .every(beam => beam.userData.semanticRoofInteriorJointTrimmed === true),
-  'Joined child ridge beams must use the trimmed interior framing run'
+  childRidgeBeams.every(beam => beam.userData.semanticRoofInteriorJunctionAligned === true),
+  'Joined child ridge framing must follow the canonical penetration instead of stopping at the wall line'
 );
+const childRidgeJoinBound = joinedProfile.childLocalJoinEnd === 'negative'
+  ? -Math.min(...childRidgeBeams.map(beam => beam.userData.semanticRoofInteriorRidgeRunMin))
+  : Math.max(...childRidgeBeams.map(beam => beam.userData.semanticRoofInteriorRidgeRunMax));
+assert.ok(
+  childRidgeJoinBound >= childCoreHalfLength + Math.max(0, joinedProfile.joinInset - 0.05),
+  'Joined child ridge beam must terminate at the real valley apex rather than exposing the exterior ridge bundle'
+);
+
+const multiWingPlan = planSemanticRoofFootprint([
+  { x: 0, z: 0 }, { x: 2, z: 0 },
+  { x: 0, z: 1 }, { x: 2, z: 1 },
+  { x: 0, z: 2 }, { x: 1, z: 2 }, { x: 2, z: 2 }
+]);
+const multiWingProfiles = planSemanticRoofJunctionProfiles(multiWingPlan);
+assert.ok(multiWingProfiles.length >= 2, 'Multi-wing courtyard probe must expose both child-to-parent roof junctions');
+const multiWingRoof = createSemanticRoofFootprintVisual('MultiWingInteriorJunctionProbe', { plan: multiWingPlan });
+assert.equal(
+  objectsWith(multiWingRoof, object => object.userData?.semanticRoofInteriorJointTrim === true).length,
+  0,
+  'Multi-wing interiors must not accumulate overlapping seam-mask frames'
+);
+for (const profile of multiWingProfiles) {
+  const wing = multiWingPlan.wings[profile.childWingIndex];
+  const root = multiWingRoof.children.find(child => child.userData?.semanticRoofWingId === wing.id);
+  assert.ok(root?.userData.semanticRoofInteriorJunctionAligned, 'Every joined child wing must use canonical interior-junction alignment');
+  const wingLiners = objectsWith(root, object => object.userData?.semanticRoofInteriorLiner === true);
+  assert.equal(wingLiners.length, 2, 'Every multi-wing child must retain both ceiling slopes');
+  for (const liner of wingLiners) {
+    const sideLabel = liner.name.endsWith('North') ? 'North' : 'South';
+    const underlay = root.getObjectByName(`SemanticRoofSlope${sideLabel}`);
+    liner.geometry.computeBoundingBox();
+    underlay.geometry.computeBoundingBox();
+    assert.ok(
+      near(liner.geometry.boundingBox.min.x, underlay.geometry.boundingBox.min.x) &&
+      near(liner.geometry.boundingBox.max.x, underlay.geometry.boundingBox.max.x),
+      'Every multi-wing child liner must preserve its canonical valley boundary exactly'
+    );
+  }
+}
 
 assert.ok(
   objectsWith(joinedRoof, object => object.userData?.semanticRoofJunction === true).length === 0,
   'Interior framing must not reintroduce the retired horizontal seam-mask system'
 );
 
-console.log('Finished wall log courses, timber roof soffits and cleanly shielded semantic roof interiors verified');
+console.log('Finished wall courses, canonical roof-junction liners, extended soffits and valley-aware interior framing verified');
