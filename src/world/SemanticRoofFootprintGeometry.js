@@ -109,16 +109,23 @@ export function createSemanticRoofFootprintVisual(
   root.userData.semanticRoofValleyJoined = junctionProfiles.length > 0;
 
   // Surface polish is intentionally applied after structural junction trimming. The
-  // helper receives the same junction profiles so decorative straw bundles leave the
+  // helper receives the same junction profiles so fine straw and moss accents leave the
   // parent valley openings clear rather than visually filling a cutout back in.
   let strawBundleCount = 0;
+  let strawEdgeTuftCount = 0;
+  let mossAccentCount = 0;
   for (const wing of plan.wings) {
     const wingRoot = wingRootsByIndex.get(wing.index);
     strawBundleCount += applySemanticRoofThatchFinish(wingRoot, wing, {
       junctionProfiles
     });
+    strawEdgeTuftCount += wingRoot?.userData.semanticRoofStrawEdgeTuftCount ?? 0;
+    mossAccentCount += wingRoot?.userData.semanticRoofMossAccentCount ?? 0;
   }
+  root.userData.semanticRoofFineStraw = true;
   root.userData.semanticRoofStrawBundleCount = strawBundleCount;
+  root.userData.semanticRoofStrawEdgeTuftCount = strawEdgeTuftCount;
+  root.userData.semanticRoofMossAccentCount = mossAccentCount;
 
   // Low horizontal seam masks remain intentionally absent. Junction continuity now
   // comes from the actual sloped roof geometry, so there is no separate mask system
