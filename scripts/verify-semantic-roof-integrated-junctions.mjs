@@ -58,6 +58,20 @@ const assertLayeredThatch = (visual, label) => {
     visual.userData.semanticRoofStrawBundleCount > 0,
     `${label} must report the generated layered-thatch detail count`
   );
+
+  const edgeTufts = objectsWith(visual, object => object.userData?.semanticRoofStrawEdgeTufts === true);
+  assert.ok(edgeTufts.length >= 2, `${label} must add tapered 3D straw tips along the visible course edges`);
+  assert.ok(
+    edgeTufts.every(tufts => tufts.isInstancedMesh && tufts.count > 0),
+    `${label} course-edge straw must remain batched in low-draw-call instanced meshes`
+  );
+  assert.ok(
+    edgeTufts.every(tufts => tufts.userData.semanticRoofProductionThatch === true),
+    `${label} edge detail must be marked as part of the production thatch finish`
+  );
+
+  const productionWings = objectsWith(visual, object => object.userData?.semanticRoofProductionThatch === true);
+  assert.ok(productionWings.length >= 2, `${label} must expose the production-thatch presentation contract`);
   const fullDepthCourses = objectsWith(visual, object => object.userData?.semanticRoofThatchFullDepth === true);
   assert.ok(fullDepthCourses.length >= 2, `${label} must keep the existing courses and give them fuller depth`);
   const fullRidges = objectsWith(visual, object => object.userData?.semanticRoofFullRidgeBundle === true);
@@ -98,6 +112,14 @@ const assertIntegratedCrossGable = ({ cells, childCellCount, label }) => {
   assert.ok(
     parentRoot.userData.semanticRoofStrawBundlesSkippedForJunction > 0,
     `${label} decorative straw must leave the structural valley opening clear`
+  );
+  assert.ok(
+    parentRoot.userData.semanticRoofStrawEdgeTuftsSkippedForJunction > 0,
+    `${label} course-edge straw tips must also leave the structural valley opening clear`
+  );
+  assert.ok(
+    parentRoot.userData.semanticRoofStrawEdgeTuftCount > 0,
+    `${label} parent roof must retain course-edge straw detail outside the valley`
   );
 
   const childUnderlays = objectsWith(childRoot, object => object.userData?.semanticRoofUnderlay === true);
@@ -201,4 +223,4 @@ assert.equal(rotatedProjection.profile.parentSlopeSide, 'positive');
 assert.equal(rotatedProjection.profile.childLocalJoinEnd, 'negative');
 
 assert.ok(PANEL_GRID.cellSize > 0, 'Semantic roof integration remains anchored to the canonical panel grid');
-console.log('Integrated cross-gable valleys, exterior-only gables, layered thatch and matching interior roof topology verified');
+console.log('Integrated cross-gable valleys, exterior-only gables, production layered thatch and matching interior roof topology verified');
