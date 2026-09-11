@@ -4,14 +4,18 @@ import {
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
 
-const INTERIOR_LINER_COLOR = 0x93623b;
-const INTERIOR_GABLE_COLOR = 0x875634;
-const INTERIOR_FRAME_COLOR = 0x51351f;
-const RAFTER_SPACING = 0.86;
+const INTERIOR_LINER_COLOR = 0x845535;
+const INTERIOR_GABLE_COLOR = 0x764a2f;
+const INTERIOR_FRAME_COLOR = 0x5a3b25;
+const INTERIOR_SOFFIT_COLOR = 0x7b4f31;
+const RAFTER_SPACING = 1.0;
 const RAFTER_RADIUS = 0.055;
 const RIDGE_BEAM_RADIUS = 0.082;
 const TIE_BEAM_RADIUS = 0.06;
+const JOIN_TRIM_RADIUS = 0.082;
+const JOIN_TOP_PLATE_RADIUS = 0.07;
 const LINER_INSET = 0.072;
+const SOFFIT_INSET = 0.115;
 const LINER_JOIN_SETBACK = 0.12;
 const FRAME_JOIN_SETBACK = 0.08;
 const EPSILON = 0.00001;
@@ -34,6 +38,13 @@ const gableInteriorMaterial = new THREE.MeshStandardMaterial({
 
 const frameMaterial = new THREE.MeshStandardMaterial({
   color: INTERIOR_FRAME_COLOR,
+  roughness: 0.97,
+  metalness: 0,
+  flatShading: true
+});
+
+const soffitMaterial = new THREE.MeshStandardMaterial({
+  color: INTERIOR_SOFFIT_COLOR,
   roughness: 0.97,
   metalness: 0,
   flatShading: true
@@ -201,6 +212,41 @@ const addInteriorLiners = (buildGroup, wing, junctionProfiles, metrics) => {
   return count;
 };
 
+const addInteriorSoffits = (buildGroup, metrics) => {
+  const sources = [];
+  buildGroup.traverse(object => {
+    if (
+      object?.isMesh &&
+      object.userData?.semanticRoofExteriorEave === true &&
+      object.name?.startsWith('SemanticRoofThatchEave')
+    ) {
+      sources.push(object);
+    }
+  });
+
+  let count = 0;
+  for (const source of sources) {
+    const side = Number(source.userData?.semanticRoofEaveSide) < 0 ? -1 : 1;
+    const soffit = new THREE.Mesh(source.geometry.clone(), soffitMaterial);
+    soffit.name = source.name.replace('SemanticRoofThatchEave', 'SemanticRoofInteriorSoffit');
+    soffit.position.copy(source.position);
+    soffit.rotation.copy(source.rotation);
+    soffit.scale.copy(source.scale);
+    soffit.scale.y *= 0.22;
+    soffit.position.addScaledVector(slopeNormal(side, metrics.pitch), -SOFFIT_INSET);
+    soffit.castShadow = false;
+    soffit.receiveShadow = true;
+    soffit.userData.semanticRoofInteriorSoffit = true;
+    soffit.userData.semanticRoofInteriorThatchShield = true;
+    soffit.userData.semanticRoofEaveSide = side;
+    soffit.userData.semanticRoofEaveSegmentStart = source.userData.semanticRoofEaveSegmentStart;
+    soffit.userData.semanticRoofEaveSegmentEnd = source.userData.semanticRoofEaveSegmentEnd;
+    buildGroup.add(soffit);
+    count += 1;
+  }
+  return count;
+};
+
 const addInteriorGables = buildGroup => {
   const gables = [];
   buildGroup.traverse(object => {
@@ -219,6 +265,55 @@ const addInteriorGables = buildGroup => {
     buildGroup.add(lining);
   }
   return gables.length;
+};
+
+const addInteriorJointTrim = (buildGroup, wing, junctionProfiles, metrics) => {
+  const profiles = childJoinProfilesForWing(wing, junctionProfiles);
+  if (!profiles.length) return 0;
+
+  const core = coreRunBounds(wing);
+  const coreHalfLength = (core.max - core.min) * 0.5;
+  let count = 0;
+
+  for (const [profileIndex, profile] of profiles.entries()) {
+    const sign = profile.childLocalJoinEnd === 'negative' ? -1 : 1;
+    const joinX = sign * coreHalfLength;
+    const ridge = new THREE.Vector3(joinX, metrics.ridgeY - 0.11, 0);
+
+    for (const side of [-1, 1]) {
+      const eave = new THREE.Vector3(
+        joinX,
+        metrics.eaveY - 0.08,
+        side * Math.max(0.08, metrics.halfSpan - 0.045)
+      );
+      const trim = cylinderBetween(
+        eave,
+        ridge,
+        JOIN_TRIM_RADIUS,
+        `SemanticRoofInteriorJoinRake${profileIndex + 1}${side < 0 ? 'North' : 'South'}`
+      );
+      if (!trim) continue;
+      trim.userData.semanticRoofInteriorJointTrim = true;
+      trim.userData.semanticRoofInteriorJointThatchShield = true;
+      buildGroup.add(trim);
+      count += 1;
+    }
+
+    const plate = cylinderBetween(
+      new THREE.Vector3(joinX, metrics.eaveY - 0.105, -Math.max(0.08, metrics.halfSpan - 0.06)),
+      new THREE.Vector3(joinX, metrics.eaveY - 0.105, Math.max(0.08, metrics.halfSpan - 0.06)),
+      JOIN_TOP_PLATE_RADIUS,
+      `SemanticRoofInteriorJoinTopPlate${profileIndex + 1}`
+    );
+    if (plate) {
+      plate.userData.semanticRoofInteriorJointTrim = true;
+      plate.userData.semanticRoofInteriorJointThatchShield = true;
+      buildGroup.add(plate);
+      count += 1;
+    }
+  }
+
+  return count;
 };
 
 const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
@@ -301,19 +396,37 @@ const addInteriorFraming = (buildGroup, wing, junctionProfiles, metrics) => {
 /**
  * Add an interior-only presentation layer to a completed semantic Roof wing. Parent
  * valley openings still come directly from the canonical integrated roof underlay. At a
- * child-wing join, however, the inward liner is deliberately set back slightly from the
- * exterior intersection and decorative framing stays inside the child wing's core run.
- * This prevents the offset ceiling and beams from protruding through the neighbouring
- * roof at the seam while keeping structural roof topology, support and ownership intact.
+ * child-wing join, the inward liner is set back slightly from the exterior intersection,
+ * then a timber join frame masks the exposed seam without sealing the real opening.
+ * Exterior eave-thatch geometry is covered from below by matching timber soffits, so straw
+ * remains an exterior material while the occupied room reads as a finished timber shell.
  * Exposed gable infill receives a BackSide timber lining. All added members remain visual
  * only and do not participate in support, collision, cost, save identity or demolition.
  */
 export function applySemanticRoofInteriorFinish(wingRoot, wing, {
   junctionProfiles = []
 } = {}) {
-  if (!wingRoot || !wing) return { linerCount: 0, gableCount: 0, rafterCount: 0, beamCount: 0 };
+  if (!wingRoot || !wing) {
+    return {
+      linerCount: 0,
+      soffitCount: 0,
+      gableCount: 0,
+      jointTrimCount: 0,
+      rafterCount: 0,
+      beamCount: 0
+    };
+  }
   const buildGroup = buildGroupForWing(wingRoot, wing);
-  if (!buildGroup) return { linerCount: 0, gableCount: 0, rafterCount: 0, beamCount: 0 };
+  if (!buildGroup) {
+    return {
+      linerCount: 0,
+      soffitCount: 0,
+      gableCount: 0,
+      jointTrimCount: 0,
+      rafterCount: 0,
+      beamCount: 0
+    };
+  }
 
   const metrics = metricsForWing(wing);
   const linerCount = addInteriorLiners(
@@ -322,7 +435,14 @@ export function applySemanticRoofInteriorFinish(wingRoot, wing, {
     junctionProfiles,
     metrics
   );
+  const soffitCount = addInteriorSoffits(buildGroup, metrics);
   const gableCount = addInteriorGables(buildGroup);
+  const jointTrimCount = addInteriorJointTrim(
+    buildGroup,
+    wing,
+    junctionProfiles,
+    metrics
+  );
   const { rafterCount, beamCount } = addInteriorFraming(
     buildGroup,
     wing,
@@ -332,13 +452,23 @@ export function applySemanticRoofInteriorFinish(wingRoot, wing, {
 
   wingRoot.userData.semanticRoofInteriorFinished = true;
   wingRoot.userData.semanticRoofInteriorLinerCount = linerCount;
+  wingRoot.userData.semanticRoofInteriorSoffitCount = soffitCount;
   wingRoot.userData.semanticRoofInteriorGableCount = gableCount;
+  wingRoot.userData.semanticRoofInteriorJointTrimCount = jointTrimCount;
   wingRoot.userData.semanticRoofInteriorRafterCount = rafterCount;
   wingRoot.userData.semanticRoofInteriorBeamCount = beamCount;
+  wingRoot.userData.semanticRoofInteriorThatchShielded = soffitCount > 0;
   wingRoot.userData.semanticRoofInteriorJointTrimmed = childJoinProfilesForWing(
     wing,
     junctionProfiles
   ).length > 0;
 
-  return { linerCount, gableCount, rafterCount, beamCount };
+  return {
+    linerCount,
+    soffitCount,
+    gableCount,
+    jointTrimCount,
+    rafterCount,
+    beamCount
+  };
 }

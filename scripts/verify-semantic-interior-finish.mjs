@@ -36,6 +36,23 @@ for (const variant of ['solid', 'door', 'window']) {
     faces.every(face => face.material?.isMeshStandardMaterial === true),
     `${variant} wall timber finish must remain a normal lit material rather than a UI/preview shader`
   );
+
+  const seams = objectsWith(wall, object => object.userData?.semanticWallInteriorCourseSeam === true);
+  assert.equal(
+    seams.length,
+    wall.userData.semanticWallInteriorCourseSeamCount,
+    `${variant} wall course-seam diagnostics must match the finished interior geometry`
+  );
+  assert.equal(
+    seams.length,
+    faces.length,
+    `${variant} wall must keep one subtle interior course seam per split-log face`
+  );
+  assert.equal(
+    wall.userData.semanticWallInteriorCourseDefinition,
+    true,
+    `${variant} wall must advertise readable interior log-course definition`
+  );
 }
 
 const solidWall = createWallPanelVisual('InteriorSolidToneProbe', 'solid');
@@ -56,16 +73,33 @@ assert.ok(simplePlan, 'Simple two-cell footprint must produce a semantic roof pl
 const simpleRoof = createSemanticRoofFootprintVisual('InteriorRoofProbe', { plan: simplePlan });
 assert.equal(simpleRoof.userData.semanticRoofInteriorFinished, true);
 assert.equal(simpleRoof.userData.interiorTimberFinish, true);
+assert.equal(simpleRoof.userData.interiorThatchShielded, true);
 assert.equal(simpleRoof.userData.semanticRoofInteriorLinerCount, 2, 'One gable wing needs one interior liner per slope');
+assert.ok(simpleRoof.userData.semanticRoofInteriorSoffitCount >= 2, 'Each exposed eave must receive a timber soffit under the exterior thatch');
 assert.equal(simpleRoof.userData.semanticRoofInteriorGableCount, 2, 'Both exposed gable ends must receive inside-facing timber closure');
 assert.ok(simpleRoof.userData.semanticRoofInteriorRafterCount >= 6, 'Interior roof must expose repeated decorative rafters');
 assert.ok(simpleRoof.userData.semanticRoofInteriorBeamCount >= 2, 'Interior roof must expose a ridge beam plus at least one tie beam');
+assert.equal(simpleRoof.userData.semanticRoofInteriorThatchShielded, true, 'Finished roof must mark exterior thatch as shielded from the occupied interior');
 
 const liners = objectsWith(simpleRoof, object => object.userData?.semanticRoofInteriorLiner === true);
 assert.equal(liners.length, 2);
 assert.ok(
   liners.every(liner => liner.material?.side === THREE.FrontSide),
   'Slope lining must render as an inside ceiling surface without showing through the exterior'
+);
+const soffits = objectsWith(simpleRoof, object => object.userData?.semanticRoofInteriorSoffit === true);
+const exteriorEaves = objectsWith(simpleRoof, object => (
+  object.userData?.semanticRoofExteriorEave === true &&
+  object.name?.startsWith('SemanticRoofThatchEave')
+));
+assert.equal(
+  soffits.length,
+  exteriorEaves.length,
+  'Every exterior thatch eave extension must have a matching interior timber soffit shield'
+);
+assert.ok(
+  soffits.every(soffit => soffit.userData.semanticRoofInteriorThatchShield === true),
+  'Interior eave soffits must explicitly own the thatch-occlusion presentation contract'
 );
 const interiorGables = objectsWith(simpleRoof, object => object.userData?.semanticRoofInteriorGable === true);
 assert.equal(interiorGables.length, 2);
@@ -121,6 +155,10 @@ assert.equal(
   true,
   'Joined child wing must advertise trimmed interior presentation at the roof seam'
 );
+assert.ok(
+  childRoot.userData.semanticRoofInteriorJointTrimCount >= 3,
+  'Joined child wing must frame the open roof seam with two rakes and one top plate'
+);
 
 const childLiners = objectsWith(
   childRoot,
@@ -144,6 +182,19 @@ for (const liner of childLiners) {
   );
 }
 
+const childJointTrim = objectsWith(
+  childRoot,
+  object => object.userData?.semanticRoofInteriorJointTrim === true
+);
+assert.ok(
+  childJointTrim.length >= 3,
+  'Joined child roof must expose explicit timber trim around the interior opening'
+);
+assert.ok(
+  childJointTrim.every(trim => trim.userData.semanticRoofInteriorJointThatchShield === true),
+  'Joined seam trim must explicitly shield exterior straw from the interior view'
+);
+
 const childRafters = objectsWith(
   childRoot,
   object => object.userData?.semanticRoofInteriorRafter === true
@@ -166,4 +217,4 @@ assert.ok(
   'Interior framing must not reintroduce the retired horizontal seam-mask system'
 );
 
-console.log('Coherent wall timber tone and cleanly trimmed semantic roof interiors verified');
+console.log('Finished wall log courses, timber roof soffits and cleanly shielded semantic roof interiors verified');
