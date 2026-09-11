@@ -6,12 +6,13 @@ import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { createPhysicalLogVisual } from './PhysicalLogVisual.js';
 
 const INTERACTION_RADIUS = 2.4;
-const GRASS_PATCH_COUNT = 160;
+const GRASS_PATCH_COUNT = 210;
 const GRASS_PATCH_MIN_RADIUS = 4;
 const GRASS_PATCH_MAX_RADIUS = 7;
-const GRASS_PATCH_CENTER_SPACING = 13.5;
+const GRASS_PATCH_CENTER_SPACING = 10.8;
 const GRASS_PATCH_GRID_SIZE = 14;
 const GRASS_PATCH_SEED = 0x3ac917;
+const HARVESTABLE_GRASS_COLOR = 0x9eb45b;
 
 export class GatherableSystem {
   constructor({ scene, terrain, ecology = terrain, scatter = null, grassField = null }) {
@@ -20,6 +21,9 @@ export class GatherableSystem {
     this.ecology = ecology === terrain && terrain?.terrain ? terrain.terrain : ecology;
     this.scatter = scatter ?? terrain?.scatter ?? null;
     this.grassField = grassField ?? terrain?.grass ?? null;
+    if (this.grassField?.material?.color) {
+      this.grassField.material.color.setHex(HARVESTABLE_GRASS_COLOR);
+    }
     this.group = new THREE.Group();
     this.group.name = 'world-gatherables';
     this.scene.add(this.group);
@@ -544,7 +548,7 @@ export class GatherableSystem {
     }
 
     const materialFallback = new THREE.MeshStandardMaterial({
-      color: 0x6fa957,
+      color: HARVESTABLE_GRASS_COLOR,
       roughness: 0.96,
       metalness: 0,
       side: THREE.DoubleSide
