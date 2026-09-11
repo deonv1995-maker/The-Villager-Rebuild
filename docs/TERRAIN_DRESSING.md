@@ -72,3 +72,21 @@ On the deployed Android build verify that:
 - completed floors hide the short grass cleanly;
 - chunk transitions do not show obvious cover popping;
 - movement and camera performance remain smooth on the target device.
+
+## 2026-09-11 — Continuous meadow carpet footprint
+
+The first micro-cover pass fixed the missing rendering layer, but each individual clump still occupied substantially less ground than the fixed 1.7 m placement grid. That geometry-to-grid mismatch could leave obvious bare holes even where the deterministic density field selected most cells.
+
+The short-cover geometry now uses a broader twelve-blade footprint and slightly wider per-instance X/Z variation while remaining deliberately low. Meadow fill probability is also stronger in suitable/lush regions, with trail suppression and scatter clearance unchanged. This improves visual continuity by making each existing instance cover more useful ground rather than solving the problem by multiplying object count.
+
+The mobile rendering contract remains the same: one shared low-poly geometry, chunk-keyed `THREE.InstancedMesh` batches, no grass shadows, no new texture dependency, and no per-frame matrix work unless construction revisions change. Regression coverage protects the wide-footprint requirement so future tuning cannot accidentally return the meadow to isolated tufts on a sparse grid.
+
+### Device acceptance
+
+On the deployed Android build verify that:
+
+- suitable meadow reads as overlapping short turf rather than a regular field of separated clumps;
+- the short carpet remains visibly below the taller reactive grass layer;
+- worn paths still cut through the turf cleanly;
+- no short grass appears on sand, steep rock or through completed floors;
+- grass density does not introduce visible frame-rate or chunk-culling regressions while walking and rotating the camera.
