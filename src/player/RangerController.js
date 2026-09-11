@@ -18,13 +18,16 @@ const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
 const THIRD_PERSON_LOOK_AHEAD = 2;
 const FIRST_PERSON_EYE_HEIGHT = 1.72;
-const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 3.8;
-const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 3.2;
+const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 2.4;
+const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 1.75;
 const FIRST_PERSON_BOB_WALK_VERTICAL = 0.055;
 const FIRST_PERSON_BOB_RUN_VERTICAL = 0.085;
 const FIRST_PERSON_BOB_WALK_SWAY = 0.024;
 const FIRST_PERSON_BOB_RUN_SWAY = 0.038;
-const FIRST_PERSON_BOB_ACTIVE_RESPONSE = 36;
+const FIRST_PERSON_BOB_CADENCE_VARIATION = 0.07;
+const FIRST_PERSON_BOB_CADENCE_DRIFT = 0.025;
+const FIRST_PERSON_BOB_AMPLITUDE_DRIFT = 0.07;
+const FIRST_PERSON_BOB_ACTIVE_RESPONSE = 18;
 const FIRST_PERSON_BOB_RECENTER_RESPONSE = 12;
 const CAMERA_MODES = Object.freeze(['third-person', 'first-person']);
 const TOOL_ACTION_TARGET_DURATION = Object.freeze({
@@ -775,10 +778,15 @@ export class RangerController {
       const swayAmplitude = running
         ? FIRST_PERSON_BOB_RUN_SWAY
         : FIRST_PERSON_BOB_WALK_SWAY;
-      this.firstPersonBobPhase += this.firstPersonMoveDistance * phasePerMeter;
+      const cadenceScale = 1
+        + Math.sin(this.firstPersonBobPhase * 0.43 + 0.8) * FIRST_PERSON_BOB_CADENCE_VARIATION
+        + Math.sin(this.firstPersonBobPhase * 0.19 + 2.15) * FIRST_PERSON_BOB_CADENCE_DRIFT;
+      this.firstPersonBobPhase += this.firstPersonMoveDistance * phasePerMeter * cadenceScale;
 
-      const sway = Math.sin(this.firstPersonBobPhase) * swayAmplitude;
-      const vertical = Math.sin(this.firstPersonBobPhase * 2) * verticalAmplitude;
+      const amplitudeScale = 1
+        + Math.sin(this.firstPersonBobPhase * 0.31 + 1.35) * FIRST_PERSON_BOB_AMPLITUDE_DRIFT;
+      const sway = Math.sin(this.firstPersonBobPhase) * swayAmplitude * amplitudeScale;
+      const vertical = Math.sin(this.firstPersonBobPhase * 2) * verticalAmplitude * amplitudeScale;
       this.tempFirstPersonBobTarget.set(
         Math.cos(this.yaw) * sway,
         vertical,
