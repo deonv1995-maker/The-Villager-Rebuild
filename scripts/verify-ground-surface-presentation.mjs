@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   GROUND_SURFACE_COLORS,
   terrainSurfaceColorAt,
+  terrainSurfacePatchFieldsAt,
   terrainSurfaceToneFieldsAt
 } from '../src/world/TerrainSurfacePresentation.js';
 
@@ -40,6 +41,26 @@ assert.equal(
   'ground tone fields must produce visible regional variation'
 );
 
+const patchesA = terrainSurfacePatchFieldsAt(-48, 17);
+const patchesB = terrainSurfacePatchFieldsAt(86, -73);
+for (const patches of [patchesA, patchesB]) {
+  assert.equal(patches.lawnPatch >= 0 && patches.lawnPatch <= 1, true, 'lawn patch field must stay normalized');
+  assert.equal(patches.dryPatch >= 0 && patches.dryPatch <= 1, true, 'dry patch field must stay normalized');
+  assert.equal(patches.fleck >= 0 && patches.fleck <= 1, true, 'ground fleck field must stay normalized');
+}
+assert.deepEqual(
+  terrainSurfacePatchFieldsAt(-48, 17),
+  patchesA,
+  'stylized ground patch breakup must stay deterministic across rebuilds'
+);
+assert.equal(
+  Math.abs(patchesA.lawnPatch - patchesB.lawnPatch)
+    + Math.abs(patchesA.dryPatch - patchesB.dryPatch)
+    + Math.abs(patchesA.fleck - patchesB.fleck) > 0.1,
+  true,
+  'ground patch fields must create visibly different low-poly surface regions'
+);
+
 const openGrass = sample({ grassPatchStrength: 0.05, forestCover: 0 });
 const lushGrass = sample({ grassPatchStrength: 0.95, forestCover: 0 });
 assert.equal(distance(openGrass, lushGrass) > 0.025, true, 'lush grass patches must tint the terrain differently from open meadow');
@@ -61,4 +82,4 @@ assert.equal(distance(steepA, steepB) < 0.00001, true, 'steep terrain must remai
 
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.trailSoil), true, 'worn trail soil colour must remain a shared palette value');
 
-console.log('ground surface presentation contracts verified');
+console.log('ground surface palette and deterministic low-poly patch contracts verified');
