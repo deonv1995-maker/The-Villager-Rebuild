@@ -74,7 +74,6 @@ export function createSemanticRoofFootprintVisual(
   root.userData.layeredThatchPolish = true;
 
   const wingRootsByIndex = new Map();
-  let strawBundleCount = 0;
   for (const wing of plan.wings) {
     const wingRoot = createSemanticRoofZoneVisual(
       `${name}-${wing.id}`,
@@ -96,11 +95,9 @@ export function createSemanticRoofFootprintVisual(
       : null;
     removeJoinedGablePresentation(wingRoot, wing.ridgeAxis, wing.gableEnds);
     makeSemanticRoofGablesExteriorOnly(wingRoot);
-    strawBundleCount += applySemanticRoofThatchFinish(wingRoot, wing);
     root.add(wingRoot);
     wingRootsByIndex.set(wing.index, wingRoot);
   }
-  root.userData.semanticRoofStrawBundleCount = strawBundleCount;
 
   // Cross-gable appendages need a real valley intersection, not merely two complete
   // roof prisms overlapping at one wall edge. Extend the child slopes/ridge into the
@@ -110,6 +107,18 @@ export function createSemanticRoofFootprintVisual(
   const junctionProfiles = applySemanticRoofJunctionGeometry(plan, wingRootsByIndex);
   root.userData.semanticRoofIntegratedJunctions = junctionProfiles.length;
   root.userData.semanticRoofValleyJoined = junctionProfiles.length > 0;
+
+  // Surface polish is intentionally applied after structural junction trimming. The
+  // helper receives the same junction profiles so decorative straw bundles leave the
+  // parent valley openings clear rather than visually filling a cutout back in.
+  let strawBundleCount = 0;
+  for (const wing of plan.wings) {
+    const wingRoot = wingRootsByIndex.get(wing.index);
+    strawBundleCount += applySemanticRoofThatchFinish(wingRoot, wing, {
+      junctionProfiles
+    });
+  }
+  root.userData.semanticRoofStrawBundleCount = strawBundleCount;
 
   // Low horizontal seam masks remain intentionally absent. Junction continuity now
   // comes from the actual sloped roof geometry, so there is no separate mask system
