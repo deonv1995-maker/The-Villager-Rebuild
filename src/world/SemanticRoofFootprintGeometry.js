@@ -74,6 +74,7 @@ export function createSemanticRoofFootprintVisual(
   root.userData.exteriorOnlyGables = true;
   root.userData.layeredThatchPolish = true;
   root.userData.interiorTimberFinish = true;
+  root.userData.interiorThatchShielded = true;
 
   const wingRootsByIndex = new Map();
   for (const wing of plan.wings) {
@@ -116,7 +117,9 @@ export function createSemanticRoofFootprintVisual(
   let strawEdgeTuftCount = 0;
   let mossAccentCount = 0;
   let interiorLinerCount = 0;
+  let interiorSoffitCount = 0;
   let interiorGableCount = 0;
+  let interiorJointTrimCount = 0;
   let interiorRafterCount = 0;
   let interiorBeamCount = 0;
   for (const wing of plan.wings) {
@@ -128,13 +131,15 @@ export function createSemanticRoofFootprintVisual(
     mossAccentCount += wingRoot?.userData.semanticRoofMossAccentCount ?? 0;
 
     // Interior finish clones the already-integrated underlay geometry, so the visible
-    // timber ceiling keeps real valley openings and joined child extensions. It also
-    // provides inside-only gable closure plus decorative rafters/ridge/tie beams.
+    // timber ceiling keeps real valley openings and joined child extensions. Eave soffits
+    // shield exterior straw from below, while joined ends receive a timber seam frame.
     const interior = applySemanticRoofInteriorFinish(wingRoot, wing, {
       junctionProfiles
     });
     interiorLinerCount += interior.linerCount;
+    interiorSoffitCount += interior.soffitCount;
     interiorGableCount += interior.gableCount;
+    interiorJointTrimCount += interior.jointTrimCount;
     interiorRafterCount += interior.rafterCount;
     interiorBeamCount += interior.beamCount;
   }
@@ -144,9 +149,12 @@ export function createSemanticRoofFootprintVisual(
   root.userData.semanticRoofMossAccentCount = mossAccentCount;
   root.userData.semanticRoofInteriorFinished = true;
   root.userData.semanticRoofInteriorLinerCount = interiorLinerCount;
+  root.userData.semanticRoofInteriorSoffitCount = interiorSoffitCount;
   root.userData.semanticRoofInteriorGableCount = interiorGableCount;
+  root.userData.semanticRoofInteriorJointTrimCount = interiorJointTrimCount;
   root.userData.semanticRoofInteriorRafterCount = interiorRafterCount;
   root.userData.semanticRoofInteriorBeamCount = interiorBeamCount;
+  root.userData.semanticRoofInteriorThatchShielded = interiorSoffitCount > 0;
 
   // Low horizontal seam masks remain intentionally absent. Junction continuity now
   // comes from the actual sloped roof geometry, while the interior finish follows that
