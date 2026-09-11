@@ -5,6 +5,7 @@ import {
   PANEL_ROOF_FORMS,
   PANEL_WALL_VARIANTS
 } from '../data/PanelConstructionDefinitions.js';
+import { collectPanelUpperStoreySupports } from './PanelUpperStoreyRules.js';
 
 const requireInteger = (value, label) => {
   if (!Number.isInteger(value)) throw new Error(`${label} must be an integer`);
@@ -244,8 +245,23 @@ export class PanelConstructionGrid {
   }
 
   removeWall(edgeKey) {
+    const wall = this.walls.get(edgeKey);
+    if (!wall) return false;
     const dependentRoof = [...this.roofZones.values()].some(zone => roofZoneUsesEdge(zone, edgeKey));
     if (dependentRoof) return false;
+
+    const upperFloors = [...this.floors.values()]
+      .filter(floor => floor.storey === wall.storey + 1);
+    if (upperFloors.length) {
+      const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
+      const supportKeys = new Set(
+        collectPanelUpperStoreySupports(remainingWalls, {
+          levelTolerance: PANEL_GRID.snapTolerance + 0.001
+        }).map(support => panelCellKey(support))
+      );
+      if (upperFloors.some(floor => !supportKeys.has(floor.key))) return false;
+    }
+
     return this.walls.delete(edgeKey);
   }
 
