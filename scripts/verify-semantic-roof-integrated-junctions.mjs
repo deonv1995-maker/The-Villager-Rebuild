@@ -23,6 +23,47 @@ const buildGroup = (root, wing) => (
     : root
 );
 
+const assertExteriorOnlyGables = (visual, label) => {
+  const gables = objectsWith(visual, object => object.userData?.semanticRoofGable === true);
+  assert.ok(gables.length > 0, `${label} must retain its exposed exterior gable infill`);
+  for (const gable of gables) {
+    assert.equal(
+      gable.material?.side,
+      THREE.FrontSide,
+      `${label} gable infill must render only toward the exterior instead of through the room`
+    );
+    assert.equal(gable.userData.semanticRoofExteriorOnly, true);
+    const normals = gable.geometry?.getAttribute?.('normal');
+    assert.ok(normals?.count > 0, `${label} gable must retain a valid outward normal`);
+    let normalX = 0;
+    for (let index = 0; index < normals.count; index += 1) normalX += normals.getX(index);
+    normalX /= normals.count;
+    if (gable.name === 'SemanticRoofGableA') {
+      assert.ok(normalX < -0.5, `${label} A gable must face the local negative roof end`);
+    }
+    if (gable.name === 'SemanticRoofGableB') {
+      assert.ok(normalX > 0.5, `${label} B gable must face the local positive roof end`);
+    }
+  }
+};
+
+const assertLayeredThatch = (visual, label) => {
+  const bundles = objectsWith(visual, object => object.userData?.semanticRoofStrawBundles === true);
+  assert.ok(bundles.length >= 2, `${label} must add tapered straw-bundle surface breakup`);
+  assert.ok(
+    bundles.every(bundle => bundle.isInstancedMesh && bundle.count > 0),
+    `${label} straw detail must stay in low-draw-call instanced meshes`
+  );
+  assert.ok(
+    visual.userData.semanticRoofStrawBundleCount > 0,
+    `${label} must report the generated layered-thatch detail count`
+  );
+  const fullDepthCourses = objectsWith(visual, object => object.userData?.semanticRoofThatchFullDepth === true);
+  assert.ok(fullDepthCourses.length >= 2, `${label} must keep the existing courses and give them fuller depth`);
+  const fullRidges = objectsWith(visual, object => object.userData?.semanticRoofFullRidgeBundle === true);
+  assert.ok(fullRidges.length >= 1, `${label} must keep a fuller bundled ridge silhouette`);
+};
+
 const assertIntegratedCrossGable = ({ cells, childCellCount, label }) => {
   const plan = planSemanticRoofFootprint(cells);
   assert.ok(plan, `${label} must produce a roof plan`);
@@ -42,6 +83,10 @@ const assertIntegratedCrossGable = ({ cells, childCellCount, label }) => {
   const visual = createSemanticRoofFootprintVisual(`${label}Probe`, { plan });
   assert.equal(visual.userData.semanticRoofIntegratedJunctions, profiles.length);
   assert.equal(visual.userData.semanticRoofValleyJoined, true);
+  assert.equal(visual.userData.exteriorOnlyGables, true);
+  assert.equal(visual.userData.layeredThatchPolish, true);
+  assertExteriorOnlyGables(visual, label);
+  assertLayeredThatch(visual, label);
 
   const childRoot = wingRoot(visual, child);
   const parentRoot = wingRoot(visual, parent);
@@ -50,6 +95,10 @@ const assertIntegratedCrossGable = ({ cells, childCellCount, label }) => {
   assert.ok(childRoot.userData.semanticRoofJoinInset > 0);
   assert.equal(parentRoot.userData.semanticRoofValleyCutout, true);
   assert.ok(parentRoot.userData.semanticRoofValleyCutoutCount >= 1);
+  assert.ok(
+    parentRoot.userData.semanticRoofStrawBundlesSkippedForJunction > 0,
+    `${label} decorative straw must leave the structural valley opening clear`
+  );
 
   const childUnderlays = objectsWith(childRoot, object => object.userData?.semanticRoofUnderlay === true);
   assert.equal(childUnderlays.length, 2, `${label} child must retain both roof underlay slopes`);
@@ -152,4 +201,4 @@ assert.equal(rotatedProjection.profile.parentSlopeSide, 'positive');
 assert.equal(rotatedProjection.profile.childLocalJoinEnd, 'negative');
 
 assert.ok(PANEL_GRID.cellSize > 0, 'Semantic roof integration remains anchored to the canonical panel grid');
-console.log('Integrated cross-gable valleys, L-roof penetration, rotated joins and matching interior roof topology verified');
+console.log('Integrated cross-gable valleys, exterior-only gables, layered thatch and matching interior roof topology verified');
