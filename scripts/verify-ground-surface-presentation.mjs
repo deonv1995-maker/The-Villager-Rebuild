@@ -127,6 +127,21 @@ assert.equal(cover.meshes.length > 0, true, 'ground cover must build batched ren
 assert.equal(cover.meshes.every(mesh => mesh.isInstancedMesh), true, 'ground cover must remain instanced for mobile rendering');
 assert.ok(cover.geometry.getAttribute('color'), 'ground-cover blades must carry low-poly green colour variation');
 assert.equal(cover.material.vertexColors, true, 'ground-cover material must consume blade colour variation');
+
+const coverPositions = cover.geometry.getAttribute('position');
+let maxHorizontalRadius = 0;
+for (let index = 0; index < coverPositions.count; index += 1) {
+  maxHorizontalRadius = Math.max(
+    maxHorizontalRadius,
+    Math.hypot(coverPositions.getX(index), coverPositions.getZ(index))
+  );
+}
+assert.equal(
+  maxHorizontalRadius > 0.55,
+  true,
+  'short-grass clumps must span enough ground to read as a continuous carpet without multiplying instances'
+);
+
 cover.update();
 assert.equal(
   cover.entries.every(entry => entry.constructionHidden === true),
@@ -146,4 +161,20 @@ assert.equal(
   'ground-cover population must stay deterministic across rebuilds'
 );
 
-console.log('ground surface palette, deterministic low-poly patches and dense construction-aware ground cover verified');
+const openCover = new GroundCoverPresentationSystem({
+  group: new THREE.Group(),
+  terrain: {
+    ...coverTerrain,
+    grassDensityAt: () => 0,
+    grassPatchStrengthAt: () => 0
+  },
+  scatter: { isGrassClear: () => true },
+  spacing: 1.2
+});
+assert.equal(
+  coverCount > openCover.populate(),
+  true,
+  'lush meadow fields must remain denser than open suitable ground'
+);
+
+console.log('ground surface palette, deterministic low-poly patches and dense wide-footprint construction-aware ground cover verified');
