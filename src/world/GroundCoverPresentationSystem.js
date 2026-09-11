@@ -4,11 +4,12 @@ import { constructionFloorCoversVegetation } from './GrassFieldSystem.js';
 const COVER_SPACING = 1.7;
 const COVER_HEIGHT_OFFSET = 0.012;
 const COVER_COLORS = Object.freeze([
-  0x72b957,
-  0x5fa84b,
-  0x83c866,
-  0x4c9645,
-  0x93cf6b
+  0x4d9144,
+  0x61a64b,
+  0x73b957,
+  0x86c965,
+  0x579b46,
+  0x98cf6d
 ]);
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
@@ -99,9 +100,9 @@ export class GroundCoverPresentationSystem {
           naturalY,
           z,
           yaw: hash01(column, row, 13) * Math.PI * 2,
-          scaleX: 0.82 + scaleVariation * 0.58,
-          scaleY: 0.72 + heightVariation * 0.52,
-          scaleZ: 0.82 + (1 - scaleVariation) * 0.52,
+          scaleX: 0.98 + scaleVariation * 0.5,
+          scaleY: 0.66 + heightVariation * 0.42,
+          scaleZ: 0.98 + (1 - scaleVariation) * 0.46,
           chunkKey: this.chunks?.keyForPosition(x, z) ?? null,
           mesh: null,
           index: -1,
@@ -125,8 +126,8 @@ export class GroundCoverPresentationSystem {
     const reactive = this.terrain.grassDensityAt?.(x, z) ?? 0;
     const patch = this.terrain.grassPatchStrengthAt?.(x, z) ?? reactive;
     let density = Math.max(
-      reactive * 0.82,
-      suitability * (0.3 + patch * 0.54)
+      reactive * 0.86,
+      suitability * (0.38 + patch * 0.58)
     );
 
     const trailWear = this.terrain.trailWearAt?.(z) ?? 0;
@@ -137,7 +138,7 @@ export class GroundCoverPresentationSystem {
       density *= pathFade;
     }
 
-    return THREE.MathUtils.clamp(density * 0.92 + suitability * 0.07, 0, 0.88);
+    return THREE.MathUtils.clamp(density * 0.95 + suitability * 0.05, 0, 0.94);
   }
 
   #buildMeshes() {
@@ -226,7 +227,7 @@ function buildGroundCoverGeometry() {
   const colors = [];
   const indices = [];
   const color = new THREE.Color();
-  const bladeCount = 10;
+  const bladeCount = 12;
 
   const pushVertex = (x, y, z, hex) => {
     const index = positions.length / 3;
@@ -237,39 +238,41 @@ function buildGroundCoverGeometry() {
   };
 
   for (let blade = 0; blade < bladeCount; blade += 1) {
-    const angle = blade * 2.399963229728653 + (blade % 3) * 0.11;
-    const radius = blade === 0 ? 0 : 0.12 + (blade % 4) * 0.085;
+    const angle = blade * 2.399963229728653 + (blade % 4) * 0.09;
+    const ring = blade % 6;
+    const radius = blade === 0 ? 0 : 0.14 + ring * 0.086;
     const cx = Math.cos(angle) * radius;
     const cz = Math.sin(angle) * radius;
     const facing = angle + Math.PI * 0.37 + (blade % 2) * 0.48;
     const acrossX = Math.cos(facing);
     const acrossZ = Math.sin(facing);
-    const height = 0.24 + (blade % 5) * 0.045;
-    const width = 0.065 + (blade % 3) * 0.014;
-    const lean = 0.035 + (blade % 4) * 0.012;
+    const height = 0.2 + (blade % 5) * 0.042;
+    const width = 0.068 + (blade % 4) * 0.012;
+    const lean = 0.04 + (blade % 4) * 0.014;
     const dirX = Math.cos(angle);
     const dirZ = Math.sin(angle);
-    const hex = COVER_COLORS[blade % COVER_COLORS.length];
+    const baseHex = COVER_COLORS[blade % COVER_COLORS.length];
+    const tipHex = COVER_COLORS[(blade + 1 + (blade % 2)) % COVER_COLORS.length];
 
-    const left = pushVertex(cx - acrossX * width, 0, cz - acrossZ * width, hex);
-    const right = pushVertex(cx + acrossX * width, 0, cz + acrossZ * width, hex);
+    const left = pushVertex(cx - acrossX * width, 0, cz - acrossZ * width, baseHex);
+    const right = pushVertex(cx + acrossX * width, 0, cz + acrossZ * width, baseHex);
     const shoulderLeft = pushVertex(
-      cx - acrossX * width * 0.48 + dirX * lean * 0.55,
-      height * 0.66,
-      cz - acrossZ * width * 0.48 + dirZ * lean * 0.55,
-      hex
+      cx - acrossX * width * 0.5 + dirX * lean * 0.55,
+      height * 0.64,
+      cz - acrossZ * width * 0.5 + dirZ * lean * 0.55,
+      baseHex
     );
     const shoulderRight = pushVertex(
-      cx + acrossX * width * 0.48 + dirX * lean * 0.55,
-      height * 0.66,
-      cz + acrossZ * width * 0.48 + dirZ * lean * 0.55,
-      hex
+      cx + acrossX * width * 0.5 + dirX * lean * 0.55,
+      height * 0.64,
+      cz + acrossZ * width * 0.5 + dirZ * lean * 0.55,
+      baseHex
     );
     const tip = pushVertex(
       cx + dirX * lean,
       height,
       cz + dirZ * lean,
-      COVER_COLORS[(blade + 1) % COVER_COLORS.length]
+      tipHex
     );
 
     indices.push(
