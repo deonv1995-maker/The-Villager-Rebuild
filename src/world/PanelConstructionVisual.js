@@ -8,6 +8,7 @@ import {
 import { createSemanticDoorPanelVisual } from './SemanticDoorPanelGeometry.js';
 import { createSemanticRoofZoneVisual } from './SemanticRoofZoneGeometry.js';
 import { createSemanticStairPanelVisual } from './SemanticStairPanelGeometry.js';
+import { applySemanticWallInteriorWoodFinish } from './SemanticWallInteriorFinish.js';
 import { semanticWallRowYs } from './SemanticWallPanelGeometry.js';
 import { createSemanticWindowPanelVisual } from './SemanticWindowPanelGeometry.js';
 
@@ -23,19 +24,25 @@ export function createFloorPanelVisual(name = 'PanelFloor') {
 }
 
 export function createWallPanelVisual(name = 'PanelWall', variant = 'solid') {
-  if (variant === 'door') return createSemanticDoorPanelVisual(name);
-  if (variant === 'window') return createSemanticWindowPanelVisual(name);
-
-  const root = new THREE.Group();
-  root.name = name;
-  root.userData.panelWallVariant = 'solid';
-  root.userData.wallFlatFaceInward = true;
-  for (const rowY of semanticWallRowYs()) {
-    const row = createSplitHalfLogVisual('SemanticSolidWallSplitLog');
-    row.rotation.x = Math.PI / 2;
-    row.position.y = rowY;
-    root.add(row);
+  let root;
+  if (variant === 'door') {
+    root = createSemanticDoorPanelVisual(name);
+  } else if (variant === 'window') {
+    root = createSemanticWindowPanelVisual(name);
+  } else {
+    root = new THREE.Group();
+    root.name = name;
+    root.userData.panelWallVariant = 'solid';
+    root.userData.wallFlatFaceInward = true;
+    for (const rowY of semanticWallRowYs()) {
+      const row = createSplitHalfLogVisual('SemanticSolidWallSplitLog');
+      row.rotation.x = Math.PI / 2;
+      row.position.y = rowY;
+      root.add(row);
+    }
   }
+
+  applySemanticWallInteriorWoodFinish(root);
   return root;
 }
 

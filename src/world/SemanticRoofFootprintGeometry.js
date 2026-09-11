@@ -4,6 +4,7 @@ import {
   semanticRoofRise,
   semanticRoofWallSeatDrop
 } from './SemanticRoofZoneGeometry.js';
+import { applySemanticRoofInteriorFinish } from './SemanticRoofInteriorFinish.js';
 import { applySemanticRoofJunctionGeometry } from './SemanticRoofJunctionGeometry.js';
 import {
   applySemanticRoofThatchFinish,
@@ -72,6 +73,7 @@ export function createSemanticRoofFootprintVisual(
   root.userData.internalGablesJoined = true;
   root.userData.exteriorOnlyGables = true;
   root.userData.layeredThatchPolish = true;
+  root.userData.interiorTimberFinish = true;
 
   const wingRootsByIndex = new Map();
   for (const wing of plan.wings) {
@@ -102,8 +104,7 @@ export function createSemanticRoofFootprintVisual(
   // Cross-gable appendages need a real valley intersection, not merely two complete
   // roof prisms overlapping at one wall edge. Extend the child slopes/ridge into the
   // parent roof until the two pitches meet, and cut the matching triangular valley
-  // opening out of the parent slope. The same edited meshes are double-sided, so the
-  // joined topology is visible from the room interior as well as from outside.
+  // opening out of the parent slope. The same edited meshes remain the canonical shell.
   const junctionProfiles = applySemanticRoofJunctionGeometry(plan, wingRootsByIndex);
   root.userData.semanticRoofIntegratedJunctions = junctionProfiles.length;
   root.userData.semanticRoofValleyJoined = junctionProfiles.length > 0;
@@ -114,6 +115,10 @@ export function createSemanticRoofFootprintVisual(
   let strawBundleCount = 0;
   let strawEdgeTuftCount = 0;
   let mossAccentCount = 0;
+  let interiorLinerCount = 0;
+  let interiorGableCount = 0;
+  let interiorRafterCount = 0;
+  let interiorBeamCount = 0;
   for (const wing of plan.wings) {
     const wingRoot = wingRootsByIndex.get(wing.index);
     strawBundleCount += applySemanticRoofThatchFinish(wingRoot, wing, {
@@ -121,14 +126,30 @@ export function createSemanticRoofFootprintVisual(
     });
     strawEdgeTuftCount += wingRoot?.userData.semanticRoofStrawEdgeTuftCount ?? 0;
     mossAccentCount += wingRoot?.userData.semanticRoofMossAccentCount ?? 0;
+
+    // Interior finish clones the already-integrated underlay geometry, so the visible
+    // timber ceiling keeps real valley openings and joined child extensions. It also
+    // provides inside-only gable closure plus decorative rafters/ridge/tie beams.
+    const interior = applySemanticRoofInteriorFinish(wingRoot, wing, {
+      junctionProfiles
+    });
+    interiorLinerCount += interior.linerCount;
+    interiorGableCount += interior.gableCount;
+    interiorRafterCount += interior.rafterCount;
+    interiorBeamCount += interior.beamCount;
   }
   root.userData.semanticRoofFineStraw = true;
   root.userData.semanticRoofStrawBundleCount = strawBundleCount;
   root.userData.semanticRoofStrawEdgeTuftCount = strawEdgeTuftCount;
   root.userData.semanticRoofMossAccentCount = mossAccentCount;
+  root.userData.semanticRoofInteriorFinished = true;
+  root.userData.semanticRoofInteriorLinerCount = interiorLinerCount;
+  root.userData.semanticRoofInteriorGableCount = interiorGableCount;
+  root.userData.semanticRoofInteriorRafterCount = interiorRafterCount;
+  root.userData.semanticRoofInteriorBeamCount = interiorBeamCount;
 
   // Low horizontal seam masks remain intentionally absent. Junction continuity now
-  // comes from the actual sloped roof geometry, so there is no separate mask system
-  // that can leak through the ceiling when the player looks up from inside.
+  // comes from the actual sloped roof geometry, while the interior finish follows that
+  // same geometry rather than adding a competing topology layer.
   return root;
 }
