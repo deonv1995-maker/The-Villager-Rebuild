@@ -30,16 +30,45 @@ The offshore formations are environmental silhouette dressing only. They do not 
 
 The expanded playable terrain derives its vertex colours from `TerrainSurfacePresentation.js`. The palette combines broad meadow-scale colour variation, deterministic local tone variation, dry/open-ground warmth, existing grass-patch strength and existing forest cover so the ground reads as a landscape instead of a single green sheet.
 
-The visual field is deterministic and presentation-only. It does not alter `heightAt()`, slope classification, sand classification, collision, construction support, ecology density, world generation, or chunk ownership. It adds no texture dependency, no additional terrain mesh and no extra ground draw call, preserving the mobile-first rendering architecture.
+The visual field is deterministic and presentation-only. It does not alter `heightAt()`, slope classification, sand classification, collision, construction support, ecology density, world generation, or chunk ownership. It adds no texture dependency and no competing terrain mesh, preserving the mobile-first rendering architecture.
 
 Grass-heavy patches tint the underlying terrain toward richer meadow green, open patches receive warmer tones, and woodland keeps the established darker forest-floor relationship. Sand and steep terrain retain separate warm-sand and earth/rock palettes. The existing intermittent Day-1 wear patches remain separate from the hidden traversal corridor and use the shared earth colour from the same presentation palette.
 
-Fine near-ground structure continues to come from the existing instanced reactive grass and ambient-detail systems rather than a second competing vegetation layer. Construction terrain adaptation remains responsible for exposed soil where floors cut into terrain.
+`GrassFieldSystem` remains the behavioural grass layer: it owns Ranger-reactive bending/compression and therefore stays intentionally bounded. Ambient flowers, mushrooms and coastal detail remain owned by `AmbientWorldDetailSystem`. Construction terrain adaptation remains responsible for exposed soil where floors cut into terrain.
 
 ## 2026-09-11 — Reference-matched low-poly patch breakup
 
-Device feedback showed that broad smooth colour interpolation still did not match the approved generated village imagery. The presentation target is now explicit: readable low-poly lawn regions with brighter greens, warmer dry/soil interruptions, visible deterministic flecks, and the existing grass/flower/rock dressing layered above them.
+Device feedback showed that broad smooth colour interpolation still did not match the approved generated village imagery. The presentation target is now explicit: readable low-poly lawn regions with brighter greens, warmer dry/soil interruptions, visible deterministic flecks, and grass/flower/rock dressing layered above them.
 
-`TerrainSurfacePresentation.terrainSurfacePatchFieldsAt()` is the single presentation authority for this added breakup. It samples deterministic broad and detail cells and quantizes them into a small number of visible levels. Those patch values are then blended with the existing biome, height, slope, grass-density and forest-cover inputs. This deliberately produces a more authored/faceted surface while leaving the continuous height field and all gameplay queries unchanged.
+`TerrainSurfacePresentation.terrainSurfacePatchFieldsAt()` is the single presentation authority for this added colour breakup. It samples deterministic broad and detail cells and quantizes them into a small number of visible levels. Those patch values are then blended with the existing biome, height, slope, grass-density and forest-cover inputs. This deliberately produces a more authored/faceted surface while leaving the continuous height field and all gameplay queries unchanged.
 
-This is **not** a second terrain system and does not add decal meshes or per-cell objects. The renderer still uses the same chunked terrain meshes and draw-call profile. Regression coverage verifies that the patch fields stay normalized, deterministic and visibly different between regions.
+The renderer still uses the same chunked terrain meshes for the authoritative ground surface. Regression coverage verifies that the patch fields stay normalized, deterministic and visibly different between regions.
+
+## 2026-09-11 — Dense meadow micro-cover
+
+A direct Android comparison against the approved generated village reference exposed the remaining root cause: the current expanded world spreads the bounded reactive-grass population across a much larger island, so the camera still sees large areas of naked vertex-coloured terrain. Increasing reactive grass indefinitely would waste CPU/memory on behavioural state that the reference does not require.
+
+`GroundCoverPresentationSystem` therefore adds one explicit rendering-only layer for short meadow micro-cover. It is **not** another ecology authority and does not change `grassDensityAt()`, harvesting, collision, terrain height, world generation or navigation. It consumes the existing vegetation suitability, grass patch, trail-wear and scatter-clearance sources and deterministically places low-poly short-blade clumps on a fixed jittered grid.
+
+The ownership boundary is:
+
+- `ExpandedIslandTerrainSystem` remains the sole continuous terrain/height surface;
+- `GroundCoverPresentationSystem` supplies cheap static short lawn coverage;
+- `GrassFieldSystem` supplies taller Ranger-reactive grass;
+- `FernFieldSystem` and `AmbientWorldDetailSystem` retain their existing ecology/presentation roles.
+
+Ground-cover clumps are grouped into `THREE.InstancedMesh` batches by existing `WorldChunkSystem` keys, so normal world distance/frustum culling still applies. They cast no shadows, use a very small shared blade geometry with vertex-colour variation, and only update matrices when construction/collision revisions change. Floors hide the cover through the same `constructionFloorCoversVegetation()` contract already used by reactive vegetation, preventing grass from poking through completed buildings.
+
+The worn-trail palette is also deliberately warmer/darker brown so translucent trail patches read as soil rather than olive-green polygons over the meadow.
+
+### Device acceptance
+
+On the deployed Android build verify that:
+
+- normal third-person gameplay now shows continuous short grass texture across suitable meadow instead of broad empty green planes;
+- taller reactive tufts remain visibly distinct from the short carpet;
+- paths still read as worn brown soil and remain visibly clearer than surrounding meadow;
+- sand, steep rock and construction interiors do not receive inappropriate ground cover;
+- completed floors hide the short grass cleanly;
+- chunk transitions do not show obvious cover popping;
+- movement and camera performance remain smooth on the target device.
