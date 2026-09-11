@@ -1,20 +1,20 @@
 import * as THREE from 'three';
 
 export const GROUND_SURFACE_COLORS = Object.freeze({
-  sand: 0xdfc993,
-  sandLight: 0xead6a4,
-  sandDamp: 0xcab078,
-  rockSteep: 0x776d5d,
-  rockSlope: 0x827861,
-  grassLow: 0x82ba61,
-  grassMid: 0x639e51,
-  grassHigh: 0x5a894a,
-  ridge: 0x74765b,
-  meadowLight: 0x98c96c,
-  meadowLush: 0x4b9144,
-  meadowDry: 0xa7b166,
-  forest: 0x3d7044,
-  trailSoil: 0x88704c
+  sand: 0xdfc38a,
+  sandLight: 0xedd6a0,
+  sandDamp: 0xc5a86f,
+  rockSteep: 0x746b5c,
+  rockSlope: 0x81755f,
+  grassLow: 0x79b85c,
+  grassMid: 0x5fa14d,
+  grassHigh: 0x508b44,
+  ridge: 0x72745a,
+  meadowLight: 0x9acb6b,
+  meadowLush: 0x438f43,
+  meadowDry: 0xa8ad64,
+  forest: 0x386d40,
+  trailSoil: 0x8a6d47
 });
 
 const COLORS = Object.freeze(
@@ -24,6 +24,40 @@ const COLORS = Object.freeze(
 );
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
+const stepped = (value, steps) => Math.round(clamp01(value) * steps) / steps;
+
+const hash01 = (x, z, salt = 0) => {
+  let value = Math.imul((x | 0) ^ (salt * 374761393), 668265263);
+  value = Math.imul(value ^ ((z | 0) * 2246822519), 1274126177);
+  value ^= value >>> 15;
+  return (value >>> 0) / 0xffffffff;
+};
+
+/**
+ * Broad fields describe climate/biome colour. Patch fields describe the visible hand-built
+ * low-poly surface breakup seen at gameplay distance. Keeping these separate means terrain
+ * height, collision, ecology and placement stay untouched while the rendered ground gains a
+ * much clearer lawn/soil mosaic instead of one softly interpolated green sheet.
+ */
+export function terrainSurfacePatchFieldsAt(x, z) {
+  const broadCellSize = 6.4;
+  const detailCellSize = 2.8;
+  const broadX = Math.floor((x + 1.7) / broadCellSize);
+  const broadZ = Math.floor((z - 2.3) / broadCellSize);
+  const detailX = Math.floor((x - 0.9) / detailCellSize);
+  const detailZ = Math.floor((z + 1.1) / detailCellSize);
+
+  const lawnPatch = stepped(
+    hash01(broadX, broadZ, 11) * 0.62 + hash01(detailX, detailZ, 23) * 0.38,
+    5
+  );
+  const dryPatch = stepped(
+    hash01(broadX - 7, broadZ + 13, 31) * 0.7 + hash01(detailX + 5, detailZ - 3, 47) * 0.3,
+    4
+  );
+  const fleck = stepped(hash01(detailX, detailZ, 71), 6);
+  return { lawnPatch, dryPatch, fleck };
+}
 
 export function terrainSurfaceToneFieldsAt(x, z) {
   const broad = clamp01(0.5 + (
@@ -41,7 +75,7 @@ export function terrainSurfaceToneFieldsAt(x, z) {
     Math.sin(x * 0.035 - z * 0.029 + 2.1) +
     Math.cos(z * 0.044 + x * 0.018 - 0.5)
   ) / 4);
-  const dry = THREE.MathUtils.smoothstep(dryRaw, 0.55, 0.82);
+  const dry = THREE.MathUtils.smoothstep(dryRaw, 0.5, 0.8);
 
   return { broad, detail, dry };
 }
@@ -56,25 +90,26 @@ export function terrainSurfaceColorAt({
   grassPatchStrength = 0
 }, target = new THREE.Color()) {
   const { broad, detail, dry } = terrainSurfaceToneFieldsAt(x, z);
+  const { lawnPatch, dryPatch, fleck } = terrainSurfacePatchFieldsAt(x, z);
 
   if (sand) {
     target.copy(COLORS.sand);
-    target.lerp(COLORS.sandLight, broad * 0.2);
-    target.lerp(COLORS.sandDamp, (1 - detail) * 0.08);
-    target.offsetHSL(0, 0, (detail - 0.5) * 0.022);
+    target.lerp(COLORS.sandLight, broad * 0.25 + lawnPatch * 0.08);
+    target.lerp(COLORS.sandDamp, (1 - detail) * 0.12);
+    target.offsetHSL(0, 0, (fleck - 0.5) * 0.035);
     return target;
   }
 
   if (slope > 0.82) {
     target.copy(COLORS.rockSteep);
-    target.offsetHSL(0, 0, (detail - 0.5) * 0.035);
+    target.offsetHSL(0, 0, (fleck - 0.5) * 0.055);
     return target;
   }
 
   if (slope > 0.56) {
     target.copy(COLORS.rockSlope);
-    target.lerp(COLORS.meadowDry, broad * 0.035);
-    target.offsetHSL(0, 0, (detail - 0.5) * 0.03);
+    target.lerp(COLORS.meadowDry, broad * 0.055 + dryPatch * 0.03);
+    target.offsetHSL(0, 0, (detail - 0.5) * 0.045);
     return target;
   }
 
@@ -85,10 +120,13 @@ export function terrainSurfaceColorAt({
 
   const patch = clamp01(grassPatchStrength);
   const forest = clamp01(forestCover);
-  target.lerp(COLORS.meadowLight, broad * 0.22);
-  target.lerp(COLORS.meadowDry, dry * (0.15 - patch * 0.06));
-  target.lerp(COLORS.meadowLush, patch * 0.24);
-  target.lerp(COLORS.forest, forest * 0.2);
-  target.offsetHSL(0, 0, (detail - 0.5) * 0.045);
+  const lushStrength = clamp01(patch * 0.34 + lawnPatch * 0.2 + broad * 0.09);
+  const dryStrength = clamp01(dry * 0.16 + dryPatch * (0.08 - patch * 0.035));
+
+  target.lerp(COLORS.meadowLight, broad * 0.16 + lawnPatch * 0.08);
+  target.lerp(COLORS.meadowDry, dryStrength);
+  target.lerp(COLORS.meadowLush, lushStrength);
+  target.lerp(COLORS.forest, forest * 0.24);
+  target.offsetHSL(0, 0, (stepped(detail, 5) - 0.5) * 0.065 + (fleck - 0.5) * 0.025);
   return target;
 }

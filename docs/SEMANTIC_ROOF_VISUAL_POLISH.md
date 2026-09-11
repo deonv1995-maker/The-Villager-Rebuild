@@ -1,89 +1,80 @@
 # Semantic Roof visual polish
 
-This pass addresses the Android acceptance feedback for the semantic Roof introduced with the semantic Stairs/Roof milestone. The Roof already passed functional placement testing, but its first presentation looked like a flat demo cover, sat visibly above the top wall row, and left the gable ends open. Later complex-roof acceptance also exposed two presentation issues: the broad triangular gable infill could be seen from inside the room, and the finished thatch still read too much like flat stacked panels instead of hand-laid bundles.
+The semantic Roof is structurally stable and remains owned by `PanelConstructionGrid.roofZones`. Roof placement, support rules, Log cost, demolition/refund, Save/Continue identity, ridge-axis selection, collision and Hammer ownership are not presentation concerns and must not be changed to improve roof appearance.
 
-The September 2026 production-thatch pass keeps the same roof architecture and pushes the exterior finish closer to the approved visual target: denser hand-laid straw breakup, stronger overlapping course depth, a softer irregular straw edge, and a fuller ridge silhouette. It remains a presentation-only change.
+`SemanticRoofZoneGeometry` owns the weather-tight five-course roof shell. `SemanticRoofFootprintGeometry` composes complex wings and junctions. `SemanticRoofThatchFinish` is the exterior presentation layer and consumes the existing semantic wing/junction plan as its source of truth.
 
-## Scope
+## Visual target
 
-The semantic Roof remains an explicit `PanelConstructionGrid.roofZones` structure. This pass does **not** change Roof placement, support rules, Log cost, demolition/refund, Save/Continue identity, ridge-axis selection, collision, or the Hammer ownership boundary.
+The approved village direction is a polished stylized low-poly roof that reads immediately as hand-laid straw: warm yellow/brown material, fine irregular straw breakup, pointed overlapping edges, a substantial bundled ridge and sparse green/moss accents. It must not read as five stacked rectangular panels or as thick cylindrical roof logs.
 
-`SemanticRoofZoneGeometry` remains the base roof-shell presentation owner. `SemanticRoofFootprintGeometry` composes complex wings and junctions, while `SemanticRoofThatchFinish` adds the final exterior-facing gable rule and low-draw-call straw detail. These layers are presentation only and continue to consume the existing semantic footprint/junction plan as their source of truth.
+The September 11 reference-matching pass therefore keeps the structural courses but changes which layer carries the visible finish. The shell remains opaque and weather-tight while dense fine straw sits above it and creates the dominant exterior surface.
 
-## Finished thatch presentation
-
-The semantic Roof uses the established visual language from the proven finished-thatch presentation without reviving the legacy physical-member roof topology as structural authority.
+## Production thatch presentation
 
 Each semantic gable Roof presents:
 
-- five overlapping solid-depth straw courses on each slope;
-- alternating warm thatch tones and deterministic straw fringe on every course;
-- fuller course depth so the overlapping rows cast a stronger layered silhouette;
-- nine staggered rows of tapered, warm-colour-varied surface bundles per slope, batched through `THREE.InstancedMesh` rather than one mesh/draw call per reed;
-- a second instanced layer of tapered 3D straw tips along all five visible course edges, giving the eaves and overlaps a pointed hand-laid silhouette instead of a flat cut line;
-- a darker opaque underlay beneath the thatch;
-- pronounced eave overhang with a timber fascia;
-- a fuller rounded thatch ridge roll with rope ties;
-- timber rake trim at each exposed gable end;
-- closed timber-coloured triangular gable infill when viewed from outside.
+- five overlapping structural thatch courses on each slope;
+- a dark opaque underlay beneath the courses;
+- fifteen tightly spaced rows of thin tapered straw bundles per slope;
+- deterministic warm straw colour variation across those bundles;
+- a second instanced layer of longer, pointed straw tips along all five visible lap/eave lines;
+- an intentionally longer first/eave row so the outer silhouette looks loose and hand laid rather than machine-cut;
+- a rounded bundled ridge with rope ties;
+- sparse flattened low-poly moss/green accents on the outer straw surface;
+- pronounced exterior eave overhang with timber fascia;
+- timber rake trim and exterior-only triangular gable infill.
 
-The production finish deliberately keeps the structural five-course shell unchanged. Surface bundles and course-edge tufts are decorative detail layers only, so improving the roof material does not introduce another roof-placement system or alter collision and persistence.
+The old production pass increased the solid course depth aggressively. Device feedback showed that this still made the roof read as stacked blocks. The shell-depth multiplier is now restrained; visual thickness comes primarily from the dense straw and edge layers. `semanticRoofThatchFullDepth` remains the compatibility marker for the retained structural course layer, not a requirement to exaggerate the box geometry.
 
-The added straw detail is deliberately decorative. Parent cross-gable valley profiles are passed into the finish step, and both surface bundles and edge tufts that would occupy a structural valley opening are omitted. The finish therefore cannot refill an opening that `SemanticRoofJunctionGeometry` has already cut into the actual roof shell.
+## Junction and interior contract
 
-The existing `SemanticRoofSlopeNorth` and `SemanticRoofSlopeSouth` identities remain on the opaque underlay so semantic Roof runtime/regression ownership stays stable.
+Decorative finish is always applied after `SemanticRoofJunctionGeometry` has created the real cross-gable valley. The same canonical junction profiles are passed into `SemanticRoofThatchFinish`, and fine straw/edge instances that would occupy a valley opening are omitted. Moss accents are also rejected inside those profiles.
+
+Joined roof slopes remain double-sided so the finished ceiling is visible from inside. Exposed gable infill remains a single-sided exterior facade; it must not render back through the occupied room. No low horizontal seam-mask system is allowed to return.
+
+The existing `SemanticRoofSlopeNorth` and `SemanticRoofSlopeSouth` identities remain on the opaque underlay so runtime/regression ownership stays stable.
 
 ## Performance boundary
 
-The richer finish must stay mobile-safe. Each slope adds two instanced draw groups: one for the dense surface bundles and one for the course-edge tufts. Increasing visible straw density therefore increases instance count rather than creating hundreds of independent meshes or draw calls. Detail remains deterministic so Save/Continue rebuilds the same visual presentation without serializing individual straw pieces.
+The reference-matched finish remains mobile-first. Detail density is increased through `THREE.InstancedMesh`, not one mesh per straw piece. Each slope still uses one surface-bundle instance group and one edge-tip instance group. Moss is a small additional instanced group per wing. Increasing straw density therefore increases instance count rather than exploding draw calls.
+
+The detail is deterministic and is rebuilt from semantic roof state; individual straw or moss instances are never serialized into saves.
+
+`SemanticRoofFootprintGeometry` aggregates the generated straw, edge and moss counts onto the footprint root for diagnostics/regression coverage while leaving semantic structural state unchanged.
 
 ## Wall seating
 
-The semantic Roof root remains at the canonical structural storey height. Presentation geometry uses a derived wall-seat offset instead of changing structural placement.
-
-The offset is calculated from the canonical semantic wall dimensions:
-
-`storey height - visible wall top`
-
-Full-height semantic walls now reach the canonical storey top, so the current derived offset is zero. Roof and wall presentation therefore meet on the same structural line without introducing a second height constant.
-
-## Interior finish
-
-The first semantic Roof visual exposed generated rafter Logs beneath the cover. The finished semantic Roof no longer generates those interior-visible rafter pieces. The opaque underlay, exterior thatch, ridge finish and gable closures provide the complete presentation while the semantic Roof-zone state remains the structural source of truth.
-
-Complex joined gables already remove their internal end presentation from the footprint plan. Exposed gable infill now has an additional rendering contract: it is a **single-sided exterior facade** whose triangle winding faces away from the room. The A and B end triangles are explicitly wound toward their respective outside ends. This keeps the cabin closed from outside while preventing the large triangular side panel from rendering when the Ranger looks back at it from inside. Roof slopes remain double-sided so the finished ceiling/thatch underside still reads correctly indoors.
-
-This preserves the earlier construction polish decision that roof pieces must not hang visibly inside a completed building without adding camera-specific hiding logic or a competing roof system.
+The Roof root stays at the canonical structural storey height. Full-height semantic walls reach that storey top, so the derived wall-seat offset remains zero. Appearance work must not introduce another roof-height constant.
 
 ## Regression contract
 
-`scripts/verify-semantic-roof-polish.mjs` continues to verify the base semantic roof shell, wall seating, course identities, ridge/eave finish and lack of generated rafters.
+`scripts/verify-semantic-roof-polish.mjs` verifies the base semantic shell, wall seating, course identities, ridge/eave finish, closed gables and clean interior.
 
-`scripts/verify-semantic-roof-integrated-junctions.mjs` additionally verifies:
+`scripts/verify-semantic-roof-integrated-junctions.mjs` additionally verifies that:
 
-- exposed semantic gable infill uses `THREE.FrontSide` instead of rendering through the room;
-- A/B gable normals face their correct exterior ends;
-- joined cross-gable geometry still retains its double-sided interior roof slopes;
-- dense surface straw is emitted as instanced meshes rather than hundreds of draw calls;
-- the tapered 3D course-edge straw layer is also emitted as instanced meshes;
-- main thatch courses retain fuller presentation depth and the ridge retains a bundled silhouette;
-- both decorative straw layers are omitted from parent valley cutouts;
-- no horizontal seam-mask system is reintroduced.
+- gable infill remains exterior-only;
+- joined interior slopes remain double-sided;
+- fine surface straw is emitted as instanced meshes;
+- pointed edge straw is emitted as instanced meshes;
+- sparse moss accents are deterministic instanced presentation detail;
+- structural courses remain present beneath the fine straw;
+- ridge finish remains bundled and prominent;
+- straw layers remain outside structural valley openings;
+- no interior seam-mask system is reintroduced.
 
-Both regressions are part of the full `npm run check` suite.
+Both regressions are part of the full `npm run check` gate.
 
 ## Android acceptance gate
 
-Before advancing to a later building milestone, verify on the deployed Android build that:
+Before advancing the building milestone, verify on the deployed Android build that:
 
-- the Roof clearly reads as thick, layered hand-laid thatch rather than flat or damaged panels;
-- the visible course edges have an irregular straw-tip silhouette without looking noisy or fuzzy at normal gameplay distance;
-- straw surface breakup remains clean at cross-gable/L-roof valleys;
-- the denser straw finish remains smooth on the target Android device with no obvious frame-time regression around multi-wing buildings;
-- there is no visible wall-to-roof floating gap;
-- exposed gable ends look closed from outside;
-- the broad triangular gable infill is no longer visible from inside the occupied room;
-- no loose roof framing hangs visibly through the occupied interior;
-- third-person and first-person Roof previews still align with the supported footprint;
-- Save -> close -> Continue restores the same finished Roof;
-- Hammer Remove still refunds the full dynamic `5 Logs x covered Floor cells` cost.
+- the Roof reads as dense hand-laid straw at normal third-person distance rather than solid stacked blocks;
+- individual straw breakup is visible without becoming noisy/fuzzy;
+- the eave and course edges have an irregular pointed silhouette;
+- green/moss accents stay sparse and decorative rather than covering the roof;
+- cross-gable valleys remain clean and joined;
+- there is no wall-to-roof gap;
+- gable ends are closed outside but do not render through the room;
+- first-person/third-person preview alignment, Save/Continue and Remove/refund remain unchanged;
+- multi-wing roofs remain smooth on the target Android device.

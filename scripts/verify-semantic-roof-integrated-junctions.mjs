@@ -49,14 +49,23 @@ const assertExteriorOnlyGables = (visual, label) => {
 
 const assertLayeredThatch = (visual, label) => {
   const bundles = objectsWith(visual, object => object.userData?.semanticRoofStrawBundles === true);
-  assert.ok(bundles.length >= 2, `${label} must add tapered straw-bundle surface breakup`);
+  assert.ok(bundles.length >= 2, `${label} must add fine straw-bundle surface breakup`);
   assert.ok(
     bundles.every(bundle => bundle.isInstancedMesh && bundle.count > 0),
     `${label} straw detail must stay in low-draw-call instanced meshes`
   );
   assert.ok(
+    bundles.every(bundle => bundle.userData.semanticRoofFineStraw === true),
+    `${label} surface bundles must use the fine-straw production finish rather than coarse roof logs`
+  );
+  assert.ok(
     visual.userData.semanticRoofStrawBundleCount > 0,
     `${label} must report the generated layered-thatch detail count`
+  );
+  assert.equal(
+    visual.userData.semanticRoofFineStraw,
+    true,
+    `${label} must expose the fine-straw presentation contract`
   );
 
   const edgeTufts = objectsWith(visual, object => object.userData?.semanticRoofStrawEdgeTufts === true);
@@ -70,10 +79,21 @@ const assertLayeredThatch = (visual, label) => {
     `${label} edge detail must be marked as part of the production thatch finish`
   );
 
+  const moss = objectsWith(visual, object => object.userData?.semanticRoofMossAccents === true);
+  assert.ok(moss.length >= 1, `${label} must include sparse green roof accents from the approved visual direction`);
+  assert.ok(
+    moss.every(accent => accent.isInstancedMesh && accent.count > 0),
+    `${label} moss accents must remain batched rather than becoming individual meshes`
+  );
+  assert.ok(
+    visual.userData.semanticRoofMossAccentCount > 0,
+    `${label} must report its deterministic moss accent count`
+  );
+
   const productionWings = objectsWith(visual, object => object.userData?.semanticRoofProductionThatch === true);
   assert.ok(productionWings.length >= 2, `${label} must expose the production-thatch presentation contract`);
   const fullDepthCourses = objectsWith(visual, object => object.userData?.semanticRoofThatchFullDepth === true);
-  assert.ok(fullDepthCourses.length >= 2, `${label} must keep the existing courses and give them fuller depth`);
+  assert.ok(fullDepthCourses.length >= 2, `${label} must retain the weather-tight structural thatch courses beneath the fine straw`);
   const fullRidges = objectsWith(visual, object => object.userData?.semanticRoofFullRidgeBundle === true);
   assert.ok(fullRidges.length >= 1, `${label} must keep a fuller bundled ridge silhouette`);
 };
@@ -223,4 +243,4 @@ assert.equal(rotatedProjection.profile.parentSlopeSide, 'positive');
 assert.equal(rotatedProjection.profile.childLocalJoinEnd, 'negative');
 
 assert.ok(PANEL_GRID.cellSize > 0, 'Semantic roof integration remains anchored to the canonical panel grid');
-console.log('Integrated cross-gable valleys, exterior-only gables, production layered thatch and matching interior roof topology verified');
+console.log('Integrated cross-gable valleys, exterior-only gables, fine production thatch, moss accents and matching interior roof topology verified');
