@@ -34,7 +34,7 @@ const checks = [
   ['Sprout story restore occurs after shared Ranger restore so dialogue cinematic ownership cannot block teleport restore', saveController.indexOf('restoreGameState(this.game, record.state)') < saveController.indexOf('this.game.sproutArrival?.restoreState?.(record.state.sproutArrival)')],
   ['pre-Sprout saves are deliberately skipped rather than replaying the opening in an established world', controller.includes('PHASE.LEGACY_SKIPPED') && controller.includes('legacySkipped: true')],
   ['story milestones request explicit save checkpoints', controller.includes("saveNow?.('sprout-impact')") && controller.includes("saveNow?.('sprout-rescue')") && controller.includes("saveNow?.('sprout-allied')")],
-  ['documentation keeps production Sprout art and physical tree felling as later slices while companion retrieval is now active', docs.includes('production Sprout 3D asset') && docs.includes('tree-felling animation/state') && docs.includes('Once allied, Sprout follows the Ranger')]
+  ['documentation keeps production Sprout art and falling-tree damage as later slices while companion retrieval and physical felling are active', docs.includes('production Sprout 3D asset') && docs.includes('falling-tree damage/collision') && docs.includes('Once allied, Sprout follows the Ranger') && docs.includes('visible authored-tree fall')]
 ];
 
 let failed = 0;
