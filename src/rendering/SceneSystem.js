@@ -21,7 +21,7 @@ export class SceneSystem {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.shadowMap.enabled = false;
 
-    this.#createLighting();
+    this.lighting = this.#createLighting();
     this.resize = this.resize.bind(this);
     window.addEventListener('resize', this.resize, { passive: true });
     this.resize();
@@ -41,6 +41,8 @@ export class SceneSystem {
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.12);
     this.scene.add(ambient);
+
+    return Object.freeze({ hemi, sun, skyFill, ambient });
   }
 
   resize() {
