@@ -65,6 +65,56 @@ assert.ok(
   'First-person camera must sit at Ranger eye height'
 );
 
+const pitchCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const pitchPlayer = new RangerController({ scene, camera: pitchCamera, terrain });
+pitchPlayer.model = new THREE.Group();
+pitchPlayer.root.add(pitchPlayer.model);
+pitchPlayer.assetMode = 'kaykit';
+pitchPlayer.setCameraMode('first-person');
+pitchPlayer.beginCameraLook();
+pitchPlayer.rotateCamera(0, -10000);
+pitchPlayer.endCameraLook();
+pitchPlayer.update(1 / 60);
+const skyDirection = new THREE.Vector3();
+pitchCamera.getWorldDirection(skyDirection);
+assert.ok(
+  skyDirection.y > 0.999999,
+  'First-person pitch must allow the player to look visually straight up into the sky'
+);
+assert.ok(
+  Math.hypot(skyDirection.x, skyDirection.z) < 0.002,
+  'First-person sky look must reach the near-vertical pole without rolling the camera'
+);
+
+pitchPlayer.beginCameraLook();
+pitchPlayer.rotateCamera(0, 10000);
+pitchPlayer.endCameraLook();
+pitchPlayer.update(1 / 60);
+const groundDirection = new THREE.Vector3();
+pitchCamera.getWorldDirection(groundDirection);
+assert.ok(
+  groundDirection.y < -0.999999,
+  'First-person pitch must allow the player to look visually straight down at the ground'
+);
+assert.ok(
+  Math.hypot(groundDirection.x, groundDirection.z) < 0.002,
+  'First-person ground look must reach the near-vertical pole without rolling the camera'
+);
+assert.equal(pitchPlayer.setCameraMode('third-person'), 'third-person');
+assert.equal(
+  pitchPlayer.pitch,
+  -0.75,
+  'Returning from a vertical first-person view must restore the established third-person pitch envelope'
+);
+pitchPlayer.beginCameraLook();
+pitchPlayer.rotateCamera(0, -10000);
+pitchPlayer.endCameraLook();
+assert.equal(
+  pitchPlayer.pitch,
+  0.25,
+  'Third-person manual look must retain its established upper pitch limit'
+);
+
 const beforeLook = player.getFacingDirection(new THREE.Vector3());
 player.beginCameraLook();
 player.rotateCamera(80, -20);
@@ -240,4 +290,4 @@ assert.equal(positionReads, 2, 'Third person must continue using the same curren
 assert.equal(firstPersonUpdates, 1);
 assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('Forward-biased third-person framing, natural relaxed walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
+console.log('Forward-biased third-person framing, full first-person vertical look, natural relaxed walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
