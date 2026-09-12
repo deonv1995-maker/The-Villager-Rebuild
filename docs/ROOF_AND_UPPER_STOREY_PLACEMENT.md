@@ -67,6 +67,20 @@ visuals. Higher floors are supported by the completed structure below and expose
 corners for the next FRAME level. No centre post or duplicate upstairs building system is
 introduced.
 
+After the first upper-floor panel is anchored inside a completed wall-family enclosure,
+that same storey may expand orthogonally beyond the lower footprint. These same-level
+snaps intentionally create overhangs and balcony floors; they keep the exact elevation,
+orientation, structure identity, collision and save schema of the anchored upper lattice.
+Every connected upper-floor component must retain a path to at least one enclosure-backed
+panel, so demolition cannot leave a floating balcony.
+
+Wall, Door and Window panels treat every built Floor edge as valid support, including the
+outer edges of an overhang. They do not require a matching wall directly below. When two
+storeys expose coincident placement candidates, the horizontal aim remains authoritative
+for the exact cell/edge while a bounded player-height bias selects the level the Ranger is
+currently standing on. This applies consistently to Floor and the Wall/Door/Window family
+and does not introduce a separate balcony building system or alter Roof sequencing.
+
 In player terms, a "fully built frame" means the upright perimeter plus its closed RAW
 top-beam ring. With `FLOOR` selected, that completed enclosure becomes the upper-floor
 snap target until that same region is committed to a completed roof. The resulting floor
@@ -178,6 +192,13 @@ topology limits prevent selection from searching unrelated distant buildings.
 - the next FRAME posts interlock at the RAW beam centreline instead of floating above it;
 - upper floors do not create terrain foundation posts;
 - reconstructed storey metadata recovers the same structural FRAME seat.
+
+`scripts/verify-panel-upper-storey.mjs` additionally locks the semantic-panel path:
+
+- an anchored upper Floor expands outward at the same level as a balcony/overhang;
+- player height selects the upper lattice over a coincident ground expansion;
+- Wall, Door and Window all snap to an overhang Floor without a wall below;
+- removing the enclosure-backed anchor cannot orphan a floating upper-floor component.
 
 `scripts/verify-first-person-floor-targeting.mjs` locks:
 

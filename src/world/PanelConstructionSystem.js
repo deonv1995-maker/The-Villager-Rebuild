@@ -26,6 +26,7 @@ import {
 } from './PanelConstructionVisual.js';
 import { FloorSupportVisual } from './FloorSupportVisual.js';
 import { PanelStructureRegistry } from './PanelStructureRegistry.js';
+import { panelPlayerLevelPenalty } from './PanelPlacementLevelRules.js';
 import { semanticDoorColliderSpecs } from './SemanticDoorPanelGeometry.js';
 import {
   createSemanticRoofZoneVisual,
@@ -455,16 +456,15 @@ export class PanelConstructionSystem {
             { x: center.x, y: support.levelY, z: center.z },
             target,
             constructionAim
-          )
+          ) + panelPlayerLevelPenalty(support.levelY, playerPosition.y)
         };
         if (!best || candidate.score < best.score) best = candidate;
       }
 
       for (const floor of structure.grid.floors.values()) {
-        // Upper floors are enumerated from closed semantic wall support above. Keeping
-        // storey-zero expansion here prevents an existing upstairs panel from creating
-        // unsupported cantilever slots outside the wall enclosure.
-        if (floor.storey !== 0) continue;
+        // Every established floor lattice may expand orthogonally. On upper storeys this
+        // is the intentional balcony/overhang path: the first panel remains anchored by
+        // the closed wall enclosure and subsequent panels snap at that exact level.
         for (const direction of directionEntries) {
           const cellX = floor.x + direction.dx;
           const cellZ = floor.z + direction.dz;
@@ -472,7 +472,9 @@ export class PanelConstructionSystem {
           if (structure.grid.floors.has(key)) continue;
           const center = this.registry.cellCenterWorld(structure, { x: cellX, z: cellZ });
           if (Math.hypot(center.x - playerPosition.x, center.z - playerPosition.z) > PANEL_GRID.placementReach) continue;
-          const terrain = this.#evaluateFloorTerrain(center.x, center.z, structure.yaw, floor.levelY);
+          const terrain = floor.storey === 0
+            ? this.#evaluateFloorTerrain(center.x, center.z, structure.yaw, floor.levelY)
+            : { valid: true };
           const candidate = {
             kind: 'floor',
             structureId: structure.id,
@@ -485,12 +487,13 @@ export class PanelConstructionSystem {
             yaw: structure.yaw,
             baseY: floor.levelY,
             topY: floor.levelY + FLOOR_TOP_LIFT,
+            snapKind: floor.storey > 0 ? 'upper-floor-overhang' : 'adjacent-floor',
             valid: terrain.valid && this.#floorClear(center.x, center.z),
             score: this.#candidateScore(
               { x: center.x, y: floor.levelY, z: center.z },
               target,
               constructionAim
-            )
+            ) + panelPlayerLevelPenalty(floor.levelY, playerPosition.y)
           };
           if (!best || candidate.score < best.score) best = candidate;
         }
@@ -567,7 +570,7 @@ export class PanelConstructionSystem {
               { x: edge.x, y: floor.levelY + PANEL_GRID.storeyHeight * 0.5, z: edge.z },
               target,
               constructionAim
-            )
+            ) + panelPlayerLevelPenalty(floor.levelY, playerPosition.y)
           };
           if (!best || candidate.score < best.score) best = candidate;
         }

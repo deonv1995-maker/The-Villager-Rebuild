@@ -162,6 +162,19 @@ Reason: rotating independent gable cells could make the preview face the correct
 
 Compatibility: newly placed members persist their roof form. Complete legacy gables remain completion-only with their thatch intact, and new one-pitch targets are withheld until those legacy members are deliberately demolished.
 
+## 2026-09-12 — Player-level balcony and overhang construction
+
+Decision: an enclosure-backed upper Floor may extend orthogonally beyond the lower wall
+footprint as one connected semantic floor lattice. Wall, Door and Window panels may use
+any built Floor edge on that lattice without requiring a matching lower wall. Coincident
+storeys are disambiguated with a bounded player-height bias while aim still selects the
+exact slot.
+
+Reason: balconies and upper-storey overhangs are variations of the existing Floor and
+wall-family systems, not separate building types. Keeping them in the canonical grid
+preserves snapping, collision, persistence and future expansion while dependency checks
+prevent demolition from leaving floating upper-floor components.
+
 ## Open decisions
 
 The following are intentionally not locked yet:

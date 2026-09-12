@@ -8,7 +8,8 @@ import {
 import {
   collectPanelUpperStoreySupports,
   collectPanelUpperWallSupports,
-  collectPanelWallEnclosureCells
+  collectPanelWallEnclosureCells,
+  panelUpperFloorComponentsSupported
 } from './PanelUpperStoreyRules.js';
 
 const requireInteger = (value, label) => {
@@ -206,6 +207,13 @@ export class PanelConstructionGrid {
     const dependentRoof = [...this.roofZones.values()].some(zone => zone.cellKeys.includes(key));
     const dependentUpperFloor = this.floors.has(panelCellKey({ x, z, storey: storey + 1 }));
     if (dependentWall || dependentStair || dependentRoof || dependentUpperFloor) return false;
+    if (storey > 0) {
+      const remainingFloors = [...this.floors.values()].filter(floor => floor.key !== key);
+      if (!panelUpperFloorComponentsSupported(remainingFloors, [...this.walls.values()], {
+        storey,
+        levelTolerance: PANEL_GRID.snapTolerance + 0.001
+      })) return false;
+    }
     return this.floors.delete(key);
   }
 
@@ -270,12 +278,10 @@ export class PanelConstructionGrid {
     ));
     if (upperFloors.length || floorlessUpperWalls.length) {
       const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
-      const upperFloorSupportKeys = new Set(
-        collectPanelUpperStoreySupports(remainingWalls, {
-          levelTolerance: PANEL_GRID.snapTolerance + 0.001
-        }).map(support => panelCellKey(support))
-      );
-      if (upperFloors.some(floor => !upperFloorSupportKeys.has(floor.key))) return false;
+      if (!panelUpperFloorComponentsSupported(upperFloors, remainingWalls, {
+        storey: wall.storey + 1,
+        levelTolerance: PANEL_GRID.snapTolerance + 0.001
+      })) return false;
 
       const upperWallSupportKeys = new Set(
         collectPanelUpperWallSupports(remainingWalls, {

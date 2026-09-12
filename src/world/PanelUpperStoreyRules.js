@@ -252,3 +252,58 @@ export function findPanelUpperStoreySupport(walls, {
   return collectPanelUpperStoreySupports(walls, { levelTolerance })
     .find(support => support.x === x && support.z === z && support.storey === storey) ?? null;
 }
+
+/**
+ * Confirms that every connected upper-floor component still reaches at least one cell
+ * carried by a completed wall-family enclosure below. Floors may cantilever outward by
+ * snapping to their same-level neighbours, but the resulting balcony/overhang may never
+ * become a disconnected floating island after demolition.
+ */
+export function panelUpperFloorComponentsSupported(floors, walls, {
+  storey,
+  levelTolerance = 0.001
+} = {}) {
+  const candidates = (floors ?? []).filter(floor => (
+    Number.isInteger(floor?.x) &&
+    Number.isInteger(floor?.z) &&
+    Number.isInteger(floor?.storey) &&
+    floor.storey > 0 &&
+    (storey === undefined || floor.storey === storey) &&
+    Number.isFinite(floor.levelY)
+  ));
+  if (!candidates.length) return true;
+
+  const supports = collectPanelUpperStoreySupports(walls, { levelTolerance });
+  const supportsByLevel = new Set(supports.map(support => (
+    `${support.storey}:${support.x}:${support.z}:${support.levelY.toFixed(4)}`
+  )));
+  const remaining = new Map(candidates.map(floor => [
+    `${floor.storey}:${floor.x}:${floor.z}`,
+    floor
+  ]));
+
+  while (remaining.size) {
+    const [seedKey, seed] = remaining.entries().next().value;
+    remaining.delete(seedKey);
+    const pending = [seed];
+    let anchored = false;
+
+    for (let index = 0; index < pending.length; index += 1) {
+      const floor = pending[index];
+      if (supportsByLevel.has(
+        `${floor.storey}:${floor.x}:${floor.z}:${floor.levelY.toFixed(4)}`
+      )) anchored = true;
+
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const neighbourKey = `${floor.storey}:${floor.x + dx}:${floor.z + dz}`;
+        const neighbour = remaining.get(neighbourKey);
+        if (!neighbour || Math.abs(neighbour.levelY - floor.levelY) > levelTolerance) continue;
+        remaining.delete(neighbourKey);
+        pending.push(neighbour);
+      }
+    }
+
+    if (!anchored) return false;
+  }
+  return true;
+}

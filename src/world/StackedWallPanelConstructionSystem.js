@@ -9,6 +9,7 @@ import {
 import { panelCellKey } from './PanelConstructionGrid.js';
 import { PanelConstructionSystem } from './PanelConstructionSystem.js';
 import { createPanelPreview } from './PanelConstructionVisual.js';
+import { panelPlayerLevelPenalty } from './PanelPlacementLevelRules.js';
 import { collectPanelUpperWallSupports } from './PanelUpperStoreyRules.js';
 
 const PREVIEW_VALID = 0x65d879;
@@ -121,7 +122,7 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
             },
             target,
             constructionAim
-          )
+          ) + panelPlayerLevelPenalty(support.levelY, playerPosition.y)
         };
         if (!best || candidate.score < best.score) best = candidate;
       }

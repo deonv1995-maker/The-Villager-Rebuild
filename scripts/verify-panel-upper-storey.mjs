@@ -169,4 +169,71 @@ const restoredStructure = [...restored.system.registry.structures.values()][0];
 assert.ok(restoredStructure.grid.floors.has(panelCellKey({ x: 0, z: 0, storey: 1 })));
 assert.equal(restored.collision.getObstaclesByType('panel-floor').length, 2);
 
+// A player standing upstairs may extend that exact lattice beyond the lower wall
+// footprint to form an overhang. A coincident ground expansion remains available, but
+// player-height ranking must select the upper slot. The new Floor then directly owns
+// Wall/Door/Window placement with no lower wall requirement.
+for (const mode of ['wall', 'door', 'window']) {
+  const balconyRuntime = makeRuntime(6);
+  const balconyStructure = balconyRuntime.system.registry.createStructure({
+    originX: 0,
+    originZ: 0,
+    yaw: 0
+  });
+  assert.equal(
+    balconyStructure.grid.placeFloor({ x: 0, z: 0, storey: 0, levelY: groundLevel }).ok,
+    true
+  );
+  addPerimeterWalls(balconyStructure.grid, [{ x: 0, z: 0 }]);
+  assert.equal(
+    balconyStructure.grid.placeFloor({ x: 0, z: 0, storey: 1, levelY: upperLevel }).ok,
+    true
+  );
+  balconyRuntime.system.restore(balconyRuntime.system.snapshot());
+  balconyRuntime.system.setActive(true);
+  balconyRuntime.system.setBuildMode('floor');
+
+  const upstairsPlayer = new THREE.Vector3(PANEL_GRID.cellSize, upperLevel, -targetDistance);
+  const balconyState = balconyRuntime.system.update(upstairsPlayer, facing);
+  assert.equal(balconyState.previewValid, true, 'Upper Floor must expose a same-level overhang slot');
+  assert.equal(balconyRuntime.system.previewPlacement?.storey, 1);
+  assert.equal(balconyRuntime.system.previewPlacement?.cellX, 1);
+  assert.equal(balconyRuntime.system.previewPlacement?.cellZ, 0);
+  assert.equal(balconyRuntime.system.previewPlacement?.snapKind, 'upper-floor-overhang');
+  assert.ok(Math.abs(balconyRuntime.system.previewPlacement.baseY - upperLevel) < 1e-8);
+  assert.equal(balconyRuntime.system.build(upstairsPlayer, facing)?.kind, 'floor');
+
+  balconyRuntime.system.setBuildMode(mode);
+  const wallState = balconyRuntime.system.update(upstairsPlayer, facing);
+  assert.equal(wallState.previewValid, true, `${mode} must snap to the balcony Floor`);
+  assert.equal(balconyRuntime.system.previewPlacement?.storey, 1);
+  assert.equal(balconyRuntime.system.previewPlacement?.cellX, 1);
+  assert.ok(Math.abs(balconyRuntime.system.previewPlacement.baseY - upperLevel) < 1e-8);
+  const builtWall = balconyRuntime.system.build(upstairsPlayer, facing);
+  assert.equal(builtWall?.variant, mode === 'wall' ? 'solid' : mode);
+}
+
+// Cantilever state remains dependency-safe. Removing the only wall-anchored upper Floor
+// must fail while its balcony extension depends on it, then succeed after the extension
+// is removed.
+const dependencyGrid = new PanelConstructionGrid();
+assert.equal(dependencyGrid.placeFloor({ x: 0, z: 0, storey: 0, levelY: groundLevel }).ok, true);
+addPerimeterWalls(dependencyGrid, [{ x: 0, z: 0 }]);
+assert.equal(dependencyGrid.placeFloor({ x: 0, z: 0, storey: 1, levelY: upperLevel }).ok, true);
+assert.equal(dependencyGrid.placeFloor({ x: 1, z: 0, storey: 1, levelY: upperLevel }).ok, true);
+const dependencyWall = [...dependencyGrid.walls.values()]
+  .find(wall => wall.direction === 'north');
+assert.equal(
+  dependencyGrid.removeWall(dependencyWall.key),
+  false,
+  'A lower enclosure wall may not be removed while it anchors an upper overhang'
+);
+assert.equal(
+  dependencyGrid.removeFloor({ x: 0, z: 0, storey: 1 }),
+  false,
+  'The anchored upper Floor may not be removed from beneath a dependent overhang'
+);
+assert.equal(dependencyGrid.removeFloor({ x: 1, z: 0, storey: 1 }), true);
+assert.equal(dependencyGrid.removeFloor({ x: 0, z: 0, storey: 1 }), true);
+
 console.log('Panel upper-storey wall support verification passed.');
