@@ -28,6 +28,9 @@ export class SproutCompanionController {
     this.lastTimestamp = null;
     this.scanElapsed = 0;
     this.cooldown = 0;
+    this.elapsed = 0;
+    this.approachElapsed = 0;
+    this.followSide = 1;
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3(0, 0, 1);
     this.followTarget = new THREE.Vector3();
@@ -73,35 +76,45 @@ export class SproutCompanionController {
     if (this.playerFacing.lengthSq() < 0.0001) this.playerFacing.set(0, 0, 1);
     else this.playerFacing.normalize();
 
+    dt = clampDt(dt);
+    this.elapsed += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.scanElapsed += dt;
     this.#resolveFollowTarget();
+
+    this.#separateFromRanger();
+    if (this.compression) {
+      this.#settleHover(this.root.position.x, this.root.position.z, dt);
+      this.#updateCompression(dt);
+      return;
+    }
+    // A selected pickup gets a bounded approach; a reserved compression always finishes.
+    if (this.target) this.approachElapsed += dt;
+    if (this.target && this.approachElapsed >= SPROUT_COMPANION.approachTimeoutSeconds) {
+      this.target = null;
+      this.cooldown = 1;
+    }
 
     const rangerDistance = Math.hypot(
       this.root.position.x - this.playerPosition.x,
       this.root.position.z - this.playerPosition.z
     );
 
-    if (rangerDistance >= SPROUT_COMPANION.hardCatchUpDistance) {
+    if (!this.target && rangerDistance >= SPROUT_COMPANION.hardCatchUpDistance) {
       this.#cancelCollectionIntent();
       this.#snapNearRanger();
       return;
     }
 
-    if (rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
+    if (!this.target && rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
       this.#cancelCollectionIntent();
       this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
       return;
     }
 
-    if (this.compression) {
-      this.#updateCompression(dt);
-      return;
-    }
-
     if (this.target) {
       const live = this.gatherables.getLooseResource?.(this.target.id);
-      if (!live || !this.#withinRangerCollectionRadius(live.position)) {
+      if (!live) {
         this.target = null;
       } else {
         this.target = live;
@@ -126,7 +139,10 @@ export class SproutCompanionController {
         SPROUT_COMPANION.collectionRadius,
         resourceId => this.allowedResources.has(resourceId)
       ) ?? null;
-      if (this.target) return;
+      if (this.target) {
+        this.approachElapsed = 0;
+        return;
+      }
     }
 
     this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
@@ -146,19 +162,45 @@ export class SproutCompanionController {
   #resolveFollowTarget() {
     const rightX = this.playerFacing.z;
     const rightZ = -this.playerFacing.x;
-    this.followTarget.set(
-      this.playerPosition.x - this.playerFacing.x * SPROUT_COMPANION.followDistance + rightX * SPROUT_COMPANION.followSideOffset,
-      0,
-      this.playerPosition.z - this.playerFacing.z * SPROUT_COMPANION.followDistance + rightZ * SPROUT_COMPANION.followSideOffset
-    );
+    let bestScore = Infinity;
+    for (const side of [this.followSide, -this.followSide]) {
+      const x = this.playerPosition.x - this.playerFacing.x * SPROUT_COMPANION.followDistance
+        + rightX * SPROUT_COMPANION.followSideOffset * side;
+      const z = this.playerPosition.z - this.playerFacing.z * SPROUT_COMPANION.followDistance
+        + rightZ * SPROUT_COMPANION.followSideOffset * side;
+      const clear = this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)
+        && this.island.isPlayable?.(x, z, 1.2) !== false;
+      const score = Math.hypot(x - this.root.position.x, z - this.root.position.z)
+        + (side === this.followSide ? 0 : 0.65) + (clear ? 0 : 100);
+      if (score < bestScore) {
+        bestScore = score;
+        this.followTarget.set(x, 0, z);
+        this.nextFollowSide = side;
+      }
+    }
+    this.followSide = this.nextFollowSide;
     this.followTarget.y = this.island.heightAt(this.followTarget.x, this.followTarget.z) + SPROUT_COMPANION.hoverHeight;
     return this.followTarget;
   }
 
   #moveToward(target, speed, dt) {
     if (!this.root || !target || dt <= 0) return;
-    const dx = target.x - this.root.position.x;
-    const dz = target.z - this.root.position.z;
+    let dx = target.x - this.root.position.x;
+    let dz = target.z - this.root.position.z;
+    // Route around the Ranger whenever the full desired segment crosses personal space.
+    const px = this.root.position.x - this.playerPosition.x;
+    const pz = this.root.position.z - this.playerPosition.z;
+    const lengthSq = dx * dx + dz * dz;
+    const t = lengthSq > 0 ? THREE.MathUtils.clamp(-(px * dx + pz * dz) / lengthSq, 0, 1) : 0;
+    const clearance = SPROUT_COMPANION.rangerPersonalSpace;
+    if (Math.hypot(px + t * dx, pz + t * dz) < clearance + 0.08) {
+      const angle = Math.atan2(pz, px);
+      const cross = px * dz - pz * dx;
+      const turn = Math.abs(cross) < 0.01 ? this.followSide : Math.sign(cross);
+      const waypointAngle = angle + turn * 0.45;
+      dx = this.playerPosition.x + Math.cos(waypointAngle) * (clearance + 0.3) - this.root.position.x;
+      dz = this.playerPosition.z + Math.sin(waypointAngle) * (clearance + 0.3) - this.root.position.z;
+    }
     const distance = Math.hypot(dx, dz);
     if (distance < 0.015) {
       this.#settleHover(target.x, target.z, dt);
@@ -181,6 +223,12 @@ export class SproutCompanionController {
       airborne: true
     });
 
+    // World sliding must not reintroduce Ranger overlap.
+    if (Math.hypot(resolved.x - this.playerPosition.x, resolved.z - this.playerPosition.z)
+      < SPROUT_COMPANION.rangerPersonalSpace) {
+      this.#settleHover(this.root.position.x, this.root.position.z, dt);
+      return;
+    }
     const movedX = resolved.x - this.root.position.x;
     const movedZ = resolved.z - this.root.position.z;
     this.root.position.x = resolved.x;
@@ -194,7 +242,7 @@ export class SproutCompanionController {
 
   #settleHover(x, z, dt) {
     const ground = this.island.heightAt(x, z);
-    const hoverBob = Math.sin(performance.now() * 0.0027) * 0.055;
+    const hoverBob = Math.sin(this.elapsed * SPROUT_COMPANION.hoverFrequency) * SPROUT_COMPANION.hoverAmplitude;
     const targetY = ground + SPROUT_COMPANION.hoverHeight + hoverBob;
     const blend = dt > 0 ? Math.min(1, dt * 8) : 1;
     this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, targetY, blend);
@@ -221,10 +269,26 @@ export class SproutCompanionController {
     );
   }
 
-  #withinRangerCollectionRadius(position) {
-    const dx = position.x - this.playerPosition.x;
-    const dz = position.z - this.playerPosition.z;
-    return dx * dx + dz * dz <= SPROUT_COMPANION.collectionRadius ** 2;
+  #separateFromRanger() {
+    const dx = this.root.position.x - this.playerPosition.x;
+    const dz = this.root.position.z - this.playerPosition.z;
+    const distance = Math.hypot(dx, dz);
+    const radius = SPROUT_COMPANION.rangerPersonalSpace;
+    if (distance >= radius) return;
+    // Ranger motion can enter Sprout's space even when Sprout is compressing or idle.
+    const angle = distance > 0.001 ? Math.atan2(dz, dx)
+      : Math.atan2(-this.playerFacing.z, -this.playerFacing.x);
+    for (const offset of [0, 0.5, -0.5, 1, -1, Math.PI]) {
+      const x = this.playerPosition.x + Math.cos(angle + offset) * (radius + 0.02);
+      const z = this.playerPosition.z + Math.sin(angle + offset) * (radius + 0.02);
+      if (this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)
+        && this.island.isPlayable?.(x, z, 1.2) !== false) {
+        this.root.position.x = x;
+        this.root.position.z = z;
+        return;
+      }
+    }
+    this.#snapNearRanger();
   }
 
   #beginCompression(target) {
@@ -294,15 +358,6 @@ export class SproutCompanionController {
   #updateCompression(dt) {
     const state = this.compression;
     if (!state || !this.root) return;
-
-    const rangerDistance = Math.hypot(
-      this.root.position.x - this.playerPosition.x,
-      this.root.position.z - this.playerPosition.z
-    );
-    if (rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
-      this.#cancelCompression();
-      return;
-    }
 
     state.elapsed += dt;
     const rawProgress = THREE.MathUtils.clamp(state.elapsed / state.duration, 0, 1);

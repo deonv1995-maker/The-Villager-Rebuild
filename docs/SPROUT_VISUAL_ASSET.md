@@ -52,3 +52,9 @@ A future externally authored GLB may replace this model if an art pass requires 
 - Runtime format: procedural Three.js geometry/material hierarchy.
 - Third-party license dependency: none for this model.
 - Intended role: production Sprout companion presentation.
+
+## Refinement pass (visual version 2)
+
+The same production hierarchy now has a fuller spherical shell, a larger rounded glossy black screen, taller cyan eyes and a small smile. Rounded leaf fins replace pointed four-sided cones. The backpack has rounded corners and a medical marking. The scanner, orange trim, two helper arms, utility lamp, gripper, cyan hover ring and three stabilizer pods remain. RoundedBoxGeometry comes from the already-pinned Three.js package; no GLB, texture, dependency, or dynamic light was added.
+
+The concept attachment was not available in this development turn or found in the repository; the supplied written visual target guided this refinement. Exact image comparison and mobile-scale charm/readability still require device review.

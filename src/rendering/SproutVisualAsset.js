@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
 const COLORS = Object.freeze({
   shell: 0xe7e1cf,
@@ -115,7 +116,7 @@ export function createSproutVisual() {
   const root = new THREE.Group();
   root.name = 'sprout-production-companion';
   root.userData.sproutProductionVisual = true;
-  root.userData.visualVersion = 1;
+  root.userData.visualVersion = 2;
 
   const emissiveBase = {
     roughness: 0.2,
@@ -130,7 +131,7 @@ export function createSproutVisual() {
     green: makeStandard(COLORS.green, { roughness: 0.5, metalness: 0.18 }),
     greenDark: makeStandard(COLORS.greenDark, { roughness: 0.4, metalness: 0.3 }),
     orange: makeStandard(COLORS.orange, { roughness: 0.42, metalness: 0.12 }),
-    face: makeStandard(COLORS.face, { roughness: 0.24, metalness: 0.34 }),
+    face: makeStandard(COLORS.face, { roughness: 0.12, metalness: 0.34 }),
     joint: makeStandard(COLORS.joint, { roughness: 0.38, metalness: 0.52 }),
     expression: makeStandard(COLORS.cyan, { ...emissiveBase, emissiveIntensity: 1.55, transparent: false, opacity: 1 }),
     scanner: makeStandard(0x8ce7f5, { ...emissiveBase, emissiveIntensity: 0.72 }),
@@ -141,7 +142,7 @@ export function createSproutVisual() {
   const body = addMesh(root, new THREE.SphereGeometry(0.5, 20, 14), materials.shell, {
     name: 'sprout-spherical-shell',
     position: [0, 0.04, 0],
-    scale: [1, 0.93, 0.96]
+    scale: [1.06, 1, 1]
   });
 
   for (const side of [-1, 1]) {
@@ -160,52 +161,52 @@ export function createSproutVisual() {
   });
   lowerBand.scale.z = 0.92;
 
-  const faceFrame = addMesh(root, new THREE.BoxGeometry(0.56, 0.29, 0.095), materials.greenDark, {
+  const faceFrame = addMesh(root, new RoundedBoxGeometry(0.79, 0.52, 0.18, 3, 0.085), materials.greenDark, {
     name: 'sprout-face-frame',
-    position: [0, 0.105, 0.435],
+    position: [0, 0.115, 0.415],
     rotation: [-0.035, 0, 0],
     scale: [1, 1, 0.82]
   });
   faceFrame.scale.x = 0.98;
 
-  addMesh(root, new THREE.BoxGeometry(0.48, 0.22, 0.065), materials.face, {
+  addMesh(root, new RoundedBoxGeometry(0.71, 0.445, 0.13, 3, 0.064), materials.face, {
     name: 'sprout-face-screen',
-    position: [0, 0.105, 0.489],
+    position: [0, 0.115, 0.475],
     rotation: [-0.035, 0, 0],
     shadow: false
   });
 
-  const eyeLeft = addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.expression, {
+  const eyeLeft = addMesh(root, new THREE.SphereGeometry(0.085, 12, 8), materials.expression, {
     name: 'sprout-eye-left',
-    position: [-0.105, 0.145, 0.532],
-    scale: [1.25, 0.62, 0.34],
+    position: [-0.15, 0.16, 0.55],
+    scale: [0.92, 1.15, 0.25],
     shadow: false
   });
-  addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.expression, {
+  addMesh(root, new THREE.SphereGeometry(0.085, 12, 8), materials.expression, {
     name: 'sprout-eye-right',
-    position: [0.105, 0.145, 0.532],
-    scale: [1.25, 0.62, 0.34],
+    position: [0.15, 0.16, 0.55],
+    scale: [0.92, 1.15, 0.25],
     shadow: false
   });
   const mouth = addMesh(root, new THREE.TorusGeometry(0.072, 0.011, 5, 12, Math.PI), materials.expression, {
     name: 'sprout-expression-mouth',
-    position: [0, 0.052, 0.53],
+    position: [0, 0.055, 0.555],
     rotation: [0, 0, Math.PI],
     scale: [1, 0.7, 1],
     shadow: false
   });
 
-  const finLeft = addMesh(root, new THREE.ConeGeometry(0.11, 0.34, 4), materials.green, {
+  const finLeft = addMesh(root, new THREE.SphereGeometry(0.11, 10, 8), materials.green, {
     name: 'sprout-leaf-fin-left',
     position: [-0.18, 0.56, -0.015],
     rotation: [0.05, 0.18, -0.38],
-    scale: [0.72, 1, 0.42]
+    scale: [0.85, 1.85, 0.4]
   });
-  const finRight = addMesh(root, new THREE.ConeGeometry(0.11, 0.34, 4), materials.green, {
+  const finRight = addMesh(root, new THREE.SphereGeometry(0.11, 10, 8), materials.green, {
     name: 'sprout-leaf-fin-right',
     position: [0.18, 0.56, -0.015],
     rotation: [0.05, -0.18, 0.38],
-    scale: [0.72, 1, 0.42]
+    scale: [0.85, 1.85, 0.4]
   });
   addMesh(root, new THREE.BoxGeometry(0.08, 0.035, 0.018), materials.orange, {
     name: 'sprout-fin-02-mark',
@@ -232,7 +233,7 @@ export function createSproutVisual() {
     shadow: false
   });
 
-  const backpack = addMesh(root, new THREE.BoxGeometry(0.34, 0.34, 0.16), materials.greenDark, {
+  const backpack = addMesh(root, new RoundedBoxGeometry(0.36, 0.36, 0.2, 2, 0.07), materials.greenDark, {
     name: 'sprout-removable-back-module',
     position: [0, 0.015, -0.49],
     rotation: [0.02, 0, 0]
@@ -241,6 +242,19 @@ export function createSproutVisual() {
   addMesh(root, new THREE.BoxGeometry(0.18, 0.07, 0.025), materials.orange, {
     name: 'sprout-back-module-latch',
     position: [0, 0.105, -0.584]
+  });
+
+  for (const [width, height] of [[0.12, 0.035], [0.035, 0.12]]) {
+    addMesh(root, new THREE.BoxGeometry(width, height, 0.012), materials.shell, {
+      name: `sprout-medical-mark-${width > height ? 'horizontal' : 'vertical'}`,
+      position: [0, -0.035, -0.597],
+      shadow: false
+    });
+  }
+  // Small reflective screen glints remain readable without another light or texture.
+  addMesh(root, new THREE.SphereGeometry(0.035, 8, 6), materials.shell, {
+    name: 'sprout-screen-glint', position: [-0.25, 0.26, 0.544],
+    scale: [1.2, 0.36, 0.12], shadow: false
   });
 
   const leftArm = createArm({ side: -1, materials });

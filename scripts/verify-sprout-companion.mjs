@@ -29,9 +29,9 @@ const checks = [
   ['companion activation is gated by the ALLIED story checkpoint', companion.includes('this.arrival.isAllied?.()') && arrival.includes('isAllied()') && arrival.includes('return this.phase === PHASE.ALLIED')],
   ['the crash-site Sprout presentation transfers instead of spawning a duplicate companion actor', arrival.includes('this.crashSite.scene.attach(sprout)') && arrival.includes('this.crashSite.sprout = null') && arrival.includes("sprout.name = 'sprout-companion-placeholder'")],
   ['companion tuning keeps collection bounded and catch-up explicit', definitions.includes('collectionRadius:') && definitions.includes('catchUpDistance:') && definitions.includes('hardCatchUpDistance:') && definitions.includes("collectibleResourceIds: Object.freeze(['stick', 'stone', 'grass', 'log'])")],
-  ['Sprout follow formation keeps clearer Ranger separation without changing collection range', definitions.includes('followDistance: 2.05') && definitions.includes('followSideOffset: 0.95') && definitions.includes('collectionRadius: 6.25')],
+  ['Sprout follow formation keeps clearer Ranger separation with expanded collection range', definitions.includes('followDistance: 2.05') && definitions.includes('followSideOffset: 0.95') && definitions.includes('collectionRadius: 9')],
   ['Sprout ordinary movement reuses the shared world collision authority', companion.includes('this.collision.resolveMove(from, desired') && companion.includes('SPROUT_COMPANION.collisionRadius')],
-  ['catch-up wins over active collection intent', companion.includes('this.#cancelCollectionIntent();') && companion.includes('SPROUT_COMPANION.catchUpDistance') && companion.includes('SPROUT_COMPANION.hardCatchUpDistance')],
+  ['catch-up safeguards remain available after collection', companion.includes('this.#cancelCollectionIntent();') && companion.includes('SPROUT_COMPANION.catchUpDistance') && companion.includes('SPROUT_COMPANION.hardCatchUpDistance')],
   ['GatherableSystem exposes one transactional loose-pickup reservation boundary', gatherables.includes('findNearestLooseResource(position, maxDistance, filter = null)') && gatherables.includes('reserveLooseResource(id, owner)') && gatherables.includes('releaseLooseResource(id, owner)') && gatherables.includes('takeReservedLooseResource(id, owner)')],
   ['player targeting ignores pickups temporarily reserved by Sprout', gatherables.includes('if (!item.active || item.reservedBy) continue;')],
   ['Sprout scans only real loose item records rather than harvesting grass patches or intact nodes', companion.includes('findNearestLooseResource?.(') && !companion.includes('.gather(') && !companion.includes('harvestGrassPatch') && !companion.includes('treeHarvest') && !companion.includes('rockHarvest')],
@@ -61,3 +61,5 @@ for (const [label, ok] of checks) {
 
 if (failed > 0) process.exitCode = 1;
 else console.log(`Sprout companion regression checks passed (${checks.length} contracts).`);
+
+await import('./verify-sprout-behavior.mjs');
