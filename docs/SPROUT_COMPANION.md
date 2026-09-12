@@ -37,7 +37,7 @@ Storage capacity, collection radius, compression speed and larger-object support
 The responsibility split is explicit:
 
 - **Ranger performs the harvesting.** The Ranger chops a standing tree, mines a rock, cuts/harvests vegetation and performs other active world interactions.
-- **World systems create real results.** A chopped tree should ultimately visibly fall before its timber becomes collectible; mined/cut resources exist in the world according to their resource system.
+- **World systems create real results.** A felled tree visibly falls and settles before its configured Logs become collectible; mined/cut resources exist in the world according to their resource system.
 - **Sprout performs retrieval.** After allegiance, Sprout detects eligible loose world pickups near the Ranger and collects them through the compression beam.
 - **Inventory remains authoritative.** Collection succeeds only when the resource is legitimately transferred out of its world representation and into the shared inventory.
 
@@ -97,15 +97,27 @@ Sprout uses the shared world collision service for ordinary follow/collection mo
 
 The companion does not introduce a navmesh or a competing obstacle database. If it falls far enough behind, collection intent is cancelled and catch-up takes priority. A bounded hard catch-up is allowed only as recovery from large separation or obstacle trapping.
 
-## Tree-felling requirement
+## Tree felling and timber handoff
 
-Normal tree harvesting should still move toward a visible felling state. The intended final loop is:
+Normal tree harvesting now follows the intended visible handoff:
 
-`Axe hits -> tree enters falling state -> trunk visibly falls -> fall settles -> configured Log results become collectible -> Sprout may collect those Logs after allegiance`
+`Axe hits -> final hit hides the instanced standing tree -> an authored-tree proxy pivots away from the Ranger -> fall settles -> stump/regrowth state begins -> configured Log results become collectible -> Sprout may collect those Logs after allegiance`
 
-The current tree system already creates legitimate loose Log results after the final axe hit, so Sprout can retrieve those results now. However, the standing tree still transitions immediately to stump/results at the final hit. The physical falling animation/state remains a later harvesting slice.
+The falling presentation is created from the harvested tree's existing render matrices and shared tree mesh/material data. It is therefore a temporary presentation of the same authored tree rather than a second forest-tree authority. A low-poly fallback is used only when no render-state handles are available.
 
-Tree fall presentation must remain owned by the tree-harvest/world layer. Sprout only reacts to valid collectible results after they exist.
+Logs are **not** spawned at the final axe hit. `TreeHarvestSystem` creates them only after the falling presentation reaches its settled state. Sprout therefore cannot compress timber before the visible tree impact has completed.
+
+The tree collider is removed when felling begins so the former standing trunk no longer behaves as an upright obstacle. Falling-tree damage/collision is intentionally not introduced by this slice; that would be a separate combat/physics decision.
+
+### Save/Continue rule for felling
+
+Tree regrowth persistence is also the settled-state checkpoint for this transition:
+
+- a save written during the short falling animation contains no regrowth record for that tree, so Continue restarts the fall and still produces its Logs only after impact;
+- a save written after the tree settled contains its regrowth record, so restore finalizes the stump/regrowth state without spawning replacement Logs because restored `GatherableSystem` state is already authoritative for whether those Logs still exist or were collected;
+- older saves created before visible felling are treated as already-settled tree state and therefore do not duplicate timber on Continue.
+
+This keeps harvesting, world pickups and shared inventory as separate authorities while preserving save compatibility.
 
 ## Upgrade direction
 
@@ -124,7 +136,8 @@ These are progression extensions and must build on the same companion/inventory 
 
 - `InventorySystem` remains the single item-count authority for the Ranger/Sprout pair.
 - `GatherableSystem` remains responsible for loose world pickup identity, player targeting, Sprout reservation/release and legitimate committed pickup removal.
-- `TreeHarvestSystem` remains responsible for axe hits, tree state, regrowth and creation of timber results. The future physical fall belongs there, not in Sprout logic.
+- `TreeHarvestSystem` remains responsible for axe hits, standing-tree state, felling completion, stump/regrowth state and creation of timber results.
+- `TreeFellingPresentation` owns only the temporary visual fall of the already-harvested authored tree. It does not award Logs, mutate inventory or decide harvesting.
 - `SproutArrivalController` owns the opening gameplay story state, crash investigation objective, rescue action, boot dialogue and allegiance checkpoint. At allegiance it exposes the single crash-site Sprout presentation for companion ownership; it does not own item quantities or harvesting.
 - `SproutCrashSiteSystem` owns the gameplay crash-site presentation/collision, incoming blue object, fallen rescue tree and pre-allegiance temporary Sprout/pod visual.
 - `SproutCompanionController` owns post-allegiance follow intent, collision-aware catch-up, loose-resource selection and compression presentation. It does not harvest nodes and it does not own item quantities.
@@ -135,8 +148,10 @@ These are progression extensions and must build on the same companion/inventory 
 
 ## Current implementation boundary
 
-The Sprout introduction, crash-site rescue and first companion behavior are now connected end to end. After the beach-recovery cinematic, the blue object impacts inland; the Ranger investigates, frees Sprout and completes the allegiance dialogue. The existing crash-site Sprout presentation then transfers to the companion runtime rather than spawning a duplicate actor.
+The Sprout introduction, crash-site rescue, companion retrieval and visible tree-to-timber handoff are now connected end to end. After the beach-recovery cinematic, the blue object impacts inland; the Ranger investigates, frees Sprout and completes the allegiance dialogue. The existing crash-site Sprout presentation then transfers to the companion runtime rather than spawning a duplicate actor.
 
 Once allied, Sprout follows the Ranger, uses the shared collision world for movement, scans a bounded radius for eligible loose Stick/Stone/Grass/Log pickups, approaches them, displays a blue compression transfer and adds the committed quantity to the existing shared inventory. Catch-up always wins over resource chasing, and collection uses the `GatherableSystem` reservation/commit boundary so save data cannot record an unexplained duplicate award.
 
-This slice still does **not** implement storage-capacity upgrades, advanced companion utilities, multi-target collection, a production Sprout 3D asset, or the normal tree-felling animation/state. Those remain later milestones.
+For timber specifically, the Ranger's final axe hit now starts a visible authored-tree fall. The tree must settle before its configured Log pickups are spawned, after which the existing Sprout collection logic can retrieve them without any special-case harvesting path.
+
+This slice still does **not** implement storage-capacity upgrades, advanced companion utilities, multi-target collection, a production Sprout 3D asset, or falling-tree damage/collision. Those remain later milestones.
