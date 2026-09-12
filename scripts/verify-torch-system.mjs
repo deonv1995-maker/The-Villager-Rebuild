@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { WorldTimeRuntime } from '../src/core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from '../src/core/WorldTimeSystem.js';
+import { ASSET_PATHS } from '../src/data/AssetPaths.js';
 import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
 import { TORCH } from '../src/data/TorchDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
@@ -22,6 +23,11 @@ assert.equal(nightMinutes, 9 * 60, 'The current night phase must remain nine in-
 assert.equal(TORCH.burnDurationGameMinutes, nightMinutes / 2, 'One torch must last half of the configured night');
 assert.equal(TORCH.burnDurationGameMinutes, 270, 'Baseline torch life must be 4.5 in-game hours');
 assert.equal(TOOL_DEFINITIONS.torch.role, 'light');
+assert.equal(TOOL_DEFINITIONS.torch.icon, 'torch', 'Torch must use its dedicated UI icon semantic');
+assert.ok(
+  ASSET_PATHS.ui.mobile.torch.endsWith('/ui/cosy/icon-torch.webp'),
+  'Torch must resolve through the central cosy WebP asset registry'
+);
 assert.equal(TOOL_ORDER.at(-1), 'torch', 'Torch must be a normal toolbelt slot');
 assert.ok(TORCH.light.angle < Math.PI / 2, 'Torch spotlight must not wrap light behind the Ranger');
 assert.deepEqual(
@@ -157,6 +163,7 @@ const main = read('src/main.js');
 const saveController = read('src/persistence/SaveGameController.js');
 const rangerTools = read('src/player/RangerToolPresentation.js');
 const torchRuntimeSource = read('src/gameplay/TorchRuntimeController.js');
+const mobileHud = read('src/ui/MobileHud.js');
 const torchCss = read('src/torch.css');
 const packageJson = JSON.parse(read('package.json'));
 
@@ -170,6 +177,7 @@ const checks = [
   ['torch runtime does not create a second animation loop', !torchRuntimeSource.includes('requestAnimationFrame')],
   ['torch light is a handheld directional spotlight', torchRuntimeSource.includes('new THREE.SpotLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
   ['torch light aims forward from the Ranger instead of radiating behind', torchRuntimeSource.includes('addScaledVector(this.direction, this.definition.light.aimDistance)')],
+  ['mobile HUD exposes the dedicated torch artwork', mobileHud.includes('torch: ui.torch')],
   ['eight-slot mobile belt has a narrow-screen layout contract', torchCss.includes('@media (max-width: 420px)') && torchCss.includes('10.6vw')],
   ['full check suite includes torch regression', packageJson.scripts.check.includes('npm run verify:torch')]
 ];
