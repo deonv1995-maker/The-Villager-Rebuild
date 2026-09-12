@@ -26,8 +26,8 @@ export class TorchRuntimeController {
     this.targetPosition = new THREE.Vector3();
     this.visualRoot = this.#createVisual();
     this.handMounted = game.player.mountRightHandObject?.(this.visualRoot) ?? false;
-    if (!this.handMounted && !this.visualRoot.parent) {
-      game.player.root.add(this.visualRoot);
+    if (!this.handMounted) {
+      if (!this.visualRoot.parent) game.player.root.add(this.visualRoot);
       const fallback = definition.visual.fallbackPosition;
       this.visualRoot.position.set(fallback.x, fallback.y, fallback.z);
     }
