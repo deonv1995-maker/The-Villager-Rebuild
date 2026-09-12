@@ -150,18 +150,17 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
         game,
         setStatus: setGameplayStatus,
         onComplete: () => {
-          sproutArrival.beginAfterArrival();
           worldTimeRuntime.start();
+          sproutArrival.beginAfterArrival();
           saveController.start({ saveImmediately: true });
         }
       });
       game.arrivalIntro = arrivalIntro;
       const arrivalStarted = arrivalIntro.start();
       if (!arrivalStarted) {
-        sproutArrival.beginAfterArrival();
         worldTimeRuntime.start();
+        sproutArrival.beginAfterArrival();
         saveController.start({ saveImmediately: true });
-        setStatus('DAY 1 · ASHORE');
       }
     }
 
