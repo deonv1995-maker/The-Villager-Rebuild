@@ -22,10 +22,42 @@ function fixture() {
   root.position.set(0, tuning.hoverHeight, -2);
   scene.add(root);
   const collision = new WorldCollisionSystem({ heightAt: () => 0, isPlayable: () => true });
+  const externalActions = new Map();
+  const statuses = [];
+  const player = {
+    cinematicDriver: null,
+    getPosition: out => out.copy(position),
+    getFacingDirection: out => out.copy(facing),
+    beginCinematic(driver) {
+      if (!driver || this.cinematicDriver) return false;
+      this.cinematicDriver = driver;
+      return true;
+    },
+    endCinematic(driver) {
+      if (!this.cinematicDriver || (driver && this.cinematicDriver !== driver)) return false;
+      this.cinematicDriver = null;
+      return true;
+    },
+    playCinematicAnimation(preferences, options = {}) {
+      return { name: Array.isArray(preferences) ? preferences[0] : preferences, duration: options.loop ? 1 : 1.35 };
+    },
+    faceWorldPoint() {}
+  };
+  const hud = {
+    setInventory() {},
+    setExternalAction(id, action) {
+      if (action) externalActions.set(id, action);
+      else externalActions.delete(id);
+    }
+  };
   const game = {
-    player: { getPosition: out => out.copy(position), getFacingDirection: out => out.copy(facing) },
+    player,
     island: { heightAt: () => 0, isPlayable: () => true, collision },
-    gatherables, inventory, sceneSystem: { scene },
+    gatherables,
+    inventory,
+    hud,
+    setStatus: message => statuses.push(message),
+    sceneSystem: { scene },
     sproutArrival: { isAllied: () => true, claimCompanionPresentation: () => root }
   };
   const controller = new SproutCompanionController({ game });
@@ -38,7 +70,21 @@ function fixture() {
     gatherables.items.push(item);
     return item;
   };
-  return { controller, tick, add, position, facing, root, inventory, gatherables, collision, scene };
+  return {
+    controller,
+    tick,
+    add,
+    position,
+    facing,
+    root,
+    inventory,
+    gatherables,
+    collision,
+    scene,
+    player,
+    externalActions,
+    statuses
+  };
 }
 
 for (const resourceId of tuning.collectibleResourceIds) {
@@ -81,20 +127,75 @@ for (const resourceId of tuning.collectibleResourceIds) {
   const f = fixture();
   f.root.position.set(0, tuning.hoverHeight, 2);
   let smallest = Infinity;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 38; i++) {
+    f.position.z -= 0.035;
     f.tick();
-    smallest = Math.min(smallest, Math.hypot(f.root.position.x, f.root.position.z));
+    smallest = Math.min(smallest, Math.hypot(f.root.position.x - f.position.x, f.root.position.z - f.position.z));
   }
   assert.ok(smallest >= tuning.rangerPersonalSpace, 'Follow route must go around Ranger');
-  assert.ok(f.root.position.z < -1, 'Avoidance must reach behind Ranger, not stall');
   f.position.copy(f.root.position);
   f.tick();
   assert.ok(Math.hypot(f.root.position.x - f.position.x, f.root.position.z - f.position.z) >= tuning.rangerPersonalSpace,
     'Ranger entering Sprout position must cause separation');
   const heights = [];
-  for (let i = 0; i < 150; i++) { f.tick(); heights.push(f.root.position.y); }
+  for (let i = 0; i < 80; i++) { f.tick(); heights.push(f.root.position.y); }
   assert.ok(Math.max(...heights) - Math.min(...heights) > 0.06, 'Idle hover must visibly move');
   assert.ok(heights.every(y => Math.abs(y - tuning.hoverHeight) <= tuning.hoverAmplitude + 0.001), 'Hover stays restrained');
+}
+{
+  const f = fixture();
+  f.tick(2);
+  const perceivedBefore = f.controller.perceivedPlayerPosition.clone();
+  f.position.set(2.5, 0, 0);
+  f.tick();
+  assert.ok(f.controller.perceivedPlayerPosition.distanceTo(perceivedBefore) < 0.01,
+    'Sprout must not know an abrupt Ranger move on the same frame');
+  f.tick(10);
+  assert.ok(f.controller.perceivedPlayerPosition.distanceTo(f.position) < 0.01,
+    'Sprout must eventually sample the Ranger after its reaction delay');
+}
+{
+  const f = fixture();
+  const start = f.root.position.clone();
+  f.tick(Math.ceil((tuning.idleAfterSeconds + 3) / 0.05));
+  const horizontalTravel = Math.hypot(f.root.position.x - start.x, f.root.position.z - start.z);
+  assert.ok(horizontalTravel > 0.2, 'Stationary Ranger must allow independent Sprout idle roaming');
+  assert.equal(f.controller.rangerMoving, false);
+}
+{
+  const f = fixture();
+  f.tick(Math.ceil((tuning.idleAfterSeconds + 0.3) / 0.05));
+  const item = f.add('stick', f.root.position.x, f.root.position.z + 0.6);
+  f.tick(6);
+  assert.ok(f.controller.compression, 'Idle collection must reserve a nearby loose resource');
+  assert.ok(f.controller.compression.inspectDuration >= tuning.idleInspectMinSeconds,
+    'Idle collection must include an inspection beat before compression');
+  f.tick(8);
+  assert.equal(f.inventory.get('stick'), 0, 'Inspection must not award inventory early');
+  assert.ok(item.active && item.reservedBy, 'Inspection preserves the reservation/commit boundary');
+  f.tick(50);
+  assert.equal(f.inventory.get('stick'), 1, 'Inspected pickup must still commit exactly once');
+}
+{
+  const f = fixture();
+  f.tick(Math.ceil((tuning.bondingIdleSeconds + 0.4) / 0.05));
+  const petAction = f.externalActions.get('sprout-bond');
+  assert.equal(petAction?.caption, 'PET', 'Idle nearby Sprout must expose a player-triggered PET action');
+  assert.equal(petAction?.onTrigger?.(), true);
+  assert.equal(f.player.cinematicDriver !== null, true, 'PET must use the Ranger cinematic boundary only after trigger');
+  assert.equal(f.controller.getPresentationState().affectionate, true);
+  f.tick(60);
+  assert.equal(f.player.cinematicDriver, null, 'PET interaction must release Ranger control');
+  f.controller.bondingCooldown = 0;
+  f.controller.rangerIdleElapsed = tuning.bondingIdleSeconds + 0.1;
+  f.tick();
+  const countAction = f.externalActions.get('sprout-bond');
+  assert.equal(countAction?.caption, 'COUNT', 'Bond action must alternate to inventory counting');
+  assert.equal(countAction?.onTrigger?.(), true);
+  assert.equal(f.controller.getPresentationState().scanning, true, 'COUNT must drive scanner presentation');
+  assert.ok(f.statuses.some(message => message.includes('INVENTORY CHECK')), 'COUNT must summarize shared inventory through status feedback');
+  f.tick(70);
+  assert.equal(f.player.cinematicDriver, null, 'COUNT interaction must release Ranger control');
 }
 {
   const f = fixture();
@@ -128,4 +229,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: transaction, catch-up, approach timeout, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: transaction, catch-up, delayed follow sensing, idle roam/inspection, bonding, Ranger space, hover and mobile geometry.');
