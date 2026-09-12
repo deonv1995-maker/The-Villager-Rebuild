@@ -6,11 +6,6 @@ import {
 import { SproutCrashSiteSystem } from '../world/SproutCrashSiteSystem.js';
 
 const clampDt = dt => Math.min(Math.max(0, dt), 0.05);
-const isStoryPhase = phase => (
-  phase !== PHASE.DORMANT
-  && phase !== PHASE.ALLIED
-  && phase !== PHASE.LEGACY_SKIPPED
-);
 
 export class SproutArrivalController {
   constructor({ game, setStatus = null } = {}) {
@@ -30,6 +25,7 @@ export class SproutArrivalController {
     this.lastTimestamp = null;
     this.noticeShown = false;
     this.lastObjective = '';
+    this.lastObjectiveHud = null;
     this.playerPosition = new THREE.Vector3();
     this.sitePosition = new THREE.Vector3();
     this.rescueCinematicOwned = false;
@@ -74,6 +70,7 @@ export class SproutArrivalController {
     this.phaseElapsed = 0;
     this.noticeShown = false;
     this.lastObjective = '';
+    this.lastObjectiveHud = null;
     this.setStatus?.('BLUE SIGNAL · SOMETHING IS COMING DOWN INLAND');
     this.#setObjective('Watch the inland sky');
     return true;
@@ -97,12 +94,13 @@ export class SproutArrivalController {
     this.dialogueIndex = 0;
     this.noticeShown = false;
     this.lastObjective = '';
+    this.lastObjectiveHud = null;
+    this.site = null;
 
     if (!state || Number(state.version) !== SPROUT_ARRIVAL.stateVersion) {
       // Saves created before the Sprout story slice remain playable and are not forced
       // through a new opening event in the middle of an established world.
       this.phase = PHASE.LEGACY_SKIPPED;
-      this.site = null;
       return { restored: false, legacySkipped: true };
     }
 
@@ -124,8 +122,11 @@ export class SproutArrivalController {
     ) {
       this.crashSite.setSite(state.site);
       this.site = this.crashSite.resolveSite();
+    } else if (savedPhase !== PHASE.DORMANT && savedPhase !== PHASE.LEGACY_SKIPPED) {
+      this.site = this.crashSite.resolveSite();
     }
 
+    this.player.getPosition(this.playerPosition);
     if (savedPhase === PHASE.IMPACT_DELAY) {
       this.#setObjective('Watch the inland sky');
     } else if (savedPhase === PHASE.IMPACTING) {
@@ -200,6 +201,7 @@ export class SproutArrivalController {
         this.phaseElapsed = 0;
         this.setStatus?.('IMPACT · SOMETHING CRASHED INLAND');
         this.#syncInvestigateObjective();
+        this.game.saveController?.saveNow?.('sprout-impact');
       }
       return;
     }
@@ -220,6 +222,7 @@ export class SproutArrivalController {
       if (progress >= 1) {
         this.crashSite.completeRescue();
         this.#enterDialogue();
+        this.game.saveController?.saveNow?.('sprout-rescue');
       }
       return;
     }
@@ -231,6 +234,7 @@ export class SproutArrivalController {
 
     if (this.phase === PHASE.ALLIED) {
       this.#clearRescueAction();
+      this.#setObjective('Day 1 · Gather sticks, stones and grass');
     }
   }
 
@@ -342,12 +346,16 @@ export class SproutArrivalController {
     this.#releaseCinematic();
     this.setStatus?.('SPROUT · ALLIED');
     this.#setObjective('Day 1 · Gather sticks, stones and grass');
+    this.game.saveController?.saveNow?.('sprout-allied');
   }
 
   #setObjective(message) {
-    if (!message || this.lastObjective === message) return;
+    if (!message) return;
+    const hud = this.game.hud ?? null;
+    if (this.lastObjective === message && this.lastObjectiveHud === hud) return;
     this.lastObjective = message;
-    this.game.hud?.setObjective(message);
+    this.lastObjectiveHud = hud;
+    hud?.setObjective(message);
   }
 
   #clearRescueAction() {
@@ -375,5 +383,3 @@ export class SproutArrivalController {
     this.dialogueElement.hidden = true;
   }
 }
-
-export { isStoryPhase };
