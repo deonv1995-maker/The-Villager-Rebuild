@@ -23,7 +23,7 @@ This keeps garden features expandable without creating a second building system 
 | Short Fence | 1 Log | One canonical grid edge | Blocking low fence |
 | Cobble Paving | 2 Stone | One canonical grid cell | Non-blocking paved surface |
 
-Costs live in `src/data/LandscapingDefinitions.js`; UI and placement code must not duplicate gameplay costs.
+Costs live in `src/data/LandscapingDefinitions.js`; UI and placement code must not duplicate gameplay costs. The section deliberately starts with only these two active rows so later landscaping modules can be added without mixing them into Hammer construction.
 
 ## Grid ownership
 
