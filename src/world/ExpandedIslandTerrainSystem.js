@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { EXPLORATION_WORLD } from '../data/ExplorationRegionDefinitions.js';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
+import { ExplorationRegionSystem } from './ExplorationRegionSystem.js';
 import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
-const MAINLAND_SCALE = 2;
+const MAINLAND_SCALE = EXPLORATION_WORLD.mainlandScale;
 const BASE_COAST_X = 172;
 const BASE_COAST_Z = 132;
 const DAY_ONE_BAY_RADIUS = 128;
@@ -28,6 +30,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     this.chunks = chunks;
     this.mainlandScale = MAINLAND_SCALE;
     this.chunkTerrainSegments = 18;
+    this.explorationRegions = new ExplorationRegionSystem({
+      regions: EXPLORATION_WORLD.regions,
+      activationWeight: EXPLORATION_WORLD.regionActivationWeight
+    });
     this.satelliteIslands = this.#generateSatelliteIslands();
     this.extentX = Math.max(
       410,
@@ -55,12 +61,34 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const expanded = ellipse * irregularity;
 
     // Keep the proven Day-1 beach in the same playable area by turning the
-    // old southern coast into a deep inlet while the rest of the mainland
-    // expands to roughly double its previous linear dimensions.
+    // old southern coast into a deep inlet while the wider mainland expands
+    // around it. The inlet contract is intentionally independent of scale.
     const bayDelta = wrappedAngleDelta(angle, DAY_ONE_BAY_ANGLE);
     const bayStrength = Math.exp(-(bayDelta * bayDelta) / (2 * DAY_ONE_BAY_WIDTH * DAY_ONE_BAY_WIDTH));
     const bayEdge = DAY_ONE_BAY_RADIUS * (1 + Math.sin(angle * 11 + 0.6) * 0.045);
     return THREE.MathUtils.lerp(expanded, bayEdge, bayStrength * 0.965);
+  }
+
+  regionAt(x, z) {
+    return this.explorationRegions.regionAt(x, z) ?? super.regionAt(x, z);
+  }
+
+  getExplorationRegions() {
+    return this.explorationRegions.getDefinitions();
+  }
+
+  vegetationSuitabilityAt(x, z, maxSlope = 0.56) {
+    const base = super.vegetationSuitabilityAt(x, z, maxSlope);
+    if (base <= 0) return 0;
+    const region = this.explorationRegions.regionAt(x, z);
+    return THREE.MathUtils.clamp(base * (region?.vegetationMultiplier ?? 1), 0, 1);
+  }
+
+  forestCoverAt(x, z) {
+    const base = super.forestCoverAt(x, z);
+    if (base <= 0) return 0;
+    const region = this.explorationRegions.regionAt(x, z);
+    return THREE.MathUtils.clamp(base * (region?.forestMultiplier ?? 1), 0, 1);
   }
 
   heightAt(x, z) {
@@ -81,8 +109,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const longNoise =
       Math.sin(x * 0.013 + z * 0.021 + 0.4) * 0.42 +
       Math.cos(z * 0.017 - x * 0.009 - 1.2) * 0.34;
+    const explorationTerrain = this.explorationRegions.terrainOffsetAt(x, z);
 
-    height += shoreFade * (outerFeatures + longNoise);
+    height += shoreFade * (outerFeatures + longNoise + explorationTerrain);
     return height;
   }
 

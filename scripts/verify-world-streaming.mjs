@@ -5,13 +5,34 @@ import { WorldChunkSystem } from '../src/world/WorldChunkSystem.js';
 import { WaterVisualSystem } from '../src/world/WaterVisualSystem.js';
 
 const terrain = new ExpandedIslandTerrainSystem(new THREE.Group());
-assert.equal(terrain.mainlandScale, 2, 'expanded mainland must retain the agreed 2x linear scale');
+assert.equal(terrain.mainlandScale, 2.25, 'expanded mainland must retain the agreed 2.25x linear scale');
 assert.equal(terrain.chunkTerrainSegments, 18, 'terrain must expose one shared chunk tessellation for terrain and shallow water');
-assert.equal(terrain.coastRadiusAt(0) > 300, true, 'expanded east/west mainland radius must materially exceed the old island');
-assert.equal(terrain.coastRadiusAt(Math.PI) > 300, true, 'expanded west mainland radius must materially exceed the old island');
+assert.equal(terrain.coastRadiusAt(0) > 340, true, 'expanded east/west mainland radius must materially exceed the previous 2x island');
+assert.equal(terrain.coastRadiusAt(Math.PI) > 340, true, 'expanded west mainland radius must materially exceed the previous 2x island');
 assert.equal(terrain.coastRadiusAt(Math.PI / 2) < 160, true, 'Day-1 southern coast must remain a deep inlet rather than moving the tutorial inland');
 const spawn = terrain.getSpawnPoint();
 assert.equal(terrain.isPlayable(spawn.x, spawn.z), true, 'existing Day-1 spawn must stay playable after mainland expansion');
+
+const explorationRegions = terrain.getExplorationRegions();
+assert.equal(explorationRegions.length, 4, 'expanded mainland must expose the first four deterministic exploration regions');
+assert.equal(new Set(explorationRegions.map(region => region.id)).size, explorationRegions.length, 'exploration region ids must remain unique');
+for (const expected of explorationRegions) {
+  const resolved = terrain.regionAt(expected.center.x, expected.center.z);
+  assert.equal(resolved.name, expected.id, `${expected.id} centre must resolve through the shared terrain region query`);
+  assert.equal(resolved.biome, expected.biome, `${expected.id} must expose its biome through the shared region query`);
+  assert.equal(resolved.poiTypes.length > 0, true, `${expected.id} must reserve at least one future POI category`);
+  assert.equal(terrain.isPlayable(expected.center.x, expected.center.z), true, `${expected.id} centre must remain on traversable mainland`);
+}
+const northernHighlands = terrain.regionAt(-28, -198);
+const westernJungle = terrain.regionAt(-220, 15);
+assert.equal(northernHighlands.biome, 'mountain', 'northern highlands must provide a real mountain exploration region');
+assert.equal(northernHighlands.forestMultiplier < 1, true, 'mountain region must thin canopy relative to ordinary woodland');
+assert.equal(westernJungle.biome, 'jungle', 'western mainland must provide a dedicated jungle exploration region');
+assert.equal(westernJungle.forestMultiplier > 1, true, 'jungle region must increase canopy density through the existing ecology path');
+assert.equal(westernJungle.poiTypes.includes('ruin'), true, 'jungle region must remain ready for later abandoned-structure placement');
+assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for later cave placement');
+assert.equal(terrain.heightAt(-28, -198) > 6, true, 'northern highlands must be authoritative elevated terrain rather than a distant visual-only mountain');
+assert.equal(['mountain', 'jungle'].includes(terrain.regionAt(spawn.x, spawn.z).biome), false, 'Day-1 spawn must stay outside the new deep-exploration biomes');
 
 const satellites = terrain.getSatelliteIslands();
 assert.equal(satellites.length, 9, 'expanded archipelago must keep a deterministic set of nine satellite islands');
@@ -143,4 +164,4 @@ for (const mesh of shorelineMeshes) {
   }
 }
 
-console.log('expanded world streaming contracts verified');
+console.log('expanded world streaming and exploration-region contracts verified');
