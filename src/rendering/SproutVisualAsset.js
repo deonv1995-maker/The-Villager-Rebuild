@@ -12,6 +12,8 @@ const COLORS = Object.freeze({
   joint: 0x6d7470
 });
 
+const PRESENTATION_SCALE = 0.75;
+
 const makeStandard = (color, options = {}) => new THREE.MeshStandardMaterial({
   color,
   roughness: options.roughness ?? 0.48,
@@ -50,6 +52,7 @@ const createArm = ({ side, materials }) => {
   root.name = side < 0 ? 'sprout-left-helper-arm' : 'sprout-right-helper-arm';
   root.position.set(side * 0.47, -0.02, 0.03);
   root.rotation.z = side * -0.18;
+  root.userData.baseY = root.position.y;
 
   addMesh(root, new THREE.SphereGeometry(0.105, 10, 7), materials.joint, {
     name: `${root.name}-shoulder`
@@ -116,7 +119,8 @@ export function createSproutVisual() {
   const root = new THREE.Group();
   root.name = 'sprout-production-companion';
   root.userData.sproutProductionVisual = true;
-  root.userData.visualVersion = 2;
+  root.userData.visualVersion = 3;
+  root.userData.presentationScale = PRESENTATION_SCALE;
 
   const emissiveBase = {
     roughness: 0.2,
@@ -161,38 +165,44 @@ export function createSproutVisual() {
   });
   lowerBand.scale.z = 0.92;
 
-  const faceFrame = addMesh(root, new RoundedBoxGeometry(0.79, 0.52, 0.18, 3, 0.085), materials.greenDark, {
+  // The face is nested into the spherical shell instead of reading as a separate box.
+  addMesh(root, new RoundedBoxGeometry(0.75, 0.49, 0.12, 4, 0.135), materials.shellShade, {
     name: 'sprout-face-frame',
-    position: [0, 0.115, 0.415],
+    position: [0, 0.115, 0.405],
     rotation: [-0.035, 0, 0],
-    scale: [1, 1, 0.82]
+    scale: [1, 0.98, 0.78]
   });
-  faceFrame.scale.x = 0.98;
-
-  addMesh(root, new RoundedBoxGeometry(0.71, 0.445, 0.13, 3, 0.064), materials.face, {
+  addMesh(root, new RoundedBoxGeometry(0.69, 0.43, 0.075, 4, 0.12), materials.greenDark, {
+    name: 'sprout-face-liner',
+    position: [0, 0.115, 0.447],
+    rotation: [-0.035, 0, 0],
+    shadow: false
+  });
+  addMesh(root, new RoundedBoxGeometry(0.635, 0.375, 0.04, 4, 0.105), materials.face, {
     name: 'sprout-face-screen',
-    position: [0, 0.115, 0.475],
+    position: [0, 0.115, 0.49],
     rotation: [-0.035, 0, 0],
     shadow: false
   });
 
-  const eyeLeft = addMesh(root, new THREE.SphereGeometry(0.085, 12, 8), materials.expression, {
+  // Arc-shaped eyes carry more character than circular dots and echo the approved concept.
+  const eyeLeft = addMesh(root, new THREE.TorusGeometry(0.064, 0.017, 6, 12, Math.PI), materials.expression, {
     name: 'sprout-eye-left',
-    position: [-0.15, 0.16, 0.55],
-    scale: [0.92, 1.15, 0.25],
+    position: [-0.145, 0.18, 0.518],
+    scale: [1, 0.72, 0.6],
     shadow: false
   });
-  addMesh(root, new THREE.SphereGeometry(0.085, 12, 8), materials.expression, {
+  const eyeRight = addMesh(root, new THREE.TorusGeometry(0.064, 0.017, 6, 12, Math.PI), materials.expression, {
     name: 'sprout-eye-right',
-    position: [0.15, 0.16, 0.55],
-    scale: [0.92, 1.15, 0.25],
+    position: [0.145, 0.18, 0.518],
+    scale: [1, 0.72, 0.6],
     shadow: false
   });
-  const mouth = addMesh(root, new THREE.TorusGeometry(0.072, 0.011, 5, 12, Math.PI), materials.expression, {
+  const mouth = addMesh(root, new THREE.TorusGeometry(0.055, 0.01, 5, 12, Math.PI), materials.expression, {
     name: 'sprout-expression-mouth',
-    position: [0, 0.055, 0.555],
+    position: [0, 0.055, 0.52],
     rotation: [0, 0, Math.PI],
-    scale: [1, 0.7, 1],
+    scale: [1, 0.66, 1],
     shadow: false
   });
 
@@ -215,22 +225,30 @@ export function createSproutVisual() {
     shadow: false
   });
 
-  const scanHousing = addMesh(root, new THREE.CylinderGeometry(0.115, 0.115, 0.105, 10), materials.greenDark, {
+  // Mount the scanner high on the front-left quarter so it reads clearly from gameplay camera angles.
+  const scannerMount = new THREE.Group();
+  scannerMount.name = 'sprout-scanner-mount';
+  scannerMount.position.set(-0.36, 0.33, 0.31);
+  scannerMount.rotation.set(-0.05, -0.48, -0.12);
+  root.add(scannerMount);
+  addMesh(scannerMount, new THREE.CylinderGeometry(0.125, 0.135, 0.155, 10), materials.greenDark, {
     name: 'sprout-scanning-lens-housing',
-    position: [-0.495, 0.135, 0.045],
-    rotation: [0, 0, Math.PI / 2]
+    rotation: [Math.PI / 2, 0, 0]
   });
-  scanHousing.scale.z = 0.9;
-  addMesh(root, new THREE.CylinderGeometry(0.078, 0.078, 0.118, 10), materials.joint, {
+  addMesh(scannerMount, new THREE.TorusGeometry(0.091, 0.018, 6, 12), materials.orange, {
     name: 'sprout-scanning-lens-ring',
-    position: [-0.535, 0.135, 0.045],
-    rotation: [0, 0, Math.PI / 2]
-  });
-  const scannerLens = addMesh(root, new THREE.CircleGeometry(0.064, 10), materials.scanner, {
-    name: 'sprout-scanning-lens',
-    position: [-0.597, 0.135, 0.045],
-    rotation: [0, -Math.PI / 2, 0],
+    position: [0, 0, 0.085],
     shadow: false
+  });
+  const scannerLens = addMesh(scannerMount, new THREE.CircleGeometry(0.072, 12), materials.scanner, {
+    name: 'sprout-scanning-lens',
+    position: [0, 0, 0.105],
+    shadow: false
+  });
+  addMesh(scannerMount, new THREE.CylinderGeometry(0.035, 0.045, 0.14, 7), materials.joint, {
+    name: 'sprout-scanner-hinge',
+    position: [0.055, -0.1, -0.055],
+    rotation: [0.25, 0, -0.42]
   });
 
   const backpack = addMesh(root, new RoundedBoxGeometry(0.36, 0.36, 0.2, 2, 0.07), materials.greenDark, {
@@ -251,10 +269,11 @@ export function createSproutVisual() {
       shadow: false
     });
   }
-  // Small reflective screen glints remain readable without another light or texture.
   addMesh(root, new THREE.SphereGeometry(0.035, 8, 6), materials.shell, {
-    name: 'sprout-screen-glint', position: [-0.25, 0.26, 0.544],
-    scale: [1.2, 0.36, 0.12], shadow: false
+    name: 'sprout-screen-glint',
+    position: [-0.245, 0.255, 0.515],
+    scale: [1.2, 0.36, 0.12],
+    shadow: false
   });
 
   const leftArm = createArm({ side: -1, materials });
@@ -271,23 +290,43 @@ export function createSproutVisual() {
     rotation: [Math.PI / 2, 0, 0],
     shadow: false
   });
+  const hoverInnerRing = addMesh(hoverAssembly, new THREE.TorusGeometry(0.235, 0.025, 6, 18), materials.hover, {
+    name: 'sprout-antigrav-inner-ring',
+    position: [0, -0.03, 0],
+    rotation: [Math.PI / 2, 0, 0],
+    shadow: false
+  });
   addMesh(hoverAssembly, new THREE.CylinderGeometry(0.22, 0.27, 0.105, 12), materials.greenDark, {
     name: 'sprout-hover-core',
     position: [0, 0.03, 0]
   });
 
+  const stabilizerPods = [];
   for (let index = 0; index < 3; index += 1) {
     const angle = index * (Math.PI * 2 / 3) + Math.PI / 6;
-    addMesh(hoverAssembly, new THREE.SphereGeometry(0.095, 8, 6), materials.shellShade, {
+    const podRoot = new THREE.Group();
+    podRoot.name = `sprout-stabilizer-root-${index + 1}`;
+    podRoot.position.set(Math.cos(angle) * 0.43, -0.02, Math.sin(angle) * 0.43);
+    podRoot.userData.baseY = podRoot.position.y;
+    podRoot.userData.phase = 0.55 + index * 2.17;
+    hoverAssembly.add(podRoot);
+
+    addMesh(podRoot, new THREE.SphereGeometry(0.095, 8, 6), materials.shellShade, {
       name: `sprout-stabilizer-pod-${index + 1}`,
-      position: [Math.cos(angle) * 0.43, -0.02, Math.sin(angle) * 0.43],
       scale: [1, 0.75, 1]
     });
-    addMesh(hoverAssembly, new THREE.SphereGeometry(0.045, 7, 5), materials.hover, {
-      name: `sprout-stabilizer-glow-${index + 1}`,
-      position: [Math.cos(angle) * 0.43, -0.09, Math.sin(angle) * 0.43],
+    addMesh(podRoot, new THREE.TorusGeometry(0.074, 0.014, 5, 12), materials.hover, {
+      name: `sprout-stabilizer-ring-${index + 1}`,
+      position: [0, -0.075, 0],
+      rotation: [Math.PI / 2, 0, 0],
       shadow: false
     });
+    addMesh(podRoot, new THREE.SphereGeometry(0.042, 7, 5), materials.hover, {
+      name: `sprout-stabilizer-glow-${index + 1}`,
+      position: [0, -0.09, 0],
+      shadow: false
+    });
+    stabilizerPods.push(podRoot);
   }
 
   root.userData.faceGlow = eyeLeft;
@@ -301,7 +340,12 @@ export function createSproutVisual() {
   root.userData.finRight = finRight;
   root.userData.hoverAssembly = hoverAssembly;
   root.userData.hoverRing = hoverRing;
+  root.userData.hoverInnerRing = hoverInnerRing;
+  root.userData.stabilizerPods = stabilizerPods;
+  root.userData.scannerMount = scannerMount;
   root.userData.scannerLens = scannerLens;
+  root.userData.eyeLeft = eyeLeft;
+  root.userData.eyeRight = eyeRight;
   root.userData.mouth = mouth;
   root.userData.body = body;
 
@@ -336,6 +380,20 @@ export function updateSproutVisual(root, elapsed, {
   const hoverAssembly = root.userData.hoverAssembly;
   if (hoverAssembly) hoverAssembly.rotation.y = elapsed * 0.42;
 
+  const hoverRing = root.userData.hoverRing;
+  const hoverInnerRing = root.userData.hoverInnerRing;
+  if (hoverRing) hoverRing.position.y = Math.sin(elapsed * 1.33) * 0.018;
+  if (hoverInnerRing) hoverInnerRing.position.y = -0.03 + Math.sin(elapsed * 1.08 + 1.7) * 0.014;
+
+  const stabilizerPods = root.userData.stabilizerPods ?? [];
+  stabilizerPods.forEach((pod, index) => {
+    const phase = pod.userData.phase ?? index * 2.17;
+    const irregular = Math.sin(elapsed * (1.18 + index * 0.09) + phase) * 0.026
+      + Math.sin(elapsed * (2.61 + index * 0.13) + phase * 1.7) * 0.011;
+    pod.position.y = (pod.userData.baseY ?? -0.02) + irregular;
+    pod.rotation.z = Math.sin(elapsed * 0.72 + phase) * 0.045;
+  });
+
   const finLeft = root.userData.finLeft;
   const finRight = root.userData.finRight;
   if (finLeft) finLeft.rotation.z = -0.38 - Math.sin(elapsed * 1.7) * 0.035;
@@ -343,11 +401,36 @@ export function updateSproutVisual(root, elapsed, {
 
   const leftArm = root.userData.leftArm;
   const rightArm = root.userData.rightArm;
-  if (leftArm) leftArm.rotation.x = Math.sin(elapsed * 1.45) * 0.035;
-  if (rightArm) rightArm.rotation.x = -Math.sin(elapsed * 1.45) * 0.035;
+  if (leftArm) {
+    leftArm.rotation.x = Math.sin(elapsed * 1.45) * 0.035;
+    leftArm.position.y = (leftArm.userData.baseY ?? -0.02)
+      - Math.sin(elapsed * 2.05 - 0.56) * 0.024
+      + Math.sin(elapsed * 0.83 + 0.4) * 0.006;
+  }
+  if (rightArm) {
+    rightArm.rotation.x = -Math.sin(elapsed * 1.45) * 0.035;
+    rightArm.position.y = (rightArm.userData.baseY ?? -0.02)
+      - Math.sin(elapsed * 2.05 - 0.74) * 0.022
+      + Math.sin(elapsed * 0.91 + 1.2) * 0.006;
+  }
+
+  const eyeLeft = root.userData.eyeLeft;
+  const eyeRight = root.userData.eyeRight;
+  const eyeSquint = powered ? (scanning ? 0.58 : 0.72 + Math.sin(elapsed * 1.1) * 0.035) : 0.18;
+  if (eyeLeft) {
+    eyeLeft.scale.y = eyeSquint;
+    eyeLeft.rotation.z = scanning ? 0.08 : 0;
+  }
+  if (eyeRight) {
+    eyeRight.scale.y = eyeSquint;
+    eyeRight.rotation.z = scanning ? -0.08 : 0;
+  }
 
   const mouth = root.userData.mouth;
-  if (mouth) mouth.scale.y = powered ? 0.7 + powerPulse * 0.05 : 0.25;
+  if (mouth) {
+    mouth.scale.x = scanning ? 0.78 : 1;
+    mouth.scale.y = powered ? (scanning ? 0.45 : 0.66 + powerPulse * 0.045) : 0.22;
+  }
 }
 
 export function disposeSproutVisual(root) {
