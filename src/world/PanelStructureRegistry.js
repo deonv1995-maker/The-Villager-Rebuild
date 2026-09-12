@@ -1,5 +1,6 @@
 import { PANEL_GRID } from '../data/PanelConstructionDefinitions.js';
-import { panelEdgeDescriptor, PanelConstructionGrid } from './PanelConstructionGrid.js';
+import { panelEdgeDescriptor } from './PanelConstructionGrid.js';
+import { SupportedPanelConstructionGrid } from './SupportedPanelConstructionGrid.js';
 
 const normalizeYaw = yaw => {
   const value = Math.atan2(Math.sin(yaw ?? 0), Math.cos(yaw ?? 0));
@@ -34,7 +35,7 @@ export class PanelStructureRegistry {
       originX,
       originZ,
       yaw: normalizeYaw(yaw),
-      grid: new PanelConstructionGrid({
+      grid: new SupportedPanelConstructionGrid({
         originX: -this.cellSize * 0.5,
         originZ: -this.cellSize * 0.5,
         cellSize: this.cellSize
@@ -196,7 +197,7 @@ export class PanelStructureRegistry {
         originX: saved.originX,
         originZ: saved.originZ,
         yaw: normalizeYaw(saved.yaw),
-        grid: PanelConstructionGrid.restore(saved.grid)
+        grid: SupportedPanelConstructionGrid.restore(saved.grid)
       });
     }
 
