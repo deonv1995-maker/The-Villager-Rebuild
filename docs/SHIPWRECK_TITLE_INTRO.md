@@ -2,7 +2,7 @@
 
 ## Decision
 
-The opening presentation remains split across deliberately narrow layers. `TitleSceneApp` owns the lightweight pre-game voyage/wreck scene. `TitleCelestialEvent` owns only the title-scene night, stars, blue arrival signal and incoming-object presentation. `TitleStormSystem` owns title-only ocean/weather effects. `BeachArrivalIntroController` owns the short post-load beach arrival inside the already-created gameplay world.
+The opening presentation remains split across deliberately narrow layers. `TitleSceneApp` owns the lightweight pre-game voyage/wreck scene. `TitleCelestialEvent` owns only the title-scene night, stars, blue arrival signal and incoming-object presentation. `TitleCinematicCamera` owns the short title-only focus shot that directs attention toward that celestial event. `TitleStormSystem` owns title-only ocean/weather effects. `BeachArrivalIntroController` owns the short post-load beach arrival inside the already-created gameplay world.
 
 None of these presentation layers may become a second gameplay implementation or compete with the authoritative inventory, harvesting, construction, collision, wildlife, mobile-input or PWA systems.
 
@@ -35,13 +35,30 @@ Pressing **PLAY** no longer jumps directly into a rising storm. The voyage first
 - the sky darkens toward night before the storm begins;
 - a low-cost point-star field fades into the horizon/sky;
 - a distinct bright blue flash occurs after night has established;
-- immediately after that flash, one blue incoming object becomes visible travelling toward the island;
+- immediately after that flash, one blue incoming object becomes visible travelling diagonally toward the island;
+- the incoming object now reads as a high-speed atmospheric entry rather than a simple point: a bright core is wrapped in a blue glow, two tapered additive plasma tails, a brighter streak spine, a pulsing local light and a compressed bow-shock/heat bubble with a bright leading rim;
+- the trajectory accelerates visually as it descends and the tail length increases with progress, so movement remains readable even on a small mobile screen;
 - the incoming object is visually suggestive of a shooting star but is deliberately not identified as Sprout by the title scene;
 - the title event ends with that object still on course toward the island. It does not create an impact/crater or resolve the crash site before gameplay loads.
 
-`TitleSceneConfig` is the timing authority for `nightStart`, `nightFull`, `blueFlashAt`, `blueFlashWidth`, `shootingStarStart`, `shootingStarEnd`, `stormStart`, `stormFull`, severe-storm timing, wreck-impact timing and transition-cover timing. The blue flash precedes `stormStart`, so the weather escalation reads as a consequence of the signal instead of an unrelated storm that was already underway.
+`TitleSceneConfig` is the timing authority for `nightStart`, `nightFull`, `blueFlashAt`, `blueFlashWidth`, `shootingStarStart`, `shootingStarEnd`, the celestial focus-shot timings, `stormStart`, `stormFull`, severe-storm timing, wreck-impact timing and transition-cover timing. The blue flash precedes `stormStart`, so the weather escalation reads as a consequence of the signal instead of an unrelated storm that was already underway.
 
-The celestial module may adjust title-scene sky/fog/light exposure for night and the blue flash, but it does not own rain, waves, ship motion, collision or gameplay day/night state. `WorldTimeDefinitions` remains the gameplay clock authority and starts a fresh shipwreck game at Day 1, 22:00 so the title scene's established night carries across the black transition without making the disposable title renderer a gameplay clock.
+The celestial module may adjust title-scene sky/fog/light exposure for night and the blue flash, but it does not own rain, waves, ship motion, collision, gameplay camera state or gameplay day/night state. `WorldTimeDefinitions` remains the gameplay clock authority and starts a fresh shipwreck game at Day 1, 22:00 so the title scene's established night carries across the black transition without making the disposable title renderer a gameplay clock.
+
+## Camera choreography
+
+`TitleCinematicCamera` is a disposable title-only presentation controller. It does not replace or configure `RangerController` cameras and is destroyed with the title scene before gameplay starts.
+
+The focus shot is intentionally short and structured around the celestial signal:
+
+1. the normal voyage camera begins easing sideways/upward shortly before the blue flash so the player's eye is already being redirected;
+2. the flash adds a brief additional upward emphasis and FOV kick;
+3. as the incoming object appears, the camera blends its look target from the ship's forward path to the live shooting-star position;
+4. the title camera narrows from the normal `48°` field of view toward a `34°` focus framing while adding a small push and lift, making the object large enough to read on mobile without cutting away from the voyage completely;
+5. while tracking, only a very small low-frequency drift is added so the shot feels alive without competing with the object's fast motion;
+6. the camera releases back to the ship before the severe wreck phase and Ranger jump, restoring the existing crash framing instead of carrying celestial tracking into gameplay or the handoff.
+
+The shooting-star position remains owned by `TitleCelestialEvent`; the camera consumes it through `getFocusPosition()` rather than duplicating the celestial trajectory.
 
 ## Ship presentation
 
@@ -81,9 +98,9 @@ Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSc
 3. Gameplay HUD/status remain hidden while the title scene owns presentation.
 4. Pressing **PLAY** starts the voyage sequence with the island ahead and the sea still calm.
 5. The voyage transitions toward night and stars become visible.
-6. A bright blue flash occurs.
-7. Immediately after the flash, the incoming blue object appears and moves toward the island; storm danger starts rising only after this signal.
-8. Wind, waves, rain and ship motion escalate into the wreck sequence.
+6. The camera begins a short focus move and a bright blue flash provides the first explicit attention cue.
+7. Immediately after the flash, the incoming blue object appears with its plasma tail and bow shock; the camera tracks it briefly while storm danger starts rising only after the signal.
+8. The camera releases back to the ship as wind, waves, rain and ship motion escalate into the wreck sequence.
 9. At impact the upper mast fractures, sail/rigging react, cargo lurches and the Ranger abandons ship into the water.
 10. The screen covers to black and the disposable title renderer is removed while the incoming object remains unresolved.
 11. Existing `GameApp` boots the full world at **Day 1, 22:00** and immediately synchronizes the authoritative night lighting before the black transition is released.
@@ -93,10 +110,11 @@ Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSc
 ## Architecture boundaries
 
 - `TitleSceneApp` remains an orchestrator.
-- `TitleCelestialEvent` owns only stars/night/blue signal/incoming-object title presentation.
+- `TitleCelestialEvent` owns only stars/night/blue signal/incoming-object title presentation and remains the trajectory source of truth.
+- `TitleCinematicCamera` owns only the disposable title-scene attention/focus shot and consumes the celestial trajectory; it never touches gameplay cameras.
 - `TitleStormSystem` owns title-only ocean/weather effects.
 - `TitleShipVisual`/`TitleShipDeckDetails` own title-only vessel presentation.
-- `TitleSceneConfig` remains the single source of truth for title voyage/celestial/storm/wreck timing and existing title tuning values.
+- `TitleSceneConfig` remains the single source of truth for title voyage/celestial/camera/storm/wreck timing and tuning values.
 - `WorldTimeDefinitions` remains the single source of truth for the gameplay new-game clock start and legacy-save fallback; title presentation does not write gameplay time.
 - `BeachArrivalIntroController` remains presentation sequencing only and does not create ordinary gameplay movement.
 - `RangerCrawlPose` remains a narrowly scoped cinematic animation helper.
@@ -108,6 +126,6 @@ Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSc
 
 ## Mobile constraints
 
-The title UI remains safe-area aware with a dedicated landscape layout. Renderer pixel ratio remains capped at 1.5 and title shadows remain disabled. The star field is one `Points` draw, and the incoming object uses a very small fixed set of title-only meshes/line/light objects. These resources are disposed with the title scene before gameplay.
+The title UI remains safe-area aware with a dedicated landscape layout. Renderer pixel ratio remains capped at 1.5 and title shadows remain disabled. The star field is one `Points` draw, and the atmospheric-entry treatment uses a small fixed set of simple low-segment meshes, one line and the existing small point light. There is no post-processing pipeline, particle simulation, second renderer or second animation loop. These resources are disposed with the title scene before gameplay.
 
 The procedural crawl remains deliberately small and uses only the production Ranger's existing mixer/bones. During beach arrival, `arrival-intro-active` keeps the already-created mobile HUD non-interactive and fully transparent until control is released.

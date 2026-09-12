@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { createTitleIslandBackdrop } from './TitleIslandBackdrop.js';
+import { TitleCinematicCamera } from './TitleCinematicCamera.js';
 import { TitleCelestialEvent } from './TitleCelestialEvent.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 import { addTitleShipDeckDetails } from './TitleShipDeckDetails.js';
@@ -70,6 +71,11 @@ export class TitleSceneApp {
       sun: this.sun,
       ambient: this.ambient,
       lightning: this.lightning
+    });
+    this.cinematicCamera = new TitleCinematicCamera({
+      camera: this.camera,
+      ship: this.ship,
+      celestialEvent: this.celestialEvent
     });
     this.#createMenuUi();
 
@@ -249,6 +255,11 @@ export class TitleSceneApp {
     this.celestialEvent?.update(dt, {
       active: this.state === 'intro',
       introProgress
+    });
+    this.cinematicCamera?.apply({
+      active: this.state === 'intro',
+      introProgress,
+      elapsed: this.elapsed
     });
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.#frame);
