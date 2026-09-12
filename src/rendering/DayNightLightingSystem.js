@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CELESTIAL_PRESENTATION } from '../data/CelestialDefinitions.js';
 import { WORLD_DAY_MINUTES } from '../data/WorldTimeDefinitions.js';
-import { celestialDirectionAt } from './CelestialOrbit.js';
+import { dominantCelestialDirectionAt } from './CelestialOrbit.js';
 
 const KEYFRAMES = Object.freeze([
   Object.freeze({ minute: 0, sky: 0x071624, fog: 0x142631, hemiSky: 0x243a55, hemiGround: 0x0d1512, hemiIntensity: 0.62, sunColor: 0xb6cae8, sunIntensity: 0.05, fillColor: 0x7498ce, fillIntensity: 0.44, ambientColor: 0x91aac4, ambientIntensity: 0.13, exposure: 0.78 }),
@@ -32,15 +32,19 @@ function keyframePair(minuteOfDay) {
 }
 
 export class DayNightLightingSystem {
-  constructor({ sceneSystem } = {}) {
+  constructor({ sceneSystem, focusProvider = null } = {}) {
     if (!sceneSystem?.scene || !sceneSystem?.lighting || !sceneSystem?.renderer) {
       throw new Error('DayNightLightingSystem requires a SceneSystem with named lighting');
     }
     this.scene = sceneSystem.scene;
     this.renderer = sceneSystem.renderer;
     this.lighting = sceneSystem.lighting;
+    this.focusProvider = typeof focusProvider === 'function' ? focusProvider : null;
     this.colorScratch = new THREE.Color();
-    this.sunDirection = new THREE.Vector3();
+    this.keyDirection = new THREE.Vector3();
+    this.lightFocus = new THREE.Vector3();
+
+    if (!this.lighting.sun.target.parent) this.scene.add(this.lighting.sun.target);
   }
 
   apply(snapshot) {
@@ -56,7 +60,7 @@ export class DayNightLightingSystem {
 
     this.#lerpColor(this.lighting.sun.color, from.sunColor, to.sunColor, t);
     this.lighting.sun.intensity = lerp(from.sunIntensity, to.sunIntensity, t);
-    this.#positionSun(minuteOfDay);
+    this.#positionCelestialKey(minuteOfDay);
 
     this.#lerpColor(this.lighting.skyFill.color, from.fillColor, to.fillColor, t);
     this.lighting.skyFill.intensity = lerp(from.fillIntensity, to.fillIntensity, t);
@@ -72,12 +76,19 @@ export class DayNightLightingSystem {
     target.lerp(this.colorScratch, amount);
   }
 
-  #positionSun(minuteOfDay) {
-    celestialDirectionAt(minuteOfDay, { target: this.sunDirection });
-    this.lighting.sun.position.set(
-      this.sunDirection.x * CELESTIAL_PRESENTATION.lightDistance,
-      Math.max(4, this.sunDirection.y * CELESTIAL_PRESENTATION.lightDistance),
-      this.sunDirection.z * CELESTIAL_PRESENTATION.lightDistance
+  #positionCelestialKey(minuteOfDay) {
+    dominantCelestialDirectionAt(minuteOfDay, { target: this.keyDirection });
+    this.lightFocus.set(0, 0, 0);
+    const providedFocus = this.focusProvider?.(this.lightFocus);
+    if (providedFocus?.isVector3 && providedFocus !== this.lightFocus) {
+      this.lightFocus.copy(providedFocus);
+    }
+
+    this.lighting.sun.target.position.copy(this.lightFocus);
+    this.lighting.sun.position.copy(this.lightFocus).addScaledVector(
+      this.keyDirection,
+      CELESTIAL_PRESENTATION.lightDistance
     );
+    this.lighting.sun.target.updateMatrixWorld();
   }
 }
