@@ -9,7 +9,9 @@ The torch is the first portable night-navigation item layered onto the shared da
 - The torch is crafted from **1 Stick + 2 Grass**.
 - Crafted torches are inventory-backed and occupy a normal tool-belt slot.
 - Equipping a torch shows a simple handheld torch prop in third-person view and creates a warm local light whose origin follows the flame itself rather than the Ranger root.
-- Torch illumination is biased forward and slightly downward so the ground and nearby objects ahead of the Ranger are readable while the area behind the Ranger stays substantially darker.
+- Torch illumination radiates in **all directions** from the flame. A burning torch is a local fire source, not a forward-facing flashlight or modern spotlight.
+- The flame and emitted light visibly flutter while held. Flicker is presentation-only and is driven from the existing world-time runtime update; it does not create another animation loop or affect fuel consumption.
+- The local torch light casts shadows from nearby opaque world geometry, including the Ranger and shadow-enabled forest tree batches. The Ranger is promoted to a local shadow caster only while the torch is burning, then restored to the normal celestial receiver-only policy when the torch is put away or expires.
 - Torch fuel decreases only while `torch` is the equipped tool. Switching to another tool or the hand pauses the remaining burn time.
 - A torch lasts **half of the configured night phase**. With the current 20:00–05:00 night, that is 270 in-game minutes (4.5 in-game hours). The duration is derived from `WORLD_TIME` rather than hard-coded to real seconds, so future day-length tuning preserves the half-night rule.
 - When a torch expires, exactly one torch inventory unit is consumed. If another torch is available while the player is still holding the torch slot, the next unit takes over at full fuel. When the final torch expires, the tool belt falls back to the hand.
@@ -17,9 +19,13 @@ The torch is the first portable night-navigation item layered onto the shared da
 
 ## Architecture
 
-`TorchRuntimeController` owns torch burn state, handheld presentation, and the local light. It does **not** own an animation frame or wall-clock timer. `WorldTimeRuntime` fans the same authoritative `WorldTimeSystem` snapshot into both visual presentations (lighting/celestial systems) and gameplay time consumers. The torch therefore advances in game-time and cannot silently burn while the world clock is stopped or before the beach-arrival intro completes.
+`TorchRuntimeController` owns torch burn state, handheld presentation, fire flicker, and the local light. It does **not** own an animation frame or gameplay wall-clock timer. `WorldTimeRuntime` fans the same authoritative `WorldTimeSystem` snapshot into both visual presentations (lighting/celestial systems) and gameplay time consumers. The torch therefore advances in game-time and cannot silently burn while the world clock is stopped or before the beach-arrival intro completes.
 
-The handheld torch contains a dedicated flame anchor. Each runtime update resolves that anchor to world space and uses it as the `SpotLight` position. A separate runtime-owned target follows the Ranger's facing direction and is lowered toward the ground, giving one authoritative forward/downward illumination cone without introducing a second competing light system.
+The handheld torch contains a dedicated flame anchor. Each runtime update resolves that anchor to world space and uses it as the position of one `PointLight`. This is the authoritative portable fire source: there is no competing forward cone or Ranger-root glow.
+
+Flicker is deterministic and bounded. Several phase-offset waves modulate light intensity, a small amount of reach, and the visible flame scale. All tuning lives under `TORCH.light.flicker` so the effect can be adjusted without duplicating presentation constants in runtime code.
+
+Torch shadows reuse the renderer shadow pipeline already owned by `CelestialShadowSystem`; the torch does not create a second renderer or shadow manager. The point light owns a small local shadow map. While the torch burns, `TorchRuntimeController` temporarily enables `castShadow` on the Ranger's render meshes, excluding the torch prop itself. Existing centralized shadow enrollment keeps static/chunked forest tree batches and ordinary opaque world meshes eligible as casters and receivers. Ranger caster flags are restored when the torch is no longer active.
 
 The generic `RangerToolPresentation` intentionally ignores the `torch` identifier so it cannot create a competing prop. Torch presentation remains owned by `TorchRuntimeController`.
 
@@ -27,9 +33,11 @@ The generic `RangerToolPresentation` intentionally ignores the `torch` identifie
 
 ## Mobile performance and HUD
 
-The torch uses one local spotlight with shadows disabled. This keeps the handheld source visually anchored and prevents the previous full-radius glow from lighting the ground behind the Ranger, while retaining the low-cost single-light mobile budget. The day/night global lighting remains unchanged. Adding the eighth tool-belt slot also introduces a narrow-screen sizing rule so the full belt remains inside the viewport on small mobile widths.
+The torch uses one omnidirectional point light and one **256 × 256** point-light shadow map. Because point-light shadows render multiple cube faces, their refresh is explicitly capped at **10 Hz** rather than updating every rendered frame. The torch requests shadow refreshes through the existing renderer shadow map and only while the source is active. This keeps the effect bounded while still allowing moving Ranger/tree silhouettes to respond to the handheld fire.
 
-The current crafting menu reuses the existing campfire fire glyph for the torch recipe, while the belt slot draws a lightweight CSS torch mark. This avoids introducing another external asset dependency during the day/night milestone.
+The global celestial shadow system remains unchanged: its directional map, tree enrollment, local coverage and refresh policy are still centrally owned. The Ranger remains receiver-only for the normal celestial policy; torch runtime promotion is temporary and scoped to the period in which a torch is actively burning.
+
+The current crafting menu reuses the existing campfire fire glyph for the torch recipe, while the belt uses the approved dedicated torch artwork. The eight-slot belt retains the narrow-screen sizing rule so the full belt remains inside the viewport on small mobile widths.
 
 ## Regression coverage
 
@@ -42,10 +50,13 @@ The current crafting menu reuses the existing campfire fire glyph for the torch 
 - the belt meter reports fuel percentage;
 - partial fuel persists across save/restore without offline burn;
 - the torch uses the shared world-time runtime rather than a second timer loop;
-- the local light is a flame-anchored forward/downward spotlight;
-- local-light shadows remain disabled for mobile performance;
+- the local light is a flame-anchored omnidirectional `PointLight`;
+- intensity/reach/flame flutter remains bounded by centralized tuning;
+- local point-light shadows are enabled with a 256px map and at most 10 Hz refresh;
+- the Ranger temporarily casts while the torch burns and returns to the normal non-caster state when it is put away;
+- centralized forest-tree batches remain eligible shadow casters;
 - the eight-slot belt retains a narrow-screen layout contract.
 
 ## Device verification
 
-After merge/deploy, verify on a physical phone that the eighth tool-belt slot remains comfortable to tap, the light visibly originates from the torch flame rather than the Ranger centre, the ground ahead is useful without washing out the night scene, the area behind the Ranger stays darker, the handheld prop sits naturally in the Ranger's hand, and first-person navigation remains readable while the prop itself is hidden.
+After merge/deploy, verify on a physical phone that the eighth tool-belt slot remains comfortable to tap, the light visibly originates from the torch flame rather than the Ranger centre, illumination spreads naturally around the Ranger instead of forming a flashlight cone, the brightness/flame movement reads as fire rather than electronic pulsing, and Ranger/tree shadows are visible and stable enough while walking. Also verify that the added point-light shadow cost remains smooth on the target Android device, that the night scene is not washed out, and that first-person navigation remains readable while the handheld prop itself is hidden.

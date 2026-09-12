@@ -7,14 +7,23 @@ export const TORCH = Object.freeze({
   itemId: 'torch',
   burnDurationGameMinutes: nightDurationGameMinutes * 0.5,
   light: Object.freeze({
-    color: 0xffb45f,
+    color: 0xffa24f,
     intensity: 72,
     distance: 11,
     decay: 2,
-    angle: Math.PI * 0.34,
-    penumbra: 0.82,
-    aimDistance: 5.5,
-    aimDrop: 1.35
+    flicker: Object.freeze({
+      intensityVariance: 0.18,
+      distanceVariance: 0.045,
+      flameScaleVariance: 0.16
+    }),
+    shadow: Object.freeze({
+      mapSize: 256,
+      near: 0.12,
+      far: 11,
+      bias: -0.0015,
+      normalBias: 0.035,
+      refreshHz: 10
+    })
   }),
   visual: Object.freeze({
     handleLength: 0.7,

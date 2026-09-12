@@ -29,7 +29,9 @@ assert.ok(
   'Torch must resolve through the central cosy WebP asset registry'
 );
 assert.equal(TOOL_ORDER.at(-1), 'torch', 'Torch must be a normal toolbelt slot');
-assert.ok(TORCH.light.angle < Math.PI / 2, 'Torch spotlight must not wrap light behind the Ranger');
+assert.ok(TORCH.light.flicker.intensityVariance > 0, 'Burning torch light must have visible intensity flutter');
+assert.ok(TORCH.light.shadow.mapSize <= 256, 'Portable point-light shadows must stay within the mobile shadow budget');
+assert.ok(TORCH.light.shadow.refreshHz <= 10, 'Portable shadow refresh must remain bounded for mobile');
 assert.deepEqual(
   CRAFTING_RECIPES.torch.ingredients,
   [{ itemId: 'stick', quantity: 1 }, { itemId: 'grass', quantity: 2 }],
@@ -49,12 +51,21 @@ assert.equal(toolbelt.select('torch').equipped, true);
 const scene = new THREE.Scene();
 const playerRoot = new THREE.Group();
 playerRoot.position.set(3, 2, -4);
+const rangerMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(0.5, 1.5, 0.4),
+  new THREE.MeshStandardMaterial({ color: 0x889966 })
+);
+rangerMesh.name = 'test-ranger-body';
+rangerMesh.castShadow = false;
+playerRoot.add(rangerMesh);
+const rendererShadowMap = { needsUpdate: false };
+let shadowClock = 1000;
 const statuses = [];
 const game = {
   inventory,
   crafting,
   toolbelt,
-  sceneSystem: { scene },
+  sceneSystem: { scene, renderer: { shadowMap: rendererShadowMap } },
   player: {
     root: playerRoot,
     mountRightHandObject(object) {
@@ -76,31 +87,34 @@ const game = {
   }
 };
 
-const torch = new TorchRuntimeController({ game });
+const torch = new TorchRuntimeController({ game, now: () => shadowClock });
 toolbelt.fuel = torch;
 torch.apply({ day: 1, minuteOfDay: 20 * 60 });
 assert.equal(torch.light.visible, true, 'Equipped torch must emit light');
-assert.equal(torch.light.isSpotLight, true, 'Torch must use one directional local spotlight');
-assert.equal(torch.light.castShadow, false, 'Mobile torch light must not enable expensive local-light shadows');
+assert.equal(torch.light.isPointLight, true, 'Burning torch must radiate in all directions from one point light');
+assert.equal(torch.light.castShadow, true, 'Burning torch must own a bounded local shadow map');
+assert.equal(torch.light.shadow.mapSize.width, TORCH.light.shadow.mapSize);
+assert.equal(torch.light.shadow.mapSize.height, TORCH.light.shadow.mapSize);
+assert.equal(torch.light.shadow.camera.near, TORCH.light.shadow.near);
+assert.equal(torch.light.shadow.camera.far, TORCH.light.shadow.far);
 assert.equal(torch.light.position.x, 3, 'Torch light X must come from the handheld flame anchor');
 assert.ok(
   nearlyEqual(torch.light.position.y, 2 + TORCH.visual.handleLength * 0.6, 0.0001),
   'Torch light Y must come from the handheld flame anchor rather than Ranger centre'
 );
 assert.equal(torch.light.position.z, -4, 'Torch light Z must come from the handheld flame anchor');
+assert.equal(rangerMesh.castShadow, true, 'Ranger must become a torch-shadow caster while the torch burns');
+assert.equal(rendererShadowMap.needsUpdate, true, 'Torch activation must request a local shadow refresh');
+const firstIntensity = torch.light.intensity;
+const firstFlameScale = torch.flame.scale.y;
+shadowClock += 120;
+torch.apply({ day: 1, minuteOfDay: 20 * 60 });
+assert.notEqual(torch.light.intensity, firstIntensity, 'Torch intensity must flutter over time');
+assert.notEqual(torch.flame.scale.y, firstFlameScale, 'Visible flame must flutter with the light');
 assert.ok(
-  nearlyEqual(torch.lightTarget.position.z, -4 + TORCH.light.aimDistance, 0.0001),
-  'Torch spotlight must aim ahead of the Ranger'
+  Math.abs(torch.light.intensity - TORCH.light.intensity) <= TORCH.light.intensity * TORCH.light.flicker.intensityVariance + 0.001,
+  'Torch flicker must stay inside its centralized intensity variance'
 );
-assert.ok(
-  nearlyEqual(
-    torch.lightTarget.position.y,
-    torch.light.position.y - TORCH.light.aimDrop,
-    0.0001
-  ),
-  'Torch spotlight must aim down toward the ground in front of the Ranger'
-);
-assert.equal(torch.light.target, torch.lightTarget, 'Spotlight target must use the runtime-owned forward target');
 
 torch.apply({ day: 1, minuteOfDay: 22 * 60 + 15 });
 assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135));
@@ -114,6 +128,7 @@ toolbelt.select('hand');
 torch.apply({ day: 1, minuteOfDay: 23 * 60 + 15 });
 assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135), 'Torch fuel must pause while not held');
 assert.equal(torch.light.visible, false, 'Unequipped torch must stop lighting the world');
+assert.equal(rangerMesh.castShadow, false, 'Ranger torch-shadow casting must restore when the torch is put away');
 
 toolbelt.select('torch');
 torch.apply({ day: 2, minuteOfDay: 1 * 60 + 30 });
@@ -125,6 +140,7 @@ torch.apply({ day: 2, minuteOfDay: 6 * 60 });
 assert.equal(inventory.get('torch'), 0, 'Second full burn must consume the spare torch');
 assert.equal(toolbelt.getEquippedToolId(), null, 'Toolbelt must fall back to hand when the final torch burns out');
 assert.equal(torch.light.visible, false);
+assert.equal(rangerMesh.castShadow, false);
 assert.ok(statuses.at(-1)?.includes('TORCH BURNED OUT'));
 
 inventory.add('torch', 1);
@@ -136,7 +152,7 @@ torch.apply({ day: 2, minuteOfDay: 6 * 60 + 30 });
 assert.ok(nearlyEqual(torch.captureState().remainingGameMinutes, 60), 'Restored partial torch must resume from saved fuel');
 torch.dispose();
 assert.equal(torch.light.parent, null, 'Torch runtime must release its scene light cleanly');
-assert.equal(torch.lightTarget.parent, null, 'Torch runtime must release its spotlight target cleanly');
+assert.equal(rangerMesh.castShadow, false, 'Torch disposal must restore the Ranger shadow policy');
 
 let scheduledFrame = null;
 let presentationCount = 0;
@@ -163,6 +179,7 @@ const main = read('src/main.js');
 const saveController = read('src/persistence/SaveGameController.js');
 const rangerTools = read('src/player/RangerToolPresentation.js');
 const torchRuntimeSource = read('src/gameplay/TorchRuntimeController.js');
+const celestialShadowSource = read('src/rendering/CelestialShadowSystem.js');
 const mobileHud = read('src/ui/MobileHud.js');
 const torchCss = read('src/torch.css');
 const packageJson = JSON.parse(read('package.json'));
@@ -175,8 +192,9 @@ const checks = [
   ['torch state restores after inventory/equipment', saveController.includes('this.game.torchRuntime?.restoreState?.(record.state.torch)')],
   ['generic Ranger tool visual does not compete with torch presentation', rangerTools.includes("toolId === 'spear' || toolId === 'torch'")],
   ['torch runtime does not create a second animation loop', !torchRuntimeSource.includes('requestAnimationFrame')],
-  ['torch light is a handheld directional spotlight', torchRuntimeSource.includes('new THREE.SpotLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
-  ['torch light aims forward from the Ranger instead of radiating behind', torchRuntimeSource.includes('addScaledVector(this.direction, this.definition.light.aimDistance)')],
+  ['torch light is a flame-anchored omnidirectional point source', torchRuntimeSource.includes('new THREE.PointLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
+  ['torch uses bounded shadow refresh rather than per-frame shadow ownership', torchRuntimeSource.includes('this.definition.light.shadow.refreshHz') && torchRuntimeSource.includes('shadowMap.needsUpdate = true')],
+  ['forest tree batches remain centralized shadow casters', celestialShadowSource.includes('return { cast: staticTreeBatch, receive: staticTreeBatch }')],
   ['mobile HUD exposes the dedicated torch artwork', mobileHud.includes('torch: ui.torch')],
   ['eight-slot mobile belt has a narrow-screen layout contract', torchCss.includes('@media (max-width: 420px)') && torchCss.includes('10.6vw')],
   ['full check suite includes torch regression', packageJson.scripts.check.includes('npm run verify:torch')]
