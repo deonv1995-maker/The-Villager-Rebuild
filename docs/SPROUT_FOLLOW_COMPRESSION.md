@@ -18,7 +18,9 @@ This ordering is important for autosave safety: a save taken during compression 
 
 ## Follow priority
 
-Following the Ranger has higher priority than retrieving resources. If Sprout exceeds the catch-up threshold, collection intent is cancelled and Sprout returns to the Ranger. A larger hard catch-up threshold permits a bounded relocation beside the Ranger when collision-aware movement cannot recover from extreme separation.
+Sprout searches within 9 metres of the Ranger. A selected eligible pickup keeps its approach intent when the Ranger moves; an 8-second approach timeout releases unreachable intent. Once reserved, the short compression transaction finishes before any follow/catch-up check, even after extreme separation. Capacity failure or disposal still releases the reservation without awarding items. After completion, ordinary catch-up resumes; the existing hard catch-up threshold permits bounded relocation beside the Ranger. No second pickup starts while catch-up is needed.
+
+The companion chooses a nearby left/right follow formation with hysteresis, steers around a 1.25-metre Ranger personal-space circle, and rejects world-collision sliding that would enter it. Ranger movement into an idle/compressing Sprout triggers a clear nearby separation placement. World obstacles remain owned by WorldCollisionSystem. Hover uses simulation time and a restrained 0.065-metre amplitude; no camera motion is added.
 
 The hard catch-up is a companion recovery mechanism, not a general NPC pathfinding system.
 

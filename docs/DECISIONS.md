@@ -202,3 +202,7 @@ The following are intentionally not locked yet:
 - final hostile-creature roster;
 - final Day 1 hunt species after in-engine asset comparison;
 - exact number and type of advanced production/civic buildings.
+
+## Sprout visual and companion refinement
+
+Refine the existing game-native production Sprout model rather than replacing its format or actor lifecycle. Keep visual geometry separate from movement. Companion-local Ranger personal-space steering supplements shared world collision without changing Ranger controls. Expand eligible loose-resource search to 9 metres, preserve selected approaches for a bounded eight seconds, and finish reserved compression before catch-up. Shared inventory, capacity, reservation/commit, autosave semantics and Ranger-only intact-node harvesting remain authoritative. See SPROUT_FOLLOW_COMPRESSION.md and SPROUT_VISUAL_ASSET.md.
