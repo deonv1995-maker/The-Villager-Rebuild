@@ -63,6 +63,9 @@ export class SproutVisualRuntimeController {
 
     this.#ensureInstalled();
     if (this.visual) {
+      if (this.visual.userData?.sproutProductionVisual) {
+        this.visual.name = 'sprout-production-companion';
+      }
       const powered = Boolean(this.crashSite.freed || this.arrival.isAllied?.());
       const companion = this.game.sproutCompanion;
       const scanning = Boolean(companion?.target || companion?.compression);
