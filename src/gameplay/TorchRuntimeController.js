@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WORLD_DAY_MINUTES } from '../data/WorldTimeDefinitions.js';
 import { TORCH } from '../data/TorchDefinitions.js';
 
+const TAU = Math.PI * 2;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
 const roundTenth = value => Math.round(value * 10) / 10;
 
@@ -12,18 +13,24 @@ function absoluteGameMinute(snapshot) {
 }
 
 export class TorchRuntimeController {
-  constructor({ game, definition = TORCH } = {}) {
+  constructor({
+    game,
+    definition = TORCH,
+    now = () => globalThis.performance?.now?.() ?? Date.now()
+  } = {}) {
     if (!game?.inventory || !game?.toolbelt || !game?.player || !game?.sceneSystem?.scene) {
       throw new Error('TorchRuntimeController requires a started GameApp');
     }
 
     this.game = game;
     this.definition = definition;
+    this.now = now;
     this.remainingGameMinutes = definition.burnDurationGameMinutes;
     this.lastAbsoluteGameMinute = null;
+    this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
+    this.wasBurning = false;
     this.position = new THREE.Vector3();
-    this.direction = new THREE.Vector3();
-    this.targetPosition = new THREE.Vector3();
+    this.playerShadowState = new Map();
     this.visualRoot = this.#createVisual();
     this.handMounted = game.player.mountRightHandObject?.(this.visualRoot) ?? false;
     if (!this.handMounted) {
@@ -32,21 +39,16 @@ export class TorchRuntimeController {
       this.visualRoot.position.set(fallback.x, fallback.y, fallback.z);
     }
 
-    this.lightTarget = new THREE.Object3D();
-    this.lightTarget.name = 'ranger-torch-light-target';
-    this.light = new THREE.SpotLight(
+    this.light = new THREE.PointLight(
       definition.light.color,
       definition.light.intensity,
       definition.light.distance,
-      definition.light.angle,
-      definition.light.penumbra,
       definition.light.decay
     );
     this.light.name = 'ranger-torch-light';
     this.light.visible = false;
-    this.light.castShadow = false;
-    this.light.target = this.lightTarget;
-    game.sceneSystem.scene.add(this.light, this.lightTarget);
+    this.#configureShadow();
+    game.sceneSystem.scene.add(this.light);
     this.#syncPresentation();
   }
 
@@ -61,7 +63,7 @@ export class TorchRuntimeController {
       this.#burn(elapsedGameMinutes);
     }
 
-    this.#syncPresentation();
+    this.#syncPresentation(currentAbsoluteGameMinute);
     return this.snapshot();
   }
 
@@ -103,8 +105,9 @@ export class TorchRuntimeController {
   }
 
   dispose() {
+    this.#setPlayerShadowCasting(false);
     this.light.parent?.remove(this.light);
-    this.lightTarget.parent?.remove(this.lightTarget);
+    this.light.shadow?.map?.dispose?.();
     this.visualRoot.parent?.remove(this.visualRoot);
   }
 
@@ -137,34 +140,109 @@ export class TorchRuntimeController {
     }
   }
 
-  #syncPresentation() {
+  #configureShadow() {
+    const shadowDefinition = this.definition.light.shadow;
+    const shadow = this.light.shadow;
+    this.light.castShadow = true;
+    shadow.mapSize.set(shadowDefinition.mapSize, shadowDefinition.mapSize);
+    shadow.camera.near = shadowDefinition.near;
+    shadow.camera.far = shadowDefinition.far;
+    shadow.bias = shadowDefinition.bias;
+    shadow.normalBias = shadowDefinition.normalBias;
+    shadow.camera.updateProjectionMatrix();
+  }
+
+  #syncPresentation(currentAbsoluteGameMinute = null) {
     const burning = this.#isBurning();
     this.visualRoot.visible = burning && !Boolean(this.game.player.isFirstPerson?.());
     this.light.visible = burning;
-    if (!burning) return;
+
+    if (burning !== this.wasBurning) {
+      this.#setPlayerShadowCasting(burning);
+      this.#requestShadowRefresh(true);
+      this.wasBurning = burning;
+    }
+
+    if (!burning) {
+      this.flame.scale.set(1, 1, 1);
+      this.light.intensity = this.definition.light.intensity;
+      this.light.distance = this.definition.light.distance;
+      this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
+      return;
+    }
 
     this.flameAnchor.getWorldPosition(this.position);
     this.light.position.copy(this.position);
+    this.#applyFlicker(currentAbsoluteGameMinute);
+    this.#requestShadowRefresh();
+  }
 
-    const facing = this.game.player.getFacingDirection?.(this.direction);
-    if (!facing) {
-      this.direction.set(
-        Math.sin(this.game.player.root.rotation.y),
-        0,
-        Math.cos(this.game.player.root.rotation.y)
-      ).normalize();
+  #applyFlicker(currentAbsoluteGameMinute) {
+    const time = Number.isFinite(currentAbsoluteGameMinute) ? currentAbsoluteGameMinute : 0;
+    const fast = Math.sin(time * TAU * 4.73 + 0.35);
+    const middle = Math.sin(time * TAU * 7.91 + 1.7);
+    const high = Math.sin(time * TAU * 13.37 + 2.4);
+    const flicker = clamp((fast * 0.5) + (middle * 0.32) + (high * 0.18), -1, 1);
+    const reachPulse = clamp((middle * 0.68) + (high * 0.32), -1, 1);
+    const flickerDefinition = this.definition.light.flicker;
+
+    this.light.intensity = this.definition.light.intensity
+      * (1 + flicker * flickerDefinition.intensityVariance);
+    this.light.distance = this.definition.light.distance
+      * (1 + reachPulse * flickerDefinition.distanceVariance);
+
+    const flameScale = 1 + flicker * flickerDefinition.flameScaleVariance;
+    this.flame.scale.set(
+      1 - flicker * flickerDefinition.flameScaleVariance * 0.22,
+      flameScale,
+      1 - flicker * flickerDefinition.flameScaleVariance * 0.22
+    );
+  }
+
+  #requestShadowRefresh(force = false) {
+    const shadowMap = this.game.sceneSystem.renderer?.shadowMap;
+    if (!shadowMap) return;
+
+    const timestamp = Number(this.now()) || 0;
+    const refreshIntervalMs = 1000 / this.definition.light.shadow.refreshHz;
+    if (!force && timestamp - this.lastShadowRefreshMs < refreshIntervalMs) return;
+
+    shadowMap.needsUpdate = true;
+    this.lastShadowRefreshMs = timestamp;
+  }
+
+  #setPlayerShadowCasting(enabled) {
+    if (!enabled) {
+      for (const [object, previousCastShadow] of this.playerShadowState) {
+        object.castShadow = previousCastShadow;
+      }
+      this.playerShadowState.clear();
+      return;
     }
 
-    this.targetPosition
-      .copy(this.position)
-      .addScaledVector(this.direction, this.definition.light.aimDistance);
-    this.targetPosition.y -= this.definition.light.aimDrop;
-    this.lightTarget.position.copy(this.targetPosition);
+    this.game.player.root.traverse(object => {
+      if (!object?.isMesh || this.#belongsToTorchVisual(object)) return;
+      if (!this.playerShadowState.has(object)) {
+        this.playerShadowState.set(object, Boolean(object.castShadow));
+      }
+      object.castShadow = true;
+    });
+  }
+
+  #belongsToTorchVisual(object) {
+    let current = object;
+    while (current) {
+      if (current === this.visualRoot) return true;
+      if (current === this.game.player.root) return false;
+      current = current.parent;
+    }
+    return false;
   }
 
   #createVisual() {
     const group = new THREE.Group();
     group.name = 'ranger-handheld-torch';
+    group.userData.celestialShadowPolicy = 'receiver-only';
 
     const handle = new THREE.Mesh(
       new THREE.CylinderGeometry(
@@ -184,14 +262,19 @@ export class TorchRuntimeController {
       new THREE.MeshStandardMaterial({ color: 0x4d3427, roughness: 1 })
     );
     wrap.position.y = this.definition.visual.handleLength * 0.44;
+    wrap.castShadow = false;
     group.add(wrap);
 
     const flame = new THREE.Mesh(
       new THREE.ConeGeometry(0.105, this.definition.visual.flameHeight, 7),
       new THREE.MeshBasicMaterial({ color: this.definition.light.color })
     );
+    flame.name = 'ranger-torch-flame';
     flame.position.y = this.definition.visual.handleLength * 0.6;
+    flame.castShadow = false;
+    flame.receiveShadow = false;
     group.add(flame);
+    this.flame = flame;
 
     this.flameAnchor = new THREE.Object3D();
     this.flameAnchor.name = 'ranger-torch-flame-anchor';
