@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { LANDSCAPING_GRID } from '../src/data/LandscapingDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
@@ -97,4 +98,38 @@ restored.restore(snapshot);
 assert.equal(restored.snapshot().entries.length, 2, 'Landscaping restore should rematerialize all saved entries');
 assert.equal(restoreCollision.obstacles.filter(entry => entry.type === 'landscape-fence').length, 1, 'Restored fence should restore collision');
 
-console.log('Shovel landscaping grid snap, costs, collision, duplicate protection and persistence verified');
+const [mainSource, controllerSource, menuSource, saveSource, indexSource] = await Promise.all([
+  readFile('src/main.js', 'utf8'),
+  readFile('src/gameplay/LandscapingRuntimeController.js', 'utf8'),
+  readFile('src/ui/ShovelLandscapingMenu.js', 'utf8'),
+  readFile('src/persistence/SaveGameController.js', 'utf8'),
+  readFile('index.html', 'utf8')
+]);
+
+assert.ok(
+  mainSource.includes('new LandscapingRuntimeController({ game })') &&
+  mainSource.indexOf('new PanelConstructionRuntimeController({ game })') < mainSource.indexOf('new LandscapingRuntimeController({ game })'),
+  'Landscaping runtime must start after panel construction so the shared registry already exists'
+);
+assert.ok(
+  controllerSource.includes("toolId === 'shovel' && equippedToolId === 'shovel'") &&
+  controllerSource.includes('this.#closeLandscaping({ announce: false });'),
+  'Shovel selection must open landscaping and switching away must close it'
+);
+assert.ok(
+  menuSource.includes("this.onSelect?.('close')") &&
+  controllerSource.includes('LANDSCAPING CLOSED · SHOVEL READY FOR STUMPS'),
+  'Closing Landscaping must return the equipped Shovel to its existing stump-removal role'
+);
+assert.ok(
+  saveSource.includes('state.landscaping = this.game.landscaping?.snapshot?.() ?? null') &&
+  saveSource.includes('this.game.landscaping?.restore?.(record.state.landscaping)') &&
+  saveSource.indexOf('this.game.panelConstruction?.restore?.(record.state.panelConstruction)') < saveSource.indexOf('this.game.landscaping?.restore?.(record.state.landscaping)'),
+  'Landscaping must persist independently and restore after the panel grid authority'
+);
+assert.ok(
+  indexSource.includes('./src/shovel-landscaping-menu.css'),
+  'Landscaping mobile HUD layout rules must be loaded by the app shell'
+);
+
+console.log('Shovel landscaping grid snap, costs, collision, duplicate protection, persistence and runtime ownership verified');
