@@ -1,0 +1,19 @@
+body.shovel-landscaping-open .hud-note {
+  opacity: 0;
+  visibility: hidden;
+}
+
+body.shovel-landscaping-open:not(.shovel-landscaping-expanded) #boot-status {
+  max-width: min(52vw, calc(100vw - 222px));
+}
+
+body.shovel-landscaping-expanded #boot-status:not([data-error="true"]) {
+  opacity: 0;
+  visibility: hidden;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  body.shovel-landscaping-open:not(.shovel-landscaping-expanded) #boot-status {
+    max-width: min(48vw, calc(100vw - 206px));
+  }
+}
