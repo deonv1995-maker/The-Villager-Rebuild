@@ -53,7 +53,7 @@ export const TOOL_DEFINITIONS = Object.freeze({
   torch: Object.freeze({
     id: 'torch',
     label: 'Torch',
-    icon: 'campfire',
+    icon: 'torch',
     role: 'light',
     actionLabel: 'Hold torch',
     usesDurability: false
