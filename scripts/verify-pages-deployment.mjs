@@ -23,8 +23,8 @@ assert.ok(waitIndex >= 0 && waitIndex < uploadIndex && uploadIndex < deployIndex
 
 for (const requirement of [
   'FOUNDATION 0.3.8 · STARTING',
-  'head_sha',
-  'created_at',
+  '`head_sha`',
+  'created at or after',
   'Vite `dist` artifact to be the final Pages deployment'
 ]) {
   assert.ok(docs.includes(requirement), `Pages deployment documentation is missing: ${requirement}`);
