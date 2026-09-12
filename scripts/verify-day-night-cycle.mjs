@@ -4,11 +4,15 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import { WorldTimeRuntime } from '../src/core/WorldTimeRuntime.js';
 import { WorldTimeSystem, worldTimePhaseAt } from '../src/core/WorldTimeSystem.js';
+import { CELESTIAL_PRESENTATION } from '../src/data/CelestialDefinitions.js';
 import { WORLD_TIME } from '../src/data/WorldTimeDefinitions.js';
+import { CelestialBodySystem } from '../src/rendering/CelestialBodySystem.js';
+import { celestialDirectionAt } from '../src/rendering/CelestialOrbit.js';
 import { DayNightLightingSystem } from '../src/rendering/DayNightLightingSystem.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
+const nearlyEqual = (left, right, epsilon = 0.000001) => Math.abs(left - right) <= epsilon;
 
 assert.equal(WORLD_TIME.startDay, 1, 'New games must begin on Day 1');
 assert.equal(WORLD_TIME.startMinuteOfDay, 8 * 60, 'New games must begin at 08:00');
@@ -48,12 +52,30 @@ const fallback = new WorldTimeSystem();
 assert.equal(fallback.restoreState(null), false, 'Older compatible saves without time state must keep the new-game default');
 assert.equal(fallback.getSnapshot().displayTime, '08:00');
 
+const sunrise = celestialDirectionAt(6 * 60);
+const noon = celestialDirectionAt(12 * 60);
+const sunset = celestialDirectionAt(18 * 60);
+const midnight = celestialDirectionAt(0);
+const midnightMoon = celestialDirectionAt(0, { moon: true });
+assert.ok(Math.abs(sunrise.y) < 0.000001, 'Sun must meet the horizon around 06:00');
+assert.ok(noon.y > 0.999, 'Sun must be highest around 12:00');
+assert.ok(Math.abs(sunset.y) < 0.000001, 'Sun must meet the opposite horizon around 18:00');
+assert.ok(midnight.y < -0.999, 'Sun must be below the world around midnight');
+assert.ok(midnightMoon.y > 0.999, 'Moon must be highest around midnight');
+assert.ok(
+  celestialDirectionAt(9 * 60).dot(celestialDirectionAt(9 * 60, { moon: true })) < -0.999,
+  'Moon must remain opposite the sun so the sky acts as a readable clock'
+);
+
 function makeSceneSystem() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xaeddec);
   scene.fog = new THREE.FogExp2(0xa9c7bc, 0.0043);
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+  camera.position.set(3, 7, -4);
   return {
     scene,
+    camera,
     renderer: { toneMappingExposure: 1.06 },
     lighting: {
       hemi: new THREE.HemisphereLight(0xe7f4f7, 0x42533c, 2.2),
@@ -77,13 +99,53 @@ assert.ok(daylightSky > midnightSky, 'Sky presentation must become visibly darke
 assert.ok(sceneSystem.lighting.hemi.intensity > 0, 'Night must retain playable fill lighting');
 assert.ok(sceneSystem.lighting.skyFill.intensity > 0, 'Night must retain cool sky fill rather than becoming pitch black');
 
+lighting.apply({ minuteOfDay: 9 * 60 });
+const expectedLightDirection = celestialDirectionAt(9 * 60);
+const actualLightDirection = sceneSystem.lighting.sun.position.clone().normalize();
+assert.ok(
+  actualLightDirection.dot(expectedLightDirection) > 0.999,
+  'Directional sunlight must use the same visible sun orbit while the sun is above the horizon'
+);
+
+const celestialScene = makeSceneSystem();
+const celestialBodies = new CelestialBodySystem({ sceneSystem: celestialScene });
+celestialBodies.apply({ minuteOfDay: 12 * 60 });
+assert.equal(celestialBodies.sun.root.visible, true, 'Sun must be visible at midday');
+assert.equal(celestialBodies.moon.root.visible, false, 'Moon must be below the horizon at midday');
+assert.ok(
+  nearlyEqual(celestialBodies.sun.root.position.distanceTo(celestialScene.camera.position), CELESTIAL_PRESENTATION.orbitRadius, 0.001),
+  'Celestial bodies must stay at a stable sky distance around the moving camera'
+);
+assert.equal(celestialBodies.sun.bodyMaterial.fog, false, 'Sun must not disappear into world fog');
+assert.equal(celestialBodies.sun.bodyMaterial.depthTest, true, 'Terrain and mountains must be able to occlude the low sun');
+
+celestialBodies.apply({ minuteOfDay: 0 });
+assert.equal(celestialBodies.sun.root.visible, false, 'Sun must be below the horizon at midnight');
+assert.equal(celestialBodies.moon.root.visible, true, 'Moon must be visible at midnight');
+assert.ok(celestialBodies.moon.bodyMaterial.opacity > 0.99, 'Moon must be fully readable when high in the night sky');
+
+celestialBodies.apply({ minuteOfDay: 6 * 60 });
+assert.equal(celestialBodies.sun.root.visible, true, 'Sun must fade through the horizon at sunrise');
+assert.equal(celestialBodies.moon.root.visible, true, 'Moon must fade through the opposite horizon at sunrise');
+assert.ok(
+  celestialBodies.sun.root.position.clone().sub(celestialScene.camera.position)
+    .dot(celestialBodies.moon.root.position.clone().sub(celestialScene.camera.position)) < 0,
+  'Sunrise and moonset must occur on opposite horizons'
+);
+celestialBodies.dispose();
+assert.equal(celestialBodies.group.parent, null, 'Celestial presentation must cleanly release scene ownership');
+
 let scheduledFrame = null;
 let cancelledFrame = null;
-let applyCount = 0;
+let lightingApplyCount = 0;
+let celestialApplyCount = 0;
 const runtimeTime = new WorldTimeSystem();
 const runtime = new WorldTimeRuntime({
   worldTime: runtimeTime,
-  lighting: { apply: () => { applyCount += 1; } },
+  presentations: [
+    { apply: () => { lightingApplyCount += 1; } },
+    { apply: () => { celestialApplyCount += 1; } }
+  ],
   requestFrame: callback => {
     scheduledFrame = callback;
     return 77;
@@ -91,11 +153,13 @@ const runtime = new WorldTimeRuntime({
   cancelFrame: id => { cancelledFrame = id; }
 });
 runtime.start();
-assert.equal(applyCount, 1, 'Runtime start must immediately synchronize lighting');
+assert.equal(lightingApplyCount, 1, 'Runtime start must immediately synchronize lighting');
+assert.equal(celestialApplyCount, 1, 'Runtime start must immediately synchronize celestial presentation');
 scheduledFrame(1000);
 const beforeFrame = runtimeTime.getSnapshot().minuteOfDay;
 scheduledFrame(1050);
 assert.ok(runtimeTime.getSnapshot().minuteOfDay > beforeFrame, 'Runtime frames must advance shared world time');
+assert.equal(lightingApplyCount, celestialApplyCount, 'One world-time frame must fan out to all presentation systems');
 runtime.stop();
 assert.equal(cancelledFrame, 77, 'Runtime stop must release its animation frame');
 
@@ -107,7 +171,8 @@ const packageJson = JSON.parse(read('package.json'));
 const checks = [
   ['gameplay boot creates one shared world-time system', main.includes('const worldTime = new WorldTimeSystem()')],
   ['day/night presentation reuses SceneSystem lighting', main.includes('new DayNightLightingSystem({ sceneSystem: game.sceneSystem })')],
-  ['world time runtime is owned by gameplay boot', main.includes('new WorldTimeRuntime({ worldTime, lighting: dayNightLighting })')],
+  ['gameplay boot creates one clock-driven celestial presentation system', main.includes('new CelestialBodySystem({ sceneSystem: game.sceneSystem })')],
+  ['world time runtime fans one snapshot into lighting and celestial bodies', main.includes('presentations: [dayNightLighting, celestialBodies]')],
   ['new game clock starts after beach arrival rather than consuming tutorial time during the intro', main.includes('onComplete: () => {\n          worldTimeRuntime.start();')],
   ['continue restores before the clock resumes', main.indexOf('const restored = saveController.restore()') < main.indexOf('worldTimeRuntime.start();')],
   ['scene exposes existing lights instead of creating a second lighting rig', sceneSource.includes('this.lighting = this.#createLighting()') && sceneSource.includes('return Object.freeze({ hemi, sun, skyFill, ambient })')],
@@ -126,4 +191,4 @@ for (const [label, ok] of checks) {
 }
 
 if (failed > 0) process.exitCode = 1;
-else console.log(`Day/night cycle regression checks passed (${checks.length} integration contracts).`);
+else console.log(`Day/night and celestial-cycle regression checks passed (${checks.length} integration contracts).`);

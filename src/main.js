@@ -12,6 +12,7 @@ import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizat
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
+import { CelestialBodySystem } from './rendering/CelestialBodySystem.js';
 import { DayNightLightingSystem } from './rendering/DayNightLightingSystem.js';
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
@@ -41,9 +42,14 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
 
     const worldTime = new WorldTimeSystem();
     const dayNightLighting = new DayNightLightingSystem({ sceneSystem: game.sceneSystem });
-    const worldTimeRuntime = new WorldTimeRuntime({ worldTime, lighting: dayNightLighting });
+    const celestialBodies = new CelestialBodySystem({ sceneSystem: game.sceneSystem });
+    const worldTimeRuntime = new WorldTimeRuntime({
+      worldTime,
+      presentations: [dayNightLighting, celestialBodies]
+    });
     game.worldTime = worldTime;
     game.dayNightLighting = dayNightLighting;
+    game.celestialBodies = celestialBodies;
     game.worldTimeRuntime = worldTimeRuntime;
     worldTimeRuntime.sync();
 
