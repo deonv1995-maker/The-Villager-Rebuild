@@ -30,7 +30,7 @@ export class TitleCelestialEvent {
     this.elapsed = 0;
     this.shootingStarPosition = new THREE.Vector3();
     this.shootingStarStart = new THREE.Vector3(38, 34, -96);
-    this.shootingStarEnd = new THREE.Vector3(-9, 8.5, -81);
+    this.shootingStarEnd = new THREE.Vector3(-7, 10.5, -81);
     this.travelDirection = new THREE.Vector3()
       .subVectors(this.shootingStarEnd, this.shootingStarStart)
       .normalize();
