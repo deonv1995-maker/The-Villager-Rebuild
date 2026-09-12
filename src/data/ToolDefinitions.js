@@ -49,7 +49,14 @@ export const TOOL_DEFINITIONS = Object.freeze({
     actionLabel: 'Strike',
     range: 2.35,
     damage: 1
+  }),
+  torch: Object.freeze({
+    id: 'torch',
+    label: 'Torch',
+    icon: 'campfire',
+    role: 'light',
+    actionLabel: 'Hold torch'
   })
 });
 
-export const TOOL_ORDER = Object.freeze(['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword']);
+export const TOOL_ORDER = Object.freeze(['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword', 'torch']);
