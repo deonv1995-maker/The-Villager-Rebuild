@@ -2,84 +2,111 @@
 
 ## Decision
 
-The opening presentation remains split across two deliberately narrow layers. `TitleSceneApp` owns the lightweight pre-game voyage/wreck scene, while `BeachArrivalIntroController` owns the short post-load beach arrival inside the already-created gameplay world. Neither layer may become a second gameplay implementation or compete with the authoritative inventory, harvesting, construction, collision, wildlife, mobile-input or PWA systems.
+The opening presentation remains split across deliberately narrow layers. `TitleSceneApp` owns the lightweight pre-game voyage/wreck scene. `TitleCelestialEvent` owns only the title-scene night, stars, blue arrival signal and incoming-object presentation. `TitleStormSystem` owns title-only ocean/weather effects. `BeachArrivalIntroController` owns the short post-load beach arrival inside the already-created gameplay world.
+
+None of these presentation layers may become a second gameplay implementation or compete with the authoritative inventory, harvesting, construction, collision, wildlife, mobile-input or PWA systems.
+
+Sprout's actual island impact, crash site, rescue interaction and companion gameplay belong to the gameplay world. The disposable title renderer does not create the Sprout crash site, a second Sprout actor or an inventory implementation.
 
 ## Character source of truth
 
-Both halves of the opening use the same production Ranger used by gameplay. The title scene loads `ASSET_PATHS.ranger.model` and the normal KayKit movement animation pack; the beach arrival uses the `RangerController` instance already created by `GameApp`.
+Both halves of the existing shipwreck opening use the same production Ranger used by gameplay. The title scene loads `ASSET_PATHS.ranger.model` and the normal KayKit movement animation pack; the beach arrival uses the `RangerController` instance already created by `GameApp`.
 
-The ship presentation keeps a small balance rig around the title Ranger, but it no longer blends arm bones back toward the imported model bind pose. That bind pose is effectively a T-pose and was the reason the Ranger kept stretching his arms sideways on deck. `Idle_A` now remains authoritative for the Ranger's limbs while the presentation rig supplies only whole-body deck sway, bracing and storm counter-motion.
+The ship presentation keeps a small balance rig around the title Ranger, but it does not blend arm bones back toward the imported model bind pose. `Idle_A` remains authoritative for the Ranger's limbs while the presentation rig supplies whole-body deck sway, bracing and storm counter-motion.
 
-`RangerController` exposes one exclusive cinematic-control boundary for the beach arrival: `beginCinematic`, `setCinematicPose`, `playCinematicAnimation` and `endCinematic`. While that boundary is active, ordinary move, sprint, look, jump and keyboard input are ignored. When the arrival finishes, the controller is restored to the normal Day-1 locomotion/camera state. This keeps player control ownership in one place rather than duplicating normal movement logic in the intro controller.
+`RangerController` exposes one exclusive cinematic-control boundary for the beach arrival: `beginCinematic`, `setCinematicPose`, `playCinematicAnimation` and `endCinematic`. While that boundary is active, ordinary move, sprint, look, jump and keyboard input are ignored. When the arrival finishes, the controller is restored to normal locomotion/camera state.
 
-The arrival controller first asks the already-loaded KayKit action registry for a true crawl clip. Crouching and ordinary walking clips are intentionally excluded because rotating a walking cycle onto the sand does not read as an exhausted survivor crawling ashore. If the currently shipped animation pack has no native crawl, `RangerCrawlPose` builds a small cinematic-only animation clip on the production Ranger's existing `AnimationMixer`. The clip alternates hand/elbow reaches with contralateral tucked knees, while the arrival controller keeps the torso low and adds restrained shoulder roll. It is presentation-only and is stopped before the normal get-up animation begins.
+The arrival controller first asks the already-loaded KayKit action registry for a true crawl clip. Crouching and ordinary walking clips are intentionally excluded. If the shipped animation pack has no native crawl, `RangerCrawlPose` builds the existing small cinematic-only crawl clip on the production Ranger's `AnimationMixer`. It remains presentation-only and is stopped before the normal get-up animation begins.
 
 ## Island source of truth
 
 The distant title island remains a low-cost presentation generated from `ExpandedIslandTerrainSystem`, so its shoreline and elevation profile stay related to the playable world without creating the full world during the menu.
 
-The established Day-1 spawn is an inland gameplay reference, not the cinematic water-entry point. The arrival controller derives a seaward vector from the live island centre through that spawn and samples outward across the authoritative terrain until it finds genuinely shallow water. The preferred start is terrain roughly `0.11` world units below the current water level, bounded to a shallow `0.045–0.22` depth band. The search can travel up to 48 world units because the current Day-1 bay places the visible waterline substantially farther seaward than the gameplay spawn.
+The established Day-1 spawn is an inland gameplay reference, not the cinematic water-entry point. The arrival controller derives a seaward vector from the live island centre through that spawn and samples outward across the authoritative terrain until it finds genuinely shallow water. The preferred start remains terrain roughly `0.11` world units below the current water level, bounded to a shallow `0.045–0.22` depth band.
 
-From that shallow-water start, the controller reverses the same vector and searches only a short distance inland. The crawl is bounded to `1.0–3.4` world units and stops at the first playable point that is clearly above the water line (`0.24` world units of clearance). The Ranger therefore begins visibly in the surf, drags himself across the wet edge onto nearby dry sand, rises, dusts himself off and hands control to the player at that same endpoint. There is no hidden glide or teleport back to the inland gameplay spawn.
+From that shallow-water start, the controller reverses the same vector and searches only a short distance inland. The crawl remains bounded to `1.0–3.4` world units and stops at the first playable point clearly above the water line (`0.24` world units of clearance). There is no hidden glide or teleport back to the inland gameplay spawn.
+
+## Celestial Sprout-arrival prelude
+
+Pressing **PLAY** no longer jumps directly into a rising storm. The voyage first establishes the island under calm water and then moves through a short night transition.
+
+`TitleCelestialEvent` owns this title-only celestial presentation:
+
+- the sky darkens toward night before the storm begins;
+- a low-cost point-star field fades into the horizon/sky;
+- a distinct bright blue flash occurs after night has established;
+- immediately after that flash, one blue incoming object becomes visible travelling toward the island;
+- the incoming object is visually suggestive of a shooting star but is deliberately not identified as Sprout by the title scene;
+- the title event ends with that object still on course toward the island. It does not create an impact/crater or resolve the crash site before gameplay loads.
+
+`TitleSceneConfig` is the timing authority for `nightStart`, `nightFull`, `blueFlashAt`, `blueFlashWidth`, `shootingStarStart`, `shootingStarEnd`, `stormStart`, `stormFull`, severe-storm timing, wreck-impact timing and transition-cover timing. The blue flash precedes `stormStart`, so the weather escalation reads as a consequence of the signal instead of an unrelated storm that was already underway.
+
+The celestial module may adjust title-scene sky/fog/light exposure for night and the blue flash, but it does not own rain, waves, ship motion, collision or gameplay day/night state.
 
 ## Ship presentation
 
-`TitleShipVisual` remains presentation-only, but the vessel is no longer treated as a bare hull shell plus a few primitive poles:
+`TitleShipVisual` remains presentation-only. The established vessel details remain intact:
 
-- the tapered hull keeps the pointed bow and broader stern, with a keel, curved side strakes, stern/transom detail and a dressed loose crate;
-- the bow deck cap and internal opaque water-occluder volume prevent the animated ocean from showing through shell/deck gaps from the menu camera;
-- standing rigging is represented by segmented flexible lines rather than rigid cylinders;
-- the mast remains split into a lower section and a separate upper fracture pivot, with raw-wood splinters on both fracture faces;
-- the sail is **not** parented to the falling upper mast. It is a ship-owned subdivided cloth mesh whose top edge follows the broken yard while its lower sheet anchors remain attached lower on the ship;
-- every sail vertex is rebuilt between those moving upper and lower anchors each frame, with bounded wind billow, interior sag and extra storm slack. When the mast breaks, the top of the sail falls with the yard while the lower edge lags behind, so the material shears, droops and folds instead of rotating as one rigid square;
-- rigging endpoints likewise resolve from the actual broken upper-mast transform, so rope slack follows the fracture rather than using a separate fake pole motion.
+- tapered pointed hull, broader stern, keel, side strakes, stern/transom detail and dressed loose crate;
+- bow deck cap and internal opaque water-occluder volume;
+- segmented flexible standing rigging;
+- lower mast plus separate upper fracture pivot with visible raw-wood splinters;
+- a ship-owned subdivided sail whose top edge follows the broken yard while lower sheet anchors stay attached lower on the vessel;
+- per-frame sail deformation between moving upper and lower anchors so the cloth shears, droops and folds when the mast breaks;
+- rigging endpoints driven from the actual broken upper-mast transform.
 
-These additions do not create sailing physics or a reusable boat gameplay system. The ship remains a disposable title-scene prop.
+These systems do not create sailing physics or a reusable boat gameplay system. The ship remains a disposable title-scene prop.
 
 ## Storm and water presentation
 
 `TitleStormSystem` continues to own title-only ocean/weather effects:
 
 - calm water uses low-amplitude multi-directional waves;
-- storm progression increases wave amplitude, speed and short-frequency chop, with maximum motion centrally capped in `TitleSceneConfig`;
-- ocean vertex normals are recalculated so changing waves affect lighting;
+- after the blue arrival signal, storm danger increases wave amplitude, speed and short-frequency chop;
+- ocean normals are recalculated so changing waves affect lighting;
 - storm clouds, rain and deterministic lightning appear as danger rises;
 - bow foam and spray respond to ship motion;
 - wreck impact and Ranger water entry produce separate foam/splash feedback;
-- before the hull reaches the wreck impact, the Ranger deliberately jumps overboard using the production `Jump_Full_Short` clip and a deterministic cinematic arc; the Ranger is hidden exactly at water entry after triggering the splash, so no title prop can visibly continue through the ocean or ship;
-- the loose crate remains parented to the ship and receives only a bounded deck lurch during impact instead of accumulating free translation through the hull;
-- water, sky, fog and lighting darken together.
+- before the hull reaches wreck impact, the Ranger deliberately jumps overboard using `Jump_Full_Short` and a deterministic cinematic arc;
+- the Ranger is hidden exactly at water entry after triggering the splash;
+- the loose crate remains ship-owned and receives only a bounded impact lurch;
+- water, sky, fog and lighting darken with weather, while `TitleCelestialEvent` applies the earlier night/blue-signal presentation after the storm layer has updated.
 
-Flexible sail/rope motion and the mast fracture remain in `TitleShipVisual`/`TitleSceneApp`; they do not move into the storm system merely because storm intensity drives them.
+Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSceneApp`; they do not move into the storm or celestial modules.
 
 ## Flow
 
 1. App shell loads `TitleSceneApp`.
 2. A calm live ocean renders the dressed presentation ship, terrain-derived island and production Ranger on deck.
-3. Gameplay HUD and status remain hidden while the title scene owns presentation.
-4. Pressing **PLAY** starts the voyage/wreck sequence.
-5. Storm danger rises; the Ranger braces with his normal animated limbs while sail and ropes move with the wind.
-6. At impact the upper mast fractures from the lower mast with visible splinters. The yard falls, the sail deforms between its moving top edge and lower sheet anchors, rigging gains slack, cargo tumbles and the Ranger is thrown into the water.
-7. The screen covers to black and the disposable title renderer is removed.
-8. Existing `GameApp` boots the full world and all normal gameplay systems at the established Day-1 coast.
-9. Before controls are exposed, `BeachArrivalIntroController` uses the Day-1 spawn only to resolve the local seaward direction, then places the already-loaded Ranger face-down in sampled shallow water with his head pointing inland.
-10. After a short recovery beat, the Ranger performs a low exhausted crawl only from the surf onto the first nearby dry-sand point, rises in place, brushes/dusts himself off and settles.
-11. Cinematic ownership is released at that dry-sand endpoint, the HUD/controllers fade in, the normal `DAY 1 · GATHER A STICK + STONE` objective appears and gameplay becomes authoritative.
+3. Gameplay HUD/status remain hidden while the title scene owns presentation.
+4. Pressing **PLAY** starts the voyage sequence with the island ahead and the sea still calm.
+5. The voyage transitions toward night and stars become visible.
+6. A bright blue flash occurs.
+7. Immediately after the flash, the incoming blue object appears and moves toward the island; storm danger starts rising only after this signal.
+8. Wind, waves, rain and ship motion escalate into the wreck sequence.
+9. At impact the upper mast fractures, sail/rigging react, cargo lurches and the Ranger abandons ship into the water.
+10. The screen covers to black and the disposable title renderer is removed while the incoming object remains unresolved.
+11. Existing `GameApp` boots the full world and all normal gameplay systems at the established Day-1 coast.
+12. `BeachArrivalIntroController` places the already-loaded Ranger face-down in sampled shallow water, runs the short exhausted crawl, rise, dust and settle sequence, then releases cinematic ownership.
+13. A later gameplay slice will continue the celestial event after the Ranger rises: the object impacts elsewhere on the island, the Ranger is prompted to investigate, and the production Sprout crash-site/rescue sequence begins. That slice must be implemented before the normal Day-1 objective is replaced, so `main` never contains a dead exploration objective.
 
 ## Architecture boundaries
 
-- `TitleSceneApp` remains an orchestrator; island, ship and storm rendering stay separate presentation modules.
-- `TitleSceneConfig` remains the single source of truth for title voyage timing, ocean level, backdrop scaling, storm motion, deck response, mast-break and sail-flutter tuning.
-- `BeachArrivalIntroController` is presentation sequencing only. It may read the authoritative island/spawn and drive the existing Ranger through the cinematic boundary, but it does not create or replace normal gameplay movement.
-- `RangerCrawlPose` is a narrowly scoped cinematic animation helper. It uses the already-created production Ranger and its existing `AnimationMixer`; it does not own position, collision, input or gameplay locomotion.
-- `RangerController` remains the single owner of Ranger movement/input/camera state. Cinematic control is explicit and exclusive, then released back to normal control.
-- `GameApp` remains the gameplay source of truth and still creates the normal world/HUD/controllers once.
-- The opening does not modify inventory, harvesting, construction, wildlife, terrain generation, PWA manifest, service worker, native Chrome installation architecture or Pages deployment ordering.
+- `TitleSceneApp` remains an orchestrator.
+- `TitleCelestialEvent` owns only stars/night/blue signal/incoming-object title presentation.
+- `TitleStormSystem` owns title-only ocean/weather effects.
+- `TitleShipVisual`/`TitleShipDeckDetails` own title-only vessel presentation.
+- `TitleSceneConfig` remains the single source of truth for title voyage/celestial/storm/wreck timing and existing title tuning values.
+- `BeachArrivalIntroController` remains presentation sequencing only and does not create ordinary gameplay movement.
+- `RangerCrawlPose` remains a narrowly scoped cinematic animation helper.
+- `RangerController` remains the single owner of Ranger movement/input/camera state.
+- `GameApp` remains the gameplay source of truth and creates the normal world/HUD/controllers once.
+- The opening celestial work does not modify inventory, harvesting, construction, wildlife, terrain generation, PWA manifest, service worker, native Chrome installation architecture or Pages deployment ordering.
+- The title scene does not own Sprout allegiance, storage, collection, dialogue or crash-site state.
 - The ship does not establish future sailing mechanics.
-- Continue/save behavior is still not advertised until persistence exists.
 
 ## Mobile constraints
 
-The title UI remains safe-area aware with a dedicated landscape layout. Renderer pixel ratio is capped at 1.5 and title shadows remain disabled. The cloth sail remains intentionally low vertex-count and the flexible ropes use short bounded line segments. All title presentation resources are disposed before gameplay.
+The title UI remains safe-area aware with a dedicated landscape layout. Renderer pixel ratio remains capped at 1.5 and title shadows remain disabled. The star field is one `Points` draw, and the incoming object uses a very small fixed set of title-only meshes/line/light objects. These resources are disposed with the title scene before gameplay.
 
-The procedural crawl fallback is also deliberately small: it animates only the existing arm and leg bones through a short looping quaternion clip and adds no extra model or physics body. During the beach arrival the normal mobile HUD already exists because `GameApp` is loaded, but `arrival-intro-active` keeps it non-interactive and fully transparent. Only after `endCinematic` does the HUD/status receive the controlled opacity fade-in. This prevents accidental movement/look input during the arrival without introducing a second HUD implementation.
+The procedural crawl remains deliberately small and uses only the production Ranger's existing mixer/bones. During beach arrival, `arrival-intro-active` keeps the already-created mobile HUD non-interactive and fully transparent until control is released.
