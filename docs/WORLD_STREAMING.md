@@ -14,9 +14,19 @@ This separation is deliberate: collision, harvesting and future NPC navigation m
 
 ## Mainland scale and Day-1 compatibility
 
-The mainland uses approximately 2x the previous linear coast scale. The existing Day-1 beach coordinates are preserved by shaping the old southern coast into a deep inlet. This prevents the tutorial spawn/resources/hunt route from becoming an inland location merely because the wider island grew around it.
+The mainland uses approximately **2.25x the original Foundation linear coast scale**. The existing Day-1 beach coordinates are preserved by shaping the old southern coast into a deep inlet. This prevents the tutorial spawn/resources/hunt route from becoming an inland location merely because the wider island grows around it.
 
-The larger mainland adds outer regional ridges, valleys and highlands without creating a second terrain surface.
+The larger mainland adds outer regional ridges, valleys, highlands and macro exploration regions without creating a second terrain surface.
+
+## Exploration regions
+
+`ExplorationRegionSystem` evaluates deterministic macro regions defined in `src/data/ExplorationRegionDefinitions.js`. It is a query layer on the authoritative terrain, not another renderer, collision map or independently generated biome surface.
+
+The first macro regions are the northern highlands, western jungle, eastern wilds and southern frontier. Region data may influence broad terrain elevation/ruggedness and the existing terrain-owned ecology fields. The northern highlands are therefore reachable collision-bearing terrain, while the western jungle obtains denser canopy through the same vegetation functions already consumed by forest and ground-cover systems.
+
+Each macro region also exposes future point-of-interest eligibility such as caves, ruins, lookouts and clearings. Those tags are metadata only until a later POI placement pass; they must not be interpreted as permission to spawn unverified content ad hoc.
+
+`terrain.regionAt(x, z)` remains the shared query boundary for systems that need regional identity. Later POI, wildlife and resource work should consume that query instead of duplicating region coordinates.
 
 ## Satellite islands
 
@@ -51,4 +61,5 @@ Tree harvesting and camera occlusion use that registry, so chopping/fading still
 - Keep chunk roots at world origin transforms; instances retain world-space placement matrices.
 - Keep deep ocean and distant-horizon silhouettes as a very small fixed number of draw calls rather than unnecessarily subdividing them.
 - Prefer bounded pools/budgets for reactive effects.
+- Keep world scatter budgets bounded when mainland area increases; do not scale object counts directly with total land area without mobile profiling.
 - New world dressing that can become numerous should register with `WorldChunkSystem` rather than attaching directly to the permanent root.
