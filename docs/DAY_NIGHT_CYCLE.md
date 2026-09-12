@@ -57,7 +57,7 @@ The light and its target are translated around the Ranger while preserving the o
 
 The mobile shadow budget remains deliberately conservative:
 
-- one **512 × 512 PCF** shadow map;
+- one **512 × 512 PCFSoft** shadow map;
 - one shadow-casting directional light only;
 - approximately **56 m × 56 m** local orthographic coverage around the Ranger;
 - shadow-map redraw capped at **10 Hz**, while normal rendering may continue faster;
@@ -66,6 +66,8 @@ The mobile shadow budget remains deliberately conservative:
 - the animated Ranger is **receiver-only** in the throttled global map and uses a small transparent contact shadow that follows the walkable surface every presentation frame;
 - static forest tree instancing remains shadow-capable before and after world chunk splitting: pre-split `forest-tree-batch-*` meshes and runtime `chunkedTreeBatch` / `forest-tree-chunk-*` meshes cast and receive celestial shadows;
 - lightweight instanced understory, grass/fern presentation, transparent water, build previews, celestial visuals, smoke/flame/spark effects, trails, and distant mountains stay out of the shadow pass.
+
+The PCFSoft filter deliberately softens the sampled edge of tree and building shadows while preserving the existing 512px map, 56m local coverage, one-light architecture, and 10 Hz redraw ceiling. This addresses visibly blocky/pixelated shadow borders without increasing shadow-map resolution or adding another render pass.
 
 The Ranger contact shadow deliberately replaces a full animated Ranger caster in the throttled map. This prevents a 10 Hz shadow silhouette from visibly trailing a character that is rendered and moved every frame, while keeping the character's standard materials fully responsive to the day/night rig and local torch light.
 
@@ -113,7 +115,7 @@ The existing design still calls for the first night to unlock sleeping near a va
 `scripts/verify-celestial-shadows.mjs` protects:
 
 - the 512px map, local camera extent, and 10 Hz refresh ceiling;
-- PCF shadow type and disabled per-frame auto-update;
+- PCFSoft shadow filtering and disabled per-frame auto-update;
 - exactly one shadow-casting celestial key light;
 - sun direction by day and moon direction at night;
 - Ranger-relative key-light targeting;
