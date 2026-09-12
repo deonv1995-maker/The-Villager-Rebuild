@@ -50,7 +50,11 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       focusProvider: lightFocus
     });
     const celestialBodies = new CelestialBodySystem({ sceneSystem: game.sceneSystem });
-    const celestialShadows = new CelestialShadowSystem({ sceneSystem: game.sceneSystem });
+    const celestialShadows = new CelestialShadowSystem({
+      sceneSystem: game.sceneSystem,
+      player: game.player,
+      terrain: game.island
+    });
     const torchRuntime = new TorchRuntimeController({ game });
     game.toolbelt.fuel = torchRuntime;
     const worldTimeRuntime = new WorldTimeRuntime({
