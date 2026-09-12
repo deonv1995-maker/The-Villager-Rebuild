@@ -68,8 +68,14 @@ export class SproutVisualRuntimeController {
       }
       const powered = Boolean(this.crashSite.freed || this.arrival.isAllied?.());
       const companion = this.game.sproutCompanion;
-      const scanning = Boolean(companion?.target || companion?.compression);
-      updateSproutVisual(this.visual, this.elapsed, { powered, scanning });
+      const presentation = companion?.getPresentationState?.() ?? {};
+      const scanning = Boolean(
+        presentation.scanning
+        ?? companion?.target
+        ?? companion?.compression
+      );
+      const affectionate = Boolean(presentation.affectionate);
+      updateSproutVisual(this.visual, this.elapsed, { powered, scanning, affectionate });
     }
 
     this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
