@@ -32,6 +32,7 @@ export class SaveGameController {
     this.game.panelConstruction?.restore?.(record.state.panelConstruction);
     this.game.landscaping?.restore?.(record.state.landscaping);
     restoreGameState(this.game, record.state);
+    this.game.torchRuntime?.restoreState?.(record.state.torch);
     this.game.treeHarvest?.restoreRegrowthState?.(record.state.treeRegrowth);
     this.game.resourceRenewal?.restoreState?.(record.state.resourceRenewal);
     this.lastFingerprint = JSON.stringify(record.state);
@@ -56,6 +57,7 @@ export class SaveGameController {
     try {
       const state = captureGameState(this.game);
       state.worldTime = this.game.worldTime?.captureState?.() ?? null;
+      state.torch = this.game.torchRuntime?.captureState?.() ?? null;
       state.panelConstruction = this.game.panelConstruction?.snapshot?.() ?? null;
       state.landscaping = this.game.landscaping?.snapshot?.() ?? null;
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];
