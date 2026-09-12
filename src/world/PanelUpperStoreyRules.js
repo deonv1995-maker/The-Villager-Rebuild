@@ -117,6 +117,60 @@ const enclosedCellsForGroup = group => {
   return enclosed;
 };
 
+const ownerForWallEdge = (wall, enclosedKeys) => {
+  if (wall.axis === 'x') {
+    if (enclosedKeys.has(cellKey(wall.edgeX, wall.edgeZ))) {
+      return { x: wall.edgeX, z: wall.edgeZ, direction: 'north' };
+    }
+    if (enclosedKeys.has(cellKey(wall.edgeX, wall.edgeZ - 1))) {
+      return { x: wall.edgeX, z: wall.edgeZ - 1, direction: 'south' };
+    }
+    return null;
+  }
+
+  if (enclosedKeys.has(cellKey(wall.edgeX, wall.edgeZ))) {
+    return { x: wall.edgeX, z: wall.edgeZ, direction: 'west' };
+  }
+  if (enclosedKeys.has(cellKey(wall.edgeX - 1, wall.edgeZ))) {
+    return { x: wall.edgeX - 1, z: wall.edgeZ, direction: 'east' };
+  }
+  return null;
+};
+
+/**
+ * Returns canonical cells enclosed by closed semantic Wall/Door/Window groups.
+ * The returned storey is the wall storey and levelY is the exact wall-top support
+ * elevation. Floor, stacked-wall and Roof rules all derive from this same enclosure
+ * authority so those systems cannot disagree about whether a section is complete.
+ */
+export function collectPanelWallEnclosureCells(walls, {
+  levelTolerance = 0.001
+} = {}) {
+  const supports = [];
+  const seen = new Set();
+
+  for (const group of wallGroups(walls, Math.max(0.000001, levelTolerance))) {
+    for (const cell of enclosedCellsForGroup(group)) {
+      const key = `${group.storey}:${cell.x}:${cell.z}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      supports.push({
+        x: cell.x,
+        z: cell.z,
+        storey: group.storey,
+        levelY: group.levelY,
+        snapKind: 'wall-enclosed-cell'
+      });
+    }
+  }
+
+  return supports.sort((left, right) => (
+    left.storey - right.storey ||
+    left.x - right.x ||
+    left.z - right.z
+  ));
+}
+
 /**
  * Semantic upper floors are supported by a physically closed wall-family perimeter on
  * the storey below. Wall, Door and Window records all share the same canonical edge
@@ -130,30 +184,62 @@ const enclosedCellsForGroup = group => {
 export function collectPanelUpperStoreySupports(walls, {
   levelTolerance = 0.001
 } = {}) {
+  return collectPanelWallEnclosureCells(walls, { levelTolerance }).map(support => ({
+    x: support.x,
+    z: support.z,
+    storey: support.storey + 1,
+    supportingStorey: support.storey,
+    levelY: support.levelY,
+    snapKind: 'wall-supported-upper-floor'
+  }));
+}
+
+/**
+ * Once a wall-family storey encloses an interior section, every wall-family edge that
+ * participates in that completed section may carry the same edge one storey higher.
+ * This allows Solid Wall, Door and Window panels to stack without requiring an upper
+ * Floor, while still preventing free-floating or cantilevered wall placement.
+ */
+export function collectPanelUpperWallSupports(walls, {
+  levelTolerance = 0.001
+} = {}) {
   const supports = [];
   const seen = new Set();
 
   for (const group of wallGroups(walls, Math.max(0.000001, levelTolerance))) {
-    const storey = group.storey + 1;
-    for (const cell of enclosedCellsForGroup(group)) {
-      const key = `${storey}:${cell.x}:${cell.z}`;
+    const enclosed = enclosedCellsForGroup(group);
+    if (!enclosed.length) continue;
+    const enclosedKeys = new Set(enclosed.map(cell => cellKey(cell.x, cell.z)));
+
+    for (const wall of group.walls) {
+      const owner = ownerForWallEdge(wall, enclosedKeys);
+      if (!owner) continue;
+      const storey = wall.storey + 1;
+      const key = `edge:${storey}:${wall.axis}:${wall.edgeX}:${wall.edgeZ}`;
       if (seen.has(key)) continue;
       seen.add(key);
       supports.push({
-        x: cell.x,
-        z: cell.z,
+        key,
+        x: owner.x,
+        z: owner.z,
         storey,
-        supportingStorey: group.storey,
-        levelY: group.levelY,
-        snapKind: 'wall-supported-upper-floor'
+        direction: owner.direction,
+        axis: wall.axis,
+        edgeX: wall.edgeX,
+        edgeZ: wall.edgeZ,
+        supportingStorey: wall.storey,
+        supportingWallKey: wall.key,
+        levelY: wall.topY,
+        snapKind: 'wall-supported-upper-wall'
       });
     }
   }
 
   return supports.sort((left, right) => (
     left.storey - right.storey ||
-    left.x - right.x ||
-    left.z - right.z
+    left.axis.localeCompare(right.axis) ||
+    left.edgeX - right.edgeX ||
+    left.edgeZ - right.edgeZ
   ));
 }
 
