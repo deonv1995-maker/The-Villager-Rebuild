@@ -112,13 +112,12 @@ export class CelestialShadowSystem {
       if (!object?.isMesh || this.preparedMeshes.has(object)) return;
       this.preparedMeshes.add(object);
 
-      if (object.isInstancedMesh || isExcludedByName(object)) {
+      if (object.isInstancedMesh || isExcludedByName(object) || !supportsLitShadows(object)) {
         object.castShadow = false;
         object.receiveShadow = false;
         return;
       }
 
-      if (!supportsLitShadows(object)) return;
       object.castShadow = true;
       object.receiveShadow = true;
     });
