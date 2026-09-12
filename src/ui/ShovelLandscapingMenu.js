@@ -1,21 +1,46 @@
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import {
+  LANDSCAPING_DEFINITIONS,
+  LANDSCAPING_MODES
+} from '../data/LandscapingDefinitions.js';
 
-const ACTIVE_MODES = new Set(['fence', 'cobble']);
+const ACTIVE_MODES = new Set(LANDSCAPING_MODES);
 const MENU_OPEN_BODY_CLASS = 'shovel-landscaping-open';
 const MENU_EXPANDED_BODY_CLASS = 'shovel-landscaping-expanded';
+
+const resourceDisplay = resourceId => (
+  resourceId === 'stone'
+    ? { singular: 'Stone', plural: 'Stone' }
+    : resourceId === 'log'
+      ? { singular: 'Log', plural: 'Logs' }
+      : { singular: resourceId, plural: resourceId }
+);
 
 export class ShovelLandscapingMenu {
   constructor({ onSelect }) {
     this.onSelect = onSelect;
     this.open = false;
     this.expanded = false;
-    this.mode = 'fence';
+    this.mode = LANDSCAPING_MODES[0] ?? 'fence';
 
     const ui = ASSET_PATHS.ui.mobile;
     this.modeIcons = Object.freeze({
       fence: ui.build.wall,
       cobble: ui.resources.stone
     });
+    const moduleRows = LANDSCAPING_MODES.map(mode => {
+      const definition = LANDSCAPING_DEFINITIONS[mode];
+      const cost = definition?.cost?.[0];
+      if (!definition || !cost) return '';
+      const resource = resourceDisplay(cost.itemId);
+      const materialLabel = cost.quantity === 1 ? resource.singular : resource.plural;
+      return `
+        <button class="construction-list-item" type="button" data-landscape="${mode}" aria-label="Place ${definition.label.toLowerCase()}">
+          <img src="${this.modeIcons[mode] ?? ui.shovel}" alt="" aria-hidden="true">
+          <span><strong>${definition.label.toUpperCase()}</strong><small>${cost.quantity} ${materialLabel.toUpperCase()}</small></span>
+        </button>
+      `;
+    }).join('');
 
     this.root = document.createElement('section');
     this.root.className = 'hammer-construction-menu shovel-landscaping-menu';
@@ -23,9 +48,9 @@ export class ShovelLandscapingMenu {
     this.root.hidden = true;
     this.root.innerHTML = `
       <button class="hammer-construction-compact" type="button" data-landscape="expand" aria-label="Open landscaping menu" aria-expanded="false">
-        <img data-role="landscape-compact-icon" src="${ui.build.wall}" alt="" aria-hidden="true">
+        <img data-role="landscape-compact-icon" src="${this.modeIcons[this.mode] ?? ui.shovel}" alt="" aria-hidden="true">
         <span>
-          <strong data-role="landscape-compact-mode">FENCE</strong>
+          <strong data-role="landscape-compact-mode">${this.#compactModeLabel(this.mode)}</strong>
           <small>LANDSCAPING</small>
         </span>
         <span class="hammer-construction-compact-chevron" aria-hidden="true">‹</span>
@@ -35,20 +60,13 @@ export class ShovelLandscapingMenu {
         <img src="${ui.shovel}" alt="" aria-hidden="true">
         <div>
           <strong>LANDSCAPE</strong>
-          <span data-role="landscape-material">LOGS 0</span>
+          <span data-role="landscape-material">${this.#materialSummary(this.mode, 0)}</span>
         </div>
         <button class="hammer-construction-close" type="button" data-landscape="close" aria-label="Close landscaping and return to normal shovel use">×</button>
       </header>
 
       <div class="construction-list" aria-label="Select a landscaping module">
-        <button class="construction-list-item" type="button" data-landscape="fence" aria-label="Place short fence">
-          <img src="${ui.build.wall}" alt="" aria-hidden="true">
-          <span><strong>SHORT FENCE</strong><small>1 LOG</small></span>
-        </button>
-        <button class="construction-list-item" type="button" data-landscape="cobble" aria-label="Place cobble paving">
-          <img src="${ui.resources.stone}" alt="" aria-hidden="true">
-          <span><strong>COBBLE PAVING</strong><small>2 STONE</small></span>
-        </button>
+        ${moduleRows}
       </div>
 
       <p class="hammer-construction-help" data-role="landscape-help">More landscaping modules can be added here later</p>
@@ -107,10 +125,11 @@ export class ShovelLandscapingMenu {
     this.#syncPresentationState();
     this.root.classList.toggle('invalid', this.open && !previewValid);
 
-    const resourceLabel = this.mode === 'cobble' ? 'STONE' : 'LOGS';
-    if (this.material) this.material.textContent = `${resourceLabel} ${materialQuantity}`;
-    if (this.compactMode) this.compactMode.textContent = this.mode === 'cobble' ? 'COBBLE' : 'FENCE';
-    if (this.compactIcon) this.compactIcon.src = this.modeIcons[this.mode] ?? this.modeIcons.fence;
+    const definition = LANDSCAPING_DEFINITIONS[this.mode];
+    const resource = resourceDisplay(definition?.resourceId ?? '');
+    if (this.material) this.material.textContent = this.#materialSummary(this.mode, materialQuantity);
+    if (this.compactMode) this.compactMode.textContent = this.#compactModeLabel(this.mode);
+    if (this.compactIcon) this.compactIcon.src = this.modeIcons[this.mode] ?? ASSET_PATHS.ui.mobile.shovel;
 
     for (const [buttonMode, button] of this.buttons) {
       const selected = ACTIVE_MODES.has(buttonMode) && buttonMode === this.mode;
@@ -120,11 +139,11 @@ export class ShovelLandscapingMenu {
     }
 
     if (!this.help) return;
-    const singular = this.mode === 'cobble' ? 'Stone' : 'Log';
     if (!this.open) {
       this.help.textContent = '';
     } else if (!canAfford) {
-      this.help.textContent = `${this.mode === 'cobble' ? 'Cobble paving' : 'Short fence'} needs ${cost} ${singular}${cost === 1 ? '' : 's'}`;
+      const materialLabel = cost === 1 ? resource.singular : resource.plural;
+      this.help.textContent = `${definition?.label ?? 'Landscaping'} needs ${cost} ${materialLabel}`;
     } else if (previewValid) {
       this.help.textContent = snappedToBuilding
         ? 'Green preview · snapped to the building grid'
@@ -132,6 +151,18 @@ export class ShovelLandscapingMenu {
     } else {
       this.help.textContent = 'Move or aim for a clear landscaping position';
     }
+  }
+
+  #compactModeLabel(mode) {
+    if (mode === 'cobble') return 'COBBLE';
+    if (mode === 'fence') return 'FENCE';
+    return LANDSCAPING_DEFINITIONS[mode]?.label?.toUpperCase?.() ?? 'LANDSCAPE';
+  }
+
+  #materialSummary(mode, quantity) {
+    const definition = LANDSCAPING_DEFINITIONS[mode];
+    const resource = resourceDisplay(definition?.resourceId ?? '');
+    return `${resource.plural.toUpperCase()} ${quantity}`;
   }
 
   #syncPresentationState() {
