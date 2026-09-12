@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { createTitleIslandBackdrop } from './TitleIslandBackdrop.js';
+import { TitleCelestialEvent } from './TitleCelestialEvent.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 import { addTitleShipDeckDetails } from './TitleShipDeckDetails.js';
 import { createTitleShipVisual } from './TitleShipVisual.js';
@@ -26,6 +27,7 @@ export class TitleSceneApp {
     this.onPlay = null;
     this.rangerThrown = false;
     this.rangerSplashDone = false;
+    this.arrivalSignalAnnounced = false;
     this.rangerJumpStart = new THREE.Vector3();
     this.rangerJumpEnd = new THREE.Vector3();
     this.rangerJumpElapsed = 0;
@@ -61,6 +63,14 @@ export class TitleSceneApp {
       lightning: this.lightning
     });
     this.storm.setShip(this.ship, shipVisual.bowOffset);
+    this.celestialEvent = new TitleCelestialEvent({
+      scene: this.scene,
+      renderer: this.renderer,
+      hemi: this.hemi,
+      sun: this.sun,
+      ambient: this.ambient,
+      lightning: this.lightning
+    });
     this.#createMenuUi();
 
     this.setStatus('VOYAGE · LOADING RANGER');
@@ -79,7 +89,7 @@ export class TitleSceneApp {
     this.state = 'intro';
     this.introElapsed = 0;
     this.menuUi?.classList.add('is-leaving');
-    this.setStatus('VOYAGE · STORM RISING');
+    this.setStatus('VOYAGE · ISLAND AHEAD');
   }
 
   releaseTransition() {
@@ -236,6 +246,10 @@ export class TitleSceneApp {
       danger: this.stormDanger,
       introProgress
     });
+    this.celestialEvent?.update(dt, {
+      active: this.state === 'intro',
+      introProgress
+    });
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.#frame);
   };
@@ -273,13 +287,18 @@ export class TitleSceneApp {
   #updateIntro(dt) {
     this.introElapsed += dt;
     const t = THREE.MathUtils.clamp(this.introElapsed / TITLE_SCENE.introDuration, 0, 1);
-    const danger = THREE.MathUtils.smoothstep(t, 0.12, 0.64);
-    const severe = THREE.MathUtils.smoothstep(t, 0.42, 0.72);
-    const impact = THREE.MathUtils.smoothstep(t, 0.66, 0.76);
+    const danger = THREE.MathUtils.smoothstep(t, TITLE_SCENE.stormStart, TITLE_SCENE.stormFull);
+    const severe = THREE.MathUtils.smoothstep(t, TITLE_SCENE.severeStormStart, TITLE_SCENE.severeStormFull);
+    const impact = THREE.MathUtils.smoothstep(t, TITLE_SCENE.wreckImpactStart, TITLE_SCENE.wreckImpactFull);
     const mastBreak = THREE.MathUtils.smoothstep(impact, TITLE_SCENE.mastBreakStart, 1);
     this.stormDanger = danger;
 
-    const forward = THREE.MathUtils.smoothstep(t, 0.02, 0.72);
+    if (!this.arrivalSignalAnnounced && t >= TITLE_SCENE.blueFlashAt) {
+      this.arrivalSignalAnnounced = true;
+      this.setStatus('VOYAGE · BLUE FLASH · STORM RISING');
+    }
+
+    const forward = THREE.MathUtils.smoothstep(t, 0.02, TITLE_SCENE.wreckImpactStart);
     this.ship.position.z = TITLE_SCENE.menuShipZ - forward * 42;
     this.ship.position.y = -0.35
       + Math.sin(this.elapsed * (1.2 + danger * 3.2)) * (0.1 + danger * TITLE_SCENE.stormShipHeave)
@@ -316,7 +335,7 @@ export class TitleSceneApp {
       this.crate.rotation.z = -crateLurch * 0.2;
     }
 
-    const cameraAdvance = THREE.MathUtils.smoothstep(t, 0.02, 0.68);
+    const cameraAdvance = THREE.MathUtils.smoothstep(t, 0.02, TITLE_SCENE.wreckImpactStart - 0.04);
     this.camera.position.set(
       THREE.MathUtils.lerp(8.5, 6.0, cameraAdvance),
       THREE.MathUtils.lerp(5.6, 4.15, cameraAdvance),
@@ -332,7 +351,7 @@ export class TitleSceneApp {
 
     this.camera.lookAt(this.ship.position.x, 1.45, this.ship.position.z - 9.5);
 
-    if (t >= 0.88) this.transitionCover?.classList.add('is-covering');
+    if (t >= TITLE_SCENE.transitionCoverStart) this.transitionCover?.classList.add('is-covering');
     if (t >= 1 && this.state === 'intro') {
       this.state = 'handoff';
       this.running = false;
