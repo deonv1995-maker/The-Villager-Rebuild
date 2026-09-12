@@ -25,6 +25,8 @@ assert.ok(midnightDirection.y > 0.999, 'Night celestial key light must flip to t
 
 let nowMs = 0;
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xaeddec);
+scene.fog = new THREE.FogExp2(0xa9c7bc, 0.0043);
 const opaque = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
   new THREE.MeshStandardMaterial({ color: 0xffffff })
