@@ -6,17 +6,17 @@ The opening begins before the Ranger reaches the beach. After **PLAY** is presse
 
 The incoming object does not strike the Ranger or the vessel. It remains on course toward the same island while the Ranger abandons ship and washes ashore.
 
-After the Ranger completes the short beach-recovery sequence and gets back to his feet, the incoming object should continue through the gameplay sky and crash elsewhere on the island. The first exploration objective becomes investigating that impact site.
+After the Ranger completes the short beach-recovery sequence and gets back to his feet, the incoming object continues through the live gameplay sky and crashes elsewhere on the island. A blue impact beacon becomes the first exploration objective.
 
-The impact site is Sprout. Sprout is found inactive/trapped beneath a fallen tree. The Ranger frees him; Sprout boots, thanks the Ranger through dialogue and pledges allegiance to the Ranger. Sprout then demonstrates his defining storage technology by compressing/storing the freed timber.
+The impact site is Sprout. Sprout is found inactive/trapped beneath a fallen tree. The Ranger frees him; Sprout boots, thanks the Ranger through dialogue and pledges allegiance to the Ranger. The rescue and allegiance checkpoint are part of the playable opening and persist through Save/Continue.
 
-This sequence introduces the companion through real gameplay instead of a menu explanation. The production crash-site/rescue slice must exist before the normal Day-1 objective is replaced, so a stable build never points the player toward an unfinished destination.
+Sprout's first material demonstration is still intended to be compressing/storing the freed timber, but that belongs to the following companion-collection slice. The current opening therefore completes the story introduction without inventing a second inventory or temporary harvesting path.
 
 ## Ranger and Sprout survival roles
 
 The Ranger is human and should remain physically believable. The Ranger performs active survival work: harvesting, chopping, mining, hunting, crafting, building and direct interaction.
 
-Sprout is the persistent support companion. After allegiance, Sprout dynamically follows the Ranger and automatically retrieves eligible loose/harvested resources within a bounded range. The Ranger and Sprout use one shared inventory; Sprout never has a second player-facing inventory.
+Sprout is the persistent support companion. After the companion-follow/collection slice is activated, Sprout dynamically follows the Ranger and automatically retrieves eligible loose/harvested resources within a bounded range. The Ranger and Sprout use one shared inventory; Sprout never has a second player-facing inventory.
 
 The intended material loop is:
 
@@ -30,7 +30,7 @@ Storage capacity and Sprout collection capability are progression systems and sh
 
 After Sprout's rescue, Day 1 continues to teach the real survival loop through a guided sequence rather than exposing every objective at once.
 
-The established survival goals remain: gather basic resources, craft early tools/weapons, hunt for food, harvest a tree, obtain timber, establish a basic fire, cook and eat. Exact ordering may be adjusted when the Sprout rescue slice is integrated so the companion introduction occurs before the game asks the player to manage quantities of bulky timber.
+The established survival goals remain: gather basic resources, craft early tools/weapons, hunt for food, harvest a tree, obtain timber, establish a basic fire, cook and eat. Exact ordering may be adjusted as the companion collection slice is integrated so the companion introduction occurs before the game asks the player to manage quantities of bulky timber.
 
 Normal tree harvesting should ultimately read as:
 

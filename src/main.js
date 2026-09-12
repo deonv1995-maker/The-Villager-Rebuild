@@ -1,4 +1,5 @@
 import './torch.css';
+import './sprout.css';
 import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
@@ -6,6 +7,7 @@ import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeControlle
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
+import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
@@ -121,6 +123,13 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     structureInteriorOcclusion.start();
     game.structureInteriorOcclusion = structureInteriorOcclusion;
 
+    const sproutArrival = new SproutArrivalController({
+      game,
+      setStatus: setGameplayStatus
+    });
+    sproutArrival.start();
+    game.sproutArrival = sproutArrival;
+
     const saveController = new SaveGameController({ game, store: saveStore });
     game.saveController = saveController;
     window.__villager = game;
@@ -142,15 +151,17 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
         setStatus: setGameplayStatus,
         onComplete: () => {
           worldTimeRuntime.start();
+          sproutArrival.beginAfterArrival();
           saveController.start({ saveImmediately: true });
         }
       });
       game.arrivalIntro = arrivalIntro;
       const arrivalStarted = arrivalIntro.start();
       if (!arrivalStarted) {
-        worldTimeRuntime.start();
-        saveController.start({ saveImmediately: true });
         setStatus('DAY 1 · ASHORE');
+        worldTimeRuntime.start();
+        sproutArrival.beginAfterArrival();
+        saveController.start({ saveImmediately: true });
       }
     }
 
