@@ -101,7 +101,7 @@ assert.ok(sceneSystem.lighting.skyFill.intensity > 0, 'Night must retain cool sk
 
 lighting.apply({ minuteOfDay: 9 * 60 });
 const expectedLightDirection = celestialDirectionAt(9 * 60);
-const actualLightDirection = sceneSystem.lighting.sun.position.clone().normalize();
+const actualLightDirection = sceneSystem.lighting.sun.position.clone().sub(sceneSystem.lighting.sun.target.position).normalize();
 assert.ok(
   actualLightDirection.dot(expectedLightDirection) > 0.999,
   'Directional sunlight must use the same visible sun orbit while the sun is above the horizon'
@@ -170,9 +170,9 @@ const packageJson = JSON.parse(read('package.json'));
 
 const checks = [
   ['gameplay boot creates one shared world-time system', main.includes('const worldTime = new WorldTimeSystem()')],
-  ['day/night presentation reuses SceneSystem lighting', main.includes('new DayNightLightingSystem({ sceneSystem: game.sceneSystem })')],
+  ['day/night presentation reuses SceneSystem lighting', main.includes('new DayNightLightingSystem({') && main.includes('sceneSystem: game.sceneSystem')],
   ['gameplay boot creates one clock-driven celestial presentation system', main.includes('new CelestialBodySystem({ sceneSystem: game.sceneSystem })')],
-  ['world time runtime fans one snapshot into lighting and celestial bodies', main.includes('presentations: [dayNightLighting, celestialBodies]')],
+  ['world time runtime fans one snapshot into lighting, celestial bodies, and shadows', main.includes('presentations: [dayNightLighting, celestialBodies, celestialShadows]')],
   ['new game clock starts after beach arrival rather than consuming tutorial time during the intro', main.includes('onComplete: () => {\n          worldTimeRuntime.start();')],
   ['continue restores before the clock resumes', main.indexOf('const restored = saveController.restore()') < main.indexOf('worldTimeRuntime.start();')],
   ['scene exposes existing lights instead of creating a second lighting rig', sceneSource.includes('this.lighting = this.#createLighting()') && sceneSource.includes('return Object.freeze({ hemi, sun, skyFill, ambient })')],
