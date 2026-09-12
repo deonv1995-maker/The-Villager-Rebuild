@@ -27,6 +27,7 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     id: 'log',
     label: 'Log',
     pickupQuantity: 1,
-    storage: 'inventory'
+    storage: 'inventory',
+    manualPickup: 'physical'
   })
 });

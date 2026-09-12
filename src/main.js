@@ -4,6 +4,7 @@ import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
+import { InventoryCapacityController } from './gameplay/InventoryCapacityController.js';
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
@@ -45,6 +46,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus: setGameplayStatus });
     await game.start();
+
+    const inventoryCapacity = new InventoryCapacityController({ game });
+    inventoryCapacity.start();
+    game.inventoryCapacity = inventoryCapacity;
 
     const worldTime = new WorldTimeSystem();
     const lightFocus = target => game.player.getPosition(target);
