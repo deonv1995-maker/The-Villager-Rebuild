@@ -117,7 +117,7 @@ export class SproutVisualRuntimeController {
     const production = createSproutVisual();
     production.position.copy(existing.position);
     production.quaternion.copy(existing.quaternion);
-    production.scale.copy(existing.scale);
+    production.scale.copy(existing.scale).multiplyScalar(production.userData.presentationScale ?? 1);
     production.visible = existing.visible;
     production.renderOrder = existing.renderOrder;
     parent.add(production);
