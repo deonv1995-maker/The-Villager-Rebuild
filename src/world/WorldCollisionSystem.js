@@ -327,8 +327,18 @@ export class WorldCollisionSystem {
     const feetY = Number.isFinite(from.y) ? from.y : fallbackBase;
     const fromGround = this.#walkableHeightAt(from.x, from.z, feetY, airborne);
     const headY = feetY + actorHeight;
+    const standingOnResolvedSupport = !airborne && Math.abs(feetY - fromGround) <= AIRBORNE_SUPPORT_TOLERANCE;
     for (const obstacle of this.obstacles) {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
+      // A collider that terminates below the Ranger's resolved walking surface cannot
+      // block horizontal travel on that surface. Upper floors sit slightly above their
+      // supporting wall tops, so the wall below an overhang seam must not become an
+      // invisible barrier while same-storey walls continue to block normally.
+      if (
+        standingOnResolvedSupport &&
+        Number.isFinite(obstacle.topY) &&
+        obstacle.topY < fromGround - 0.001
+      ) continue;
       if (feetY > obstacle.topY + 0.12) continue;
       if (headY < obstacle.bottomY - 0.08) continue;
 
