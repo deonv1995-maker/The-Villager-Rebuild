@@ -23,6 +23,7 @@ assert.equal(TORCH.burnDurationGameMinutes, nightMinutes / 2, 'One torch must la
 assert.equal(TORCH.burnDurationGameMinutes, 270, 'Baseline torch life must be 4.5 in-game hours');
 assert.equal(TOOL_DEFINITIONS.torch.role, 'light');
 assert.equal(TOOL_ORDER.at(-1), 'torch', 'Torch must be a normal toolbelt slot');
+assert.ok(TORCH.light.angle < Math.PI / 2, 'Torch spotlight must not wrap light behind the Ranger');
 assert.deepEqual(
   CRAFTING_RECIPES.torch.ingredients,
   [{ itemId: 'stick', quantity: 1 }, { itemId: 'grass', quantity: 2 }],
@@ -41,6 +42,7 @@ assert.equal(toolbelt.select('torch').equipped, true);
 
 const scene = new THREE.Scene();
 const playerRoot = new THREE.Group();
+playerRoot.position.set(3, 2, -4);
 const statuses = [];
 const game = {
   inventory,
@@ -54,7 +56,10 @@ const game = {
       return true;
     },
     getPosition(target) {
-      return target.set(3, 2, -4);
+      return target.copy(playerRoot.position);
+    },
+    getFacingDirection(target) {
+      return target.set(0, 0, 1);
     },
     isFirstPerson() {
       return false;
@@ -69,8 +74,27 @@ const torch = new TorchRuntimeController({ game });
 toolbelt.fuel = torch;
 torch.apply({ day: 1, minuteOfDay: 20 * 60 });
 assert.equal(torch.light.visible, true, 'Equipped torch must emit light');
-assert.equal(torch.light.castShadow, false, 'Mobile torch light must not enable expensive point-light shadows');
-assert.deepEqual(torch.light.position.toArray(), [3, 3.45, -4], 'Torch light must follow Ranger position');
+assert.equal(torch.light.isSpotLight, true, 'Torch must use one directional local spotlight');
+assert.equal(torch.light.castShadow, false, 'Mobile torch light must not enable expensive local-light shadows');
+assert.equal(torch.light.position.x, 3, 'Torch light X must come from the handheld flame anchor');
+assert.ok(
+  nearlyEqual(torch.light.position.y, 2 + TORCH.visual.handleLength * 0.6, 0.0001),
+  'Torch light Y must come from the handheld flame anchor rather than Ranger centre'
+);
+assert.equal(torch.light.position.z, -4, 'Torch light Z must come from the handheld flame anchor');
+assert.ok(
+  nearlyEqual(torch.lightTarget.position.z, -4 + TORCH.light.aimDistance, 0.0001),
+  'Torch spotlight must aim ahead of the Ranger'
+);
+assert.ok(
+  nearlyEqual(
+    torch.lightTarget.position.y,
+    torch.light.position.y - TORCH.light.aimDrop,
+    0.0001
+  ),
+  'Torch spotlight must aim down toward the ground in front of the Ranger'
+);
+assert.equal(torch.light.target, torch.lightTarget, 'Spotlight target must use the runtime-owned forward target');
 
 torch.apply({ day: 1, minuteOfDay: 22 * 60 + 15 });
 assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135));
@@ -106,6 +130,7 @@ torch.apply({ day: 2, minuteOfDay: 6 * 60 + 30 });
 assert.ok(nearlyEqual(torch.captureState().remainingGameMinutes, 60), 'Restored partial torch must resume from saved fuel');
 torch.dispose();
 assert.equal(torch.light.parent, null, 'Torch runtime must release its scene light cleanly');
+assert.equal(torch.lightTarget.parent, null, 'Torch runtime must release its spotlight target cleanly');
 
 let scheduledFrame = null;
 let presentationCount = 0;
@@ -143,6 +168,8 @@ const checks = [
   ['torch state restores after inventory/equipment', saveController.includes('this.game.torchRuntime?.restoreState?.(record.state.torch)')],
   ['generic Ranger tool visual does not compete with torch presentation', rangerTools.includes("toolId === 'spear' || toolId === 'torch'")],
   ['torch runtime does not create a second animation loop', !torchRuntimeSource.includes('requestAnimationFrame')],
+  ['torch light is a handheld directional spotlight', torchRuntimeSource.includes('new THREE.SpotLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
+  ['torch light aims forward from the Ranger instead of radiating behind', torchRuntimeSource.includes('addScaledVector(this.direction, this.definition.light.aimDistance)')],
   ['eight-slot mobile belt has a narrow-screen layout contract', torchCss.includes('@media (max-width: 420px)') && torchCss.includes('10.6vw')],
   ['full check suite includes torch regression', packageJson.scripts.check.includes('npm run verify:torch')]
 ];

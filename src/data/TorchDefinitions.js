@@ -11,11 +11,15 @@ export const TORCH = Object.freeze({
     intensity: 72,
     distance: 11,
     decay: 2,
-    height: 1.45
+    angle: Math.PI * 0.34,
+    penumbra: 0.82,
+    aimDistance: 5.5,
+    aimDrop: 1.35
   }),
   visual: Object.freeze({
     handleLength: 0.7,
     handleRadius: 0.035,
-    flameHeight: 0.22
+    flameHeight: 0.22,
+    fallbackPosition: Object.freeze({ x: 0.48, y: 1.18, z: 0.1 })
   })
 });
