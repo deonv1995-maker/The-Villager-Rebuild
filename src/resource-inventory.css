@@ -6,6 +6,33 @@
   gap: 5px;
 }
 
+.inventory-strip[data-capacity]::after {
+  content: attr(data-capacity);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  min-height: 18px;
+  padding: 3px 2px;
+  border: 1px solid rgba(225, 207, 151, .28);
+  border-radius: 7px;
+  background: rgba(20, 39, 29, .88);
+  color: #f2ddb0;
+  font-size: 7px;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: .02em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.inventory-strip[data-storage-mode="sprout"]::after {
+  box-shadow: 0 0 0 1px rgba(103, 211, 231, .2) inset;
+}
+
+.inventory-strip[data-over-capacity="true"]::after {
+  border-color: rgba(216, 93, 87, .82);
+}
+
 .inventory-row {
   position: relative;
   display: grid;
