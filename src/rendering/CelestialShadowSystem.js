@@ -125,6 +125,8 @@ export class CelestialShadowSystem {
     this.now = now;
     this.playerPosition = new THREE.Vector3();
     this.playerContactShadow = null;
+    this.previousSceneBeforeRender = null;
+    this.sceneBeforeRender = null;
     this.preparedMeshes = new WeakSet();
     this.lastCasterScanMs = Number.NEGATIVE_INFINITY;
     this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
@@ -156,6 +158,12 @@ export class CelestialShadowSystem {
   }
 
   dispose() {
+    if (this.sceneBeforeRender && this.scene.onBeforeRender === this.sceneBeforeRender) {
+      this.scene.onBeforeRender = this.previousSceneBeforeRender;
+    }
+    this.sceneBeforeRender = null;
+    this.previousSceneBeforeRender = null;
+
     if (!this.playerContactShadow) return;
     this.playerContactShadow.parent?.remove(this.playerContactShadow);
     this.playerContactShadow.traverse(object => {
@@ -210,6 +218,13 @@ export class CelestialShadowSystem {
     root.add(outer, inner);
     this.scene.add(root);
     this.playerContactShadow = root;
+
+    this.previousSceneBeforeRender = this.scene.onBeforeRender;
+    this.sceneBeforeRender = (...args) => {
+      this.previousSceneBeforeRender?.apply(this.scene, args);
+      this.#syncPlayerContactShadow();
+    };
+    this.scene.onBeforeRender = this.sceneBeforeRender;
   }
 
   #syncPlayerContactShadow() {
