@@ -8,6 +8,7 @@ import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeContr
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
+import { SproutCompanionController } from './gameplay/SproutCompanionController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
@@ -129,6 +130,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     });
     sproutArrival.start();
     game.sproutArrival = sproutArrival;
+
+    const sproutCompanion = new SproutCompanionController({ game });
+    sproutCompanion.start();
+    game.sproutCompanion = sproutCompanion;
 
     const saveController = new SaveGameController({ game, store: saveStore });
     game.saveController = saveController;

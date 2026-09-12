@@ -29,6 +29,7 @@ export class SproutArrivalController {
     this.playerPosition = new THREE.Vector3();
     this.sitePosition = new THREE.Vector3();
     this.rescueCinematicOwned = false;
+    this.companionPresentation = null;
     this.rescueAction = {
       available: false,
       priority: 90,
@@ -74,6 +75,27 @@ export class SproutArrivalController {
     this.setStatus?.('BLUE SIGNAL · SOMETHING IS COMING DOWN INLAND');
     this.#setObjective('Watch the inland sky');
     return true;
+  }
+
+  isAllied() {
+    return this.phase === PHASE.ALLIED;
+  }
+
+  claimCompanionPresentation() {
+    if (!this.isAllied()) return null;
+    if (this.companionPresentation) return this.companionPresentation;
+    const sprout = this.crashSite.sprout;
+    if (!sprout) return null;
+
+    // Story owns the crash-site Sprout until allegiance. At that point presentation
+    // ownership transfers to the companion runtime without spawning a duplicate actor.
+    this.crashSite.scene.attach(sprout);
+    sprout.visible = true;
+    sprout.name = 'sprout-companion-placeholder';
+    this.companionPresentation = sprout;
+    this.crashSite.sprout = null;
+    this.crashSite.sproutEye = null;
+    return sprout;
   }
 
   captureState() {
