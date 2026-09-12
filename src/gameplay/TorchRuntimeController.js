@@ -22,20 +22,31 @@ export class TorchRuntimeController {
     this.remainingGameMinutes = definition.burnDurationGameMinutes;
     this.lastAbsoluteGameMinute = null;
     this.position = new THREE.Vector3();
+    this.direction = new THREE.Vector3();
+    this.targetPosition = new THREE.Vector3();
     this.visualRoot = this.#createVisual();
     this.handMounted = game.player.mountRightHandObject?.(this.visualRoot) ?? false;
-    if (!this.handMounted && !this.visualRoot.parent) game.player.root.add(this.visualRoot);
+    if (!this.handMounted && !this.visualRoot.parent) {
+      game.player.root.add(this.visualRoot);
+      const fallback = definition.visual.fallbackPosition;
+      this.visualRoot.position.set(fallback.x, fallback.y, fallback.z);
+    }
 
-    this.light = new THREE.PointLight(
+    this.lightTarget = new THREE.Object3D();
+    this.lightTarget.name = 'ranger-torch-light-target';
+    this.light = new THREE.SpotLight(
       definition.light.color,
       definition.light.intensity,
       definition.light.distance,
+      definition.light.angle,
+      definition.light.penumbra,
       definition.light.decay
     );
     this.light.name = 'ranger-torch-light';
     this.light.visible = false;
     this.light.castShadow = false;
-    game.sceneSystem.scene.add(this.light);
+    this.light.target = this.lightTarget;
+    game.sceneSystem.scene.add(this.light, this.lightTarget);
     this.#syncPresentation();
   }
 
@@ -93,6 +104,7 @@ export class TorchRuntimeController {
 
   dispose() {
     this.light.parent?.remove(this.light);
+    this.lightTarget.parent?.remove(this.lightTarget);
     this.visualRoot.parent?.remove(this.visualRoot);
   }
 
@@ -131,12 +143,23 @@ export class TorchRuntimeController {
     this.light.visible = burning;
     if (!burning) return;
 
-    this.game.player.getPosition(this.position);
-    this.light.position.set(
-      this.position.x,
-      this.position.y + this.definition.light.height,
-      this.position.z
-    );
+    this.flameAnchor.getWorldPosition(this.position);
+    this.light.position.copy(this.position);
+
+    const facing = this.game.player.getFacingDirection?.(this.direction);
+    if (!facing) {
+      this.direction.set(
+        Math.sin(this.game.player.root.rotation.y),
+        0,
+        Math.cos(this.game.player.root.rotation.y)
+      ).normalize();
+    }
+
+    this.targetPosition
+      .copy(this.position)
+      .addScaledVector(this.direction, this.definition.light.aimDistance);
+    this.targetPosition.y -= this.definition.light.aimDrop;
+    this.lightTarget.position.copy(this.targetPosition);
   }
 
   #createVisual() {
@@ -169,6 +192,11 @@ export class TorchRuntimeController {
     );
     flame.position.y = this.definition.visual.handleLength * 0.6;
     group.add(flame);
+
+    this.flameAnchor = new THREE.Object3D();
+    this.flameAnchor.name = 'ranger-torch-flame-anchor';
+    this.flameAnchor.position.copy(flame.position);
+    group.add(this.flameAnchor);
 
     return group;
   }
