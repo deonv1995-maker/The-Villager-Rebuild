@@ -33,14 +33,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET_SHA: ${{ github.sha }}
           REPOSITORY: ${{ github.repository }}
+          PRODUCTION_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 600))
+          production_created_at="$(
+            gh api "repos/${REPOSITORY}/actions/runs/${PRODUCTION_RUN_ID}" --jq '.created_at'
+          )"
 
+          # GitHub's dynamic branch-source Pages workflow can occasionally report the
+          # previously deployed main SHA even though the run was created by this push.
+          # Prefer an exact SHA match, but also accept the newest main-branch Pages run
+          # created at or after this production workflow began. This keeps dist last
+          # without deadlocking when GitHub's dynamic-run head_sha metadata is stale.
           while (( SECONDS < deadline )); do
             run_state="$(
               gh api "repos/${REPOSITORY}/actions/runs?per_page=100" \
-                --jq ".workflow_runs[] | select(.name == \"pages build and deployment\" and .head_sha == \"${TARGET_SHA}\") | [.id, .status, (.conclusion // \"\")] | @tsv" \
+                --jq ".workflow_runs[]
+                  | select(.name == \"pages build and deployment\" and .head_branch == \"main\")
+                  | select(.head_sha == \"${TARGET_SHA}\" or .created_at >= \"${production_created_at}\")
+                  | [.id, .status, (.conclusion // \"\"), .head_sha, .created_at]
+                  | @tsv" \
                 | head -n 1 \
                 || true
             )"
@@ -51,8 +64,8 @@ jobs:
               continue
             fi
 
-            IFS=$'\t' read -r pages_run_id pages_status pages_conclusion <<< "${run_state}"
-            echo "Branch-source Pages run ${pages_run_id}: ${pages_status} ${pages_conclusion}"
+            IFS=$'\t' read -r pages_run_id pages_status pages_conclusion pages_head_sha pages_created_at <<< "${run_state}"
+            echo "Branch-source Pages run ${pages_run_id}: ${pages_status} ${pages_conclusion} (head ${pages_head_sha}, created ${pages_created_at})"
 
             if [[ "${pages_status}" == "completed" ]]; then
               if [[ "${pages_conclusion}" != "success" ]]; then
