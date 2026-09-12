@@ -288,7 +288,11 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
 
         placement.valid = this.#roofSupported(structure, integratedCells, seed.storey);
         placement.score = nearestScore;
-        if (!best || placement.score < best.score) best = placement;
+        const betterScore = !best || placement.score < best.score - 0.05;
+        const sameAimHigherSupport = Boolean(best) &&
+          Math.abs(placement.score - best.score) <= 0.05 &&
+          placement.baseY > best.baseY + LEVEL_TOLERANCE;
+        if (betterScore || sameAimHigherSupport) best = placement;
       }
     }
 
