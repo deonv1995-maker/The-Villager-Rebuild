@@ -20,62 +20,90 @@ Sprout is tied directly to the shipwreck opening.
 8. The Ranger receives an exploration objective to find the distant impact site.
 9. The impact site contains Sprout trapped beneath a fallen tree.
 10. The Ranger frees Sprout. Sprout boots, thanks the Ranger through dialogue and pledges allegiance to the Ranger.
-11. Sprout's first gameplay demonstration is intended to be compressing and storing the freed tree/log material once the collection slice is activated.
+11. Once allegiance is complete, the same Sprout presentation leaves the crash site, follows the Ranger and can visibly compress eligible loose resources into the shared inventory.
 
-The title scene never creates a duplicate gameplay Sprout or fake crash-site authority. The gameplay continuation owns the actual island impact and rescue. The current Sprout body and crash pod at that site are deliberately lightweight procedural presentation so the story interaction can be completed before a production companion asset is selected; replacing that visual must not change story, inventory or collection state.
+The title scene never creates a duplicate gameplay Sprout or fake crash-site authority. The gameplay continuation owns the actual island impact and rescue. The current Sprout body and crash pod at that site are deliberately lightweight procedural presentation so the story interaction and companion systems can be completed before a production companion asset is selected; replacing that visual must not change story, inventory or collection state.
 
 ## Shared inventory rule
 
 There is **one authoritative shared inventory** for the Ranger/Sprout pair. Sprout does not own a second inventory and no transfer UI exists between Ranger and companion.
 
-Before Sprout joins, future capacity work should keep the Ranger's practical carrying ability intentionally limited. After Sprout joins, its matter-compression storage capability raises the amount of material that can be represented by that same shared inventory.
+The current companion slice adds retrieved quantities directly to the existing `InventorySystem` only after a legitimate world-pickup transfer commits. Storage-capacity limits are not introduced by this slice. Future capacity progression may make the Ranger/Sprout carrying fiction more explicit, but it must extend the same inventory authority rather than introduce parallel storage systems.
 
-Storage capacity is intended to be upgradeable. Capacity progression, collection radius, compression speed and larger-object support may improve over time, but they must extend the same inventory authority rather than introduce parallel storage systems.
+Storage capacity, collection radius, compression speed and larger-object support may become upgradeable over time.
 
 ## Harvest versus retrieval
 
 The responsibility split is explicit:
 
 - **Ranger performs the harvesting.** The Ranger chops a standing tree, mines a rock, cuts/harvests vegetation and performs other active world interactions.
-- **World systems create real results.** A chopped tree should visibly fall before its timber becomes collectible; mined/cut resources exist in the world according to their resource system.
-- **Sprout performs retrieval.** Once unlocked, Sprout may detect eligible loose or harvested resources near the Ranger and collect them through the compression beam.
+- **World systems create real results.** A chopped tree should ultimately visibly fall before its timber becomes collectible; mined/cut resources exist in the world according to their resource system.
+- **Sprout performs retrieval.** After allegiance, Sprout detects eligible loose world pickups near the Ranger and collects them through the compression beam.
 - **Inventory remains authoritative.** Collection succeeds only when the resource is legitimately transferred out of its world representation and into the shared inventory.
 
-Sprout must never silently harvest intact trees, rocks or other nodes merely because they are within collection range.
+Sprout never silently harvests intact trees, rocks or other nodes merely because they are within collection range. Harvestable grass patches also remain Ranger interactions. Sprout may collect a loose Grass pickup only after another world/harvest system has created that pickup as a legitimate result.
 
 ## Automatic collection
 
-Once allegiance is established, Sprout dynamically follows the Ranger and may collect eligible nearby resources such as:
+After allegiance, Sprout dynamically follows the Ranger and may retrieve the following loose pickup types:
 
-- Logs produced by chopped trees;
+- Logs already produced as world pickups;
 - loose Sticks;
-- collectible/harvested Grass;
 - loose Stones;
+- loose Grass pickups produced by an eligible world/harvest flow;
 - later resources explicitly opted into companion collection by data.
 
-Collection is bounded by a companion collection radius around the Ranger/Sprout relationship. Sprout must not disappear deep into the island chasing a distant pickup. If following the Ranger conflicts with collecting a resource, catch-up/follow behavior wins.
+Raw Meat is intentionally not part of the initial automatic collection set.
 
-The intended behavior loop is:
+Collection is bounded by a companion collection radius around the Ranger. Sprout does not disappear deep into the island chasing a distant pickup. Catch-up/follow behavior wins whenever collecting would leave Sprout too far behind.
 
-`Follow Ranger -> detect eligible loose resource -> orient/move within beam range -> compress/collect -> catch up -> resume follow`
+The implemented behavior loop is:
+
+`Follow Ranger -> scan eligible loose pickup -> move within beam range -> reserve pickup -> compress visibly -> commit world removal -> increment shared inventory -> catch up -> resume follow`
+
+A hard catch-up fallback may relocate the companion back beside the Ranger if ordinary collision-aware movement cannot close a very large separation. This is a companion recovery rule, not a second navigation system.
+
+## Transactional collection boundary
+
+`GatherableSystem` remains the authority for loose-pickup identity and removal. Sprout does not directly award an item merely because a beam animation started.
+
+Collection uses a small reservation/commit transaction:
+
+1. Sprout finds an active eligible loose pickup.
+2. `GatherableSystem` reserves that pickup for Sprout, preventing normal player targeting while the transfer is in progress.
+3. The authoritative pickup remains active with its original saved transform; only its normal visual is temporarily hidden.
+4. Sprout animates a temporary presentation clone toward the companion with a blue beam/halo.
+5. If collection is cancelled, the reservation is released and the authoritative pickup becomes visible again.
+6. If compression completes, `GatherableSystem` commits the reserved removal.
+7. Only after that commit succeeds does the existing shared `InventorySystem` receive the quantity and the HUD refresh from the authoritative inventory snapshot.
+
+Because the authoritative pickup is not moved or made inactive until commit, an autosave during the short compression animation still records a recoverable world item rather than a half-transferred resource.
 
 ## Compression presentation
 
-Collection must be visible rather than an unexplained disappearance:
+Collection must be readable rather than an unexplained disappearance:
 
-1. Sprout targets/scans the resource.
-2. A blue beam or compression effect connects Sprout to the object.
-3. The object visibly scales/compresses toward Sprout.
-4. The world pickup is removed only when the transfer succeeds.
-5. The shared inventory count visibly increments with item icon/quantity feedback.
+1. Sprout approaches the eligible loose resource.
+2. A blue compression beam and halo connect Sprout to the resource.
+3. A presentation clone visibly scales down and moves toward Sprout.
+4. The authoritative world pickup is removed only when the transfer succeeds.
+5. The shared inventory icon/quantity visibly refreshes after the award.
 
-Large objects such as Logs may use a slightly longer compression beat than small loose resources. Presentation timing must not create a second inventory or duplicate item award.
+Logs use a slightly longer compression beat than small loose resources. Presentation timing never creates a second inventory or duplicate award.
+
+## Following and collision
+
+Sprout uses the shared world collision service for ordinary follow/collection movement. It hovers at a small fixed height above the current terrain, follows behind and slightly beside the Ranger, and uses a smaller collision footprint than the human Ranger.
+
+The companion does not introduce a navmesh or a competing obstacle database. If it falls far enough behind, collection intent is cancelled and catch-up takes priority. A bounded hard catch-up is allowed only as recovery from large separation or obstacle trapping.
 
 ## Tree-felling requirement
 
-Normal tree harvesting should no longer hide the standing tree and instantly replace it with Logs at the final axe hit. The intended final loop is:
+Normal tree harvesting should still move toward a visible felling state. The intended final loop is:
 
 `Axe hits -> tree enters falling state -> trunk visibly falls -> fall settles -> configured Log results become collectible -> Sprout may collect those Logs after allegiance`
+
+The current tree system already creates legitimate loose Log results after the final axe hit, so Sprout can retrieve those results now. However, the standing tree still transitions immediately to stump/results at the final hit. The physical falling animation/state remains a later harvesting slice.
 
 Tree fall presentation must remain owned by the tree-harvest/world layer. Sprout only reacts to valid collectible results after they exist.
 
@@ -90,24 +118,25 @@ Future Sprout upgrades may include:
 - maximum compressible object size;
 - scanner, light, repair or story-specific utility systems.
 
-These are progression extensions, not requirements for the first companion slice.
+These are progression extensions and must build on the same companion/inventory boundaries.
 
 ## Architecture boundaries
 
 - `InventorySystem` remains the single item-count authority for the Ranger/Sprout pair.
-- `GatherableSystem` remains responsible for world pickup identity/presentation and legitimate pickup removal.
-- `TreeHarvestSystem` remains responsible for axe hits, tree state, felling/regrowth and creation of timber results.
-- `SproutArrivalController` owns the opening gameplay story state, crash investigation objective, rescue action, boot dialogue and allegiance checkpoint. It does not own item quantities or harvesting.
-- `SproutCrashSiteSystem` owns the gameplay crash-site presentation/collision, incoming blue object, fallen rescue tree and temporary Sprout/pod visual. It does not own story progression or inventory.
+- `GatherableSystem` remains responsible for loose world pickup identity, player targeting, Sprout reservation/release and legitimate committed pickup removal.
+- `TreeHarvestSystem` remains responsible for axe hits, tree state, regrowth and creation of timber results. The future physical fall belongs there, not in Sprout logic.
+- `SproutArrivalController` owns the opening gameplay story state, crash investigation objective, rescue action, boot dialogue and allegiance checkpoint. At allegiance it exposes the single crash-site Sprout presentation for companion ownership; it does not own item quantities or harvesting.
+- `SproutCrashSiteSystem` owns the gameplay crash-site presentation/collision, incoming blue object, fallen rescue tree and pre-allegiance temporary Sprout/pod visual.
+- `SproutCompanionController` owns post-allegiance follow intent, collision-aware catch-up, loose-resource selection and compression presentation. It does not harvest nodes and it does not own item quantities.
 - `SaveGameController` stores the additive Sprout-arrival checkpoint after normal Ranger/world restore. Pre-Sprout saves stay compatible and deliberately skip replaying the opening story inside an established world.
-- Sprout companion logic will own follow/collection intent and compression presentation once that next slice is activated, not harvesting rules.
-- HUD code displays objective/action/capacity/delta feedback but does not own story or item quantities.
-- Sprout's production visual/animation asset is presentation and must be swappable without changing storage or collection rules.
-- Story sequencing owns when Sprout allegiance becomes available; ordinary gameplay systems must not assume Sprout exists from an older save.
+- HUD code displays objective/action/inventory feedback but does not own story or item quantities.
+- Sprout's production visual/animation asset is presentation and must be swappable without changing story, movement, reservation or inventory rules.
 - Existing terrain, ecology, wildlife, construction, rendering and PWA systems remain independent unless a later Sprout feature explicitly requires an integration point.
 
 ## Current implementation boundary
 
-The title prelude and the first gameplay continuation are now connected end to end. After the beach-recovery cinematic completes, a second blue object visibly descends through the live gameplay world and impacts at a deterministic suitable inland site selected from the authoritative terrain/collision data. A persistent blue ion-smoke beacon leads the Ranger to a physical crater/pod scene where the temporary Sprout presentation is trapped beneath a fallen tree. The Ranger can use the shared HUD action boundary (or `E` on desktop) to free Sprout; Ranger cinematic ownership is used only during the rescue/boot conversation, and Sprout then reaches an `ALLIED` story checkpoint. Impact, rescue/dialogue and allegiance states are autosave-safe.
+The Sprout introduction, crash-site rescue and first companion behavior are now connected end to end. After the beach-recovery cinematic, the blue object impacts inland; the Ranger investigates, frees Sprout and completes the allegiance dialogue. The existing crash-site Sprout presentation then transfers to the companion runtime rather than spawning a duplicate actor.
 
-This slice still does **not** activate Sprout following, automatic resource retrieval, compression transfer, capacity upgrades or the normal tree-felling rewrite. It also does not select the final production Sprout model. Those remain the next companion/harvesting slices so the current milestone stays playable and does not introduce a second inventory or competing harvesting authority.
+Once allied, Sprout follows the Ranger, uses the shared collision world for movement, scans a bounded radius for eligible loose Stick/Stone/Grass/Log pickups, approaches them, displays a blue compression transfer and adds the committed quantity to the existing shared inventory. Catch-up always wins over resource chasing, and collection uses the `GatherableSystem` reservation/commit boundary so save data cannot record an unexplained duplicate award.
+
+This slice still does **not** implement storage-capacity upgrades, advanced companion utilities, multi-target collection, a production Sprout 3D asset, or the normal tree-felling animation/state. Those remain later milestones.
