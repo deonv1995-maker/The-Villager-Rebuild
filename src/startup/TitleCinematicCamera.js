@@ -50,9 +50,9 @@ export class TitleCinematicCamera {
 
     this.basePosition.copy(this.camera.position);
     this.focusPosition.copy(this.basePosition);
-    this.focusPosition.x += TITLE_SCENE.celestialFocusCameraSide * attention;
-    this.focusPosition.y += TITLE_SCENE.celestialFocusCameraLift * attention;
-    this.focusPosition.z -= TITLE_SCENE.celestialFocusCameraPush * attention;
+    this.focusPosition.x += TITLE_SCENE.celestialFocusCameraSide;
+    this.focusPosition.y += TITLE_SCENE.celestialFocusCameraLift;
+    this.focusPosition.z -= TITLE_SCENE.celestialFocusCameraPush;
 
     const handHeldDrift = attention * 0.045;
     this.focusPosition.x += Math.sin(elapsed * 1.7) * handHeldDrift;
