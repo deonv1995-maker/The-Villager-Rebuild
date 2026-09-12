@@ -152,7 +152,7 @@ export class PanelConstructionGrid {
     this.originX = requireFinite(originX, 'Grid originX');
     this.originZ = requireFinite(originZ, 'Grid originZ');
     this.cellSize = requireFinite(cellSize, 'Grid cellSize');
-    if (this.cellSize <= 0) throw new Error('Grid cellSize must be positive');
+    if (this.cellSize <= 0) throw new Error('PanelConstructionGrid requires a positive cellSize');
     this.floors = new Map();
     this.walls = new Map();
     this.stairs = new Map();
@@ -220,7 +220,7 @@ export class PanelConstructionGrid {
           levelTolerance: PANEL_GRID.snapTolerance + 0.001
         }).find(support => support.key === edge.key);
     if (!floor && !wallSupport) {
-      return { ok: false, reason: 'missing-floor-or-wall-support', ownerCellKey };
+      return { ok: false, reason: 'missing-floor', ownerCellKey };
     }
 
     if (this.walls.has(edge.key)) return { ok: false, reason: 'occupied-edge', key: edge.key };
@@ -430,7 +430,11 @@ export class PanelConstructionGrid {
       const result = grid.placeStair(stair);
       if (!result.ok) throw new Error(`Invalid persisted stair: ${stair.key ?? 'unknown'}`);
     }
-    for (const wall of snapshot.walls ?? []) {
+    const persistedWalls = [...(snapshot.walls ?? [])].sort((left, right) => (
+      (left.storey ?? 0) - (right.storey ?? 0) ||
+      String(left.key ?? '').localeCompare(String(right.key ?? ''))
+    ));
+    for (const wall of persistedWalls) {
       const result = grid.placeWall(wall);
       if (!result.ok) throw new Error(`Invalid persisted wall: ${wall.key ?? 'unknown'}`);
     }
