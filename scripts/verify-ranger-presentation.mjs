@@ -41,22 +41,28 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'unused Ranger q
 assert.notEqual(cape.geometry, sourceGeometry, 'cape deformation should own a cloned geometry');
 assert.equal(sourceGeometry.getAttribute('position').getZ(2), originalHemZ, 'source Ranger geometry must remain untouched');
 
-root.position.z += 0.1;
 root.rotation.y = 0.25;
-presentation.update(1 / 60);
+for (let frame = 0; frame < 8; frame += 1) {
+  root.position.z += 0.1;
+  presentation.update(1 / 60);
+}
 
 const deformedPositions = cape.geometry.getAttribute('position');
 const deformedTop = new THREE.Vector3().fromBufferAttribute(deformedPositions, 0);
 const deformedHem = new THREE.Vector3().fromBufferAttribute(deformedPositions, 2);
 
 assert.ok(deformedTop.distanceTo(originalTop) < 1e-6, 'cape shoulder vertices should remain pinned');
-assert.ok(Math.abs(deformedHem.z - originalHemZ) > 0.001, 'cape hem should trail when the Ranger moves');
-assert.ok(presentation.trail > 0, 'movement should build damped cape trail');
+assert.ok(deformedHem.z < originalHemZ - 0.01, 'cape hem should settle into a visible trail under sustained movement');
+assert.ok(presentation.trail > 0.05, 'sustained movement should build damped cape trail');
 assert.ok(Math.abs(presentation.sideLag) > 0, 'turning should create lateral cape inertia');
 
+const verticalLagBeforeJump = presentation.verticalLag;
 root.position.y += 0.08;
 presentation.update(1 / 60);
-assert.ok(presentation.verticalLag < 0, 'upward Ranger motion should make the cape lag downward');
+assert.ok(
+  presentation.verticalLag < verticalLagBeforeJump,
+  'upward Ranger motion should pull the cape response downward relative to its running state'
+);
 
 const toolPresentation = read('src/player/RangerToolPresentation.js');
 const packageJson = JSON.parse(read('package.json'));
