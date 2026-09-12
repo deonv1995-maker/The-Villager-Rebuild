@@ -22,6 +22,7 @@ const EXCLUDED_NAME_PARTS = Object.freeze([
 
 const RECEIVER_ONLY_POLICY = 'receiver-only';
 const STATIC_TREE_BATCH_PREFIX = 'forest-tree-batch-';
+const CHUNKED_TREE_BATCH_PREFIX = 'forest-tree-chunk-';
 const PLAYER_CONTACT_SHADOW = Object.freeze({
   lift: 0.025,
   scaleX: 1.08,
@@ -57,10 +58,12 @@ function inheritedShadowPolicy(object) {
 }
 
 function isStaticTreeBatch(object) {
-  return Boolean(
-    object?.isInstancedMesh &&
-    String(object.name ?? '').toLowerCase().startsWith(STATIC_TREE_BATCH_PREFIX)
-  );
+  if (!object?.isInstancedMesh) return false;
+  if (object.userData?.chunkedTreeBatch === true) return true;
+
+  const name = String(object.name ?? '').toLowerCase();
+  return name.startsWith(STATIC_TREE_BATCH_PREFIX)
+    || name.startsWith(CHUNKED_TREE_BATCH_PREFIX);
 }
 
 function supportsLitShadows(object) {

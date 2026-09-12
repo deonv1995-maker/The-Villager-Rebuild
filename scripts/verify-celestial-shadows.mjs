@@ -51,6 +51,17 @@ instanced.castShadow = false;
 instanced.receiveShadow = true;
 scene.add(instanced);
 
+const chunkedInstanced = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x4f994f }),
+  4
+);
+chunkedInstanced.name = 'forest-tree-chunk-0-0-0-0';
+chunkedInstanced.userData.chunkedTreeBatch = true;
+chunkedInstanced.castShadow = false;
+chunkedInstanced.receiveShadow = true;
+scene.add(chunkedInstanced);
+
 const understory = new THREE.InstancedMesh(
   new THREE.BoxGeometry(1, 1, 1),
   new THREE.MeshStandardMaterial({ color: 0x447744 }),
@@ -133,8 +144,10 @@ assert.equal(sun.shadow.camera.right, CELESTIAL_SHADOWS.cameraHalfSize);
 assert.equal(opaque.castShadow, true, 'Opaque gameplay/building meshes must automatically cast local shadows');
 assert.equal(opaque.receiveShadow, true, 'Opaque gameplay/building meshes must automatically receive local shadows');
 assert.equal(transparent.castShadow, false, 'Transparent effects must stay out of the shadow pass');
-assert.equal(instanced.castShadow, true, 'Static instanced tree batches must cast into the bounded celestial shadow map');
-assert.equal(instanced.receiveShadow, true, 'Static instanced tree batches must receive celestial/environment shadows');
+assert.equal(instanced.castShadow, true, 'Pre-split static tree batches must cast into the bounded celestial shadow map');
+assert.equal(instanced.receiveShadow, true, 'Pre-split static tree batches must receive celestial/environment shadows');
+assert.equal(chunkedInstanced.castShadow, true, 'Runtime chunked tree batches must remain celestial shadow casters');
+assert.equal(chunkedInstanced.receiveShadow, true, 'Runtime chunked tree batches must remain celestial shadow receivers');
 assert.equal(understory.castShadow, false, 'Lightweight understory must stay out of the caster pass');
 assert.equal(understory.receiveShadow, false, 'Lightweight understory must stay out of the receive pass');
 assert.equal(rangerMesh.castShadow, false, 'Animated Ranger geometry must not cast into the throttled global map');
@@ -195,6 +208,7 @@ assert.ok(
 const main = read('src/main.js');
 const sceneSource = read('src/rendering/SceneSystem.js');
 const shadowSource = read('src/rendering/CelestialShadowSystem.js');
+const worldChunkSource = read('src/world/WorldChunkSystem.js');
 const packageJson = JSON.parse(read('package.json'));
 const checks = [
   [
@@ -207,7 +221,13 @@ const checks = [
   ['day/night lighting receives Ranger focus for a local shadow camera', main.includes('focusProvider: lightFocus')],
   ['SceneSystem owns the directional-light target rather than the shadow feature creating another light', sceneSource.includes("sun.target.name = 'celestial-key-target'") && sceneSource.includes('this.scene.add(sun, sun.target)')],
   ['animated Ranger geometry uses the receiver-only shadow policy', shadowSource.includes('celestialShadowPolicy = RECEIVER_ONLY_POLICY')],
-  ['static forest batches are the only instanced vegetation promoted into the caster path', shadowSource.includes('startsWith(STATIC_TREE_BATCH_PREFIX)')],
+  [
+    'runtime forest chunking preserves a semantic tree-batch flag consumed by the centralized shadow policy',
+    worldChunkSource.includes('chunkBatch.userData.chunkedTreeBatch = true') &&
+      shadowSource.includes('chunkedTreeBatch === true') &&
+      shadowSource.includes('startsWith(CHUNKED_TREE_BATCH_PREFIX)')
+  ],
+  ['pre-split forest batches remain supported by the shadow policy', shadowSource.includes('startsWith(STATIC_TREE_BATCH_PREFIX)')],
   ['full check suite includes celestial shadow regression', packageJson.scripts.check.includes('npm run verify:celestial-shadows')]
 ];
 
