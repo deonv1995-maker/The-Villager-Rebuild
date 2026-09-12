@@ -15,6 +15,7 @@ const PREVIEW_INVALID = 0xd85d57;
 const TARGET_DISTANCE = LANDSCAPING_GRID.cellSize * 0.78;
 const AIM_GROUND_STEP = 0.22;
 const EPSILON = 0.000001;
+const DIRECTIONS = Object.values(PANEL_DIRECTIONS);
 
 const finitePoint = point => Number.isFinite(point?.x) && Number.isFinite(point?.z);
 const finiteAim = aim => (
@@ -26,16 +27,14 @@ const finiteAim = aim => (
   Number.isFinite(aim?.direction?.z)
 );
 
-const directionEntries = Object.values(PANEL_DIRECTIONS);
-
-const disposeObject = root => {
+function disposeObject(root) {
   root?.traverse?.(object => {
     object.geometry?.dispose?.();
     if (Array.isArray(object.material)) object.material.forEach(material => material?.dispose?.());
     else object.material?.dispose?.();
   });
   root?.removeFromParent?.();
-};
+}
 
 export class LandscapingSystem {
   constructor({ group, terrain, collision, inventory, panelConstruction }) {
@@ -95,6 +94,7 @@ export class LandscapingSystem {
       this.#clearPreview();
       return null;
     }
+
     const placement = this.#resolvePlacement(playerPosition, facingDirection, aim);
     const cost = landscapingCost(this.mode);
     const canAfford = cost.every(item => this.inventory.get(item.itemId) >= item.quantity);
@@ -107,16 +107,13 @@ export class LandscapingSystem {
   build(playerPosition, facingDirection, aim = null) {
     if (!this.active) return null;
     const placement = this.update(playerPosition, facingDirection, aim);
-    if (!placement?.valid) return null;
+    if (!placement?.valid || this.entries.has(placement.key)) return null;
+
     const cost = landscapingCost(this.mode);
     if (!cost.every(item => this.inventory.get(item.itemId) >= item.quantity)) return null;
-    if (this.entries.has(placement.key)) return null;
     if (!this.inventory.consume(cost)) return null;
 
-    const entry = this.#materialize({
-      ...placement,
-      mode: this.mode
-    });
+    const entry = this.#materialize({ ...placement, mode: this.mode });
     this.update(playerPosition, facingDirection, aim);
     return {
       ...entry,
@@ -150,6 +147,7 @@ export class LandscapingSystem {
     this.#clearRuntimeEntries();
     this.mode = LANDSCAPING_MODES.includes(snapshot?.mode) ? snapshot.mode : 'fence';
     this.active = false;
+
     for (const saved of snapshot?.entries ?? []) {
       if (
         typeof saved?.key !== 'string' ||
@@ -159,6 +157,7 @@ export class LandscapingSystem {
         !Number.isFinite(saved?.z) ||
         !Number.isFinite(saved?.yaw)
       ) continue;
+
       this.#materialize({
         key: saved.key,
         mode: saved.mode,
@@ -174,6 +173,7 @@ export class LandscapingSystem {
         valid: true
       });
     }
+
     this.#clearPreview();
     return true;
   }
@@ -190,12 +190,15 @@ export class LandscapingSystem {
       ? this.#structurePlacement(structure, target)
       : this.#worldPlacement(target);
     if (!placement) return null;
-    const inReach = Math.hypot(placement.x - playerPosition.x, placement.z - playerPosition.z) <= LANDSCAPING_GRID.placementReach;
+
+    const inReach = Math.hypot(
+      placement.x - playerPosition.x,
+      placement.z - playerPosition.z
+    ) <= LANDSCAPING_GRID.placementReach;
     const playable = this.terrain.isPlayable?.(placement.x, placement.z, 0.16) !== false;
-    const occupied = this.entries.has(placement.key);
     return {
       ...placement,
-      valid: inReach && playable && !occupied && placement.structuralConflict !== true
+      valid: inReach && playable && !this.entries.has(placement.key) && placement.structuralConflict !== true
     };
   }
 
@@ -213,6 +216,7 @@ export class LandscapingSystem {
         structureId: structure.id,
         cellX: cell.x,
         cellZ: cell.z,
+        edgeKey: null,
         x: center.x,
         y: this.#baseHeightAt(center.x, center.z),
         z: center.z,
@@ -222,7 +226,7 @@ export class LandscapingSystem {
     }
 
     let best = null;
-    for (const direction of directionEntries) {
+    for (const direction of DIRECTIONS) {
       const edge = registry.edgePlacementWorld(structure, {
         x: cell.x,
         z: cell.z,
@@ -234,6 +238,7 @@ export class LandscapingSystem {
       if (!best || distance < best.distance) best = { edge, distance };
     }
     if (!best) return null;
+
     return {
       key: `landscape:${structure.id}:fence:${best.edge.key}`,
       gridKind: 'structure',
@@ -263,6 +268,7 @@ export class LandscapingSystem {
         structureId: null,
         cellX,
         cellZ,
+        edgeKey: null,
         x: centerX,
         y: this.#baseHeightAt(centerX, centerZ),
         z: centerZ,
@@ -272,14 +278,17 @@ export class LandscapingSystem {
     }
 
     const half = cellSize * 0.5;
-    const candidates = [
-      { axis: 'x', x: centerX, z: centerZ - half, yaw: 0, edgeKey: `x:${cellX}:${cellZ}` },
-      { axis: 'x', x: centerX, z: centerZ + half, yaw: Math.PI, edgeKey: `x:${cellX}:${cellZ + 1}` },
-      { axis: 'z', x: centerX + half, z: centerZ, yaw: Math.PI * 0.5, edgeKey: `z:${cellX + 1}:${cellZ}` },
-      { axis: 'z', x: centerX - half, z: centerZ, yaw: -Math.PI * 0.5, edgeKey: `z:${cellX}:${cellZ}` }
+    const edges = [
+      { x: centerX, z: centerZ - half, yaw: 0, edgeKey: `x:${cellX}:${cellZ}` },
+      { x: centerX, z: centerZ + half, yaw: Math.PI, edgeKey: `x:${cellX}:${cellZ + 1}` },
+      { x: centerX + half, z: centerZ, yaw: Math.PI * 0.5, edgeKey: `z:${cellX + 1}:${cellZ}` },
+      { x: centerX - half, z: centerZ, yaw: -Math.PI * 0.5, edgeKey: `z:${cellX}:${cellZ}` }
     ];
-    candidates.sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z));
-    const edge = candidates[0];
+    edges.sort((a, b) => (
+      Math.hypot(a.x - target.x, a.z - target.z) -
+      Math.hypot(b.x - target.x, b.z - target.z)
+    ));
+    const edge = edges[0];
     return {
       key: `landscape:world:fence:${edge.edgeKey}`,
       gridKind: 'world',
@@ -309,6 +318,7 @@ export class LandscapingSystem {
         }
       }
     }
+
     const length = Math.hypot(facingDirection.x, facingDirection.z) || 1;
     return {
       x: playerPosition.x + facingDirection.x / length * TARGET_DISTANCE,
@@ -323,11 +333,9 @@ export class LandscapingSystem {
   }
 
   #renderPreview(placement, valid) {
-    if (!placement) {
-      this.#clearPreview();
-      return;
-    }
-    this.#clearPreview();
+    this.#disposePreviewRoot();
+    if (!placement) return;
+
     const material = new THREE.MeshBasicMaterial({
       color: valid ? PREVIEW_VALID : PREVIEW_INVALID,
       transparent: true,
@@ -388,35 +396,39 @@ export class LandscapingSystem {
     return entry;
   }
 
-  #createFenceVisual(placement, material) {
+  #createFenceVisual(placement, sourceMaterial) {
     const definition = LANDSCAPING_DEFINITIONS.fence;
     const root = new THREE.Group();
     root.position.set(placement.x, placement.y, placement.z);
     root.rotation.y = placement.yaw;
     const usableLength = LANDSCAPING_GRID.cellSize * 0.92;
-    const postGeometry = new THREE.BoxGeometry(definition.postThickness, definition.height, definition.postThickness);
+
     for (const x of [-usableLength * 0.5, usableLength * 0.5]) {
-      const post = new THREE.Mesh(postGeometry.clone(), material.clone());
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(definition.postThickness, definition.height, definition.postThickness),
+        sourceMaterial.clone()
+      );
       post.position.set(x, definition.height * 0.5, 0);
       post.castShadow = true;
       post.receiveShadow = true;
       root.add(post);
     }
+
     for (const y of [definition.height * 0.36, definition.height * 0.68]) {
       const rail = new THREE.Mesh(
         new THREE.BoxGeometry(usableLength, definition.railThickness, definition.railThickness),
-        material.clone()
+        sourceMaterial.clone()
       );
       rail.position.set(0, y, 0);
       rail.castShadow = true;
       rail.receiveShadow = true;
       root.add(rail);
     }
-    material.dispose();
+    sourceMaterial.dispose();
     return root;
   }
 
-  #createCobbleVisual(placement, material) {
+  #createCobbleVisual(placement, sourceMaterial) {
     const definition = LANDSCAPING_DEFINITIONS.cobble;
     const root = new THREE.Group();
     root.position.set(placement.x, placement.y + definition.thickness * 0.5, placement.z);
@@ -426,11 +438,12 @@ export class LandscapingSystem {
     const gap = 0.045;
     const stoneSize = (available - gap * (count - 1)) / count;
     const start = -available * 0.5 + stoneSize * 0.5;
+
     for (let row = 0; row < count; row += 1) {
       for (let column = 0; column < count; column += 1) {
         const stone = new THREE.Mesh(
           new THREE.BoxGeometry(stoneSize, definition.thickness, stoneSize),
-          material.clone()
+          sourceMaterial.clone()
         );
         stone.position.set(
           start + column * (stoneSize + gap),
@@ -441,14 +454,18 @@ export class LandscapingSystem {
         root.add(stone);
       }
     }
-    material.dispose();
+    sourceMaterial.dispose();
     return root;
   }
 
-  #clearPreview() {
+  #disposePreviewRoot() {
     if (!this.previewRoot) return;
     disposeObject(this.previewRoot);
     this.previewRoot = null;
+  }
+
+  #clearPreview() {
+    this.#disposePreviewRoot();
     this.previewPlacement = null;
     this.previewValid = false;
   }
