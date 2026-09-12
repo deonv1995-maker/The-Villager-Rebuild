@@ -158,6 +158,7 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       game.arrivalIntro = arrivalIntro;
       const arrivalStarted = arrivalIntro.start();
       if (!arrivalStarted) {
+        setStatus('DAY 1 · ASHORE');
         worldTimeRuntime.start();
         sproutArrival.beginAfterArrival();
         saveController.start({ saveImmediately: true });
