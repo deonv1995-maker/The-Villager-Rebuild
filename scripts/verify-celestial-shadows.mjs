@@ -133,7 +133,11 @@ const shadows = new CelestialShadowSystem({
   now: () => nowMs
 });
 assert.equal(renderer.shadowMap.enabled, true, 'Celestial shadows must enable the renderer shadow path');
-assert.equal(renderer.shadowMap.type, THREE.PCFShadowMap, 'Low-cost shadows must use PCF rather than the softer expensive path');
+assert.equal(
+  renderer.shadowMap.type,
+  THREE.PCFSoftShadowMap,
+  'Celestial shadows must use soft PCF filtering so tree and building edges do not read as blocky pixels'
+);
 assert.equal(renderer.shadowMap.autoUpdate, false, 'Shadow maps must not redraw every rendered frame');
 assert.equal(sun.castShadow, true, 'Exactly the shared celestial key light must cast the shadow map');
 assert.equal(skyFill.castShadow, false, 'Sky fill must not create a second shadow map');
