@@ -28,6 +28,12 @@ export class ExplorationRegionSystem {
     this.activationWeight = activationWeight;
   }
 
+  #activeStrength(weight) {
+    if (weight <= this.activationWeight) return 0;
+    const activationRange = Math.max(0.0001, 1 - this.activationWeight);
+    return smoothstep01((weight - this.activationWeight) / activationRange);
+  }
+
   regionAt(x, z) {
     let bestRegion = null;
     let bestWeight = 0;
@@ -43,9 +49,13 @@ export class ExplorationRegionSystem {
     return {
       name: bestRegion.id,
       weight: bestWeight,
+      strength: this.#activeStrength(bestWeight),
       biome: bestRegion.biome,
       vegetationMultiplier: bestRegion.vegetationMultiplier,
       forestMultiplier: bestRegion.forestMultiplier,
+      vegetationFloor: bestRegion.vegetationFloor ?? 0,
+      forestFloor: bestRegion.forestFloor ?? 0,
+      scatter: bestRegion.scatter ?? null,
       poiTypes: bestRegion.poiTypes
     };
   }
@@ -54,15 +64,22 @@ export class ExplorationRegionSystem {
     let offset = 0;
     for (const region of this.regions) {
       const weight = influenceAt(x, z, region);
-      if (weight <= this.activationWeight) continue;
+      const activeBlend = this.#activeStrength(weight);
+      if (activeBlend <= 0) continue;
 
-      const activationRange = Math.max(0.0001, 1 - this.activationWeight);
-      const activeBlend = smoothstep01((weight - this.activationWeight) / activationRange);
       const ruggedField = (
         Math.sin(x * 0.035 + z * 0.026 + region.phase)
         + Math.cos(z * 0.041 - x * 0.018 - region.phase * 0.7)
       ) * 0.5;
-      offset += weight * activeBlend * (region.heightBias + ruggedField * region.ruggedness);
+      const ridgeField = Math.abs(
+        Math.sin(x * 0.019 - z * 0.014 + region.phase * 0.8)
+        * Math.cos(z * 0.023 + x * 0.011 - region.phase)
+      );
+      offset += weight * activeBlend * (
+        region.heightBias
+        + ruggedField * region.ruggedness
+        + ridgeField * (region.ridgeStrength ?? 0)
+      );
     }
     return offset;
   }
@@ -74,6 +91,12 @@ export class ExplorationRegionSystem {
       center: { ...region.center },
       radii: { ...region.radii },
       yaw: region.yaw,
+      heightBias: region.heightBias,
+      ruggedness: region.ruggedness,
+      ridgeStrength: region.ridgeStrength ?? 0,
+      vegetationFloor: region.vegetationFloor ?? 0,
+      forestFloor: region.forestFloor ?? 0,
+      scatter: region.scatter ? { ...region.scatter } : null,
       poiTypes: [...region.poiTypes]
     }));
   }
