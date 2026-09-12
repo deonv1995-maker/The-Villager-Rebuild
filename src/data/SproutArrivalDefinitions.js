@@ -36,15 +36,15 @@ export const SPROUT_ARRIVAL = Object.freeze({
     }),
     Object.freeze({
       speaker: 'SPROUT',
-      text: 'You moved the tree. Thank you, Ranger.'
+      text: 'You moved those logs off me. Thank you, Ranger.'
     }),
     Object.freeze({
       speaker: 'SPROUT',
-      text: 'My pod is wrecked, but my core systems survived the impact.'
+      text: 'My scout pod is wrecked, but my core systems survived the impact.'
     }),
     Object.freeze({
       speaker: 'SPROUT',
-      text: 'Designation: Sprout. From this point forward, I am with you.'
+      text: 'Designation: Sprout. I am with you now. Watch what I can do with those logs.'
     })
   ])
 });
