@@ -35,6 +35,9 @@ export class SaveGameController {
     this.game.torchRuntime?.restoreState?.(record.state.torch);
     this.game.treeHarvest?.restoreRegrowthState?.(record.state.treeRegrowth);
     this.game.resourceRenewal?.restoreState?.(record.state.resourceRenewal);
+    // Story state restores after Ranger placement. Dialogue/rescue checkpoints may take
+    // cinematic ownership, so restoring them earlier would conflict with player restore.
+    this.game.sproutArrival?.restoreState?.(record.state.sproutArrival);
     this.lastFingerprint = JSON.stringify(record.state);
     this.lastSavedAt = record.savedAt;
     return { restored: true, savedAt: record.savedAt };
@@ -62,6 +65,7 @@ export class SaveGameController {
       state.landscaping = this.game.landscaping?.snapshot?.() ?? null;
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];
       state.resourceRenewal = this.game.resourceRenewal?.captureState?.() ?? null;
+      state.sproutArrival = this.game.sproutArrival?.captureState?.() ?? null;
       const fingerprint = JSON.stringify(state);
       if (fingerprint === this.lastFingerprint) {
         return {
