@@ -3,13 +3,21 @@ import { WORLD_TIME } from '../data/WorldTimeDefinitions.js';
 export class WorldTimeRuntime {
   constructor({
     worldTime,
-    lighting,
+    lighting = null,
+    presentations = [],
     requestFrame = globalThis.requestAnimationFrame?.bind(globalThis),
     cancelFrame = globalThis.cancelAnimationFrame?.bind(globalThis)
   } = {}) {
-    if (!worldTime || !lighting) throw new Error('WorldTimeRuntime requires world time and lighting systems');
+    const presentationSystems = [lighting, ...presentations].filter(Boolean);
+    if (!worldTime || presentationSystems.length === 0) {
+      throw new Error('WorldTimeRuntime requires world time and at least one presentation system');
+    }
+    if (presentationSystems.some(system => typeof system.apply !== 'function')) {
+      throw new Error('WorldTimeRuntime presentation systems must expose apply(snapshot)');
+    }
+
     this.worldTime = worldTime;
-    this.lighting = lighting;
+    this.presentations = presentationSystems;
     this.requestFrame = requestFrame;
     this.cancelFrame = cancelFrame;
     this.running = false;
@@ -18,7 +26,8 @@ export class WorldTimeRuntime {
   }
 
   sync() {
-    this.lighting.apply(this.worldTime.getSnapshot());
+    const snapshot = this.worldTime.getSnapshot();
+    for (const presentation of this.presentations) presentation.apply(snapshot);
   }
 
   start() {
