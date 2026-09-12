@@ -8,7 +8,6 @@ const COLORS = Object.freeze({
   orange: 0xd8833d,
   face: 0x11191b,
   cyan: 0x67d7f0,
-  lensDark: 0x18282c,
   joint: 0x6d7470
 });
 
@@ -86,7 +85,7 @@ const createArm = ({ side, materials }) => {
       position: [0, -0.055, 0.04],
       rotation: [Math.PI / 2, 0, 0]
     });
-    const lamp = addMesh(wrist, new THREE.CircleGeometry(0.057, 10), materials.cyan, {
+    const lamp = addMesh(wrist, new THREE.CircleGeometry(0.057, 10), materials.lamp, {
       name: 'sprout-utility-lamp',
       position: [0, -0.06, 0.112],
       rotation: [0, 0, 0],
@@ -118,6 +117,13 @@ export function createSproutVisual() {
   root.userData.sproutProductionVisual = true;
   root.userData.visualVersion = 1;
 
+  const emissiveBase = {
+    roughness: 0.2,
+    metalness: 0.05,
+    emissive: COLORS.cyan,
+    transparent: true,
+    opacity: 0.94
+  };
   const materials = {
     shell: makeStandard(COLORS.shell, { roughness: 0.58, metalness: 0.12 }),
     shellShade: makeStandard(COLORS.shellShade, { roughness: 0.5, metalness: 0.22 }),
@@ -126,20 +132,10 @@ export function createSproutVisual() {
     orange: makeStandard(COLORS.orange, { roughness: 0.42, metalness: 0.12 }),
     face: makeStandard(COLORS.face, { roughness: 0.24, metalness: 0.34 }),
     joint: makeStandard(COLORS.joint, { roughness: 0.38, metalness: 0.52 }),
-    cyan: makeStandard(COLORS.cyan, {
-      roughness: 0.18,
-      metalness: 0.08,
-      emissive: COLORS.cyan,
-      emissiveIntensity: 1.55
-    }),
-    cyanSoft: makeStandard(0x8ce7f5, {
-      roughness: 0.24,
-      metalness: 0.04,
-      emissive: COLORS.cyan,
-      emissiveIntensity: 0.72,
-      transparent: true,
-      opacity: 0.92
-    })
+    expression: makeStandard(COLORS.cyan, { ...emissiveBase, emissiveIntensity: 1.55, transparent: false, opacity: 1 }),
+    scanner: makeStandard(0x8ce7f5, { ...emissiveBase, emissiveIntensity: 0.72 }),
+    hover: makeStandard(0x8ce7f5, { ...emissiveBase, emissiveIntensity: 0.92 }),
+    lamp: makeStandard(0xbaf4ff, { ...emissiveBase, emissiveIntensity: 0.82 })
   };
 
   const body = addMesh(root, new THREE.SphereGeometry(0.5, 20, 14), materials.shell, {
@@ -179,19 +175,19 @@ export function createSproutVisual() {
     shadow: false
   });
 
-  const eyeLeft = addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.cyan, {
+  const eyeLeft = addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.expression, {
     name: 'sprout-eye-left',
     position: [-0.105, 0.145, 0.532],
     scale: [1.25, 0.62, 0.34],
     shadow: false
   });
-  addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.cyan, {
+  addMesh(root, new THREE.SphereGeometry(0.055, 9, 6), materials.expression, {
     name: 'sprout-eye-right',
     position: [0.105, 0.145, 0.532],
     scale: [1.25, 0.62, 0.34],
     shadow: false
   });
-  const mouth = addMesh(root, new THREE.TorusGeometry(0.072, 0.011, 5, 12, Math.PI), materials.cyan, {
+  const mouth = addMesh(root, new THREE.TorusGeometry(0.072, 0.011, 5, 12, Math.PI), materials.expression, {
     name: 'sprout-expression-mouth',
     position: [0, 0.052, 0.53],
     rotation: [0, 0, Math.PI],
@@ -229,7 +225,7 @@ export function createSproutVisual() {
     position: [-0.535, 0.135, 0.045],
     rotation: [0, 0, Math.PI / 2]
   });
-  const scannerLens = addMesh(root, new THREE.CircleGeometry(0.064, 10), materials.cyanSoft, {
+  const scannerLens = addMesh(root, new THREE.CircleGeometry(0.064, 10), materials.scanner, {
     name: 'sprout-scanning-lens',
     position: [-0.597, 0.135, 0.045],
     rotation: [0, -Math.PI / 2, 0],
@@ -256,7 +252,7 @@ export function createSproutVisual() {
   hoverAssembly.position.y = -0.47;
   root.add(hoverAssembly);
 
-  const hoverRing = addMesh(hoverAssembly, new THREE.TorusGeometry(0.34, 0.055, 8, 22), materials.cyanSoft, {
+  const hoverRing = addMesh(hoverAssembly, new THREE.TorusGeometry(0.34, 0.055, 8, 22), materials.hover, {
     name: 'sprout-antigrav-ring',
     rotation: [Math.PI / 2, 0, 0],
     shadow: false
@@ -273,7 +269,7 @@ export function createSproutVisual() {
       position: [Math.cos(angle) * 0.43, -0.02, Math.sin(angle) * 0.43],
       scale: [1, 0.75, 1]
     });
-    addMesh(hoverAssembly, new THREE.SphereGeometry(0.045, 7, 5), materials.cyanSoft, {
+    addMesh(hoverAssembly, new THREE.SphereGeometry(0.045, 7, 5), materials.hover, {
       name: `sprout-stabilizer-glow-${index + 1}`,
       position: [Math.cos(angle) * 0.43, -0.09, Math.sin(angle) * 0.43],
       shadow: false
@@ -281,9 +277,9 @@ export function createSproutVisual() {
   }
 
   root.userData.faceGlow = eyeLeft;
-  root.userData.expressionMaterial = materials.cyan;
-  root.userData.scannerMaterial = materials.cyanSoft;
-  root.userData.hoverMaterial = materials.cyanSoft;
+  root.userData.expressionMaterial = materials.expression;
+  root.userData.scannerMaterial = materials.scanner;
+  root.userData.hoverMaterial = materials.hover;
   root.userData.utilityLamp = leftArm.userData.utilityLamp ?? null;
   root.userData.leftArm = leftArm;
   root.userData.rightArm = rightArm;
@@ -294,11 +290,6 @@ export function createSproutVisual() {
   root.userData.scannerLens = scannerLens;
   root.userData.mouth = mouth;
   root.userData.body = body;
-
-  root.traverse(object => {
-    if (!object.isMesh) return;
-    object.frustumCulled = true;
-  });
 
   return root;
 }
