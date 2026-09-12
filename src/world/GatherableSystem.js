@@ -35,6 +35,7 @@ export class GatherableSystem {
     this.grassPatches = [];
     this.grassPatchGrid = new Map();
     this.grassDummy = new THREE.Object3D();
+    this.inventoryCapacitySource = null;
     this.sharedVisuals = {
       stickGeometry: new THREE.CylinderGeometry(0.075, 0.095, 1.05, 6),
       stickMaterial: new THREE.MeshStandardMaterial({ color: 0x6b4930, roughness: 1 }),
@@ -47,13 +48,23 @@ export class GatherableSystem {
     this.#populate();
   }
 
+  setInventoryCapacitySource(inventory = null) {
+    if (inventory !== null && typeof inventory.canAdd !== 'function') {
+      throw new Error('Gatherable inventory capacity source must expose canAdd(itemId, amount)');
+    }
+    this.inventoryCapacitySource = inventory;
+    return this.inventoryCapacitySource;
+  }
+
   update(playerPosition, filter = null) {
     let nearestTarget = null;
     let nearestDistanceSq = INTERACTION_RADIUS * INTERACTION_RADIUS;
 
     for (const item of this.items) {
       if (!item.active || item.reservedBy) continue;
-      if (filter && !filter(item.resourceId)) continue;
+      const definition = RESOURCE_DEFINITIONS[item.resourceId];
+      const quantity = item.quantity ?? definition?.pickupQuantity ?? 1;
+      if (filter && !filter(item.resourceId, quantity)) continue;
       const dx = item.root.position.x - playerPosition.x;
       const dz = item.root.position.z - playerPosition.z;
       const distanceSq = dx * dx + dz * dz;
@@ -92,6 +103,7 @@ export class GatherableSystem {
 
     if (this.target.kind === 'grass-patch') {
       const patch = this.target.patch;
+      if (!this.#canStore('grass', patch.quantity)) return null;
       const quantity = this.#harvestGrassPatch(patch);
       if (quantity <= 0) return null;
       this.target = null;
@@ -104,7 +116,9 @@ export class GatherableSystem {
     }
 
     const definition = RESOURCE_DEFINITIONS[this.target.item.resourceId];
-    if (definition.storage !== 'inventory') return null;
+    if (definition.storage !== 'inventory' || definition.manualPickup === 'physical') return null;
+    const quantity = this.target.item.quantity ?? definition.pickupQuantity;
+    if (!this.#canStore(definition.id, quantity)) return null;
     const item = this.#takeItemTarget();
     return {
       resourceId: definition.id,
@@ -116,7 +130,8 @@ export class GatherableSystem {
   takePhysical(playerPosition, resourceId = null) {
     this.update(playerPosition, id => {
       const definition = RESOURCE_DEFINITIONS[id];
-      return definition?.storage === 'physical' && (!resourceId || id === resourceId);
+      const physical = definition?.storage === 'physical' || definition?.manualPickup === 'physical';
+      return physical && (!resourceId || id === resourceId);
     });
     if (!this.target || this.target.kind !== 'item') return null;
     return this.#takeItemTarget();
@@ -125,7 +140,8 @@ export class GatherableSystem {
   returnPhysical(item, { x, z, yaw = 0 } = {}) {
     if (!item || !this.items.includes(item)) throw new Error('Physical gatherable must belong to this world');
     const definition = RESOURCE_DEFINITIONS[item.resourceId];
-    if (definition?.storage !== 'physical') throw new Error(`${item.resourceId} is not a physical resource`);
+    const physical = definition?.storage === 'physical' || definition?.manualPickup === 'physical';
+    if (!physical) throw new Error(`${item.resourceId} is not a physical resource`);
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(yaw)) {
       throw new Error('Returned physical gatherables require finite x, z and yaw');
     }
@@ -175,7 +191,9 @@ export class GatherableSystem {
       if (!item.active || item.reservedBy) continue;
       const definition = RESOURCE_DEFINITIONS[item.resourceId];
       if (definition?.storage !== 'inventory') continue;
-      if (filter && !filter(item.resourceId)) continue;
+      const quantity = item.quantity ?? definition.pickupQuantity;
+      if (!this.#canStore(item.resourceId, quantity)) continue;
+      if (filter && !filter(item.resourceId, quantity)) continue;
       const dx = item.root.position.x - position.x;
       const dz = item.root.position.z - position.z;
       const distanceSq = dx * dx + dz * dz;
@@ -192,6 +210,8 @@ export class GatherableSystem {
     if (!item?.active || item.reservedBy) return null;
     const definition = RESOURCE_DEFINITIONS[item.resourceId];
     if (definition?.storage !== 'inventory') return null;
+    const quantity = item.quantity ?? definition.pickupQuantity;
+    if (!this.#canStore(item.resourceId, quantity)) return null;
     return this.#describeLooseItem(item);
   }
 
@@ -201,6 +221,8 @@ export class GatherableSystem {
     if (!item?.active || (item.reservedBy && item.reservedBy !== owner)) return null;
     const definition = RESOURCE_DEFINITIONS[item.resourceId];
     if (definition?.storage !== 'inventory') return null;
+    const quantity = item.quantity ?? definition.pickupQuantity;
+    if (!this.#canStore(item.resourceId, quantity)) return null;
     item.reservedBy = owner;
     item.root.visible = false;
     if (this.target?.kind === 'item' && this.target.item === item) {
@@ -223,6 +245,12 @@ export class GatherableSystem {
     if (!item?.active || item.reservedBy !== owner) return null;
     const definition = RESOURCE_DEFINITIONS[item.resourceId];
     if (definition?.storage !== 'inventory') return null;
+    const quantity = item.quantity ?? definition.pickupQuantity;
+    if (!this.#canStore(item.resourceId, quantity)) {
+      item.reservedBy = null;
+      item.root.visible = true;
+      return null;
+    }
     item.reservedBy = null;
     item.active = false;
     item.root.visible = true;
@@ -235,32 +263,42 @@ export class GatherableSystem {
       id: item.id,
       resourceId: definition.id,
       label: definition.label,
-      quantity: item.quantity ?? definition.pickupQuantity
+      quantity
     };
   }
 
   getTarget() {
     if (!this.target) return null;
     if (this.target.kind === 'grass-patch') {
+      const quantity = this.target.patch.quantity;
+      const available = this.#canStore('grass', quantity);
       return {
         type: 'resource',
         resourceId: 'grass',
         label: RESOURCE_DEFINITIONS.grass.label,
         icon: 'hand',
         physical: false,
-        actionLabel: 'Harvest grass patch'
+        quantity,
+        available,
+        actionLabel: available ? 'Harvest grass patch' : this.#storageFullLabel()
       };
     }
 
     const definition = RESOURCE_DEFINITIONS[this.target.item.resourceId];
-    const physical = definition.storage === 'physical';
+    const physical = definition.storage === 'physical' || definition.manualPickup === 'physical';
+    const quantity = this.target.item.quantity ?? definition.pickupQuantity;
+    const available = physical || this.#canStore(definition.id, quantity);
     return {
       type: physical ? 'physical-resource' : 'resource',
       resourceId: definition.id,
       label: definition.label,
       icon: 'hand',
       physical,
-      actionLabel: physical ? `Lift ${definition.label}` : `Pick up ${definition.label}`
+      quantity,
+      available,
+      actionLabel: available
+        ? (physical ? `Lift ${definition.label}` : `Pick up ${definition.label}`)
+        : this.#storageFullLabel()
     };
   }
 
@@ -271,6 +309,16 @@ export class GatherableSystem {
       active: active.length,
       visibleTufts: active.reduce((sum, patch) => sum + patch.entries.length, 0)
     };
+  }
+
+  #canStore(resourceId, quantity = 1) {
+    if (!this.inventoryCapacitySource?.canAdd) return true;
+    return this.inventoryCapacitySource.canAdd(resourceId, quantity);
+  }
+
+  #storageFullLabel() {
+    const state = this.inventoryCapacitySource?.getStorageState?.();
+    return `${state?.label ?? 'Inventory'} full`;
   }
 
   #describeLooseItem(item) {
