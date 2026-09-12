@@ -5,12 +5,14 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 const main = read('src/main.js');
 const definitions = read('src/data/SproutCompanionDefinitions.js');
 const companion = read('src/gameplay/SproutCompanionController.js');
+const visualRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const capacityController = read('src/gameplay/InventoryCapacityController.js');
 const gainFeedback = read('src/gameplay/InventoryGainFeedbackController.js');
 const arrival = read('src/gameplay/SproutArrivalController.js');
 const gatherables = read('src/world/GatherableSystem.js');
 const inventoryCss = read('src/resource-inventory.css');
 const docs = read('docs/SPROUT_COMPANION.md');
+const autonomyDocs = read('docs/SPROUT_AUTONOMY.md');
 const feedbackDocs = read('docs/SPROUT_COLLECTION_FEEDBACK.md');
 const packageJson = JSON.parse(read('package.json'));
 
@@ -30,6 +32,11 @@ const checks = [
   ['the crash-site Sprout presentation transfers instead of spawning a duplicate companion actor', arrival.includes('this.crashSite.scene.attach(sprout)') && arrival.includes('this.crashSite.sprout = null') && arrival.includes("sprout.name = 'sprout-companion-placeholder'")],
   ['companion tuning keeps collection bounded and catch-up explicit', definitions.includes('collectionRadius:') && definitions.includes('catchUpDistance:') && definitions.includes('hardCatchUpDistance:') && definitions.includes("collectibleResourceIds: Object.freeze(['stick', 'stone', 'grass', 'log'])")],
   ['Sprout follow formation keeps clearer Ranger separation with expanded collection range', definitions.includes('followDistance: 2.05') && definitions.includes('followSideOffset: 0.95') && definitions.includes('collectionRadius: 9')],
+  ['Sprout follow intent is sampled and delayed rather than perfectly mirroring Ranger transforms', definitions.includes('followSenseMinSeconds:') && definitions.includes('followReactionMinSeconds:') && definitions.includes('followDriftRadius:') && companion.includes('this.perceivedPlayerPosition.copy(this.playerPosition)') && companion.includes('this.followReactionRemaining') && companion.includes('#sampleFollowDrift()')],
+  ['idle autonomy roams collision-safe local points and drives scanner pauses', definitions.includes('idleRoamMinRadius:') && definitions.includes('idleScanMinSeconds:') && companion.includes('#chooseIdleTarget()') && companion.includes('this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)') && companion.includes('this.idleScanRemaining')],
+  ['idle pickup inspection preserves the existing reservation and commit boundary', definitions.includes('idleInspectMinSeconds:') && companion.includes('inspectDuration') && companion.includes('#updateInspectionPoint(state)') && takeIndex >= 0 && awardIndex > takeIndex],
+  ['bonding remains player-triggered through the existing context action and Ranger cinematic boundary', companion.includes("const BOND_ACTION_ID = 'sprout-bond'") && companion.includes("caption: kind === 'pet' ? 'PET' : 'COUNT'") && companion.includes('onTrigger: () => this.#beginBondingInteraction(kind)') && companion.includes('this.player.beginCinematic(this.bondingDriver)') && companion.includes('this.player.endCinematic(this.bondingDriver)')],
+  ['visual runtime consumes companion presentation hints without owning gameplay state', companion.includes('getPresentationState()') && visualRuntime.includes('companion?.getPresentationState?.()') && visualRuntime.includes('presentation.affectionate') && !visualRuntime.includes('inventory.add') && !visualRuntime.includes('reserveLooseResource')],
   ['Sprout ordinary movement reuses the shared world collision authority', companion.includes('this.collision.resolveMove(from, desired') && companion.includes('SPROUT_COMPANION.collisionRadius')],
   ['catch-up safeguards remain available after collection', companion.includes('this.#cancelCollectionIntent();') && companion.includes('SPROUT_COMPANION.catchUpDistance') && companion.includes('SPROUT_COMPANION.hardCatchUpDistance')],
   ['GatherableSystem exposes one transactional loose-pickup reservation boundary', gatherables.includes('findNearestLooseResource(position, maxDistance, filter = null)') && gatherables.includes('reserveLooseResource(id, owner)') && gatherables.includes('releaseLooseResource(id, owner)') && gatherables.includes('takeReservedLooseResource(id, owner)')],
@@ -46,6 +53,7 @@ const checks = [
   ['Continue starts gain feedback only after restore so saved inventory does not look newly collected', feedbackIndex > companionIndex && resumeFeedbackStartIndex > restoreIndex && freshFeedbackStartIndex > freshBranchIndex],
   ['collection feedback documentation preserves shared inventory, Sprout compression and future upgrade boundaries', feedbackDocs.includes('presentation only') && feedbackDocs.includes('One shared `InventorySystem` remains authoritative') && feedbackDocs.includes('No storage-upgrade progression')],
   ['documentation records reservation/commit, shared inventory, Ranger harvesting and live compressed storage boundaries', docs.includes('reservation/commit') && docs.includes('one authoritative shared inventory') && docs.includes('Ranger performs the harvesting') && docs.includes('96 compressed units')],
+  ['autonomy documentation preserves independent follow, idle inspection and player-triggered bonding boundaries', autonomyDocs.includes('short irregular cadence') && autonomyDocs.includes('inspection beat before compression') && autonomyDocs.includes('player-triggered') && autonomyDocs.includes('relationship stat') && autonomyDocs.includes('shared collision service')],
   ['documentation keeps production art and falling-tree damage as later milestones while physical felling and capacity are active', docs.includes('production Sprout 3D asset') && docs.includes('falling-tree damage/collision') && docs.includes('visible authored-tree fall') && docs.includes('24 bulk units')],
   ['full repository check includes the Sprout companion regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
