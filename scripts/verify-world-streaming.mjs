@@ -13,6 +13,24 @@ assert.equal(terrain.coastRadiusAt(Math.PI / 2) < 160, true, 'Day-1 southern coa
 const spawn = terrain.getSpawnPoint();
 assert.equal(terrain.isPlayable(spawn.x, spawn.z), true, 'existing Day-1 spawn must stay playable after mainland expansion');
 
+const dayOneProtectedSamples = [
+  spawn,
+  { x: 8.5, z: 54 },
+  { x: 0, z: 60 }
+];
+for (const sample of dayOneProtectedSamples) {
+  assert.equal(
+    terrain.explorationRegions.regionAt(sample.x, sample.z),
+    null,
+    `Day-1 sample ${sample.x}:${sample.z} must stay outside macro exploration regions`
+  );
+  assert.equal(
+    terrain.explorationRegions.terrainOffsetAt(sample.x, sample.z),
+    0,
+    `Day-1 sample ${sample.x}:${sample.z} must receive zero exploration terrain offset`
+  );
+}
+
 const explorationRegions = terrain.getExplorationRegions();
 assert.equal(explorationRegions.length, 4, 'expanded mainland must expose the first four deterministic exploration regions');
 assert.equal(new Set(explorationRegions.map(region => region.id)).size, explorationRegions.length, 'exploration region ids must remain unique');
@@ -32,7 +50,6 @@ assert.equal(westernJungle.forestMultiplier > 1, true, 'jungle region must incre
 assert.equal(westernJungle.poiTypes.includes('ruin'), true, 'jungle region must remain ready for later abandoned-structure placement');
 assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for later cave placement');
 assert.equal(terrain.heightAt(-28, -198) > 6, true, 'northern highlands must be authoritative elevated terrain rather than a distant visual-only mountain');
-assert.equal(['mountain', 'jungle'].includes(terrain.regionAt(spawn.x, spawn.z).biome), false, 'Day-1 spawn must stay outside the new deep-exploration biomes');
 
 const satellites = terrain.getSatelliteIslands();
 assert.equal(satellites.length, 9, 'expanded archipelago must keep a deterministic set of nine satellite islands');
