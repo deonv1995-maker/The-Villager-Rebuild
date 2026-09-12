@@ -37,7 +37,7 @@ export class ShovelLandscapingMenu {
           <strong>LANDSCAPE</strong>
           <span data-role="landscape-material">LOGS 0</span>
         </div>
-        <button class="hammer-construction-close" type="button" data-landscape="close" aria-label="Collapse landscaping menu">×</button>
+        <button class="hammer-construction-close" type="button" data-landscape="close" aria-label="Close landscaping and return to normal shovel use">×</button>
       </header>
 
       <div class="construction-list" aria-label="Select a landscaping module">
@@ -76,8 +76,7 @@ export class ShovelLandscapingMenu {
         return;
       }
       if (mode === 'close') {
-        this.expanded = false;
-        this.#syncPresentationState();
+        this.onSelect?.('close');
         return;
       }
       if (ACTIVE_MODES.has(mode)) {
