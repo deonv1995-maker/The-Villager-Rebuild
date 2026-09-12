@@ -52,6 +52,7 @@ export class LandscapingSystem {
     this.previewRoot = null;
     this.previewPlacement = null;
     this.previewValid = false;
+    this.previewSignature = '';
     this.tempAimDirection = new THREE.Vector3();
   }
 
@@ -333,9 +334,24 @@ export class LandscapingSystem {
   }
 
   #renderPreview(placement, valid) {
-    this.#disposePreviewRoot();
-    if (!placement) return;
+    if (!placement) {
+      this.#disposePreviewRoot();
+      this.previewSignature = '';
+      return;
+    }
 
+    const signature = [
+      this.mode,
+      placement.key,
+      placement.x.toFixed(4),
+      placement.y.toFixed(4),
+      placement.z.toFixed(4),
+      placement.yaw.toFixed(4),
+      valid ? 'valid' : 'invalid'
+    ].join(':');
+    if (this.previewRoot && signature === this.previewSignature) return;
+
+    this.#disposePreviewRoot();
     const material = new THREE.MeshBasicMaterial({
       color: valid ? PREVIEW_VALID : PREVIEW_INVALID,
       transparent: true,
@@ -347,6 +363,7 @@ export class LandscapingSystem {
       : this.#createCobbleVisual(placement, material);
     this.previewRoot.name = `landscape-preview-${this.mode}`;
     this.group.add(this.previewRoot);
+    this.previewSignature = signature;
   }
 
   #materialize(placement) {
@@ -468,6 +485,7 @@ export class LandscapingSystem {
     this.#disposePreviewRoot();
     this.previewPlacement = null;
     this.previewValid = false;
+    this.previewSignature = '';
   }
 
   #clearRuntimeEntries() {
