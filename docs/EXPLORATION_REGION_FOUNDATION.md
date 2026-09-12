@@ -52,9 +52,16 @@ The northern highlands remain part of the authoritative height field. Their stro
 
 ## First cave POI
 
-`src/data/ExplorationPoiDefinitions.js` now contains the first authored exploration POI: `northern-cave-01` in the northern highlands.
+`src/data/ExplorationPoiDefinitions.js` contains the first authored exploration POI: `northern-cave-01` in the northern highlands.
 
-`ExplorationPoiSystem` owns POI presentation. The first cave is a chunk-owned, low-cost rock entrance/short alcove with a readable dark interior and side-rock collision. It is deliberately an overworld cave entrance rather than a new underground world or separate physics system.
+`ExplorationPoiSystem` owns POI presentation. The cave remains a chunk-owned, low-cost overworld entrance/short alcove rather than a new underground world or separate physics system. Its presentation contract is now layered so it reads as a cave instead of a freestanding ring of boulders:
+
+- overlapping terrain-conforming rock masses form a broad hillside/rock-face silhouette around and behind the opening;
+- a distinct irregular entrance arch defines the mouth without becoming the entire landmark silhouette;
+- repeated dark side/crown ribs provide visible recession through the short alcove;
+- the rear darkness uses an irregular cave-shaped terminus instead of a circular black patch;
+- a terrain-conforming worn approach reaches out in front of the threshold and visually guides the player toward the opening;
+- the established walk-in floor and side-rock collision contract remain intact.
 
 This first cave establishes the reusable POI boundary. Future cave interiors, ruins and landmarks should extend the POI system and region metadata rather than being hard-coded into terrain rendering.
 
@@ -64,7 +71,7 @@ The mainland remains one mathematical world for gameplay queries and chunked pre
 
 The base forest budget remains bounded. Additional biome density is expressed as explicit regional quotas rather than scaling every prop count with total island area. This keeps the performance cost measurable and prevents a larger island from silently multiplying all scene content.
 
-The first cave root is also registered with `WorldChunkSystem`, so it does not become permanent always-rendered world geometry.
+The first cave root is also registered with `WorldChunkSystem`, so it does not become permanent always-rendered world geometry. The cave readability pass continues to use simple low-poly geometry and shared materials rather than introducing a new asset-loading or terrain system.
 
 ## Day-1 compatibility
 
@@ -80,7 +87,7 @@ This pass strengthens exploration readability without skipping ahead into later 
 
 1. a true dense jungle/forest core;
 2. stronger mountain-scale northern highlands;
-3. the first visible cave entrance/alcove;
+3. the first visible cave entrance/alcove, refined into a hillside-backed entrance with visible tunnel depth;
 4. bounded regional scatter budgets;
 5. regression coverage and documentation.
 
@@ -97,5 +104,7 @@ It does **not** add a full cave dungeon, abandoned structures, hostile explorati
 - the first authored cave POI being inside its declared region and on playable terrain;
 - creation of the named cave root, dark interior and walk-in floor presentation;
 - the existing satellite-island, chunk-culling, tree-registry and shallow-water contracts.
+
+The cave-readability regression additionally protects the surrounding landform mass, continuous entrance arch, recessed tunnel ribs, irregular dark terminus, terrain-conforming approach and the unchanged side-rock collision count.
 
 The full `npm run check` suite remains required before merge, followed by device verification of biome readability, cave readability and mobile performance.
