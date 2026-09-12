@@ -10,7 +10,8 @@ This preserves the architecture rule that player and NPC systems share one world
 
 The current tuning is intentionally simple and centralized in `src/data/WorldTimeDefinitions.js`:
 
-- new game begins on **Day 1 at 08:00**;
+- a new shipwreck game begins on **Day 1 at 22:00**, preserving the night established by the title voyage and making Sprout's blue crash glow readable against the dark island;
+- legacy saves created before world-time persistence that have no clock state still fall back to **Day 1 at 08:00** for compatibility;
 - one full game day lasts **24 real minutes**;
 - one real second therefore advances one in-game minute;
 - dawn begins at **05:00**;
@@ -18,11 +19,11 @@ The current tuning is intentionally simple and centralized in `src/data/WorldTim
 - dusk begins at **17:30**;
 - night begins at **20:00**.
 
-The beach-arrival cinematic does not consume the Day 1 survival clock. The clock begins when normal gameplay begins. These values are configuration, not hard-coded rules in gameplay systems, so later device/playtesting can tune pacing without replacing the architecture.
+The beach-arrival cinematic does not consume the Day 1 survival clock. The gameplay world's lighting is synchronized to the 22:00 narrative start before the title transition is released, but the clock itself begins advancing only when normal gameplay begins after the beach-arrival cinematic. These values are configuration, not hard-coded rules in gameplay systems, so later device/playtesting can tune pacing without replacing the architecture.
 
 ## System boundaries
 
-- `WorldTimeDefinitions` is the single tuning source for clock scale, start time, phase boundaries, and frame-delta limits.
+- `WorldTimeDefinitions` is the single tuning source for clock scale, new-game start time, legacy-save fallback time, phase boundaries, and frame-delta limits.
 - `WorldTimeSystem` owns Day / time-of-day state, phase classification, progression, persistence state, and transition subscriptions.
 - `WorldTimeRuntime` advances the clock using a small requestAnimationFrame lifecycle and fans each authoritative snapshot into registered time-driven presentation systems. It clamps resume/background deltas so minimizing the PWA does not skip hours of game time.
 - `DayNightLightingSystem` is presentation only. It interpolates the existing `SceneSystem` sky, fog, hemisphere light, shared celestial key light, sky fill, ambient fill, and tone-mapping exposure.
@@ -33,7 +34,7 @@ The beach-arrival cinematic does not consume the Day 1 survival clock. The clock
 - `CelestialDefinitions` centralizes orbital distance, sky-path orientation, disc size, halo values, and horizon fading.
 - `CelestialShadowDefinitions` centralizes shadow-map resolution, local coverage, refresh rate, camera range, and bias tuning.
 - `SceneSystem` still owns the actual Three.js scene, camera, and lighting objects.
-- `SaveGameController` captures/restores world time alongside the existing shared save state. Compatible saves created before this feature simply fall back to Day 1 at 08:00.
+- `SaveGameController` captures/restores world time alongside the existing shared save state. A valid saved clock always wins on Continue; compatible saves created before world-time persistence explicitly use the 08:00 legacy fallback instead of inheriting the new 22:00 story start.
 
 ## Sun and moon sky clock
 
@@ -103,7 +104,7 @@ The existing design still calls for the first night to unlock sleeping near a va
 
 `scripts/verify-day-night-cycle.mjs` protects:
 
-- the Day 1 start time and 24-minute baseline;
+- the Day 1 22:00 narrative start, explicit 08:00 legacy-save fallback, and 24-minute baseline;
 - phase boundaries and day rollover;
 - observable phase transitions;
 - save/restore and backward-compatible missing-time behavior;
