@@ -28,11 +28,11 @@ function animationNamesFromGlb(buffer) {
   return (json.animations ?? []).map(animation => animation.name).filter(Boolean);
 }
 
-assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword'], 'Craftable tool order must remain stable');
+assert.deepEqual(TOOL_ORDER, ['spear', 'axe', 'hammer', 'pickaxe', 'shovel', 'sword', 'torch'], 'Craftable tool order must remain stable');
 assert.deepEqual(
   TOOL_DURABILITY,
   { maxPercent: 100, wearMinPercent: 3, wearMaxPercent: 6 },
-  'All tools must share the same 100% durability and random 3–6% wear constants'
+  'Durability-based tools must share the same 100% durability and random 3–6% wear constants'
 );
 assert.equal(TOOL_DEFINITIONS.spear.role, 'projectile');
 assert.equal(TOOL_DEFINITIONS.axe.role, 'tree-harvest');
@@ -40,6 +40,8 @@ assert.equal(TOOL_DEFINITIONS.hammer.role, 'demolition');
 assert.equal(TOOL_DEFINITIONS.pickaxe.role, 'rock-harvest');
 assert.equal(TOOL_DEFINITIONS.shovel.role, 'stump-removal');
 assert.equal(TOOL_DEFINITIONS.sword.role, 'melee');
+assert.equal(TOOL_DEFINITIONS.torch.role, 'light');
+assert.equal(TOOL_DEFINITIONS.torch.usesDurability, false, 'Torch fuel must stay separate from per-use tool durability');
 assert.deepEqual(
   CRAFTING_RECIPES.shovel.ingredients.map(({ itemId, quantity }) => [itemId, quantity]),
   [['stick', 1], ['stone', 1], ['grass', 1]],
@@ -77,7 +79,7 @@ for (const ingredient of STRUCTURE_DEFINITIONS.campfire.ingredients) {
 for (const [resourceId, quantity] of Object.entries(requiredInventoryResources)) {
   assert.ok(
     (initialResourceCounts[resourceId] ?? 0) >= quantity,
-    `Opening world must contain enough ${resourceId} to craft the six basic tools plus the campfire in any order`
+    `Opening world must contain enough ${resourceId} to craft the seven basic tools plus the campfire in any order`
   );
 }
 
@@ -92,7 +94,7 @@ const crafting = new CraftingSystem({ inventory });
 const durability = new ToolDurabilitySystem({ inventory, random: () => 0.5 });
 const toolbelt = new ToolbeltSystem({ inventory, crafting, durability });
 let belt = toolbelt.snapshot();
-assert.equal(belt.length, 7, 'Bottom toolbelt must contain default Hand plus six selection slots');
+assert.equal(belt.length, 8, 'Bottom toolbelt must contain default Hand plus seven selection slots');
 assert.equal(belt[0].id, 'hand');
 assert.equal(belt[0].equipped, true);
 assert.equal(toolbelt.select('spear').equipped, false, 'Selecting an unowned tool must never auto-craft it');
@@ -225,7 +227,7 @@ for (const requirement of [
 ]) {
   assert.ok(appSource.includes(requirement), `GameApp is missing survival interaction contract: ${requirement}`);
 }
-assert.ok(appSource.includes('/^Digit[1-7]$/'), 'Desktop toolbelt hotkeys must expose Hand plus all six tool slots');
+assert.ok(appSource.includes('/^Digit[1-7]$/'), 'Desktop legacy hotkeys must continue exposing Hand plus the six action tools');
 assert.ok(!appSource.includes('playSpearAttack()'), 'Active spear combat must not use the old thrust path');
 
 assert.ok(mainSource.includes('new EquipmentRuntimeController({ game })'), 'Equipment runtime must be installed at gameplay startup');
@@ -314,4 +316,4 @@ assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpea
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"));
 assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'));
 
-console.log('Inventory Logs, Hammer-owned semantic Floor/Wall/Door/Window/Stairs/Roof construction, six crafted tools, durability, campfire, harvesting and retrievable spear survival contracts verified');
+console.log('Inventory Logs, Hammer-owned semantic Floor/Wall/Door/Window/Stairs/Roof construction, seven crafted tools including timed torch fuel, durability, campfire, harvesting and retrievable spear survival contracts verified');
