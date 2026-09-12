@@ -12,7 +12,7 @@ instead of:
 
 `individual placed Logs -> geometric inference -> guessed structure -> repair on save/restore`
 
-A Floor is one canonical building cell. Wall, Door and Window are semantic wall-family modules on canonical edges. Stairs are one semantic flight between an adjacent canonical cell pair. Roofs are explicit semantic roof zones over exact connected top-floor cells.
+A Floor is one canonical building cell. Wall, Door and Window are semantic wall-family modules on canonical edges. Stairs are one semantic flight between an adjacent canonical cell pair. Roofs are explicit semantic roof zones over exact connected supported cells. A Roof support cell may come from a real Floor or from the enclosed interior of a completed wall-family ring at that storey; rendered geometry is never structural authority.
 
 Rendered Logs, thatch courses, roof wings and junction trim remain presentation. They never become the source of truth for structural identity.
 
@@ -21,14 +21,14 @@ Rendered Logs, thatch courses, roof wings and junction trim remain presentation.
 The player-facing semantic construction vocabulary includes:
 
 - **Floor Panel**, including supported upper-storey Floors;
-- **Solid Wall Panel**;
-- **Door Wall Panel**;
-- **Window Wall Panel**;
+- **Solid Wall Panel**, including floorless stacked wall tiers;
+- **Door Wall Panel**, including floorless stacked wall tiers;
+- **Window Wall Panel**, including floorless stacked wall tiers;
 - **Stairs**;
-- **Roof**;
+- **Roof**, including Roofs seated on completed floorless wall rings;
 - **Remove** through the same Hammer demolition path.
 
-Floor, Wall, Door, Window and Stairs have passed their earlier device acceptance. Roof has progressed from the initial rectangular gable slice to exact connected irregular footprints so L-, T-, U- and stepped orthogonal buildings can be roofed without filling or charging for empty bounding-box cells. The next semantic construction slice is now active: a completed closed wall-family perimeter may support a player-built Floor one storey above it.
+Floor, Wall, Door, Window and Stairs have passed their earlier device acceptance. Roof has progressed from the initial rectangular gable slice to exact connected irregular footprints so L-, T-, U- and stepped orthogonal buildings can be roofed without filling or charging for empty bounding-box cells. A completed closed wall-family perimeter now exposes both the existing player-built upper-Floor slots and the same canonical wall-family edges one storey higher. That second path lets Wall, Door and Window stack directly on completed lower walls without requiring an interior upper Floor, so taller shells and higher Roofs can be built without inventing hidden Floor panels.
 
 This milestone does **not** re-enable the legacy individual-Log structural workflow. Player-selected mono-pitch roofs remain a separate later semantic slice.
 
@@ -47,11 +47,11 @@ Current semantic costs are:
 - Door Wall Panel: **3 Logs**;
 - Window Wall Panel: **3 Logs**;
 - Stairs: **3 Logs** for one complete flight;
-- Roof: **5 Logs per actual covered canonical Floor cell**.
+- Roof: **5 Logs per actual covered canonical support cell**.
 
 The 3-Log Stair cost preserves the established complete stair-flight material budget. The semantic flight is no longer assembled or recognized from separately placed physical Logs.
 
-The 5-Log Roof cell budget preserves the old one-bay gable material meaning of four rafters plus one ridge member while removing the old member-by-member inference graph from structural authority. An irregular five-cell Roof therefore costs 25 Logs even when its rectangular bounds contain more than five cells.
+The 5-Log Roof cell budget preserves the old one-bay gable material meaning of four rafters plus one ridge member while removing the old member-by-member inference graph from structural authority. An irregular five-cell Roof therefore costs 25 Logs even when its rectangular bounds contain more than five cells. A floorless wall-supported Roof uses the same per-cell cost as a Floor-supported Roof; support type does not create a second economy.
 
 Successful demolition returns the exact semantic cost. Failed dependency checks return nothing and do not consume Hammer durability.
 
@@ -61,7 +61,7 @@ Each building remains owned by `PanelStructureRegistry` and has its own local gr
 
 The canonical cell size remains `2.9 x 2.9` world units, derived from the authoritative Log length. Floor acquisition uses the same `structureJoinRange` as structure ownership: when a ground Floor is close enough to belong to an existing building, it must resolve onto that building's lattice and inherit the neighbouring Floor's exact `levelY`. A second terrain-derived structure cannot be started inside that join radius. This prevents shallow floor steps at Door openings and keeps later Roof ownership on one coherent structure.
 
-Stored Floor and Stair identities remain integer cell coordinates. Aggregate geometry queries may use fractional local coordinates only to find the geometric centre of an explicit multi-cell Roof assembly; those fractional coordinates are never persisted as canonical cell identity.
+Stored Floor and Stair identities remain integer cell coordinates. Wall-family modules retain integer edge/storey identity. Aggregate geometry queries may use fractional local coordinates only to find the geometric centre of an explicit multi-cell Roof assembly; those fractional coordinates are never persisted as canonical cell identity.
 
 ## Floor and wall-family identity
 
@@ -71,7 +71,7 @@ Wall-family Panels occupy canonical shared edges. The east edge of one cell and 
 
 Each wall retains semantic owner/interior information, variant and inward/outward normals. Rendering derives world transforms from that data. Ranger facing, camera yaw and saved mesh transforms do not decide structural orientation.
 
-Door and Window remain semantic wall records with `variant: 'door'` or `variant: 'window'`. Door uses a traversable central opening with two side colliders. Window uses lower, side and upper collision sections around a bounded visible opening and remains non-traversable.
+Door and Window remain semantic wall records with `variant: 'door'` or `variant: 'window'`. Door uses a traversable central opening with two side colliders. Window uses lower, side and upper collision sections around a bounded visible opening and remains non-traversable. Solid Wall, Door and Window all count as the same structural wall-family edge for enclosure, upper-Floor support, stacked-wall support and Roof support.
 
 ## Semantic Stairs
 
@@ -116,15 +116,35 @@ A completed Roof on the lower cell and an existing Stair opening suppress the co
 
 Structural dependencies also run in reverse during demolition. A supporting wall-family edge cannot be removed when removing it would open the perimeter and leave an existing upper Floor unsupported. The dependent upstairs Floor must be removed first. This extends the existing semantic dependency model rather than adding a separate building-support registry.
 
-The same rule is recursive: once an upper Floor carries its own closed wall-family perimeter, that perimeter can expose the next storey using the same semantic state and storey identity. The current player milestone is double-storey building, but the rule is not hard-coded to exactly two levels.
+The enclosure query is recursive by storey. A completed wall-family ring may therefore support another Floor level, another wall-only tier, or a Roof without any special hard-coded second-storey case.
+
+## Floorless stacked wall-family tiers
+
+A completed wall-family enclosure also exposes the exact participating wall-family edges one storey higher. This is a separate placement result from upper-Floor support; it does **not** synthesize a Floor and it does not turn empty air into a generic build surface.
+
+With **Wall**, **Door** or **Window** selected, an upper floorless edge is valid only when:
+
+- the lower semantic wall-family level forms a closed interior section;
+- the candidate is the exact same canonical edge one storey above a wall-family edge participating in that completed section;
+- no Wall/Door/Window already occupies that target edge;
+- no Stair owns the target edge;
+- normal placement reach, collision and material checks pass.
+
+The upper module is placed at the exact `topY` of the supporting lower wall and retains the normal 3-Log Wall/Door/Window cost. It remains the same semantic wall record type and the same variant system as a Floor-backed wall; there is no competing "tall wall" subsystem.
+
+This support is recursive. Once all required floorless upper wall-family edges close the next interior section, that completed ring can expose the same edges one storey higher again. Save/Continue restores those wall tiers in numeric storey order so tall shells are not dependent on lexicographic key ordering.
+
+Reverse dependencies protect the chain. A lower wall-family edge cannot be removed if opening that enclosure would invalidate an existing floorless upper wall. Remove the dependent upper module first. If an upper Wall has a real Floor owner instead, the established Floor dependency remains authoritative.
+
+This rule deliberately permits buildings with higher wall shells and higher Roofs while keeping interior Floors optional. A player may therefore create a tall hall, loft void or high-roofed room without covering the interior with a hidden walkable Floor.
 
 ## Explicit semantic Roof zones
 
 Roof is not built by placing individual angled/ridge Logs and asking topology code to infer what structure they formed.
 
-The live Roof mode creates one explicit semantic Roof zone over an **exact connected set of eligible top-floor cells**. The zone stores:
+The live Roof mode creates one explicit semantic Roof zone over an **exact connected set of eligible support cells**. A support cell may be a real Floor cell or an enclosed cell from a completed wall-family ring at the same storey. The zone stores:
 
-- the canonical covered Floor cell set;
+- the canonical covered cell set;
 - storey;
 - roof form;
 - a deterministic primary ridge-axis tie-break.
@@ -133,15 +153,15 @@ The player-facing Roof form remains **gable**. `mono-pitch` remains a recognized
 
 ### Connected footprint selection
 
-Roof targeting starts from eligible cells on one structural level and resolves the cardinally connected component containing the targeted area. Disconnected Floor islands are not merged into one purchase.
+Roof targeting starts from eligible support cells on one structural level and resolves the cardinally connected component containing the targeted area. Disconnected support islands are not merged into one purchase.
 
-A candidate **new** Floor cell is excluded when:
+A candidate **new** support cell is excluded when:
 
 - it already belongs to another Roof zone;
 - a higher Floor exists directly above it;
 - it is reserved by the current Stair-opening contract.
 
-The exact connected set may be rectangular, L-shaped, T-shaped, U-shaped, stepped or another orthogonal polyomino.
+The exact connected set may be rectangular, L-shaped, T-shaped, U-shaped, stepped or another orthogonal polyomino. Existing Floor-backed complex Roof behavior and floorless wall-ring Roof behavior use the same footprint planner and semantic Roof zone type.
 
 ### Complex roof-wing planning
 
@@ -151,7 +171,7 @@ It compares row-run and column-run partitions and chooses a stable low-complexit
 
 The planner is deliberately **exact-cell**:
 
-- no wing may contain a Floor cell that is absent from the Roof zone;
+- no wing may contain a canonical cell that is absent from the Roof zone;
 - an L-shaped Roof does not fill its missing inner corner;
 - a U-shaped Roof does not cover its courtyard;
 - stepped notches remain open;
@@ -163,13 +183,15 @@ The wing plan is presentation derived from semantic state. It is not serialized 
 
 A Roof preview is valid only when:
 
-- every covered canonical Floor cell exists at the same structural level;
+- every covered canonical cell has support at one exact structural level, either from a real Floor or from a completed same-storey wall-family enclosure;
 - no covered cell already belongs to another Roof zone;
 - no covered cell is reserved by the current Stair opening contract;
 - there is no higher Floor directly above the candidate cells;
 - every exposed perimeter edge of the exact candidate footprint has a semantic Wall-family support.
 
 Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support.
+
+A floorless upper wall ring seats the Roof at that ring's exact wall `topY`; no Floor mesh or Floor collider is generated underneath it. When third-person targeting has vertically aligned completed rings with effectively the same horizontal score, the highest valid completed support wins so a high Roof does not fall back to the lower storey.
 
 When extending beside an already-roofed neighbour, the shared Roof-to-Roof edge is internal rather than requiring an artificial dividing Wall. The connected old and new Roof cells are coalesced into one semantic Roof zone and the entire connected footprint is re-planned as one integrated visual shell. Only newly covered cells are charged during extension; the merged zone retains the full cumulative covered-cell count for later demolition/refund. This same canonicalization runs during Continue so older same-structure saves with adjacent Roof zones repair overlapping gables/eaves instead of restoring competing finished Roof roots.
 
@@ -203,7 +225,7 @@ The Hammer remains the only player-facing entry point for semantic construction.
 
 Selecting Hammer opens the compact semantic build dock. The live choices are Floor, Wall, Door, Window, Stairs, Roof and Remove. Choosing any live construction mode collapses the expanded selector so the world preview remains visible.
 
-Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Roof uses the nearest covered cell for large-footprint reach/scoring rather than forcing interaction through the aggregate centre.
+Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. For Wall/Door/Window mode, a floorless stacked edge from a completed lower enclosure may replace an otherwise invalid ground/Floor-backed fallback. For Roof mode, vertically aligned valid supports prefer the highest completed ring when their horizontal score is effectively tied. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Large Roofs use the nearest covered cell for reach/scoring rather than forcing interaction through the aggregate centre.
 
 Green means the candidate and inventory cost are valid; red means support/occupancy/clearance/material requirements are not satisfied.
 
@@ -228,17 +250,17 @@ Roof uses its stored exact covered-cell count when resolving the refund, so irre
 
 ## Persistence boundary
 
-The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves. Complex Roof footprints and semantic upper Floors require no new stored mesh fields and no panel-grid schema bump: Roof zones already store arbitrary canonical cell-key sets, while Floor records already store explicit integer `storey` plus `levelY`.
+The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves. Complex Roof footprints, semantic upper Floors, floorless stacked wall-family tiers and wall-supported high Roofs require no new mesh fields and no panel-grid schema bump: Wall records already store explicit edge/storey/base/top state, Roof zones already store arbitrary canonical cell-key sets, and Floor records already store explicit integer `storey` plus `levelY`.
 
 `PanelConstructionSystem.snapshot()` stores semantic registry/grid state. Save/Continue recreates runtime visuals and collision from that state without re-consuming Logs.
 
-A restored Stair recreates all six walkable tread colliders. A restored upper Floor recreates the same standable Floor collider at its stored structural level without terrain foundation posts. A restored Roof re-runs the deterministic footprint planner from its stored cell keys and recreates the gable-wing presentation. No Three.js transforms, wing meshes or junction masks are serialized as structural authority.
+A restored Stair recreates all six walkable tread colliders. A restored upper Floor recreates the same standable Floor collider at its stored structural level without terrain foundation posts. Floorless wall tiers restore from lowest to highest storey so each recursive support exists before its dependent tier. A restored Roof re-runs the deterministic footprint planner from its stored cell keys and resolves its structural elevation from either the real Floor or completed wall enclosure that supports those cells. No Three.js transforms, wing meshes, synthetic Floor panels or junction masks are serialized as structural authority.
 
 Older rectangular semantic Roof saves remain valid: their exact cell set simply re-plans as one rectangular wing.
 
 ## Verification
 
-`npm run check` protects the semantic Floor/Wall/Door/Window/Stairs/Roof contracts, upper-storey support and complex Roof footprint behavior.
+`npm run check` protects the semantic Floor/Wall/Door/Window/Stairs/Roof contracts, upper-storey support, floorless stacked-shell support and complex Roof footprint behavior.
 
 `verify-panel-construction-grid.mjs` covers:
 
@@ -274,6 +296,19 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - support-Wall demolition dependency;
 - upper Floor save/Continue reconstruction.
 
+`verify-panel-stacked-shell.mjs` covers:
+
+- a completed lower Wall/Door/Window ring exposing its exact four wall-family edges one storey higher;
+- Wall, Door and Window all using the same floorless stacked-edge resolver and established 3-Log cost;
+- no synthetic Floor being created under a floorless upper wall tier;
+- recursive exposure of another wall tier when the upper ring becomes complete;
+- open lower sections refusing floating upper-wall support;
+- reverse demolition protection while a floorless upper wall depends on the lower enclosure;
+- a completed floorless upper ring exposing a high Roof support cell at its exact wall-top elevation;
+- third-person Roof targeting choosing that highest completed ring instead of the lower aligned support;
+- the existing 5-Log-per-cell Roof cost on the high Roof;
+- save/Continue reconstruction of floorless upper walls and wall-supported high Roofs without inventing Floor state.
+
 `verify-semantic-roof-polish.mjs` protects the finished thatch appearance, wall seating, closed gables and clean interior shell.
 
 `verify-complex-semantic-roof.mjs` protects:
@@ -294,22 +329,21 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 
 ## Android acceptance gate
 
-The active device gate is now semantic upper-storey Floor placement.
+The active device gate is the stacked upper-shell/high-Roof configuration reported on 2026-09-12.
 
-Using a completed ground-storey room such as the one in the 2026-09-11 wall-top placement report, verify:
+Using the same style of build shown in the report, verify:
 
-- with Floor selected, aiming into a fully closed Wall/Door/Window perimeter gives a green preview on **top of the walls**, not a red ground fallback;
-- placing it creates storey 1 and consumes exactly 3 Logs;
-- a larger room exposes all enclosed upper Floor cells without requiring interior divider Walls;
-- leaving an upstairs cell unbuilt remains possible;
-- Stair openings do not receive a conflicting upper Floor preview;
-- a completed lower Roof suppresses the coincident upper Floor slot;
-- an existing upper Floor prevents removal of a wall that is structurally required to keep its support perimeter closed;
-- upper Floors do not grow terrain-to-floor foundation posts;
-- the Ranger can stand and move on the upper walking surface while remaining on the lower level when underneath it;
-- Wall/Door/Window placement can continue from the new upper Floor using the same semantic edge rules;
-- Roof can subsequently target the highest completed storey using the existing semantic Roof system;
-- save -> close -> Continue restores the same upper Floors, walls and walkable collision.
+- after the lower wall-family section is complete, **Wall**, **Door** and **Window** can each show a green preview on the last open upper edge instead of `MOVE TO VALID POSITION`;
+- the placed upper Wall/Door/Window sits directly on the lower wall top and consumes exactly 3 Logs;
+- this floorless stacking works even when there is deliberately no Floor inside that upper level;
+- an incomplete/open lower wall section does not allow a floating upper Wall/Door/Window;
+- completing the upper wall ring exposes another wall tier so taller shells remain possible without a hard-coded two-storey limit;
+- a supporting lower wall cannot be demolished while an existing floorless upper wall depends on that enclosure;
+- a completed floorless upper ring allows Roof placement at the **top of that upper ring**, not at the lower storey;
+- the high Roof does not create an invisible or walkable Floor underneath it and keeps the existing Roof cost;
+- existing Floor-backed upper-storey construction still behaves as before, including Stair openings and optional unbuilt Floor cells;
+- save -> close -> Continue restores the same stacked Wall/Door/Window tiers and high Roof at the same heights;
+- third-person and first-person targeting both select the intended elevated module without introducing a competing construction controller.
 
 Player-selected mono-pitch roofs remain outside this gate.
 
@@ -317,4 +351,4 @@ Player-selected mono-pitch roofs remain outside this gate.
 
 This milestone intentionally preserves terrain/world generation, ecology, Ranger locomotion/camera, general inventory/crafting, tools/durability, combat, campfire behavior, common collision, PWA/install architecture and deployment architecture.
 
-Legacy physical construction code remains transition infrastructure only. Semantic upper-storey and complex Roof gameplay must not reconnect structural authority to it.
+Legacy physical construction code remains transition infrastructure only. Semantic upper-storey Floors, floorless stacked wall-family tiers and complex/high Roof gameplay must not reconnect structural authority to it.
