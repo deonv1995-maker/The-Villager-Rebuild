@@ -52,7 +52,7 @@ export class GatherableSystem {
     let nearestDistanceSq = INTERACTION_RADIUS * INTERACTION_RADIUS;
 
     for (const item of this.items) {
-      if (!item.active) continue;
+      if (!item.active || item.reservedBy) continue;
       if (filter && !filter(item.resourceId)) continue;
       const dx = item.root.position.x - playerPosition.x;
       const dz = item.root.position.z - playerPosition.z;
@@ -131,6 +131,8 @@ export class GatherableSystem {
     }
 
     item.active = true;
+    item.reservedBy = null;
+    item.root.visible = true;
     item.root.scale.setScalar(1);
     item.root.position.set(x, this.#groundY(item.resourceId, x, z), z);
     item.root.rotation.set(0, yaw, 0);
@@ -158,9 +160,83 @@ export class GatherableSystem {
       resourceId,
       root,
       active: true,
+      reservedBy: null,
       quantity: quantity ?? definition.pickupQuantity
     });
     return root;
+  }
+
+  findNearestLooseResource(position, maxDistance, filter = null) {
+    if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
+    let nearest = null;
+    let nearestDistanceSq = maxDistance * maxDistance;
+
+    for (const item of this.items) {
+      if (!item.active || item.reservedBy) continue;
+      const definition = RESOURCE_DEFINITIONS[item.resourceId];
+      if (definition?.storage !== 'inventory') continue;
+      if (filter && !filter(item.resourceId)) continue;
+      const dx = item.root.position.x - position.x;
+      const dz = item.root.position.z - position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearest = item;
+      nearestDistanceSq = distanceSq;
+    }
+
+    return nearest ? this.#describeLooseItem(nearest) : null;
+  }
+
+  getLooseResource(id) {
+    const item = this.items.find(candidate => candidate.id === id);
+    if (!item?.active || item.reservedBy) return null;
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    if (definition?.storage !== 'inventory') return null;
+    return this.#describeLooseItem(item);
+  }
+
+  reserveLooseResource(id, owner) {
+    if (!owner) throw new Error('Loose-resource reservations require an owner token');
+    const item = this.items.find(candidate => candidate.id === id);
+    if (!item?.active || (item.reservedBy && item.reservedBy !== owner)) return null;
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    if (definition?.storage !== 'inventory') return null;
+    item.reservedBy = owner;
+    item.root.visible = false;
+    if (this.target?.kind === 'item' && this.target.item === item) {
+      this.target = null;
+      this.indicator.visible = false;
+    }
+    return this.#describeLooseItem(item);
+  }
+
+  releaseLooseResource(id, owner) {
+    const item = this.items.find(candidate => candidate.id === id);
+    if (!item?.active || item.reservedBy !== owner) return false;
+    item.reservedBy = null;
+    item.root.visible = true;
+    return true;
+  }
+
+  takeReservedLooseResource(id, owner) {
+    const item = this.items.find(candidate => candidate.id === id);
+    if (!item?.active || item.reservedBy !== owner) return null;
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    if (definition?.storage !== 'inventory') return null;
+    item.reservedBy = null;
+    item.active = false;
+    item.root.visible = true;
+    item.root.parent?.remove(item.root);
+    if (this.target?.kind === 'item' && this.target.item === item) {
+      this.target = null;
+      this.indicator.visible = false;
+    }
+    return {
+      id: item.id,
+      resourceId: definition.id,
+      label: definition.label,
+      quantity: item.quantity ?? definition.pickupQuantity
+    };
   }
 
   getTarget() {
@@ -197,9 +273,23 @@ export class GatherableSystem {
     };
   }
 
+  #describeLooseItem(item) {
+    const definition = RESOURCE_DEFINITIONS[item.resourceId];
+    return {
+      id: item.id,
+      resourceId: item.resourceId,
+      label: definition?.label ?? item.resourceId,
+      quantity: item.quantity ?? definition?.pickupQuantity ?? 1,
+      root: item.root,
+      position: item.root.position.clone()
+    };
+  }
+
   #takeItemTarget() {
     const item = this.target.item;
     item.active = false;
+    item.reservedBy = null;
+    item.root.visible = true;
     this.group.remove(item.root);
     this.target = null;
     this.indicator.visible = false;
@@ -471,6 +561,7 @@ export class GatherableSystem {
       resourceId,
       root,
       active: true,
+      reservedBy: null,
       quantity: RESOURCE_DEFINITIONS[resourceId].pickupQuantity
     });
   }
