@@ -58,6 +58,15 @@ export const CRAFTING_RECIPES = Object.freeze({
     ]),
     output: Object.freeze({ itemId: 'sword', quantity: 1 })
   }),
+  torch: Object.freeze({
+    id: 'torch',
+    label: 'Torch',
+    ingredients: Object.freeze([
+      Object.freeze({ itemId: 'stick', quantity: 1 }),
+      Object.freeze({ itemId: 'grass', quantity: 2 })
+    ]),
+    output: Object.freeze({ itemId: 'torch', quantity: 1 })
+  }),
   campfire: Object.freeze({
     id: 'campfire',
     label: 'Campfire',
