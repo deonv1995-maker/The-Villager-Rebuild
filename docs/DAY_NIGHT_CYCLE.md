@@ -64,12 +64,12 @@ The mobile shadow budget remains deliberately conservative:
 - opaque gameplay/building meshes automatically cast and receive shadows;
 - terrain receives shadows;
 - the animated Ranger is **receiver-only** in the throttled global map and uses a small transparent contact shadow that follows the walkable surface every presentation frame;
-- the existing static `forest-tree-batch-*` instanced meshes cast and receive celestial shadows while preserving the forest batching architecture;
+- static forest tree instancing remains shadow-capable before and after world chunk splitting: pre-split `forest-tree-batch-*` meshes and runtime `chunkedTreeBatch` / `forest-tree-chunk-*` meshes cast and receive celestial shadows;
 - lightweight instanced understory, grass/fern presentation, transparent water, build previews, celestial visuals, smoke/flame/spark effects, trails, and distant mountains stay out of the shadow pass.
 
 The Ranger contact shadow deliberately replaces a full animated Ranger caster in the throttled map. This prevents a 10 Hz shadow silhouette from visibly trailing a character that is rendered and moved every frame, while keeping the character's standard materials fully responsive to the day/night rig and local torch light.
 
-Forest trees are a bounded exception to the generic instanced-vegetation exclusion. They remain static, are already grouped into a small number of `InstancedMesh` batches, and therefore can participate in the low-frequency celestial shadow pass without turning 540 trees into hundreds of separate draw calls. Small understory remains excluded. Player-built structures continue through the normal opaque-mesh policy, so their standard materials receive the same celestial and torch lighting without construction-specific shadow logic.
+Forest trees are a bounded exception to the generic instanced-vegetation exclusion. They remain static and are split into chunk-local `InstancedMesh` batches for world streaming. Those runtime chunks retain a semantic `chunkedTreeBatch` marker, allowing the centralized shadow policy to keep them in the low-frequency celestial pass without turning 540 trees into hundreds of separate draw calls. Small understory remains excluded. Player-built structures continue through the normal opaque-mesh policy, so their standard materials receive the same celestial and torch lighting without construction-specific shadow logic.
 
 ## Mobile rendering policy
 
@@ -87,7 +87,7 @@ Gameplay systems that need time should read or subscribe to `game.worldTime`; th
 
 The celestial bodies are therefore a player-facing time cue, not gameplay authority.
 
-Construction and world systems do not need shadow-specific logic for ordinary opaque meshes. `CelestialShadowSystem` periodically discovers newly added scene meshes and applies the centralized rendering policy. Static forest tree batches are recognized centrally by their established `forest-tree-batch-*` presentation names; other instanced/effect presentation remains outside the expensive caster path.
+Construction and world systems do not need shadow-specific logic for ordinary opaque meshes. `CelestialShadowSystem` periodically discovers newly added scene meshes and applies the centralized rendering policy. Static forest tree batches are recognized centrally from either the pre-split `forest-tree-batch-*` identity or the world-streaming `chunkedTreeBatch` semantic marker, with the `forest-tree-chunk-*` name retained as a compatibility fallback; other instanced/effect presentation remains outside the expensive caster path.
 
 The current cycle deliberately does **not** change animal behavior, villager behavior, hunger, damage, campfire rules, or tutorial progression.
 
@@ -119,7 +119,8 @@ The existing design still calls for the first night to unlock sleeping near a va
 - Ranger-relative key-light targeting;
 - opaque building/dynamic receiver enrollment;
 - receiver-only animated Ranger policy plus per-frame ground-following contact shadow;
-- static instanced forest-tree caster/receiver enrollment while understory stays excluded;
+- pre-split and runtime chunked forest-tree caster/receiver enrollment while understory stays excluded;
+- the `WorldChunkSystem` semantic tree-batch marker consumed by the centralized shadow policy;
 - transparent/effect exclusions;
 - delayed discovery of newly built meshes without construction-system coupling;
 - boot wiring and inclusion in the full repository check suite.
