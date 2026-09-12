@@ -5,6 +5,7 @@ import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { InventoryCapacityController } from './gameplay/InventoryCapacityController.js';
+import { InventoryGainFeedbackController } from './gameplay/InventoryGainFeedbackController.js';
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
@@ -140,6 +141,9 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     sproutCompanion.start();
     game.sproutCompanion = sproutCompanion;
 
+    const inventoryGainFeedback = new InventoryGainFeedbackController({ game });
+    game.inventoryGainFeedback = inventoryGainFeedback;
+
     const saveController = new SaveGameController({ game, store: saveStore });
     game.saveController = saveController;
     window.__villager = game;
@@ -148,6 +152,7 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       const restored = saveController.restore();
       if (!restored.restored) throw new Error('The selected save is no longer available');
 
+      inventoryGainFeedback.start();
       const toolId = game.toolbelt.getEquippedToolId();
       const carryingLog = game.physicalLogs?.isCarrying() ?? false;
       game.toolPresentation?.setEquippedTool(carryingLog ? null : toolId);
@@ -156,6 +161,7 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       saveController.start();
       setStatus('CONTINUE · AUTOSAVE ACTIVE');
     } else {
+      inventoryGainFeedback.start();
       const arrivalIntro = new BeachArrivalIntroController({
         game,
         setStatus: setGameplayStatus,
