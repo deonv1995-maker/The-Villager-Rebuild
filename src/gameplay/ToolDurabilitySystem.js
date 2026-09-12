@@ -100,6 +100,15 @@ export class ToolDurabilitySystem {
 
   returnTool(toolId, durability) {
     this.#sync(toolId);
+    if (this.definitions[toolId].usesDurability === false) {
+      return {
+        returned: false,
+        toolId,
+        durability: null,
+        quantity: this.inventory.get(toolId)
+      };
+    }
+
     const restoredDurability = roundTenth(Math.max(
       0,
       Math.min(this.durability.maxPercent, Number.isFinite(durability) ? durability : this.durability.maxPercent)
@@ -132,8 +141,13 @@ export class ToolDurabilitySystem {
 
   #sync(toolId) {
     this.#validateTool(toolId);
-    const quantity = this.inventory.get(toolId);
     const units = this.units.get(toolId);
+    if (this.definitions[toolId].usesDurability === false) {
+      units.length = 0;
+      return;
+    }
+
+    const quantity = this.inventory.get(toolId);
     while (units.length < quantity) units.push(this.durability.maxPercent);
     while (units.length > quantity) units.pop();
   }

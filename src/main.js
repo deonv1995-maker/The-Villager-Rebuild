@@ -1,3 +1,4 @@
+import './torch.css';
 import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
@@ -7,6 +8,7 @@ import { PanelConstructionRuntimeController } from './gameplay/PanelConstruction
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
+import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
@@ -49,14 +51,18 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     });
     const celestialBodies = new CelestialBodySystem({ sceneSystem: game.sceneSystem });
     const celestialShadows = new CelestialShadowSystem({ sceneSystem: game.sceneSystem });
+    const torchRuntime = new TorchRuntimeController({ game });
+    game.toolbelt.fuel = torchRuntime;
     const worldTimeRuntime = new WorldTimeRuntime({
       worldTime,
-      presentations: [dayNightLighting, celestialBodies, celestialShadows]
+      presentations: [dayNightLighting, celestialBodies, celestialShadows],
+      consumers: [torchRuntime]
     });
     game.worldTime = worldTime;
     game.dayNightLighting = dayNightLighting;
     game.celestialBodies = celestialBodies;
     game.celestialShadows = celestialShadows;
+    game.torchRuntime = torchRuntime;
     game.worldTimeRuntime = worldTimeRuntime;
     worldTimeRuntime.sync();
 

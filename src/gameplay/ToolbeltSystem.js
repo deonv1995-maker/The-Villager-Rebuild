@@ -1,11 +1,19 @@
 import { TOOL_DEFINITIONS, TOOL_DURABILITY, TOOL_ORDER } from '../data/ToolDefinitions.js';
 
 export class ToolbeltSystem {
-  constructor({ inventory, crafting, durability = null, definitions = TOOL_DEFINITIONS, order = TOOL_ORDER }) {
+  constructor({
+    inventory,
+    crafting,
+    durability = null,
+    fuel = null,
+    definitions = TOOL_DEFINITIONS,
+    order = TOOL_ORDER
+  }) {
     if (!inventory || !crafting) throw new Error('ToolbeltSystem requires inventory and crafting');
     this.inventory = inventory;
     this.crafting = crafting;
     this.durability = durability;
+    this.fuel = fuel;
     this.definitions = definitions;
     this.order = [...order];
     this.equippedToolId = null;
@@ -85,13 +93,15 @@ export class ToolbeltSystem {
         craftable: false,
         equipped: this.equippedToolId === null,
         durability: null,
+        meterKind: null,
         ingredients: []
       },
       ...this.order.map(toolId => {
         const definition = this.definitions[toolId];
         const recipe = this.crafting.getRecipe(toolId);
         const quantity = this.inventory.get(toolId);
-        const durability = this.durability?.snapshot(toolId) ?? null;
+        const fuel = definition.role === 'light' ? this.fuel?.snapshot(toolId) ?? null : null;
+        const durability = fuel ? null : this.durability?.snapshot(toolId) ?? null;
         return {
           id: toolId,
           label: definition.label,
@@ -101,7 +111,9 @@ export class ToolbeltSystem {
           owned: quantity > 0,
           craftable: this.crafting.canCraft(toolId),
           equipped: this.equippedToolId === toolId,
-          durability: durability?.durability ?? null,
+          durability: fuel?.percent ?? durability?.durability ?? null,
+          meterKind: fuel ? 'fuel' : durability ? 'durability' : null,
+          remainingGameMinutes: fuel?.remainingGameMinutes ?? null,
           ingredients: recipe.ingredients.map(ingredient => ({ ...ingredient }))
         };
       })

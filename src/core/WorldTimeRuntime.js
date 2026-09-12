@@ -5,19 +5,25 @@ export class WorldTimeRuntime {
     worldTime,
     lighting = null,
     presentations = [],
+    consumers = [],
     requestFrame = globalThis.requestAnimationFrame?.bind(globalThis),
     cancelFrame = globalThis.cancelAnimationFrame?.bind(globalThis)
   } = {}) {
     const presentationSystems = [lighting, ...presentations].filter(Boolean);
+    const consumerSystems = consumers.filter(Boolean);
     if (!worldTime || presentationSystems.length === 0) {
       throw new Error('WorldTimeRuntime requires world time and at least one presentation system');
     }
     if (presentationSystems.some(system => typeof system.apply !== 'function')) {
       throw new Error('WorldTimeRuntime presentation systems must expose apply(snapshot)');
     }
+    if (consumerSystems.some(system => typeof system.apply !== 'function')) {
+      throw new Error('WorldTimeRuntime consumer systems must expose apply(snapshot)');
+    }
 
     this.worldTime = worldTime;
     this.presentations = presentationSystems;
+    this.consumers = consumerSystems;
     this.requestFrame = requestFrame;
     this.cancelFrame = cancelFrame;
     this.running = false;
@@ -28,6 +34,7 @@ export class WorldTimeRuntime {
   sync() {
     const snapshot = this.worldTime.getSnapshot();
     for (const presentation of this.presentations) presentation.apply(snapshot);
+    for (const consumer of this.consumers) consumer.apply(snapshot);
   }
 
   start() {

@@ -1,0 +1,49 @@
+.tool-slot[data-tool="torch"] > img {
+  display: none;
+}
+
+.tool-slot[data-tool="torch"]::before,
+.tool-slot[data-tool="torch"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  pointer-events: none;
+}
+
+.tool-slot[data-tool="torch"]::before {
+  top: 14px;
+  width: 6px;
+  height: 23px;
+  transform: translateX(-50%) rotate(7deg);
+  border-radius: 4px;
+  background: linear-gradient(90deg, #5a361f, #9b6738 55%, #5d3922);
+  box-shadow: 0 0 0 1px rgba(24, 19, 14, .28);
+}
+
+.tool-slot[data-tool="torch"]::after {
+  top: 5px;
+  width: 15px;
+  height: 18px;
+  transform: translateX(-50%) rotate(5deg);
+  border-radius: 58% 42% 62% 38% / 70% 62% 38% 30%;
+  background: radial-gradient(circle at 50% 68%, #fff3ad 0 16%, #f6bd4c 32%, #e87935 67%, rgba(220, 75, 30, .2) 100%);
+  box-shadow: 0 0 8px rgba(246, 176, 70, .72);
+}
+
+.tool-slot[data-tool="torch"].equipped::after {
+  box-shadow: 0 0 11px rgba(255, 195, 88, .92);
+}
+
+@media (max-width: 420px) {
+  .toolbelt {
+    max-width: calc(100vw - 8px);
+    gap: 3px;
+    padding: 4px;
+  }
+
+  .tool-slot {
+    width: clamp(35px, 10.6vw, 42px);
+    height: clamp(35px, 10.6vw, 42px);
+    padding: clamp(5px, 1.8vw, 7px);
+  }
+}
