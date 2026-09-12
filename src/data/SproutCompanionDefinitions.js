@@ -1,6 +1,6 @@
 export const SPROUT_COMPANION = Object.freeze({
-  followDistance: 1.65,
-  followSideOffset: 0.78,
+  followDistance: 2.05,
+  followSideOffset: 0.95,
   hoverHeight: 1.12,
   followSpeed: 4.2,
   collectionMoveSpeed: 4.8,
