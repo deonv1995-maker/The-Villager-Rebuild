@@ -108,7 +108,7 @@ assert.equal(rendererShadowMap.needsUpdate, true, 'Torch activation must request
 const firstIntensity = torch.light.intensity;
 const firstFlameScale = torch.flame.scale.y;
 shadowClock += 120;
-torch.apply({ day: 1, minuteOfDay: 20 * 60 + 0.12 });
+torch.apply({ day: 1, minuteOfDay: 20 * 60 });
 assert.notEqual(torch.light.intensity, firstIntensity, 'Torch intensity must flutter over time');
 assert.notEqual(torch.flame.scale.y, firstFlameScale, 'Visible flame must flutter with the light');
 assert.ok(
