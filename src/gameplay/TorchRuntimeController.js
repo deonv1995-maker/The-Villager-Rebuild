@@ -63,7 +63,7 @@ export class TorchRuntimeController {
       this.#burn(elapsedGameMinutes);
     }
 
-    this.#syncPresentation(currentAbsoluteGameMinute);
+    this.#syncPresentation();
     return this.snapshot();
   }
 
@@ -152,7 +152,7 @@ export class TorchRuntimeController {
     shadow.camera.updateProjectionMatrix();
   }
 
-  #syncPresentation(currentAbsoluteGameMinute = null) {
+  #syncPresentation() {
     const burning = this.#isBurning();
     this.visualRoot.visible = burning && !Boolean(this.game.player.isFirstPerson?.());
     this.light.visible = burning;
@@ -173,12 +173,12 @@ export class TorchRuntimeController {
 
     this.flameAnchor.getWorldPosition(this.position);
     this.light.position.copy(this.position);
-    this.#applyFlicker(currentAbsoluteGameMinute);
+    this.#applyFlicker();
     this.#requestShadowRefresh();
   }
 
-  #applyFlicker(currentAbsoluteGameMinute) {
-    const time = Number.isFinite(currentAbsoluteGameMinute) ? currentAbsoluteGameMinute : 0;
+  #applyFlicker() {
+    const time = (Number(this.now()) || 0) / 1000;
     const fast = Math.sin(time * TAU * 4.73 + 0.35);
     const middle = Math.sin(time * TAU * 7.91 + 1.7);
     const high = Math.sin(time * TAU * 13.37 + 2.4);
