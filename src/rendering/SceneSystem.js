@@ -33,7 +33,8 @@ export class SceneSystem {
 
     const sun = new THREE.DirectionalLight(0xffe3b4, 2.85);
     sun.position.set(-28, 36, 18);
-    this.scene.add(sun);
+    sun.target.name = 'celestial-key-target';
+    this.scene.add(sun, sun.target);
 
     const skyFill = new THREE.DirectionalLight(0x8fc1d4, 0.48);
     skyFill.position.set(24, 16, -20);

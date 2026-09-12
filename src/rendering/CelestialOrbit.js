@@ -26,6 +26,12 @@ export function celestialDirectionAt(minuteOfDay, { moon = false, target = new T
   ).normalize();
 }
 
+export function dominantCelestialDirectionAt(minuteOfDay, { target = new THREE.Vector3() } = {}) {
+  celestialDirectionAt(minuteOfDay, { target });
+  if (target.y >= 0) return target;
+  return celestialDirectionAt(minuteOfDay, { moon: true, target });
+}
+
 export function celestialVisibilityForDirection(direction) {
   return THREE.MathUtils.smoothstep(
     direction?.y ?? -1,

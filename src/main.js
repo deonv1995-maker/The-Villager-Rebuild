@@ -13,6 +13,7 @@ import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
 import { CelestialBodySystem } from './rendering/CelestialBodySystem.js';
+import { CelestialShadowSystem } from './rendering/CelestialShadowSystem.js';
 import { DayNightLightingSystem } from './rendering/DayNightLightingSystem.js';
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
@@ -41,15 +42,21 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     await game.start();
 
     const worldTime = new WorldTimeSystem();
-    const dayNightLighting = new DayNightLightingSystem({ sceneSystem: game.sceneSystem });
+    const lightFocus = target => game.player.getPosition(target);
+    const dayNightLighting = new DayNightLightingSystem({
+      sceneSystem: game.sceneSystem,
+      focusProvider: lightFocus
+    });
     const celestialBodies = new CelestialBodySystem({ sceneSystem: game.sceneSystem });
+    const celestialShadows = new CelestialShadowSystem({ sceneSystem: game.sceneSystem });
     const worldTimeRuntime = new WorldTimeRuntime({
       worldTime,
-      presentations: [dayNightLighting, celestialBodies]
+      presentations: [dayNightLighting, celestialBodies, celestialShadows]
     });
     game.worldTime = worldTime;
     game.dayNightLighting = dayNightLighting;
     game.celestialBodies = celestialBodies;
+    game.celestialShadows = celestialShadows;
     game.worldTimeRuntime = worldTimeRuntime;
     worldTimeRuntime.sync();
 
