@@ -180,6 +180,14 @@ Decision: normal tree harvesting should move toward a visible felling state. The
 
 Reason: a physical fall makes tree harvesting readable and satisfying, while maintaining the architectural separation between harvesting/world state and companion retrieval/storage.
 
+## 2026-09-12 — Sprout crash-site story ownership
+
+Decision: the live island impact/rescue sequence is split across two narrow systems rather than being added to `GameApp`, the title renderer or inventory code. `SproutArrivalController` owns story progression, objectives, the bounded rescue action, dialogue/allegiance and save checkpoints. `SproutCrashSiteSystem` owns the gameplay-world impact presentation, deterministic terrain/collision-aware crash-site selection, crash debris, temporary Sprout presentation and crash-site collision. The temporary visual is explicitly swappable and does not become the production companion authority.
+
+Compatibility: Sprout arrival state is an additive field inside the existing schema-2 save record. Saves created before this slice remain valid and deliberately skip replaying the opening story inside an established world. New-game impact/rescue/allegiance checkpoints persist through the shared `SaveGameController` after Ranger/world restore.
+
+Reason: story state, world presentation/collision and item storage have different ownership. Keeping them separated allows the next follower/compression slice and eventual production Sprout asset to extend the same story state without duplicating inventory, harvesting or player control.
+
 ## Open decisions
 
 The following are intentionally not locked yet:
