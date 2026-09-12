@@ -11,6 +11,9 @@ const ANALOG_WALK_MAX_SPEED = 4.5;
 const SPRINT_SPEED = 6;
 const RUN_ANIMATION_THRESHOLD = 4;
 const CAMERA_DEFAULT_PITCH = 0.12;
+const THIRD_PERSON_PITCH_MIN = -0.75;
+const THIRD_PERSON_PITCH_MAX = 0.25;
+const FIRST_PERSON_PITCH_LIMIT = Math.PI / 2 - 0.001;
 const CAMERA_FOLLOW_RESPONSE = 0.78;
 const CAMERA_RETURN_RESPONSE = 0.5;
 const CAMERA_PITCH_RESPONSE = 0.7;
@@ -327,6 +330,9 @@ export class RangerController {
     if (!CAMERA_MODES.includes(mode) || this.cinematicDriver) return this.cameraMode;
     if (this.cameraMode === mode) return this.cameraMode;
     this.cameraMode = mode;
+    if (!this.isFirstPerson()) {
+      this.pitch = THREE.MathUtils.clamp(this.pitch, THIRD_PERSON_PITCH_MIN, THIRD_PERSON_PITCH_MAX);
+    }
     this.manualLookActive = false;
     this.cameraReturnDelay = 0;
     this.cameraRecovering = mode === 'third-person';
@@ -456,7 +462,9 @@ export class RangerController {
   rotateCamera(deltaX, deltaY) {
     if (this.cinematicDriver) return;
     this.yaw -= deltaX * 0.005;
-    this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, -0.75, 0.25);
+    const minPitch = this.isFirstPerson() ? -FIRST_PERSON_PITCH_LIMIT : THIRD_PERSON_PITCH_MIN;
+    const maxPitch = this.isFirstPerson() ? FIRST_PERSON_PITCH_LIMIT : THIRD_PERSON_PITCH_MAX;
+    this.pitch = THREE.MathUtils.clamp(this.pitch - deltaY * 0.004, minPitch, maxPitch);
   }
 
   endCameraLook() {
