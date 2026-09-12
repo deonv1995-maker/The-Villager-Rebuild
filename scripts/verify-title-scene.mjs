@@ -24,6 +24,8 @@ const islandBackdrop = read('src/startup/TitleIslandBackdrop.js');
 const shipVisual = read('src/startup/TitleShipVisual.js');
 const shipDeckDetails = read('src/startup/TitleShipDeckDetails.js');
 const stormSystem = read('src/startup/TitleStormSystem.js');
+const celestialEvent = read('src/startup/TitleCelestialEvent.js');
+const cinematicCamera = read('src/startup/TitleCinematicCamera.js');
 const arrivalIntro = read('src/startup/BeachArrivalIntroController.js');
 const rangerController = read('src/player/RangerController.js');
 const crawlPose = read('src/player/RangerCrawlPose.js');
@@ -66,6 +68,11 @@ const checks = [
   ['storm wave motion is centrally tuned below the previous aggressive amplitude', config.includes('stormWaveAmplitudeMax: 1.16') && config.includes('stormWaveSpeedBoost: 1.3')],
   ['storm system includes lightning and foam impact feedback', stormSystem.includes('pulseAt') && stormSystem.includes('wreckFoam') && stormSystem.includes('triggerRangerSplash')],
   ['title scene centralizes voyage scale and timing', config.includes('introDuration') && config.includes('oceanY') && config.includes('islandHorizontalScale')],
+  ['celestial entry uses layered tapered plasma tails instead of only a thin line', celestialEvent.includes("title-sprout-outer-plasma-tail") && celestialEvent.includes("title-sprout-inner-plasma-tail") && celestialEvent.includes('new THREE.ConeGeometry(1.25, 17') && celestialEvent.includes('new THREE.ConeGeometry(0.58, 12.5')],
+  ['celestial entry has a forward bow-shock heat bubble and leading compression rim', celestialEvent.includes("title-sprout-bow-shock-heat-bubble") && celestialEvent.includes("title-sprout-bow-shock-rim") && celestialEvent.includes('new THREE.SphereGeometry(1.15') && celestialEvent.includes('new THREE.TorusGeometry(0.96')],
+  ['celestial entry accelerates and lengthens its visible streak as it descends', celestialEvent.includes('Math.pow(progress, 1.18)') && celestialEvent.includes('const trailLength = 14 + progress * 8') && config.includes('shootingStarEnd: 0.82')],
+  ['title-only cinematic camera tracks the live celestial trajectory with a focused zoom', cinematicCamera.includes('this.celestialEvent.getFocusPosition(this.celestialTarget)') && cinematicCamera.includes('TITLE_SCENE.celestialFocusFov') && cinematicCamera.includes('this.camera.position.lerp(this.focusPosition, attention)') && config.includes('celestialFocusFov: 34')],
+  ['celestial focus shot releases before the wreck and remains separate from gameplay cameras', titleScene.includes('new TitleCinematicCamera({') && titleScene.includes('this.cinematicCamera?.apply({') && config.includes('celestialFocusEnd: 0.7') && config.includes('wreckImpactStart: 0.74') && !cinematicCamera.includes('RangerController')],
   ['play starts an intro sequence', titleScene.includes("this.state = 'intro'") && titleScene.includes('TITLE_SCENE.introDuration')],
   ['intro hands off through callback', titleScene.includes('void this.onPlay?.()')],
   ['Ranger exposes an exclusive cinematic-control boundary', rangerController.includes('beginCinematic(driver)') && rangerController.includes('endCinematic(driver)') && rangerController.includes('setCinematicPose') && rangerController.includes('playCinematicAnimation')],
