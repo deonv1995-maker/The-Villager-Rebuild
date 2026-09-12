@@ -60,9 +60,6 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       + Math.sin(angle * 17 - 0.9) * 0.014;
     const expanded = ellipse * irregularity;
 
-    // Keep the proven Day-1 beach in the same playable area by turning the
-    // old southern coast into a deep inlet while the wider mainland expands
-    // around it. The inlet contract is intentionally independent of scale.
     const bayDelta = wrappedAngleDelta(angle, DAY_ONE_BAY_ANGLE);
     const bayStrength = Math.exp(-(bayDelta * bayDelta) / (2 * DAY_ONE_BAY_WIDTH * DAY_ONE_BAY_WIDTH));
     const bayEdge = DAY_ONE_BAY_RADIUS * (1 + Math.sin(angle * 11 + 0.6) * 0.045);
@@ -81,14 +78,17 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const base = super.vegetationSuitabilityAt(x, z, maxSlope);
     if (base <= 0) return 0;
     const region = this.explorationRegions.regionAt(x, z);
-    return THREE.MathUtils.clamp(base * (region?.vegetationMultiplier ?? 1), 0, 1);
+    if (!region) return base;
+    const regionalFloor = region.vegetationFloor * region.strength;
+    return THREE.MathUtils.clamp(Math.max(base * region.vegetationMultiplier, regionalFloor), 0, 1);
   }
 
   forestCoverAt(x, z) {
     const base = super.forestCoverAt(x, z);
-    if (base <= 0) return 0;
     const region = this.explorationRegions.regionAt(x, z);
-    return THREE.MathUtils.clamp(base * (region?.forestMultiplier ?? 1), 0, 1);
+    if (!region) return base;
+    const regionalFloor = region.forestFloor * region.strength;
+    return THREE.MathUtils.clamp(Math.max(base * region.forestMultiplier, regionalFloor), 0, 1);
   }
 
   heightAt(x, z) {
