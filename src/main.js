@@ -11,6 +11,7 @@ import { PanelConstructionRuntimeController } from './gameplay/PanelConstruction
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
 import { SproutCompanionController } from './gameplay/SproutCompanionController.js';
+import { SproutVisualRuntimeController } from './gameplay/SproutVisualRuntimeController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
@@ -136,6 +137,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     });
     sproutArrival.start();
     game.sproutArrival = sproutArrival;
+
+    const sproutVisualRuntime = new SproutVisualRuntimeController({ game });
+    sproutVisualRuntime.start();
+    game.sproutVisualRuntime = sproutVisualRuntime;
 
     const sproutCompanion = new SproutCompanionController({ game });
     sproutCompanion.start();
