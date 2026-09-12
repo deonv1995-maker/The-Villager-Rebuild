@@ -22,7 +22,7 @@ export class RangerToolPresentation {
   }
 
   setEquippedTool(toolId) {
-    if (toolId === 'spear') toolId = null;
+    if (toolId === 'spear' || toolId === 'torch') toolId = null;
     if (toolId === this.currentToolId) {
       this.#syncVisibility();
       return;
