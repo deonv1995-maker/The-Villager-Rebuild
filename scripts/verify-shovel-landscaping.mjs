@@ -57,6 +57,9 @@ assert.equal(state.snappedToBuilding, true, 'Fence preview should prefer the nea
 assert.equal(state.previewValid, true, 'Fence should be placeable on a clear building edge');
 assert.equal(state.cost[0].itemId, 'log');
 assert.equal(state.cost[0].quantity, 1);
+const firstPreviewRoot = system.previewRoot;
+system.update({ x: 0, z: cell }, { x: 0, z: -1 });
+assert.equal(system.previewRoot, firstPreviewRoot, 'Stable snapped previews should reuse their mesh instead of reallocating every frame');
 
 const fence = system.build({ x: 0, z: cell }, { x: 0, z: -1 });
 assert.ok(fence, 'Fence should build from the valid snapped preview');
@@ -117,6 +120,11 @@ assert.ok(
   'Shovel selection must open landscaping and switching away must close it'
 );
 assert.ok(
+  controllerSource.includes("this.system.isActive() && this.game.toolbelt?.getEquippedToolId() !== 'shovel'") &&
+  controllerSource.includes("!this.system.isActive() || this.game.toolbelt?.getEquippedToolId() !== 'shovel'"),
+  'Landscaping must close or refuse placement if the Shovel is no longer equipped, including after durability breakage'
+);
+assert.ok(
   menuSource.includes("this.onSelect?.('close')") &&
   controllerSource.includes('LANDSCAPING CLOSED · SHOVEL READY FOR STUMPS'),
   'Closing Landscaping must return the equipped Shovel to its existing stump-removal role'
@@ -143,4 +151,4 @@ assert.ok(
   'Landscaping mobile HUD layout rules must be loaded by the app shell'
 );
 
-console.log('Shovel landscaping grid snap, costs, collision, duplicate protection, persistence and runtime ownership verified');
+console.log('Shovel landscaping grid snap, costs, collision, duplicate protection, preview caching, persistence and runtime ownership verified');
