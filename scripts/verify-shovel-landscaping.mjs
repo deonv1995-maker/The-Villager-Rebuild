@@ -122,6 +122,17 @@ assert.ok(
   'Closing Landscaping must return the equipped Shovel to its existing stump-removal role'
 );
 assert.ok(
+  menuSource.includes('LANDSCAPING_DEFINITIONS') &&
+  menuSource.includes('LANDSCAPING_MODES') &&
+  menuSource.includes('definition?.cost?.[0]'),
+  'Landscaping menu rows and displayed costs must be sourced from centralized landscaping definitions'
+);
+assert.equal(
+  menuSource.includes('<small>1 LOG</small>') || menuSource.includes('<small>2 STONE</small>'),
+  false,
+  'Landscaping menu must not duplicate fence or cobble gameplay costs in static markup'
+);
+assert.ok(
   saveSource.includes('state.landscaping = this.game.landscaping?.snapshot?.() ?? null') &&
   saveSource.includes('this.game.landscaping?.restore?.(record.state.landscaping)') &&
   saveSource.indexOf('this.game.panelConstruction?.restore?.(record.state.panelConstruction)') < saveSource.indexOf('this.game.landscaping?.restore?.(record.state.landscaping)'),
