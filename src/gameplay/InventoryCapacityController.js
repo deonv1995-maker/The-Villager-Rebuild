@@ -3,15 +3,15 @@ import { INVENTORY_STORAGE_MODE } from '../data/InventoryCapacityDefinitions.js'
 const STORAGE_SYNC_INTERVAL_MS = 200;
 
 export class InventoryCapacityController {
-  constructor({ game, setIntervalFn = globalThis.setInterval, clearIntervalFn = globalThis.clearInterval } = {}) {
+  constructor({ game, setIntervalFn = null, clearIntervalFn = null } = {}) {
     if (!game?.inventory || !game?.gatherables) {
       throw new Error('InventoryCapacityController requires started inventory and gatherable systems');
     }
     this.game = game;
     this.inventory = game.inventory;
     this.gatherables = game.gatherables;
-    this.setIntervalFn = setIntervalFn;
-    this.clearIntervalFn = clearIntervalFn;
+    this.setIntervalFn = setIntervalFn ?? ((callback, delay) => globalThis.setInterval(callback, delay));
+    this.clearIntervalFn = clearIntervalFn ?? (id => globalThis.clearInterval(id));
     this.intervalId = null;
     this.unsubscribe = null;
     this.running = false;
