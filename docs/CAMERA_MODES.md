@@ -22,6 +22,7 @@ First person is an optional view over the same Ranger state:
 - grounded movement adds a resolved-motion head bob at the camera layer: walking gets a moderate vertical bounce and side sway, running uses a faster/stronger version, and the camera smoothly returns to neutral eye height when movement stops, the Ranger is airborne, or collision prevents travel;
 - head-bob cadence is deliberately relaxed and includes subtle deterministic cadence/amplitude drift so repeated footsteps do not read as a perfectly metronomic sine wave; resolved travel remains the only movement source, so this presentation variation never changes Ranger speed or collision;
 - the existing right-side touch/mouse look controls yaw and pitch;
+- first-person pitch can reach visually straight up and straight down (within 0.001 radians of the vertical poles); the tiny pole margin prevents the camera up-vector singularity and view flipping, while third-person keeps its established orbit pitch limits;
 - releasing look does not auto-return the view behind the Ranger;
 - movement remains camera-relative through the existing Ranger movement path;
 - interaction and log dropping continue to use the horizontal first-person view direction;
@@ -41,7 +42,7 @@ First person is an optional view over the same Ranger state:
 - the third-person Ranger body, spear presentation and hand-mounted tool props are hidden to prevent camera clipping;
 - third-person structure transparency is reset/disabled while first person is active because the camera is already inside the structure.
 
-Switching back to third person restores the existing Ranger/body/tool presentation and follow-camera behavior.
+Switching back to third person restores the existing Ranger/body/tool presentation, clamps any near-vertical first-person pitch back into the established third-person orbit envelope, and resumes follow-camera behavior.
 
 ## Controls
 
@@ -55,7 +56,7 @@ Camera mode is presentation/session state, not gameplay progression, and is not 
 
 ## Verification
 
-`scripts/verify-camera-modes.mjs` verifies the forward-biased third-person composition and established follow distance, default third-person behavior, first-person eye placement, resolved-motion walk bob, relaxed/non-metronomic walking cadence, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
+`scripts/verify-camera-modes.mjs` verifies the forward-biased third-person composition and established follow distance, default third-person behavior, first-person eye placement, near-vertical sky/ground pitch without camera roll, restoration of the third-person pitch envelope, resolved-motion walk bob, relaxed/non-metronomic walking cadence, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
 `scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.
 
