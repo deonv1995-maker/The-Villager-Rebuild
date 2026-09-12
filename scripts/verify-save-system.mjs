@@ -74,12 +74,15 @@ const recoveredWallYawDelta = Math.abs(Math.atan2(
 ));
 assert.ok(recoveredWallYawDelta < 0.000001, 'Retained legacy wall helper must remain internally coherent during transition');
 
+const arrivalCallbackIndex = main.indexOf('onComplete: () => {');
+const arrivalSaveIndex = main.indexOf('saveController.start({ saveImmediately: true })', arrivalCallbackIndex);
+
 const checks = [
   ['one versioned save-store key owns browser persistence', SAVE_STORAGE_KEY === 'the-villager-rebuild.save'],
   ['main boot owns a shared SaveGameStore', main.includes('const saveStore = new SaveGameStore()')],
   ['panel runtime exists before SaveGameController', main.includes('new PanelConstructionRuntimeController({ game })') && main.indexOf('new PanelConstructionRuntimeController({ game })') < main.indexOf('new SaveGameController({ game, store: saveStore })')],
   ['Continue restores before autosave starts', main.includes('const restored = saveController.restore()') && main.indexOf('const restored = saveController.restore()') < main.indexOf('saveController.start();')],
-  ['new-game autosave begins after beach arrival completion', main.includes('onComplete: () => saveController.start({ saveImmediately: true })')],
+  ['new-game autosave begins after beach arrival completion', arrivalCallbackIndex >= 0 && arrivalSaveIndex > arrivalCallbackIndex],
   ['Continue and New Game are distinct menu actions', titleSaveMenu.includes("label.textContent = 'NEW GAME'") && titleSaveMenu.includes('<span>CONTINUE</span>')],
   ['Continue uses the title fade cover instead of the shipwreck intro', titleSaveMenu.includes("querySelector('.title-transition')") && titleSaveMenu.includes("classList.add('is-covering')")],
   ['autosave runs periodically while gameplay is active', saveController.includes('AUTOSAVE_INTERVAL_MS = 8000') && saveController.includes("this.saveNow('autosave')")],
