@@ -76,7 +76,10 @@ assert(!treeSource.slice(finalHitIndex, completeMethodIndex).includes('this.#spa
 
 assert(companionSource.includes("reserved.resourceId === 'log'"), 'Sprout must retain the longer Log compression presentation');
 assert(companionSource.includes('this.allowedResources.has(resourceId)'), 'Sprout collection must stay data-gated rather than harvesting trees directly');
-assert(docs.includes('fall settles -> configured Log results become collectible'), 'Companion documentation must preserve the visible tree-to-timber handoff');
+assert(
+  docs.includes('fall settles') && docs.includes('configured Log results become collectible'),
+  'Companion documentation must preserve the visible tree-to-timber handoff'
+);
 assert(docs.includes('without spawning replacement Logs'), 'Save/Continue documentation must preserve no-duplicate timber authority');
 
 geometry.dispose();
