@@ -162,6 +162,24 @@ Reason: rotating independent gable cells could make the preview face the correct
 
 Compatibility: newly placed members persist their roof form. Complete legacy gables remain completion-only with their thatch intact, and new one-pitch targets are withheld until those legacy members are deliberately demolished.
 
+## 2026-09-12 — Sprout shipwreck introduction
+
+Decision: Sprout is introduced as part of the opening shipwreck rather than appearing as an unrelated companion later. After PLAY, the ship first approaches the island through calm water. The voyage transitions to night and stars become visible; a distinct blue flash appears; a bright incoming object then travels toward the island; and the flash marks the onset of the storm that wrecks the Ranger's ship. The object does not strike the ship. After the Ranger reaches the beach and gets to his feet, it later impacts elsewhere on the island and becomes the first exploration objective. The impact site contains Sprout trapped beneath a fallen tree. Freeing Sprout boots him, leads to his thanks/allegiance dialogue and provides the first demonstration of his compression-storage technology.
+
+Reason: the companion, storm, exploration prompt and inventory fiction should form one coherent story event rather than separate tutorial mechanics.
+
+## 2026-09-12 — Sprout shared inventory and collection role
+
+Decision: the Ranger and Sprout use one authoritative shared inventory; Sprout never owns a second player-facing inventory. The Ranger remains responsible for harvesting. After Sprout pledges allegiance, Sprout dynamically follows the Ranger and automatically retrieves eligible loose or harvested resources within a bounded range, initially including Logs, Sticks, collectible/harvested Grass and loose Stones. Collection uses visible blue compression/beam feedback and the shared inventory count visibly increases. Sprout storage capacity and collection capability are intended to be upgradeable.
+
+Reason: the Ranger should remain physically human and limited, while Sprout provides the in-world explanation for storing quantities of bulky materials without introducing inventory-transfer busywork or parallel item authorities.
+
+## 2026-09-12 — Trees fall before timber collection
+
+Decision: normal tree harvesting should move toward a visible felling state. The final axe hit should cause the tree to fall and settle before its configured timber becomes collectible. Sprout may collect those Logs only after they exist as legitimate harvest results. Sprout does not automatically harvest intact trees.
+
+Reason: a physical fall makes tree harvesting readable and satisfying, while maintaining the architectural separation between harvesting/world state and companion retrieval/storage.
+
 ## Open decisions
 
 The following are intentionally not locked yet:
