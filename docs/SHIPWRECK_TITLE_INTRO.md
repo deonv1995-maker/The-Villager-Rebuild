@@ -41,7 +41,7 @@ Pressing **PLAY** no longer jumps directly into a rising storm. The voyage first
 
 `TitleSceneConfig` is the timing authority for `nightStart`, `nightFull`, `blueFlashAt`, `blueFlashWidth`, `shootingStarStart`, `shootingStarEnd`, `stormStart`, `stormFull`, severe-storm timing, wreck-impact timing and transition-cover timing. The blue flash precedes `stormStart`, so the weather escalation reads as a consequence of the signal instead of an unrelated storm that was already underway.
 
-The celestial module may adjust title-scene sky/fog/light exposure for night and the blue flash, but it does not own rain, waves, ship motion, collision or gameplay day/night state.
+The celestial module may adjust title-scene sky/fog/light exposure for night and the blue flash, but it does not own rain, waves, ship motion, collision or gameplay day/night state. `WorldTimeDefinitions` remains the gameplay clock authority and starts a fresh shipwreck game at Day 1, 22:00 so the title scene's established night carries across the black transition without making the disposable title renderer a gameplay clock.
 
 ## Ship presentation
 
@@ -86,9 +86,9 @@ Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSc
 8. Wind, waves, rain and ship motion escalate into the wreck sequence.
 9. At impact the upper mast fractures, sail/rigging react, cargo lurches and the Ranger abandons ship into the water.
 10. The screen covers to black and the disposable title renderer is removed while the incoming object remains unresolved.
-11. Existing `GameApp` boots the full world and all normal gameplay systems at the established Day-1 coast.
-12. `BeachArrivalIntroController` places the already-loaded Ranger face-down in sampled shallow water, runs the short exhausted crawl, rise, dust and settle sequence, then releases cinematic ownership.
-13. A later gameplay slice will continue the celestial event after the Ranger rises: the object impacts elsewhere on the island, the Ranger is prompted to investigate, and the production Sprout crash-site/rescue sequence begins. That slice must be implemented before the normal Day-1 objective is replaced, so `main` never contains a dead exploration objective.
+11. Existing `GameApp` boots the full world at **Day 1, 22:00** and immediately synchronizes the authoritative night lighting before the black transition is released.
+12. `BeachArrivalIntroController` places the already-loaded Ranger face-down in sampled shallow water, runs the short exhausted crawl, rise, dust and settle sequence, then releases cinematic ownership. The 22:00 world clock is visually active during this sequence but does not advance yet.
+13. The world clock begins advancing when normal gameplay control starts, and the gameplay Sprout arrival continues the celestial event: the object impacts elsewhere on the island, the Ranger is prompted to investigate, and the production Sprout crash-site/rescue sequence follows.
 
 ## Architecture boundaries
 
@@ -97,6 +97,7 @@ Flexible sail/rope motion and mast fracture remain in `TitleShipVisual`/`TitleSc
 - `TitleStormSystem` owns title-only ocean/weather effects.
 - `TitleShipVisual`/`TitleShipDeckDetails` own title-only vessel presentation.
 - `TitleSceneConfig` remains the single source of truth for title voyage/celestial/storm/wreck timing and existing title tuning values.
+- `WorldTimeDefinitions` remains the single source of truth for the gameplay new-game clock start and legacy-save fallback; title presentation does not write gameplay time.
 - `BeachArrivalIntroController` remains presentation sequencing only and does not create ordinary gameplay movement.
 - `RangerCrawlPose` remains a narrowly scoped cinematic animation helper.
 - `RangerController` remains the single owner of Ranger movement/input/camera state.
