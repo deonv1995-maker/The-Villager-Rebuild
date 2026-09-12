@@ -15,6 +15,7 @@ const cosyToolIcons = Object.freeze({
   pickaxe: 'icon-pickaxe.webp',
   shovel: 'icon-shovel.webp',
   sword: 'icon-sword.webp',
+  torch: 'icon-torch.webp',
   campfire: 'icon-campfire.webp',
   jump: 'icon-jump.webp',
   spear: 'icon-spear.webp'

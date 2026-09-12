@@ -54,6 +54,7 @@ export class MobileHud {
       pickaxe: ui.pickaxe,
       shovel: ui.shovel,
       sword: ui.sword,
+      torch: ui.torch,
       campfire: ui.campfire
     });
 

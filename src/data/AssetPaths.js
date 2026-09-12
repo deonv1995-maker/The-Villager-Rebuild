@@ -49,6 +49,7 @@ export const ASSET_PATHS = Object.freeze({
       pickaxe: asset('ui/cosy/icon-pickaxe.webp'),
       shovel: asset('ui/cosy/icon-shovel.webp'),
       sword: asset('ui/cosy/icon-sword.webp'),
+      torch: asset('ui/cosy/icon-torch.webp'),
       campfire: asset('ui/cosy/icon-campfire.webp'),
       jump: asset('ui/cosy/icon-jump.webp'),
       spear: asset('ui/cosy/icon-spear.webp'),
