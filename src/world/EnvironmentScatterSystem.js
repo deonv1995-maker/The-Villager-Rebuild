@@ -67,6 +67,8 @@ export class EnvironmentScatterSystem {
     this.reservations = new ReservationGrid();
     this.state = 0x8f213;
     this.coastalRockCount = 0;
+    this.treeCount = 0;
+    this.regionalTreeCount = 0;
     this.shrubMaterial = new THREE.MeshStandardMaterial({ color: 0x4f8c49, roughness: 1, flatShading: true });
   }
 
@@ -81,6 +83,8 @@ export class EnvironmentScatterSystem {
 
   async load() {
     this.reservations.clear();
+    this.treeCount = 0;
+    this.regionalTreeCount = 0;
     this.#reserveGameplayRoute();
 
     const loader = new GLTFLoader();
@@ -137,6 +141,19 @@ export class EnvironmentScatterSystem {
     };
   }
 
+  #sampleRegionPoint(region, coreScale = 1) {
+    const angle = this.random() * Math.PI * 2;
+    const radius = Math.sqrt(this.random());
+    const u = Math.cos(angle) * region.radii.x * coreScale * radius;
+    const v = Math.sin(angle) * region.radii.z * coreScale * radius;
+    const c = Math.cos(region.yaw);
+    const s = Math.sin(region.yaw);
+    return {
+      x: region.center.x + u * c - v * s,
+      z: region.center.z + u * s + v * c
+    };
+  }
+
   #pathClearance(x, z, width) {
     const strength = this.terrain.routeCorridorStrengthAt?.(z) ?? (z <= 90 && z >= -90 ? 1 : 0);
     if (strength <= 0.08) return true;
@@ -180,22 +197,25 @@ export class EnvironmentScatterSystem {
   }
 
   #placeForest({ trees, forestRock }) {
-    const placementsByType = [[], []];
+    const placementsByType = trees.map(() => []);
     let treesPlaced = 0;
-    let attempts = 0;
-    while (treesPlaced < 540 && attempts < 23000) {
-      attempts += 1;
-      const { x, z } = this.#samplePoint(23);
-      if (!this.terrain.isPlayable(x, z, 4.6)) continue;
-      if (!this.#pathClearance(x, z, 2.35)) continue;
+
+    const tryPlaceTree = (x, z, {
+      spacingScale = 1,
+      heroChance = 0.12,
+      densityGate = true
+    } = {}) => {
+      if (!this.terrain.isPlayable(x, z, 4.6)) return false;
+      if (!this.#pathClearance(x, z, 2.35)) return false;
 
       const density = this.terrain.treeDensityAt(x, z);
-      if (density <= 0 || this.random() > density) continue;
+      if (density <= 0 || (densityGate && this.random() > density)) return false;
 
-      const hero = this.random() < 0.12;
+      const hero = this.random() < heroChance;
       const scale = hero ? 2.45 + this.random() * 1.35 : 1.18 + this.random() * 1.38;
-      const reserveRadius = hero ? 2.9 + scale * 0.34 : 1.8 + scale * 0.32;
-      if (!this.reservations.isClear(x, z, reserveRadius)) continue;
+      const baseReserve = hero ? 2.9 + scale * 0.34 : 1.8 + scale * 0.32;
+      const reserveRadius = baseReserve * spacingScale;
+      if (!this.reservations.isClear(x, z, reserveRadius)) return false;
 
       const typeIndex = treesPlaced % trees.length;
       placementsByType[typeIndex].push({
@@ -217,7 +237,40 @@ export class EnvironmentScatterSystem {
         type: 'tree'
       });
       treesPlaced += 1;
+      return true;
+    };
+
+    let attempts = 0;
+    while (treesPlaced < 540 && attempts < 23000) {
+      attempts += 1;
+      const { x, z } = this.#samplePoint(23);
+      tryPlaceTree(x, z);
     }
+
+    const baseTreeCount = treesPlaced;
+    const regions = this.terrain.getExplorationRegions?.() ?? [];
+    for (const region of regions) {
+      const profile = region.scatter;
+      if (!profile?.treeQuota) continue;
+
+      let regionalPlaced = 0;
+      let regionalAttempts = 0;
+      const maxAttempts = Math.max(profile.treeQuota * 80, 1600);
+      while (regionalPlaced < profile.treeQuota && regionalAttempts < maxAttempts) {
+        regionalAttempts += 1;
+        const { x, z } = this.#sampleRegionPoint(region, profile.coreScale ?? 0.75);
+        const resolved = this.terrain.regionAt(x, z);
+        if (resolved?.name !== region.id) continue;
+        if (tryPlaceTree(x, z, {
+          spacingScale: profile.spacingScale ?? 1,
+          heroChance: profile.heroChance ?? 0.12,
+          densityGate: true
+        })) regionalPlaced += 1;
+      }
+    }
+
+    this.treeCount = treesPlaced;
+    this.regionalTreeCount = Math.max(0, treesPlaced - baseTreeCount);
 
     placementsByType.forEach((placements, index) => {
       this.#createInstancedTemplate(trees[index], placements, `forest-tree-batch-${index}`);

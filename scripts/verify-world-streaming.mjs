@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
+import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 import { WorldChunkSystem } from '../src/world/WorldChunkSystem.js';
 import { WaterVisualSystem } from '../src/world/WaterVisualSystem.js';
 
@@ -47,9 +49,26 @@ assert.equal(northernHighlands.biome, 'mountain', 'northern highlands must provi
 assert.equal(northernHighlands.forestMultiplier < 1, true, 'mountain region must thin canopy relative to ordinary woodland');
 assert.equal(westernJungle.biome, 'jungle', 'western mainland must provide a dedicated jungle exploration region');
 assert.equal(westernJungle.forestMultiplier > 1, true, 'jungle region must increase canopy density through the existing ecology path');
+assert.equal(westernJungle.forestFloor >= 0.8, true, 'jungle must enforce a strong continuous canopy floor rather than only multiplying sparse grove masks');
+assert.equal(terrain.forestCoverAt(-220, 15) >= 0.8, true, 'jungle centre must resolve to dense forest cover');
+assert.equal(westernJungle.scatter?.treeQuota >= 200, true, 'jungle must reserve a bounded regional tree quota for visible forest density');
 assert.equal(westernJungle.poiTypes.includes('ruin'), true, 'jungle region must remain ready for later abandoned-structure placement');
-assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for later cave placement');
-assert.equal(terrain.heightAt(-28, -198) > 6, true, 'northern highlands must be authoritative elevated terrain rather than a distant visual-only mountain');
+assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for cave placement');
+assert.equal(terrain.heightAt(-28, -198) > 11, true, 'northern highlands must rise clearly above hill-scale terrain');
+assert.equal(terrain.explorationRegions.terrainOffsetAt(-28, -198) > 10, true, 'mountain macro terrain must contribute a substantial authoritative elevation offset');
+
+assert.equal(EXPLORATION_POIS.length >= 1, true, 'exploration foundation must contain at least one authored POI');
+const caveDefinition = EXPLORATION_POIS.find(poi => poi.type === 'cave');
+assert.ok(caveDefinition, 'first exploration POI set must include a cave');
+assert.equal(terrain.regionAt(caveDefinition.x, caveDefinition.z).name, caveDefinition.region, 'cave entrance must sit inside its declared exploration region');
+assert.equal(terrain.isPlayable(caveDefinition.x, caveDefinition.z), true, 'cave entrance must remain on playable terrain');
+const poiGroup = new THREE.Group();
+const poiSystem = new ExplorationPoiSystem({ group: poiGroup, terrain });
+assert.equal(poiSystem.create(), 1, 'first exploration POI pass must create the cave entrance');
+const caveRoot = poiGroup.getObjectByName(`exploration-poi-${caveDefinition.id}`);
+assert.ok(caveRoot, 'cave entrance must create a named world presentation root');
+assert.ok(caveRoot.getObjectByName(`${caveDefinition.id}-dark-interior`), 'cave entrance must include a clearly readable dark interior');
+assert.ok(caveRoot.getObjectByName(`${caveDefinition.id}-floor`), 'cave entrance must include a walk-in floor presentation');
 
 const satellites = terrain.getSatelliteIslands();
 assert.equal(satellites.length, 9, 'expanded archipelago must keep a deterministic set of nine satellite islands');
@@ -134,11 +153,6 @@ ranger.x = 0.6;
 water.update(1 / 60, ranger);
 assert.equal(water.ripples.some(ripple => ripple.visible), true, 'walking through shallow water must emit a visible Ranger ripple');
 
-// Regression for the Android shoreline flicker: the old shallow-water builder
-// sampled only the centre of a cell and then drew the entire flat cell. On a
-// sloped beach that let the translucent water quad extend through dry sand,
-// producing depth fighting as the camera moved. Every emitted shallow-water
-// vertex must now remain on the submerged side of the authoritative waterline.
 const shorelineGroup = new THREE.Group();
 const shorelineChunks = new WorldChunkSystem({ group: shorelineGroup, chunkSize: 12, renderDistance: 40 });
 const shorelineHeightAt = x => x * 0.12 - 0.04;
@@ -181,4 +195,4 @@ for (const mesh of shorelineMeshes) {
   }
 }
 
-console.log('expanded world streaming and exploration-region contracts verified');
+console.log('expanded world streaming, strong-biome and exploration-POI contracts verified');
