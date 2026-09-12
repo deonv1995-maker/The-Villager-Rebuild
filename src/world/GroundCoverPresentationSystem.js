@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { constructionFloorCoversVegetation } from './GrassFieldSystem.js';
+import { constructionFloorCoversVegetation, presentationExclusionCoversVegetation } from './GrassFieldSystem.js';
 import { terrainSurfacePatchFieldsAt } from './TerrainSurfacePresentation.js';
 
 const COVER_SPACING = 1.55;
@@ -62,9 +62,34 @@ export class GroundCoverPresentationSystem {
     });
     this.entries = [];
     this.meshes = [];
+    this.presentationExclusions = [];
     this.lastCollisionRevision = -1;
     this.lastConstructionRevision = -1;
     this.dummy = new THREE.Object3D();
+  }
+
+  setPresentationExclusions(exclusions = []) {
+    this.presentationExclusions = exclusions
+      .filter(exclusion => (
+        Number.isFinite(exclusion?.x) &&
+        Number.isFinite(exclusion?.z) &&
+        Number.isFinite(exclusion?.radius) &&
+        exclusion.radius > 0
+      ))
+      .map(exclusion => ({ x: exclusion.x, z: exclusion.z, radius: exclusion.radius }));
+
+    const changedMeshes = new Set();
+    for (const entry of this.entries) {
+      const hidden = this.#isPresentationExcluded(entry);
+      if (hidden === entry.presentationHidden) continue;
+      entry.presentationHidden = hidden;
+      this.#writeMatrix(entry, false);
+      if (entry.mesh) changedMeshes.add(entry.mesh);
+    }
+    for (const mesh of changedMeshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
   }
 
   populate() {
@@ -95,7 +120,7 @@ export class GroundCoverPresentationSystem {
         const naturalY = this.terrain.heightAt(x, z) + COVER_HEIGHT_OFFSET;
         const scaleVariation = hash01(column, row, 17);
         const heightVariation = hash01(column, row, 19);
-        this.entries.push({
+        const entry = {
           x,
           y: naturalY,
           naturalY,
@@ -107,8 +132,11 @@ export class GroundCoverPresentationSystem {
           chunkKey: this.chunks?.keyForPosition(x, z) ?? null,
           mesh: null,
           index: -1,
-          constructionHidden: false
-        });
+          constructionHidden: false,
+          presentationHidden: false
+        };
+        entry.presentationHidden = this.#isPresentationExcluded(entry);
+        this.entries.push(entry);
       }
     }
 
@@ -147,6 +175,10 @@ export class GroundCoverPresentationSystem {
     }
 
     return THREE.MathUtils.clamp(density * 0.96 + suitability * 0.04, 0, 0.96);
+  }
+
+  #isPresentationExcluded(entry) {
+    return this.presentationExclusions.some(exclusion => presentationExclusionCoversVegetation(entry, exclusion));
   }
 
   #buildMeshes() {
@@ -222,7 +254,7 @@ export class GroundCoverPresentationSystem {
     if (!entry.mesh || entry.index < 0) return;
     this.dummy.position.set(entry.x, entry.y, entry.z);
     this.dummy.rotation.set(0, entry.yaw, 0);
-    if (entry.constructionHidden) this.dummy.scale.set(0, 0, 0);
+    if (entry.constructionHidden || entry.presentationHidden) this.dummy.scale.set(0, 0, 0);
     else this.dummy.scale.set(entry.scaleX, entry.scaleY, entry.scaleZ);
     this.dummy.updateMatrix();
     entry.mesh.setMatrixAt(entry.index, this.dummy.matrix);
