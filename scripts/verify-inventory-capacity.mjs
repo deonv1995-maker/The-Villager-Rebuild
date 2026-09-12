@@ -84,6 +84,44 @@ controller.dispose();
 assert.equal(clearedTimer, 17);
 assert.equal(capacitySource, null);
 
+// Browser Window timers are Web-IDL methods and can throw "Illegal invocation" when a raw
+// unbound setInterval/clearInterval function is stored and later called as a controller method.
+// The default controller path must invoke the timer through globalThis so the native receiver
+// stays correct. Node timers are permissive, so emulate the browser receiver check explicitly.
+const nativeSetInterval = globalThis.setInterval;
+const nativeClearInterval = globalThis.clearInterval;
+let browserIntervalTick = null;
+let browserClearedTimer = null;
+try {
+  globalThis.setInterval = function browserBoundSetInterval(callback, delay) {
+    assert.equal(this, globalThis, 'Default capacity timer must preserve the browser global receiver');
+    assert.equal(delay, 200);
+    browserIntervalTick = callback;
+    return 23;
+  };
+  globalThis.clearInterval = function browserBoundClearInterval(id) {
+    assert.equal(this, globalThis, 'Default capacity timer cleanup must preserve the browser global receiver');
+    browserClearedTimer = id;
+  };
+
+  const browserInventory = new InventorySystem();
+  const browserController = new InventoryCapacityController({
+    game: {
+      inventory: browserInventory,
+      gatherables: { setInventoryCapacitySource() {} },
+      hud: { inventoryElement: { dataset: {}, title: '' } },
+      sproutArrival: { isAllied: () => false }
+    }
+  });
+  assert.doesNotThrow(() => browserController.start(), 'Browser-like timer binding must not throw Illegal invocation');
+  browserIntervalTick?.();
+  browserController.dispose();
+  assert.equal(browserClearedTimer, 23);
+} finally {
+  globalThis.setInterval = nativeSetInterval;
+  globalThis.clearInterval = nativeClearInterval;
+}
+
 const resources = read('src/data/ResourceDefinitions.js');
 const gatherables = read('src/world/GatherableSystem.js');
 const contextPolicy = read('src/ui/ContextActionPolicy.js');
@@ -100,4 +138,4 @@ assert.ok(main.includes('new InventoryCapacityController({ game })'), 'Gameplay 
 assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual shoulder-carry'), 'Companion architecture must preserve the human-pack and compressed-storage rules');
 assert.ok(packageJson.scripts.check.includes('npm run verify:inventory-capacity'), 'Full repository check must include capacity regression coverage');
 
-console.log('Human Ranger carrying limits, physical Log pickup, Sprout compression capacity, HUD state and save-safe shared inventory verified');
+console.log('Human Ranger carrying limits, physical Log pickup, Sprout compression capacity, browser-safe timer binding, HUD state and save-safe shared inventory verified');
