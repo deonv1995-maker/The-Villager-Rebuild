@@ -12,11 +12,11 @@ The production visual follows the approved concept language:
 - forest-green side panels and twin leaf-like top fins;
 - orange trim and module latches;
 - black face screen with expressive cyan eyes and mouth;
-- side scanning lens;
+- side/front-quarter scanning lens;
 - two articulated helper arms;
 - utility lamp on one arm and compact multi-tool/gripper on the other;
 - removable-looking rear module;
-- cyan anti-gravity ring and three stabilizer pods below the body.
+- cyan anti-gravity rings and three independently floating stabilizer pods below the body.
 
 The robot remains deliberately small and readable next to the Ranger. It should feel like worn field technology adapted to wilderness survival rather than a toy or a combat drone.
 
@@ -26,7 +26,7 @@ Sprout is implemented as a custom lightweight Three.js model in `src/rendering/S
 
 The model factory owns presentation only. It does not know about inventory, harvesting, story progression, collision, resource legality or save state.
 
-`SproutVisualRuntimeController` installs the production model over the crash-site fallback presentation as soon as that presentation exists, preserves the existing transform/visibility, and guarantees the same production root is transferred into post-allegiance companion ownership. This preserves the established rule that the crash-site Sprout and following Sprout are the same actor rather than duplicated presentations.
+`SproutVisualRuntimeController` installs the production model over the crash-site fallback presentation as soon as that presentation exists, preserves the existing position/orientation/visibility, applies the authored production presentation scale, and guarantees the same production root is transferred into post-allegiance companion ownership. This preserves the established rule that the crash-site Sprout and following Sprout are the same actor rather than duplicated presentations.
 
 ## Animation/readability
 
@@ -34,8 +34,11 @@ Presentation-only motion includes:
 
 - slow anti-gravity assembly rotation;
 - subtle top-fin movement;
-- light helper-arm idle motion;
+- delayed helper-arm vertical inertia so the arms follow the body hover with a softer secondary motion;
+- independently phased up/down movement for the three stabilizer pods;
+- separate subtle vertical drift on the main and inner anti-gravity rings;
 - powered/down expression-light states;
+- expressive arc-eye posing, with a more focused expression while scanning;
 - brighter scanner/lamp behavior while Sprout is actively targeting or compressing a resource.
 
 These effects modify child presentation parts only. Companion movement and collision remain owned by `SproutCompanionController` and the shared world collision service.
@@ -55,6 +58,19 @@ A future externally authored GLB may replace this model if an art pass requires 
 
 ## Refinement pass (visual version 2)
 
-The same production hierarchy now has a fuller spherical shell, a larger rounded glossy black screen, taller cyan eyes and a small smile. Rounded leaf fins replace pointed four-sided cones. The backpack has rounded corners and a medical marking. The scanner, orange trim, two helper arms, utility lamp, gripper, cyan hover ring and three stabilizer pods remain. RoundedBoxGeometry comes from the already-pinned Three.js package; no GLB, texture, dependency, or dynamic light was added.
+The same production hierarchy received a fuller spherical shell, a larger rounded glossy black screen, taller cyan eyes and a small smile. Rounded leaf fins replaced pointed four-sided cones. The backpack gained rounded corners and a medical marking. The scanner, orange trim, two helper arms, utility lamp, gripper, cyan hover ring and three stabilizer pods remained. RoundedBoxGeometry comes from the already-pinned Three.js package; no GLB, texture, dependency, or dynamic light was added.
 
-The concept attachment was not available in this development turn or found in the repository; the supplied written visual target guided this refinement. Exact image comparison and mobile-scale charm/readability still require device review.
+That pass was guided by the written visual target because the concept attachment was not available during that development turn.
+
+## Refinement pass (visual version 3)
+
+The supplied concept sheet and current in-game screenshot are now the direct visual reference for Sprout. The v3 pass specifically corrects the remaining mismatches without changing companion gameplay authority:
+
+- Sprout is rendered at **75% of the previous presentation scale** (a 25% reduction), improving his proportion against the Ranger and scout pod while leaving collision and follow logic unchanged.
+- The face assembly is nested into the front of the spherical shell with a rounded cream frame, dark inset liner and shallower black screen so it reads as part of the body rather than a separate square object.
+- Circular dot eyes are replaced by cyan arc-shaped eyes closer to the concept expression language; scanning subtly shifts the arcs into a more focused pose.
+- The scanner is moved to a prominent upper front-left quarter mount with a visible orange ring and hinge so it remains readable from normal gameplay camera angles.
+- Helper arms now have a small phase-delayed vertical follow motion relative to the body hover, giving them secondary inertia instead of moving as a rigid block.
+- The hover assembly now has a second inner ring, and all three stabilizer pods include their own cyan ring/glow. Each pod moves with a smooth asynchronous two-wave offset rather than synchronized or frame-random motion, producing organic-looking movement without nondeterministic jitter.
+
+The v3 changes remain presentation-only. No inventory, harvesting, navigation, collision, story, save, terrain, camera or collection rules are modified by this pass.
