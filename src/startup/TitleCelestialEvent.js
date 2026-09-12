@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SPROUT_ARRIVAL } from '../data/SproutArrivalDefinitions.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 
 const NIGHT_SKY = new THREE.Color(0x071729);
@@ -29,8 +30,13 @@ export class TitleCelestialEvent {
     this.lightning = lightning;
     this.elapsed = 0;
     this.shootingStarPosition = new THREE.Vector3();
-    this.shootingStarStart = new THREE.Vector3(38, 34, -96);
+    const incoming = SPROUT_ARRIVAL.incoming;
+    const approach = new THREE.Vector3(incoming.approachDirection.x, 0, incoming.approachDirection.z).normalize();
     this.shootingStarEnd = new THREE.Vector3(-7, 10.5, -81);
+    this.shootingStarStart = this.shootingStarEnd
+      .clone()
+      .addScaledVector(approach, -incoming.titleHorizontalDistance);
+    this.shootingStarStart.y = 34;
     this.travelDirection = new THREE.Vector3()
       .subVectors(this.shootingStarEnd, this.shootingStarStart)
       .normalize();

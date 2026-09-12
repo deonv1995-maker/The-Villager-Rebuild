@@ -21,13 +21,15 @@ export const SPROUT_ARRIVAL = Object.freeze({
     relaxedClearanceRadius: 3.25,
     playableMargin: 5,
     maxPreferredSlope: 0.62,
+    presentationClearRadius: 3.7,
     inlandDistances: Object.freeze([20, 24, 28, 32, 36]),
     lateralOffsets: Object.freeze([9, -9, 13, -13, 5, -5, 17, -17, 0])
   }),
   incoming: Object.freeze({
     startHeight: 31,
-    lateralOffset: 14,
-    forwardOffset: 10
+    horizontalStartDistance: 24,
+    titleHorizontalDistance: 47.43416490252569,
+    approachDirection: Object.freeze({ x: -3, z: 1 })
   }),
   dialogue: Object.freeze([
     Object.freeze({

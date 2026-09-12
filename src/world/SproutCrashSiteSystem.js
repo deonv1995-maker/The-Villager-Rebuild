@@ -16,6 +16,7 @@ const TREE_LEAF = 0x5f8c46;
 const CRATER = 0x35332f;
 const SCORCH = 0x1d2324;
 const CRASH_LOG_COUNT = 4;
+const CRASH_EXCLUSION_ID = 'sprout-crash-site';
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
 const smooth01 = value => THREE.MathUtils.smoothstep(clamp01(value), 0, 1);
@@ -34,6 +35,19 @@ const CRASH_LOG_CLEARED = Object.freeze([
   Object.freeze({ position: [0.42, 0.42, 3.42], yaw: -0.08, roll: -0.05 })
 ]);
 
+const SCATTERED_DEBRIS = Object.freeze([
+  Object.freeze({ position: [-3.25, 0.19, 1.55], size: [0.62, 0.12, 0.4], rotation: [0.18, -0.52, 0.24], material: 'green' }),
+  Object.freeze({ position: [-4.15, 0.16, 1.02], size: [0.38, 0.14, 0.7], rotation: [0.42, 0.3, -0.16], material: 'dark' }),
+  Object.freeze({ position: [-2.7, 0.24, 2.48], size: [0.44, 0.1, 0.84], rotation: [0.08, 0.88, 0.32], material: 'orange' }),
+  Object.freeze({ position: [-5.05, 0.2, 2.18], size: [0.5, 0.13, 0.35], rotation: [0.25, -0.18, 0.48], material: 'dark' }),
+  Object.freeze({ position: [-1.8, 0.18, -2.84], size: [0.7, 0.11, 0.32], rotation: [0.06, 0.65, -0.22], material: 'green' }),
+  Object.freeze({ position: [2.72, 0.18, -2.08], size: [0.46, 0.12, 0.58], rotation: [0.3, -0.44, 0.18], material: 'orange' }),
+  Object.freeze({ position: [3.45, 0.16, 1.62], size: [0.36, 0.16, 0.42], rotation: [0.52, 0.22, -0.38], material: 'dark' }),
+  Object.freeze({ position: [-4.62, 0.18, -0.7], size: [0.82, 0.09, 0.34], rotation: [0.12, 0.1, 0.28], material: 'green' }),
+  Object.freeze({ position: [-2.12, 0.22, 3.6], size: [0.34, 0.18, 0.38], rotation: [0.62, -0.2, 0.4], material: 'dark' }),
+  Object.freeze({ position: [1.68, 0.2, 3.05], size: [0.5, 0.1, 0.32], rotation: [0.26, 0.72, -0.2], material: 'orange' })
+]);
+
 export class SproutCrashSiteSystem {
   constructor({ game }) {
     if (!game?.sceneSystem?.scene || !game?.island?.collision || !game?.gatherables) {
@@ -49,7 +63,9 @@ export class SproutCrashSiteSystem {
     this.incoming = null;
     this.incomingCore = null;
     this.incomingHalo = null;
+    this.incomingTrail = null;
     this.incomingLight = null;
+    this.impactShockwave = null;
     this.smoke = null;
     this.smokeBase = null;
     this.impactTreeAnchor = null;
@@ -141,10 +157,12 @@ export class SproutCrashSiteSystem {
 
   beginImpact() {
     this.resolveSite();
+    this.#setCrashPresentationExclusion(false);
     this.incoming.visible = true;
     this.root.visible = false;
     this.impactTreeAnchor.visible = true;
     if (this.impactTreeVisual) this.impactTreeVisual.rotation.z = 0;
+    if (this.impactShockwave) this.impactShockwave.visible = false;
     this.#positionIncomingAt(0);
     this.incomingLight.visible = true;
     this.incomingLight.intensity = 5.2;
@@ -152,18 +170,23 @@ export class SproutCrashSiteSystem {
 
   updateImpact(progress) {
     if (!this.site) return;
-    const t = smooth01(progress);
-    this.#positionIncomingAt(t);
-    const pulse = 0.84 + Math.sin(this.elapsed * 18) * 0.16;
-    this.incomingCore.scale.setScalar(0.72 + t * 0.55);
-    this.incomingHalo.scale.setScalar((1.35 + t * 1.45) * pulse);
-    this.incomingHalo.material.opacity = 0.2 + t * 0.48;
-    this.incomingLight.intensity = 5.2 + t * 9.5 + Math.max(0, Math.sin(this.elapsed * 20)) * 2.2;
+    const t = clamp01(progress);
+    const flightT = Math.pow(t, 2.65);
+    this.#positionIncomingAt(flightT);
+    const pulse = 0.82 + Math.sin(this.elapsed * (18 + t * 18)) * 0.18;
+    this.incomingCore.scale.set(0.72 + t * 0.32, 0.82 + t * 0.88, 0.72 + t * 0.32);
+    this.incomingHalo.scale.setScalar((1.32 + t * 1.7) * pulse);
+    this.incomingHalo.material.opacity = 0.2 + t * 0.56;
+    if (this.incomingTrail) {
+      this.incomingTrail.scale.set(1 + t * 0.32, 0.82 + t * 1.05, 1 + t * 0.32);
+      this.incomingTrail.material.opacity = 0.25 + t * 0.38;
+    }
+    this.incomingLight.intensity = 5.2 + t * 12.5 + Math.max(0, Math.sin(this.elapsed * 26)) * 2.8;
 
     if (this.impactTreeVisual) {
-      const treeFall = smooth01((t - 0.7) / 0.3);
-      this.impactTreeVisual.rotation.z = -treeFall * 1.16;
-      this.impactTreeVisual.rotation.x = treeFall * 0.08;
+      const treeFall = smooth01((t - 0.84) / 0.16);
+      this.impactTreeVisual.rotation.z = -treeFall * 1.28;
+      this.impactTreeVisual.rotation.x = treeFall * 0.12;
     }
   }
 
@@ -176,6 +199,12 @@ export class SproutCrashSiteSystem {
     this.freed = false;
     this.logsReleased = false;
     this.impactFlashAge = 0;
+    this.#setCrashPresentationExclusion(true);
+    if (this.impactShockwave) {
+      this.impactShockwave.visible = true;
+      this.impactShockwave.scale.setScalar(0.45);
+      this.impactShockwave.material.opacity = 0.9;
+    }
     this.#ensureCollision();
     this.#applyTrappedPose();
   }
@@ -229,6 +258,7 @@ export class SproutCrashSiteSystem {
     this.incoming.visible = false;
     this.impactTreeAnchor.visible = false;
     this.root.visible = this.crashed;
+    this.#setCrashPresentationExclusion(this.crashed);
     if (!this.crashed) return;
     this.#ensureCollision();
     if (this.freed) {
@@ -264,10 +294,17 @@ export class SproutCrashSiteSystem {
       const flashT = clamp01(this.impactFlashAge / 1.25);
       this.incomingLight.visible = true;
       this.incomingLight.position.set(this.site.x, this.site.y + 1.5, this.site.z);
-      this.incomingLight.intensity = (1 - flashT) * 17;
+      this.incomingLight.intensity = (1 - flashT) * 20;
+      if (this.impactShockwave) {
+        const shockT = clamp01(this.impactFlashAge / 0.72);
+        this.impactShockwave.visible = shockT < 1;
+        this.impactShockwave.scale.setScalar(0.45 + shockT * 5.8);
+        this.impactShockwave.material.opacity = (1 - shockT) * 0.9;
+      }
       if (flashT >= 1) this.incomingLight.visible = false;
     } else if (!this.incoming?.visible && this.incomingLight) {
       this.incomingLight.visible = false;
+      if (this.impactShockwave) this.impactShockwave.visible = false;
     }
   }
 
@@ -283,6 +320,7 @@ export class SproutCrashSiteSystem {
 
   dispose() {
     this.disposed = true;
+    this.#setCrashPresentationExclusion(false);
     if (this.treeCollider) this.collision.removeObstacle(this.treeCollider);
     if (this.podCollider) this.collision.removeObstacle(this.podCollider);
     this.treeCollider = null;
@@ -299,17 +337,40 @@ export class SproutCrashSiteSystem {
     this.impactTreeAnchor = null;
     this.impactTreeVisual = null;
     this.incomingLight = null;
+    this.impactShockwave = null;
+  }
+
+  #setCrashPresentationExclusion(active) {
+    if (!this.site) return;
+    if (!active) {
+      this.island.clearPresentationExclusion?.(CRASH_EXCLUSION_ID);
+      return;
+    }
+    this.island.setPresentationExclusion?.(CRASH_EXCLUSION_ID, {
+      x: this.site.x,
+      z: this.site.z,
+      radius: SPROUT_ARRIVAL.crashSite.presentationClearRadius
+    });
+  }
+
+  #getApproachDirection() {
+    const configured = SPROUT_ARRIVAL.incoming.approachDirection;
+    const direction = new THREE.Vector2(configured.x, configured.z);
+    if (direction.lengthSq() < 0.0001) direction.set(-3, 1);
+    return direction.normalize();
   }
 
   #positionIncomingAt(progress) {
     if (!this.site || !this.incoming) return;
     const config = SPROUT_ARRIVAL.incoming;
+    const direction = this.#getApproachDirection();
     const t = clamp01(progress);
-    const fall = t * t;
+    const startX = this.site.x - direction.x * config.horizontalStartDistance;
+    const startZ = this.site.z - direction.y * config.horizontalStartDistance;
     this.incoming.position.set(
-      THREE.MathUtils.lerp(this.site.x - config.lateralOffset, this.site.x, fall),
-      THREE.MathUtils.lerp(this.site.y + config.startHeight, this.site.y + 1.25, fall),
-      THREE.MathUtils.lerp(this.site.z + config.forwardOffset, this.site.z, fall)
+      THREE.MathUtils.lerp(startX, this.site.x, t),
+      THREE.MathUtils.lerp(this.site.y + config.startHeight, this.site.y + 1.12, t),
+      THREE.MathUtils.lerp(startZ, this.site.z, t)
     );
     this.incomingLight.position.copy(this.incoming.position);
   }
@@ -326,6 +387,7 @@ export class SproutCrashSiteSystem {
     this.#createWreckedShip();
     this.#createBrokenTreeRemains();
     this.#createRescueLogPile();
+    this.#createImpactShockwave();
 
     this.sprout = this.#createSproutPlaceholder();
     this.root.add(this.sprout);
@@ -335,61 +397,106 @@ export class SproutCrashSiteSystem {
     this.#createIncomingObject();
   }
 
+  #createCraterBowlGeometry(innerRadius = 1.7, outerRadius = 3.35, innerY = 0.1, outerY = 0.58, segments = 40) {
+    const positions = [];
+    const indices = [];
+    const zScale = 0.8;
+    for (let index = 0; index <= segments; index += 1) {
+      const angle = (index / segments) * Math.PI * 2;
+      const c = Math.cos(angle);
+      const s = Math.sin(angle);
+      const irregular = 1 + Math.sin(angle * 3.1 + 0.4) * 0.035 + Math.sin(angle * 7.2) * 0.02;
+      positions.push(
+        c * innerRadius, innerY, s * innerRadius * zScale,
+        c * outerRadius * irregular, outerY + Math.sin(angle * 5) * 0.06, s * outerRadius * irregular * zScale
+      );
+      if (index < segments) {
+        const base = index * 2;
+        indices.push(base, base + 1, base + 3, base, base + 3, base + 2);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
   #createCrater() {
-    const scorch = new THREE.Mesh(
-      new THREE.CircleGeometry(2.72, 32),
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(1.86, 36),
       new THREE.MeshStandardMaterial({ color: SCORCH, roughness: 1, side: THREE.DoubleSide })
     );
-    scorch.name = 'sprout-impact-crater-scorch';
-    scorch.rotation.x = -Math.PI / 2;
-    scorch.scale.z = 0.82;
-    scorch.position.y = 0.022;
-    scorch.receiveShadow = true;
-    this.root.add(scorch);
+    floor.name = 'sprout-impact-crater-scorch';
+    floor.rotation.x = -Math.PI / 2;
+    floor.scale.z = 0.8;
+    floor.position.y = 0.085;
+    floor.receiveShadow = true;
+    this.root.add(floor);
 
     const innerWall = new THREE.Mesh(
-      new THREE.RingGeometry(2.0, 3.28, 32),
+      this.#createCraterBowlGeometry(),
       new THREE.MeshStandardMaterial({ color: CRATER, roughness: 1, flatShading: true, side: THREE.DoubleSide })
     );
     innerWall.name = 'sprout-impact-crater-inner-wall';
-    innerWall.rotation.x = -Math.PI / 2;
-    innerWall.scale.z = 0.82;
-    innerWall.position.y = 0.052;
     innerWall.receiveShadow = true;
+    innerWall.castShadow = true;
     this.root.add(innerWall);
 
-    const rim = new THREE.Mesh(
-      new THREE.TorusGeometry(3.1, 0.42, 7, 34),
-      new THREE.MeshStandardMaterial({ color: 0x4c4337, roughness: 1, flatShading: true })
-    );
-    rim.name = 'sprout-impact-crater-raised-rim';
-    rim.rotation.x = Math.PI / 2;
-    rim.scale.z = 0.82;
-    rim.position.y = 0.22;
-    rim.castShadow = true;
-    rim.receiveShadow = true;
-    this.root.add(rim);
-
-    const ejectaMaterial = new THREE.MeshStandardMaterial({ color: 0x514a40, roughness: 1, flatShading: true });
-    for (let index = 0; index < 12; index += 1) {
-      const angle = (index / 12) * Math.PI * 2 + (index % 3) * 0.08;
-      const radius = 3.15 + (index % 4) * 0.23;
-      const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.24 + (index % 3) * 0.06, 0), ejectaMaterial);
-      chunk.name = `sprout-impact-ejecta-${index}`;
-      chunk.position.set(Math.cos(angle) * radius, 0.2 + (index % 2) * 0.05, Math.sin(angle) * radius * 0.82);
-      chunk.scale.set(1.2, 0.62, 0.9);
-      chunk.rotation.set(index * 0.12, angle, -index * 0.07);
+    const rimMaterial = new THREE.MeshStandardMaterial({ color: 0x4c4337, roughness: 1, flatShading: true });
+    for (let index = 0; index < 20; index += 1) {
+      const angle = (index / 20) * Math.PI * 2 + (index % 4) * 0.035;
+      const radius = 3.28 + (index % 3) * 0.13;
+      const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.36 + (index % 4) * 0.045, 0), rimMaterial);
+      chunk.name = `sprout-impact-crater-raised-rim-${index}`;
+      chunk.position.set(Math.cos(angle) * radius, 0.49 + (index % 3) * 0.045, Math.sin(angle) * radius * 0.8);
+      chunk.scale.set(1.55, 0.58 + (index % 2) * 0.12, 1.08);
+      chunk.rotation.set(index * 0.11, -angle, (index % 5 - 2) * 0.07);
       chunk.castShadow = true;
       chunk.receiveShadow = true;
       this.root.add(chunk);
+    }
+
+    const ejectaMaterial = new THREE.MeshStandardMaterial({ color: 0x514a40, roughness: 1, flatShading: true });
+    const direction = this.#getApproachDirection();
+    const baseAngle = Math.atan2(direction.y, direction.x);
+    for (let index = 0; index < 18; index += 1) {
+      const fan = ((index % 9) - 4) * 0.17 + (index >= 9 ? 0.09 : -0.05);
+      const angle = baseAngle + fan;
+      const radius = 3.7 + (index % 6) * 0.48 + Math.floor(index / 6) * 0.22;
+      const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2 + (index % 4) * 0.055, 0), ejectaMaterial);
+      chunk.name = `sprout-impact-ejecta-${index}`;
+      chunk.position.set(Math.cos(angle) * radius, 0.18 + (index % 3) * 0.045, Math.sin(angle) * radius);
+      chunk.scale.set(1.35, 0.5, 0.9);
+      chunk.rotation.set(index * 0.15, angle, -index * 0.06);
+      chunk.castShadow = true;
+      chunk.receiveShadow = true;
+      this.root.add(chunk);
+    }
+
+    const scourMaterial = new THREE.MeshStandardMaterial({ color: 0x272421, roughness: 1 });
+    const scourYaw = Math.atan2(-direction.y, direction.x);
+    for (let index = 0; index < 4; index += 1) {
+      const lateral = (index - 1.5) * 0.72;
+      const forward = 4.2 + index * 0.6;
+      const perpendicular = new THREE.Vector2(-direction.y, direction.x);
+      const centerX = direction.x * forward + perpendicular.x * lateral;
+      const centerZ = direction.y * forward + perpendicular.y * lateral;
+      const streak = new THREE.Mesh(new THREE.BoxGeometry(2.8 + index * 0.35, 0.025, 0.28 + (index % 2) * 0.12), scourMaterial);
+      streak.name = `sprout-impact-ejecta-scour-${index}`;
+      streak.position.set(centerX, 0.055, centerZ);
+      streak.rotation.y = scourYaw;
+      streak.receiveShadow = true;
+      this.root.add(streak);
     }
   }
 
   #createWreckedShip() {
     const wreck = new THREE.Group();
     wreck.name = 'sprout-wrecked-scout-pod';
-    wreck.position.set(-1.05, 0.62, -0.72);
-    wreck.rotation.set(0.13, 0.54, -0.13);
+    wreck.position.set(-1.05, 0.52, -0.72);
+    wreck.rotation.set(0.18, 0.54, -0.2);
     this.root.add(wreck);
 
     const hullMaterial = new THREE.MeshStandardMaterial({ color: CREAM, roughness: 0.48, metalness: 0.28 });
@@ -403,6 +510,7 @@ export class SproutCrashSiteSystem {
     });
     const greenMaterial = new THREE.MeshStandardMaterial({ color: GREEN, roughness: 0.5, metalness: 0.22 });
     const orangeMaterial = new THREE.MeshStandardMaterial({ color: ORANGE, roughness: 0.48, metalness: 0.28 });
+    const charMaterial = new THREE.MeshStandardMaterial({ color: 0x171b1d, roughness: 0.92, metalness: 0.18 });
     const glowMaterial = new THREE.MeshStandardMaterial({
       color: 0xbcefff,
       emissive: BLUE,
@@ -432,11 +540,53 @@ export class SproutCrashSiteSystem {
     canopy.castShadow = true;
     wreck.add(canopy);
 
+    const breach = new THREE.Mesh(new THREE.DodecahedronGeometry(0.46, 0), charMaterial);
+    breach.name = 'sprout-crashed-pod-hull-breach';
+    breach.position.set(-0.18, 0.59, 0.22);
+    breach.scale.set(1.25, 0.22, 0.85);
+    breach.rotation.set(0.1, 0.36, -0.08);
+    wreck.add(breach);
+
+    const exposedCore = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.34, 8), glowMaterial);
+    exposedCore.name = 'sprout-crashed-pod-exposed-core';
+    exposedCore.position.set(-0.2, 0.64, 0.22);
+    exposedCore.rotation.z = Math.PI / 2;
+    wreck.add(exposedCore);
+
+    for (const [index, data] of [
+      [0, { position: [-0.45, 0.58, -0.46], rotation: [0.3, -0.18, 0.52], scale: [0.7, 0.11, 0.48] }],
+      [1, { position: [0.02, 0.64, 0.58], rotation: [-0.24, 0.38, -0.44], scale: [0.56, 0.1, 0.42] }]
+    ]) {
+      const tornPlate = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), index === 0 ? hullMaterial : greenMaterial);
+      tornPlate.name = `sprout-crashed-pod-torn-plate-${index}`;
+      tornPlate.position.set(...data.position);
+      tornPlate.rotation.set(...data.rotation);
+      tornPlate.scale.set(...data.scale);
+      tornPlate.castShadow = true;
+      wreck.add(tornPlate);
+    }
+
+    const canopyCrackA = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.52, 0.035), charMaterial);
+    canopyCrackA.name = 'sprout-crashed-pod-canopy-crack-a';
+    canopyCrackA.position.set(1.08, 0.31, 0.02);
+    canopyCrackA.rotation.z = 0.42;
+    wreck.add(canopyCrackA);
+    const canopyCrackB = canopyCrackA.clone();
+    canopyCrackB.name = 'sprout-crashed-pod-canopy-crack-b';
+    canopyCrackB.scale.y = 0.72;
+    canopyCrackB.rotation.z = -0.7;
+    canopyCrackB.position.y = 0.36;
+    wreck.add(canopyCrackB);
+
     for (const side of [-1, 1]) {
       const panel = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.16, 0.58), greenMaterial);
       panel.name = `sprout-crashed-pod-armor-${side < 0 ? 'left' : 'right'}`;
       panel.position.set(-0.15, 0.05, side * 0.83);
       panel.rotation.y = side * 0.08;
+      if (side < 0) {
+        panel.position.x -= 0.18;
+        panel.rotation.set(0.2, -0.42, 0.32);
+      }
       panel.castShadow = true;
       wreck.add(panel);
 
@@ -444,13 +594,20 @@ export class SproutCrashSiteSystem {
       engine.name = `sprout-crashed-pod-engine-${side < 0 ? 'left' : 'right'}`;
       engine.rotation.z = Math.PI / 2;
       engine.position.set(-0.82, -0.05, side * 0.72);
+      if (side < 0) {
+        engine.rotation.set(0.32, -0.18, Math.PI / 2 + 0.34);
+        engine.position.set(-0.98, -0.22, -0.78);
+      }
       engine.castShadow = true;
       wreck.add(engine);
 
-      const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.055, 12), glowMaterial);
+      const thruster = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.21, 0.21, 0.055, 12),
+        side < 0 ? charMaterial : glowMaterial
+      );
       thruster.name = `sprout-crashed-pod-thruster-${side < 0 ? 'left' : 'right'}`;
       thruster.rotation.z = Math.PI / 2;
-      thruster.position.set(-1.28, -0.05, side * 0.72);
+      thruster.position.set(side < 0 ? -1.33 : -1.28, side < 0 ? -0.24 : -0.05, side * 0.72);
       wreck.add(thruster);
     }
 
@@ -463,7 +620,8 @@ export class SproutCrashSiteSystem {
     const brokenWing = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.11, 0.7), greenMaterial);
     brokenWing.name = 'sprout-crashed-pod-broken-wing';
     brokenWing.position.set(-0.15, 0.02, -1.18);
-    brokenWing.rotation.set(-0.08, -0.24, 0.22);
+    brokenWing.rotation.set(-0.18, -0.34, 0.38);
+    brokenWing.scale.x = 0.72;
     brokenWing.castShadow = true;
     wreck.add(brokenWing);
 
@@ -481,19 +639,23 @@ export class SproutCrashSiteSystem {
     reactorRing.position.set(-1.45, 0.18, 0);
     wreck.add(reactorRing);
 
-    for (let index = 0; index < 7; index += 1) {
-      const angle = index * 1.23 + 0.3;
-      const material = index % 3 === 0 ? orangeMaterial : index % 2 === 0 ? greenMaterial : chassisMaterial;
-      const debris = new THREE.Mesh(
-        index % 2 === 0 ? new THREE.TetrahedronGeometry(0.28 + index * 0.015, 0) : new THREE.BoxGeometry(0.42, 0.11, 0.68),
-        material
-      );
-      debris.name = `sprout-pod-debris-${index}`;
-      debris.position.set(Math.cos(angle) * (1.75 + index * 0.13), -0.38 + (index % 2) * 0.08, Math.sin(angle) * (1.48 + index * 0.1));
-      debris.rotation.set(0.11 * index, angle + 0.25, 0.18 * (index % 3));
+    const debrisMaterials = {
+      green: greenMaterial,
+      orange: orangeMaterial,
+      dark: chassisMaterial
+    };
+    SCATTERED_DEBRIS.forEach((entry, index) => {
+      const debris = index % 3 === 0
+        ? new THREE.Mesh(new THREE.TetrahedronGeometry(0.42, 0), debrisMaterials[entry.material])
+        : new THREE.Mesh(new THREE.BoxGeometry(...entry.size), debrisMaterials[entry.material]);
+      debris.name = `sprout-scattered-pod-debris-${index}`;
+      debris.position.set(...entry.position);
+      debris.rotation.set(...entry.rotation);
+      if (index % 3 === 0) debris.scale.set(entry.size[0] * 1.7, entry.size[1] * 3.2, entry.size[2] * 1.7);
       debris.castShadow = true;
-      wreck.add(debris);
-    }
+      debris.receiveShadow = true;
+      this.root.add(debris);
+    });
   }
 
   #createBrokenTreeRemains() {
@@ -524,6 +686,25 @@ export class SproutCrashSiteSystem {
       this.root.add(log);
       return log;
     });
+  }
+
+  #createImpactShockwave() {
+    this.impactShockwave = new THREE.Mesh(
+      new THREE.RingGeometry(0.72, 0.95, 36),
+      new THREE.MeshBasicMaterial({
+        color: 0xa9efff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+      })
+    );
+    this.impactShockwave.name = 'sprout-impact-shockwave';
+    this.impactShockwave.rotation.x = -Math.PI / 2;
+    this.impactShockwave.position.y = 0.64;
+    this.impactShockwave.visible = false;
+    this.root.add(this.impactShockwave);
   }
 
   #createImpactTree() {
@@ -674,6 +855,33 @@ export class SproutCrashSiteSystem {
     );
     this.incomingHalo.name = 'sprout-incoming-halo';
     this.incoming.add(this.incomingHalo);
+
+    const direction = this.#getApproachDirection();
+    const config = SPROUT_ARRIVAL.incoming;
+    const travel = new THREE.Vector3(
+      direction.x * config.horizontalStartDistance,
+      -(config.startHeight - 1.12),
+      direction.y * config.horizontalStartDistance
+    ).normalize();
+    const flightFrame = new THREE.Group();
+    flightFrame.name = 'sprout-gameplay-flight-frame';
+    flightFrame.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), travel);
+    this.incoming.add(flightFrame);
+
+    this.incomingTrail = new THREE.Mesh(
+      new THREE.ConeGeometry(0.72, 6.4, 10, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: BLUE,
+        transparent: true,
+        opacity: 0.28,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending
+      })
+    );
+    this.incomingTrail.name = 'sprout-gameplay-plasma-tail';
+    this.incomingTrail.position.y = -3.2;
+    flightFrame.add(this.incomingTrail);
 
     this.incomingLight = new THREE.PointLight(BLUE, 0, 28, 2);
     this.incomingLight.name = 'sprout-impact-blue-light';

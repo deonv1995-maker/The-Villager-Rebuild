@@ -18,6 +18,15 @@ export function constructionFloorCoversVegetation(entry, floor, padding = 0.12) 
   );
 }
 
+export function presentationExclusionCoversVegetation(entry, exclusion) {
+  if (!entry || !exclusion) return false;
+  const radius = Number(exclusion.radius);
+  if (!Number.isFinite(exclusion.x) || !Number.isFinite(exclusion.z) || !Number.isFinite(radius) || radius <= 0) return false;
+  const dx = entry.x - exclusion.x;
+  const dz = entry.z - exclusion.z;
+  return dx * dx + dz * dz <= radius * radius;
+}
+
 export class ReactiveVegetationFieldSystem {
   constructor({
     group,
@@ -71,6 +80,7 @@ export class ReactiveVegetationFieldSystem {
     this.baseLean = baseLean;
     this.heightOffset = heightOffset;
     this.constructionPadding = constructionPadding;
+    this.presentationExclusions = [];
     this.mesh = null;
     this.meshes = [];
     this.entries = [];
@@ -88,6 +98,34 @@ export class ReactiveVegetationFieldSystem {
   random() {
     this.state = (this.state * 1664525 + 1013904223) >>> 0;
     return this.state / 0x100000000;
+  }
+
+  setPresentationExclusions(exclusions = []) {
+    this.presentationExclusions = exclusions
+      .filter(exclusion => (
+        Number.isFinite(exclusion?.x) &&
+        Number.isFinite(exclusion?.z) &&
+        Number.isFinite(exclusion?.radius) &&
+        exclusion.radius > 0
+      ))
+      .map(exclusion => ({ x: exclusion.x, z: exclusion.z, radius: exclusion.radius }));
+
+    const changedMeshes = new Set();
+    for (const entry of this.entries) {
+      const hidden = this.#isPresentationExcluded(entry);
+      if (hidden === entry.presentationHidden) continue;
+      entry.presentationHidden = hidden;
+      entry.bendX = 0;
+      entry.bendZ = 0;
+      entry.compression = 0;
+      this.active.delete(entry);
+      this.#writeMatrix(entry, false);
+      if (entry.mesh) changedMeshes.add(entry.mesh);
+    }
+    for (const mesh of changedMeshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
   }
 
   populate() {
@@ -133,8 +171,10 @@ export class ReactiveVegetationFieldSystem {
         bendX: 0,
         bendZ: 0,
         compression: 0,
-        constructionHidden: false
+        constructionHidden: false,
+        presentationHidden: false
       };
+      entry.presentationHidden = this.#isPresentationExcluded(entry);
       this.entries.push(entry);
       this.#addToGrid(entry);
       placed += 1;
@@ -164,7 +204,7 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of candidates) {
-      if (entry.constructionHidden) continue;
+      if (entry.constructionHidden || entry.presentationHidden) continue;
       const dx = entry.x - playerPosition.x;
       const dz = entry.z - playerPosition.z;
       const distance = Math.hypot(dx, dz);
@@ -199,7 +239,7 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of Array.from(this.active)) {
-      if (entry.constructionHidden) {
+      if (entry.constructionHidden || entry.presentationHidden) {
         this.active.delete(entry);
         continue;
       }
@@ -217,6 +257,10 @@ export class ReactiveVegetationFieldSystem {
         this.active.delete(entry);
       }
     }
+  }
+
+  #isPresentationExcluded(entry) {
+    return this.presentationExclusions.some(exclusion => presentationExclusionCoversVegetation(entry, exclusion));
   }
 
   #syncConstructionOcclusion() {
@@ -335,7 +379,7 @@ export class ReactiveVegetationFieldSystem {
     if (!entry.mesh || entry.index < 0) return;
     this.dummy.position.set(entry.x, entry.y, entry.z);
     this.dummy.rotation.set(entry.baseLeanX + entry.bendX, entry.baseYaw, entry.baseLeanZ + entry.bendZ);
-    if (entry.constructionHidden) {
+    if (entry.constructionHidden || entry.presentationHidden) {
       this.dummy.scale.set(0, 0, 0);
     } else {
       this.dummy.scale.set(entry.scaleX, entry.scaleY * (1 - entry.compression), entry.scaleZ);

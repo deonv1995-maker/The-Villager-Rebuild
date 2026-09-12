@@ -96,6 +96,7 @@ export class TestIslandSystem {
     });
     this.treeOcclusion = null;
     this.assetMode = 'terrain-only';
+    this.presentationExclusions = new Map();
   }
 
   getSpawnPoint() {
@@ -129,6 +130,37 @@ export class TestIslandSystem {
 
   setConstructionFloors(floors) {
     return this.constructionTerrain.setFloors(floors);
+  }
+
+  setPresentationExclusion(id, exclusion) {
+    if (!id) throw new Error('Presentation exclusion requires a stable id');
+    if (
+      !Number.isFinite(exclusion?.x) ||
+      !Number.isFinite(exclusion?.z) ||
+      !Number.isFinite(exclusion?.radius) ||
+      exclusion.radius <= 0
+    ) {
+      throw new Error('Presentation exclusion requires finite x, z and a positive radius');
+    }
+    this.presentationExclusions.set(id, {
+      x: exclusion.x,
+      z: exclusion.z,
+      radius: exclusion.radius
+    });
+    this.#syncPresentationExclusions();
+  }
+
+  clearPresentationExclusion(id) {
+    if (!this.presentationExclusions.delete(id)) return false;
+    this.#syncPresentationExclusions();
+    return true;
+  }
+
+  #syncPresentationExclusions() {
+    const exclusions = Array.from(this.presentationExclusions.values());
+    this.groundCover.setPresentationExclusions?.(exclusions);
+    this.grass.setPresentationExclusions?.(exclusions);
+    this.ferns.setPresentationExclusions?.(exclusions);
   }
 
   isPlayable(x, z, margin = 0) {
@@ -173,6 +205,7 @@ export class TestIslandSystem {
     const groundCoverCount = this.groundCover.populate();
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
+    this.#syncPresentationExclusions();
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
     const chunkStats = this.chunks.getStats();
     const coastalRockCount = this.scatter.coastalRockCount ?? 0;
