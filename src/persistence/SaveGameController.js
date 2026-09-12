@@ -1,3 +1,4 @@
+import { WORLD_TIME } from '../data/WorldTimeDefinitions.js';
 import { captureGameState, restoreGameState } from './GameStatePersistence.js';
 
 export const AUTOSAVE_INTERVAL_MS = 8000;
@@ -28,7 +29,13 @@ export class SaveGameController {
     // modules then restore before the shared gameplay restore places the Ranger so
     // structure/fence collision exists at the saved player position. Landscaping follows
     // panel construction because its structure-backed snap records share that registry.
-    this.game.worldTime?.restoreState?.(record.state.worldTime);
+    const restoredWorldTime = this.game.worldTime?.restoreState?.(record.state.worldTime) ?? false;
+    if (!restoredWorldTime) {
+      this.game.worldTime?.setTime?.({
+        day: WORLD_TIME.startDay,
+        minuteOfDay: WORLD_TIME.legacySaveFallbackMinuteOfDay
+      });
+    }
     this.game.panelConstruction?.restore?.(record.state.panelConstruction);
     this.game.landscaping?.restore?.(record.state.landscaping);
     restoreGameState(this.game, record.state);
