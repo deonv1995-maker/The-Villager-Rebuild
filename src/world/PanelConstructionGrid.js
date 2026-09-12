@@ -5,7 +5,11 @@ import {
   PANEL_ROOF_FORMS,
   PANEL_WALL_VARIANTS
 } from '../data/PanelConstructionDefinitions.js';
-import { collectPanelUpperStoreySupports } from './PanelUpperStoreyRules.js';
+import {
+  collectPanelUpperStoreySupports,
+  collectPanelUpperWallSupports,
+  collectPanelWallEnclosureCells
+} from './PanelUpperStoreyRules.js';
 
 const requireInteger = (value, label) => {
   if (!Number.isInteger(value)) throw new Error(`${label} must be an integer`);
@@ -148,7 +152,7 @@ export class PanelConstructionGrid {
     this.originX = requireFinite(originX, 'Grid originX');
     this.originZ = requireFinite(originZ, 'Grid originZ');
     this.cellSize = requireFinite(cellSize, 'Grid cellSize');
-    if (this.cellSize <= 0) throw new Error('Grid cellSize must be positive');
+    if (this.cellSize <= 0) throw new Error('PanelConstructionGrid requires a positive cellSize');
     this.floors = new Map();
     this.walls = new Map();
     this.stairs = new Map();
@@ -206,16 +210,24 @@ export class PanelConstructionGrid {
   }
 
   placeWall({ x, z, storey = 0, direction, variant = 'solid' }) {
+    requireWallVariant(variant);
     const ownerCellKey = panelCellKey({ x, z, storey });
     const floor = this.floors.get(ownerCellKey);
-    if (!floor) return { ok: false, reason: 'missing-floor', ownerCellKey };
-
-    requireWallVariant(variant);
     const edge = panelEdgeDescriptor({ x, z, storey, direction });
+    const wallSupport = floor
+      ? null
+      : collectPanelUpperWallSupports([...this.walls.values()], {
+          levelTolerance: PANEL_GRID.snapTolerance + 0.001
+        }).find(support => support.key === edge.key);
+    if (!floor && !wallSupport) {
+      return { ok: false, reason: 'missing-floor', ownerCellKey };
+    }
+
     if (this.walls.has(edge.key)) return { ok: false, reason: 'occupied-edge', key: edge.key };
     const stairOnEdge = [...this.stairs.values()].some(stair => stair.sharedEdgeKey === edge.key);
     if (stairOnEdge) return { ok: false, reason: 'stair-edge', key: edge.key };
 
+    const baseY = floor?.levelY ?? wallSupport.levelY;
     const wall = {
       key: edge.key,
       ownerCellKey,
@@ -227,8 +239,8 @@ export class PanelConstructionGrid {
       axis: edge.axis,
       edgeX: edge.edgeX,
       edgeZ: edge.edgeZ,
-      baseY: floor.levelY,
-      topY: floor.levelY + PANEL_GRID.storeyHeight,
+      baseY,
+      topY: baseY + PANEL_GRID.storeyHeight,
       inwardNormal: { ...edge.inwardNormal },
       outwardNormal: { ...edge.outwardNormal }
     };
@@ -252,14 +264,25 @@ export class PanelConstructionGrid {
 
     const upperFloors = [...this.floors.values()]
       .filter(floor => floor.storey === wall.storey + 1);
-    if (upperFloors.length) {
+    const floorlessUpperWalls = [...this.walls.values()].filter(candidate => (
+      candidate.storey === wall.storey + 1 &&
+      !this.floors.has(candidate.ownerCellKey)
+    ));
+    if (upperFloors.length || floorlessUpperWalls.length) {
       const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
-      const supportKeys = new Set(
+      const upperFloorSupportKeys = new Set(
         collectPanelUpperStoreySupports(remainingWalls, {
           levelTolerance: PANEL_GRID.snapTolerance + 0.001
         }).map(support => panelCellKey(support))
       );
-      if (upperFloors.some(floor => !supportKeys.has(floor.key))) return false;
+      if (upperFloors.some(floor => !upperFloorSupportKeys.has(floor.key))) return false;
+
+      const upperWallSupportKeys = new Set(
+        collectPanelUpperWallSupports(remainingWalls, {
+          levelTolerance: PANEL_GRID.snapTolerance + 0.001
+        }).map(support => support.key)
+      );
+      if (floorlessUpperWalls.some(candidate => !upperWallSupportKeys.has(candidate.key))) return false;
     }
 
     return this.walls.delete(edgeKey);
@@ -343,11 +366,20 @@ export class PanelConstructionGrid {
     const key = panelRoofZoneKey({ cells, storey });
     if (this.roofZones.has(key)) return { ok: false, reason: 'occupied-roof-zone', key };
 
+    const wallSupportedCellKeys = new Set(
+      collectPanelWallEnclosureCells([...this.walls.values()], {
+        levelTolerance: PANEL_GRID.snapTolerance + 0.001
+      })
+        .filter(support => support.storey === storey)
+        .map(support => panelCellKey({ x: support.x, z: support.z, storey }))
+    );
     const cellKeys = cells
       .map(cell => panelCellKey({ x: cell.x, z: cell.z, storey }))
       .sort();
     for (const cellKey of cellKeys) {
-      if (!this.floors.has(cellKey)) return { ok: false, reason: 'missing-floor', cellKey };
+      if (!this.floors.has(cellKey) && !wallSupportedCellKeys.has(cellKey)) {
+        return { ok: false, reason: 'missing-floor-or-wall-enclosure', cellKey };
+      }
       if ([...this.roofZones.values()].some(zone => zone.cellKeys.includes(cellKey))) {
         return { ok: false, reason: 'occupied-roof-cell', cellKey };
       }
@@ -398,7 +430,11 @@ export class PanelConstructionGrid {
       const result = grid.placeStair(stair);
       if (!result.ok) throw new Error(`Invalid persisted stair: ${stair.key ?? 'unknown'}`);
     }
-    for (const wall of snapshot.walls ?? []) {
+    const persistedWalls = [...(snapshot.walls ?? [])].sort((left, right) => (
+      (left.storey ?? 0) - (right.storey ?? 0) ||
+      String(left.key ?? '').localeCompare(String(right.key ?? ''))
+    ));
+    for (const wall of persistedWalls) {
       const result = grid.placeWall(wall);
       if (!result.ok) throw new Error(`Invalid persisted wall: ${wall.key ?? 'unknown'}`);
     }
