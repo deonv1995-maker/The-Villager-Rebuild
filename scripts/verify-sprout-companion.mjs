@@ -5,6 +5,7 @@ const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'
 const main = read('src/main.js');
 const definitions = read('src/data/SproutCompanionDefinitions.js');
 const companion = read('src/gameplay/SproutCompanionController.js');
+const capacityController = read('src/gameplay/InventoryCapacityController.js');
 const arrival = read('src/gameplay/SproutArrivalController.js');
 const gatherables = read('src/world/GatherableSystem.js');
 const docs = read('docs/SPROUT_COMPANION.md');
@@ -29,8 +30,9 @@ const checks = [
   ['inventory award happens only after authoritative reserved pickup commit', takeIndex >= 0 && awardIndex > takeIndex],
   ['companion refreshes HUD from the existing authoritative inventory snapshot', companion.includes('this.game.hud?.setInventory(this.inventory.snapshot())')],
   ['companion creates no second inventory authority', !companion.includes('new InventorySystem') && !companion.includes('this.inventory = new')],
-  ['documentation records reservation/commit, shared inventory and Ranger harvesting boundaries', docs.includes('reservation/commit') && docs.includes('one authoritative shared inventory') && docs.includes('Ranger performs the harvesting')],
-  ['documentation keeps capacity, production art and falling-tree damage as later milestones while physical felling is active', docs.includes('storage-capacity upgrades') && docs.includes('production Sprout 3D asset') && docs.includes('falling-tree damage/collision') && docs.includes('visible authored-tree fall')],
+  ['capacity mode derives from Sprout allegiance without becoming a second inventory', capacityController.includes('this.game.sproutArrival?.isAllied?.()') && capacityController.includes('this.inventory.setStorageMode(mode)') && !capacityController.includes('new InventorySystem')],
+  ['documentation records reservation/commit, shared inventory, Ranger harvesting and live compressed storage boundaries', docs.includes('reservation/commit') && docs.includes('one authoritative shared inventory') && docs.includes('Ranger performs the harvesting') && docs.includes('96 compressed units')],
+  ['documentation keeps production art and falling-tree damage as later milestones while physical felling and capacity are active', docs.includes('production Sprout 3D asset') && docs.includes('falling-tree damage/collision') && docs.includes('visible authored-tree fall') && docs.includes('24 bulk units')],
   ['full repository check includes the Sprout companion regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
 
