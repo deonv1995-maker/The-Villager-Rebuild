@@ -22,9 +22,15 @@ The active icon artwork was generated in ChatGPT as one cohesive cosy-game icon 
 
 Landscape Android review showed the generated Spear, Pickaxe and Sword silhouettes becoming too small when combined with the old `0.42` locked-slot opacity. The runtime assets remain the approved generated WebPs; the correction is presentation-only. Locked tool slots now retain enough opacity to identify the item while remaining visibly unavailable, and the three slender tool silhouettes receive a small uniform scale normalization inside the existing toolbelt slot. Owned/equipped logic, crafting requirements and icon source paths are unchanged.
 
+## 2026-09-12 spear, sword and torch correction
+
+Landscape device review showed that the Spear and Sword artwork did not match their in-world props closely enough and that Torch had no dedicated runtime icon semantic. The approved correction keeps the established cosy palette and 96×96 transparent WebP contract while redrawing the three silhouettes around the actual runtime equipment: a bound stone-headed spear, the Ranger's simple wood-grip/stone-blade sword, and a wrapped wooden handheld torch with a compact amber flame. The Spear points toward the upper-left so its head remains readable beside the existing quantity badge.
+
+Torch now has its own `ASSET_PATHS.ui.mobile.torch` entry and `TOOL_DEFINITIONS.torch.icon` resolves to `torch` rather than reusing the Campfire semantic. `MobileHud` exposes that same central asset path to the toolbelt and crafting UI. This is a presentation/integration correction only; spear throwing, sword combat, torch fuel/light behavior, crafting costs, tool ordering and controls are unchanged.
+
 ## Covered player-facing icons
 
-Tools/actions: Hand, Axe, Hammer, Pickaxe, Shovel, Spear, Sword, Campfire, Jump.
+Tools/actions: Hand, Axe, Hammer, Pickaxe, Shovel, Spear, Sword, Torch, Campfire, Jump.
 
 Resources: Stick, Stone, Grass, Meat, and Log (the Log inventory entry intentionally reuses the Raw Log build icon).
 
