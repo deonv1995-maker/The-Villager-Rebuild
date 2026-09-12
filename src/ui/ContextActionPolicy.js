@@ -90,12 +90,15 @@ export function resolveContextAction({
   }
 
   if (GENERIC_INTERACTION_TARGETS.has(interactionTarget?.type)) {
+    const available = interactionTarget?.available !== false;
     return {
       source: 'interaction',
-      available: true,
+      available,
       icon: interactionTarget?.icon ?? 'hand',
       label: interactionTarget?.actionLabel ?? `Pick up ${interactionTarget?.label ?? 'item'}`,
-      caption: interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP'
+      caption: available
+        ? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')
+        : 'FULL'
     };
   }
 
