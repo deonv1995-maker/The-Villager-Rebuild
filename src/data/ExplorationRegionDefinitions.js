@@ -44,8 +44,8 @@ export const EXPLORATION_WORLD = Object.freeze({
     Object.freeze({
       id: 'southernFrontier',
       biome: 'forest',
-      center: Object.freeze({ x: -138, z: 154 }),
-      radii: Object.freeze({ x: 122, z: 78 }),
+      center: Object.freeze({ x: -205, z: 180 }),
+      radii: Object.freeze({ x: 85, z: 65 }),
       yaw: 0.18,
       phase: 5.5,
       heightBias: 0.75,

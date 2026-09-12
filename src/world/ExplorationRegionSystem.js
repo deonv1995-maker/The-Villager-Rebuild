@@ -17,6 +17,11 @@ const influenceAt = (x, z, region) => {
   ));
 };
 
+const smoothstep01 = value => {
+  const t = Math.max(0, Math.min(1, value));
+  return t * t * (3 - 2 * t);
+};
+
 export class ExplorationRegionSystem {
   constructor({ regions, activationWeight = 0.18 }) {
     this.regions = regions;
@@ -49,12 +54,15 @@ export class ExplorationRegionSystem {
     let offset = 0;
     for (const region of this.regions) {
       const weight = influenceAt(x, z, region);
-      if (weight < 0.025) continue;
+      if (weight <= this.activationWeight) continue;
+
+      const activationRange = Math.max(0.0001, 1 - this.activationWeight);
+      const activeBlend = smoothstep01((weight - this.activationWeight) / activationRange);
       const ruggedField = (
         Math.sin(x * 0.035 + z * 0.026 + region.phase)
         + Math.cos(z * 0.041 - x * 0.018 - region.phase * 0.7)
       ) * 0.5;
-      offset += weight * (region.heightBias + ruggedField * region.ruggedness);
+      offset += weight * activeBlend * (region.heightBias + ruggedField * region.ruggedness);
     }
     return offset;
   }
