@@ -30,7 +30,7 @@ const checks = [
   ['companion refreshes HUD from the existing authoritative inventory snapshot', companion.includes('this.game.hud?.setInventory(this.inventory.snapshot())')],
   ['companion creates no second inventory authority', !companion.includes('new InventorySystem') && !companion.includes('this.inventory = new')],
   ['documentation records reservation/commit, shared inventory and Ranger harvesting boundaries', docs.includes('reservation/commit') && docs.includes('one authoritative shared inventory') && docs.includes('Ranger performs the harvesting')],
-  ['documentation keeps capacity, production art and physical tree felling as later milestones', docs.includes('storage-capacity upgrades') && docs.includes('production Sprout 3D asset') && docs.includes('tree-felling animation/state')],
+  ['documentation keeps capacity, production art and falling-tree damage as later milestones while physical felling is active', docs.includes('storage-capacity upgrades') && docs.includes('production Sprout 3D asset') && docs.includes('falling-tree damage/collision') && docs.includes('visible authored-tree fall')],
   ['full repository check includes the Sprout companion regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
 

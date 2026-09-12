@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { readFile } from 'node:fs/promises';
 import { HARVESTABLE_DEFINITIONS } from '../src/data/HarvestDefinitions.js';
+import { TREE_FELLING_PRESENTATION } from '../src/world/TreeFellingPresentation.js';
 import { TreeHarvestSystem } from '../src/world/TreeHarvestSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
@@ -84,11 +85,20 @@ for (let hit = 0; hit < definition.hitsRequired; hit += 1) {
 
 const tree = regrowth.trees[0];
 assert(!tree.active, 'Tree must become inactive when chopped');
-assert(collision.getObstaclesByType('tree').length === 0, 'Chopped tree collision must remain removed throughout growth');
-assert(drops.length === definition.dropCount, 'Chopping must preserve the existing physical log yield');
-assert(group.getObjectByName('chopped-tree-stump-0'), 'Chopped tree must leave the existing source-sized stump visual');
+assert(tree.felling === true, 'Final chop must enter the visible felling state before regrowth begins');
+assert(collision.getObstaclesByType('tree').length === 0, 'Chopped tree collision must remain removed throughout felling and growth');
+assert(drops.length === 0, 'Physical Logs must not exist before the falling tree settles');
+assert(group.getObjectByName('falling-tree-0'), 'Final chop must leave a visible falling authored-tree presentation');
+assert(!group.getObjectByName('chopped-tree-stump-0'), 'Stump must not replace the tree before the fall settles');
+assert(regrowth.captureRegrowthState().length === 0, 'An in-flight falling tree must not be persisted as already-settled regrowth');
+
+now += (TREE_FELLING_PRESENTATION.fallSeconds + TREE_FELLING_PRESENTATION.settleSeconds) * 1000 + 1;
+regrowth.update(treePosition, false);
+assert(tree.felling === false && tree.fellSettled === true, 'Tree must hand off to settled stump/regrowth state after the fall completes');
+assert(drops.length === definition.dropCount, 'Settled felling must preserve the existing physical Log yield');
+assert(group.getObjectByName('chopped-tree-stump-0'), 'Settled tree must leave the existing source-sized stump visual');
 const sprout = group.getObjectByName('tree-regrowth-sprout-0');
-assert(sprout, 'Chopped stump must own a staged regrowth presentation');
+assert(sprout, 'Settled stump must own a staged regrowth presentation');
 assert(!sprout.visible, 'Only the stump may be visible during the first 30 seconds');
 
 const sourcePosition = new THREE.Vector3();
@@ -102,8 +112,12 @@ treeMesh.getMatrixAt(0, hiddenMatrix);
 assert(hiddenMatrix.elements[13] < -900, 'Authored tree instance must remain hidden during the stump-only stage');
 
 const captured = regrowth.captureRegrowthState();
-assert(captured.length === 1 && captured[0].treeId === 0, 'Inactive stump must expose persistent regrowth state');
-assert(Math.abs(captured[0].remainingSeconds - definition.regrowSeconds) < 0.001, 'New stump must begin at the configured regrowth duration');
+assert(captured.length === 1 && captured[0].treeId === 0, 'Settled inactive stump must expose persistent regrowth state');
+assert(
+  captured[0].remainingSeconds <= definition.regrowSeconds &&
+  captured[0].remainingSeconds >= definition.regrowSeconds - 0.26,
+  'New stump must begin at the configured regrowth duration after the settle handoff'
+);
 assert(captured[0].stumpRemoved === false, 'Freshly chopped tree must persist that its stump is still present');
 assert(captured[0].cleared === false, 'Freshly chopped tree site must remain eligible for normal regrowth');
 
@@ -245,7 +259,10 @@ const shovelRegrowth = new TreeHarvestSystem({
 });
 const shovelPosition = new THREE.Vector3(4, 0, -2);
 for (let hit = 0; hit < definition.hitsRequired; hit += 1) shovelRegrowth.chop(shovelPosition);
-assert(shovelDrops.length === definition.dropCount, 'Shovel scenario must begin with the normal chop yield only');
+assert(shovelDrops.length === 0, 'Shovel scenario must also wait for the tree to settle before normal Log yield exists');
+shovelNow += (TREE_FELLING_PRESENTATION.fallSeconds + TREE_FELLING_PRESENTATION.settleSeconds) * 1000 + 1;
+shovelRegrowth.update(shovelPosition, false);
+assert(shovelDrops.length === definition.dropCount, 'Shovel scenario must begin with the normal settled chop yield only');
 const stumpTarget = shovelRegrowth.getStumpTarget(shovelPosition);
 assert(stumpTarget?.type === 'stump' && stumpTarget.icon === 'shovel', 'A nearby chopped stump must expose the dedicated shovel target');
 const removedStump = shovelRegrowth.removeStump(shovelPosition);
@@ -307,4 +324,4 @@ for (const requirement of [
   assert(saveControllerSource.includes(requirement), `Save/continue must preserve staged regrowth progress: ${requirement}`);
 }
 
-console.log('Three-minute leaf-first organic tree regrowth, permanent shovel-cleared sites, canonical bonus Log yield and save migration verified');
+console.log('Visible felling into three-minute leaf-first organic tree regrowth, permanent shovel-cleared sites, canonical bonus Log yield and save migration verified');

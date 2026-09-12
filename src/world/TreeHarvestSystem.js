@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { HARVESTABLE_DEFINITIONS } from '../data/HarvestDefinitions.js';
 import { HarvestHitFeedback } from './HarvestHitFeedback.js';
+import { TreeFellingPresentation } from './TreeFellingPresentation.js';
 import { TreeHitShakeSystem } from './TreeHitShakeSystem.js';
 import { TreeRegrowthPresentation } from './TreeRegrowthPresentation.js';
 
@@ -31,6 +32,12 @@ export class TreeHarvestSystem {
     this.trees = this.#collectTrees();
     this.hitFeedback = new HarvestHitFeedback({ group });
     this.treeShake = new TreeHitShakeSystem({ treeRenderRegistry: this.treeRenderRegistry });
+    this.fellingPresentation = new TreeFellingPresentation({
+      group,
+      terrain,
+      treeRenderRegistry: this.treeRenderRegistry,
+      now: this.now
+    });
     this.regrowthPresentation = new TreeRegrowthPresentation({
       group,
       terrain,
@@ -46,7 +53,7 @@ export class TreeHarvestSystem {
 
   captureRegrowthState() {
     return this.trees
-      .filter(tree => !tree.active)
+      .filter(tree => !tree.active && !tree.felling)
       .map(tree => ({
         treeId: tree.treeId,
         remainingSeconds: Math.max(0, Number(tree.regrowRemaining) || 0),
@@ -65,6 +72,17 @@ export class TreeHarvestSystem {
     for (const tree of this.trees) {
       if (tree.active) continue;
       const saved = savedById.get(tree.treeId);
+
+      // A save written during the short fall deliberately has no regrowth record, so
+      // Continue restarts that visual beat and still creates its Logs only after impact.
+      // A saved regrowth record means the tree had already settled before save. In that
+      // case GatherableSystem restore is already authoritative for whether its Logs still
+      // exist, so finalize the tree without spawning another set of drops.
+      if (tree.felling) {
+        if (!saved) continue;
+        this.#completeFelling(tree, { spawnDrops: false });
+      }
+
       tree.cleared = Boolean(saved?.cleared ?? saved?.stumpRemoved);
       tree.stumpRemoved = tree.cleared || Boolean(saved?.stumpRemoved);
 
@@ -87,6 +105,7 @@ export class TreeHarvestSystem {
   }
 
   update(playerPosition, enabled = true) {
+    this.#advanceFelling();
     this.#advanceRegrowth(playerPosition);
     this.hitFeedback.update();
     this.treeShake.update();
@@ -211,27 +230,50 @@ export class TreeHarvestSystem {
     }
 
     tree.active = false;
-    tree.regrowRemaining = this.definition.regrowSeconds;
+    tree.felling = true;
+    tree.fellSettled = false;
+    tree.regrowRemaining = 0;
     tree.stumpRemoved = false;
     tree.cleared = false;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
-    tree.stump = this.#createStump(tree);
-    this.regrowthPresentation.begin(tree);
-    this.#syncRegrowthGrounding(tree);
-    this.#spawnDrops(tree);
+    this.fellingPresentation.begin(tree, playerPosition);
     this.choppedCount += 1;
     this.target = null;
     this.indicator.visible = false;
 
     return {
       chopped: true,
+      falling: true,
       remainingHits: 0,
       label: this.definition.label,
       position,
       dropResourceId: this.definition.dropResourceId,
       dropCount: this.definition.dropCount
     };
+  }
+
+  #advanceFelling() {
+    const completedTreeIds = this.fellingPresentation.update();
+    for (const treeId of completedTreeIds) {
+      const tree = this.trees.find(candidate => candidate.treeId === treeId);
+      if (tree?.felling) this.#completeFelling(tree, { spawnDrops: true });
+    }
+  }
+
+  #completeFelling(tree, { spawnDrops = true } = {}) {
+    if (!tree || tree.fellSettled) return false;
+    this.fellingPresentation.cancel(tree.treeId);
+    tree.felling = false;
+    tree.fellSettled = true;
+    tree.regrowRemaining = this.definition.regrowSeconds;
+    tree.stumpRemoved = false;
+    tree.cleared = false;
+    if (!tree.stump) tree.stump = this.#createStump(tree);
+    if (!tree.regrowthVisual) this.regrowthPresentation.begin(tree);
+    this.#syncRegrowthGrounding(tree);
+    if (spawnDrops) this.#spawnDrops(tree);
+    return true;
   }
 
   #advanceRegrowth(playerPosition) {
@@ -244,7 +286,7 @@ export class TreeHarvestSystem {
     if (elapsed <= 0) return;
 
     for (const tree of this.trees) {
-      if (tree.active || tree.cleared) continue;
+      if (tree.active || tree.cleared || tree.felling) continue;
       tree.regrowRemaining = Math.max(0, tree.regrowRemaining - elapsed);
 
       const ready = tree.regrowRemaining <= 0;
@@ -282,12 +324,15 @@ export class TreeHarvestSystem {
   }
 
   #regrowTree(tree) {
+    this.fellingPresentation.cancel(tree.treeId);
     this.#removeStump(tree);
     this.#restoreTreeInstance(tree);
     this.regrowthPresentation.removeSprout(tree);
     tree.obstacle = this.collision.addObstacle({ ...tree.collisionTemplate });
     tree.hits = 0;
     tree.active = true;
+    tree.felling = false;
+    tree.fellSettled = false;
     tree.regrowRemaining = 0;
     tree.stumpRemoved = false;
     tree.cleared = false;
@@ -298,7 +343,7 @@ export class TreeHarvestSystem {
     let nearest = null;
     let nearestDistanceSq = this.definition.interactionRadius ** 2;
     for (const tree of this.trees) {
-      if (tree.active || tree.cleared || tree.stumpRemoved || !tree.stump) continue;
+      if (tree.active || tree.felling || tree.cleared || tree.stumpRemoved || !tree.stump) continue;
       const dx = tree.collisionTemplate.x - playerPosition.x;
       const dz = tree.collisionTemplate.z - playerPosition.z;
       const distanceSq = dx * dx + dz * dz;
@@ -360,6 +405,8 @@ export class TreeHarvestSystem {
           renderState: [],
           hits: 0,
           active: true,
+          felling: false,
+          fellSettled: false,
           regrowRemaining: 0,
           stump: null,
           stumpRemoved: false,
