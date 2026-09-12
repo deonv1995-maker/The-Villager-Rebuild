@@ -2,6 +2,7 @@ import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
+import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
@@ -57,6 +58,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     const panelConstructionRuntime = new PanelConstructionRuntimeController({ game });
     panelConstructionRuntime.start();
     game.panelConstructionRuntime = panelConstructionRuntime;
+
+    const landscapingRuntime = new LandscapingRuntimeController({ game });
+    landscapingRuntime.start();
+    game.landscapingRuntime = landscapingRuntime;
 
     // Legacy physical-log wall/roof presentation remains mounted during the transition so
     // non-panel runtime boundaries stay stable. Inventory Logs can no longer enter that
