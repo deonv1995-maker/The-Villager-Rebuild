@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { ExpandedIslandTerrainSystem } from './ExpandedIslandTerrainSystem.js';
 import { ConstructionTerrainAdaptationSystem } from './ConstructionTerrainAdaptationSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
+import { ExplorationPoiSystem } from './ExplorationPoiSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { GroundCoverPresentationSystem } from './GroundCoverPresentationSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
@@ -43,6 +44,12 @@ export class TestIslandSystem {
     this.scatter = new EnvironmentScatterSystem({
       group: this.group,
       terrain: this.terrain,
+      collision: this.collision
+    });
+    this.explorationPois = new ExplorationPoiSystem({
+      group: this.group,
+      terrain: this.terrain,
+      chunks: this.chunks,
       collision: this.collision
     });
     this.groundCover = new GroundCoverPresentationSystem({
@@ -103,11 +110,6 @@ export class TestIslandSystem {
     return this.constructionTerrain.heightAt(x, z);
   }
 
-  /**
-   * Generic world queries retain the highest support semantics used by placement and
-   * world objects. Ranger locomotion uses walkableHeightAt instead so overlapping
-   * storeys are resolved from the actor's current vertical level rather than globally.
-   */
   heightAt(x, z) {
     const base = this.constructionHeightAt(x, z);
     return this.collision.supportHeightAt(x, z, base, {
@@ -147,6 +149,7 @@ export class TestIslandSystem {
     this.constructionTerrain.captureTerrainMeshes();
     this.waterVisuals.create();
     const mountainCount = this.mountains.create();
+    const explorationPoiCount = this.explorationPois.create();
 
     let environmentLoaded = false;
     let chunkedTreeCount = 0;
@@ -173,7 +176,8 @@ export class TestIslandSystem {
     this.assetMode = environmentLoaded ? 'production' : 'terrain-fallback';
     const chunkStats = this.chunks.getStats();
     const coastalRockCount = this.scatter.coastalRockCount ?? 0;
-    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees · ${coastalRockCount} coastal rocks · ${groundCoverCount} ground-cover clumps · ${grassCount} reactive grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
+    const regionalTreeCount = this.scatter.regionalTreeCount ?? 0;
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees (${regionalTreeCount} regional) · ${coastalRockCount} coastal rocks · ${explorationPoiCount} exploration POIs · ${groundCoverCount} ground-cover clumps · ${grassCount} reactive grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
