@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
 
 export class RangerToolPresentation {
   constructor({ player }) {
     this.player = player;
+    this.appearancePresentation = new RangerAppearancePresentation({ player });
     this.duration = 0.46;
     this.remaining = 0;
     this.currentToolId = null;
@@ -63,6 +65,7 @@ export class RangerToolPresentation {
   }
 
   update(dt) {
+    this.appearancePresentation.update(dt);
     if (this.remaining <= 0) return;
     this.remaining = Math.max(0, this.remaining - dt);
     const progress = 1 - this.remaining / this.duration;
