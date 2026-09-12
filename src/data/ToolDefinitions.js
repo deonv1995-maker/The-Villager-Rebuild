@@ -55,7 +55,8 @@ export const TOOL_DEFINITIONS = Object.freeze({
     label: 'Torch',
     icon: 'campfire',
     role: 'light',
-    actionLabel: 'Hold torch'
+    actionLabel: 'Hold torch',
+    usesDurability: false
   })
 });
 
