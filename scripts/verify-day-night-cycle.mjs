@@ -15,7 +15,8 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const nearlyEqual = (left, right, epsilon = 0.000001) => Math.abs(left - right) <= epsilon;
 
 assert.equal(WORLD_TIME.startDay, 1, 'New games must begin on Day 1');
-assert.equal(WORLD_TIME.startMinuteOfDay, 8 * 60, 'New games must begin at 08:00');
+assert.equal(WORLD_TIME.startMinuteOfDay, 22 * 60, 'New games must begin at 22:00 after the shipwreck');
+assert.equal(WORLD_TIME.legacySaveFallbackMinuteOfDay, 8 * 60, 'Legacy saves without world time must retain the 08:00 fallback');
 assert.equal(WORLD_TIME.realSecondsPerDay, 24 * 60, 'A complete game day must take 24 real minutes');
 assert.equal(worldTimePhaseAt(4 * 60 + 59), 'night');
 assert.equal(worldTimePhaseAt(5 * 60), 'dawn');
@@ -26,10 +27,10 @@ assert.equal(worldTimePhaseAt(20 * 60), 'night');
 const time = new WorldTimeSystem();
 assert.deepEqual(
   { day: time.getSnapshot().day, time: time.getSnapshot().displayTime, phase: time.getSnapshot().phase },
-  { day: 1, time: '08:00', phase: 'day' }
+  { day: 1, time: '22:00', phase: 'night' }
 );
 time.update(60);
-assert.equal(time.getSnapshot().displayTime, '09:00', 'One real minute must advance one in-game hour at the baseline scale');
+assert.equal(time.getSnapshot().displayTime, '23:00', 'One real minute must advance one in-game hour at the baseline scale');
 
 const transitions = [];
 const unsubscribe = time.subscribe(event => transitions.push(event));
@@ -49,8 +50,8 @@ assert.equal(restored.restoreState(captured), true, 'Saved world time must resto
 assert.equal(restored.getSnapshot().day, 2);
 assert.equal(restored.getSnapshot().displayTime, '00:01');
 const fallback = new WorldTimeSystem();
-assert.equal(fallback.restoreState(null), false, 'Older compatible saves without time state must keep the new-game default');
-assert.equal(fallback.getSnapshot().displayTime, '08:00');
+assert.equal(fallback.restoreState(null), false, 'Missing world-time state must not fabricate a restored clock');
+assert.equal(fallback.getSnapshot().displayTime, '22:00', 'The world-time default must remain the new-game narrative start');
 
 const sunrise = celestialDirectionAt(6 * 60);
 const noon = celestialDirectionAt(12 * 60);
@@ -177,7 +178,8 @@ const checks = [
   ['continue restores before the clock resumes', main.indexOf('const restored = saveController.restore()') < main.indexOf('worldTimeRuntime.start();')],
   ['scene exposes existing lights instead of creating a second lighting rig', sceneSource.includes('this.lighting = this.#createLighting()') && sceneSource.includes('return Object.freeze({ hemi, sun, skyFill, ambient })')],
   ['autosave captures world time', saveController.includes('state.worldTime = this.game.worldTime?.captureState?.() ?? null')],
-  ['continue restores world time when present', saveController.includes('this.game.worldTime?.restoreState?.(record.state.worldTime)')],
+  ['continue restores world time when present', saveController.includes('const restoredWorldTime = this.game.worldTime?.restoreState?.(record.state.worldTime) ?? false')],
+  ['legacy saves without world time use the explicit compatibility fallback', saveController.includes('minuteOfDay: WORLD_TIME.legacySaveFallbackMinuteOfDay')],
   ['full check suite includes the day/night regression', packageJson.scripts.check.includes('npm run verify:day-night')]
 ];
 
