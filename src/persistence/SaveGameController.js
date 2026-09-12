@@ -24,10 +24,11 @@ export class SaveGameController {
     const record = this.store.read();
     if (!record) return { restored: false, savedAt: null };
 
-    // Semantic world modules are restored before the shared gameplay restore places the
-    // Ranger. This preserves the invariant that structure/fence collision exists before
-    // the saved player position is applied. Landscaping follows panel construction because
-    // its structure-backed snap records share the panel registry coordinate authority.
+    // World time is state-only and can restore before world collision. Semantic world
+    // modules then restore before the shared gameplay restore places the Ranger so
+    // structure/fence collision exists at the saved player position. Landscaping follows
+    // panel construction because its structure-backed snap records share that registry.
+    this.game.worldTime?.restoreState?.(record.state.worldTime);
     this.game.panelConstruction?.restore?.(record.state.panelConstruction);
     this.game.landscaping?.restore?.(record.state.landscaping);
     restoreGameState(this.game, record.state);
@@ -54,6 +55,7 @@ export class SaveGameController {
     if (!this.running && reason !== 'gameplay-start') return null;
     try {
       const state = captureGameState(this.game);
+      state.worldTime = this.game.worldTime?.captureState?.() ?? null;
       state.panelConstruction = this.game.panelConstruction?.snapshot?.() ?? null;
       state.landscaping = this.game.landscaping?.snapshot?.() ?? null;
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];

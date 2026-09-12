@@ -1,3 +1,5 @@
+import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
+import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
@@ -10,6 +12,7 @@ import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizat
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
+import { DayNightLightingSystem } from './rendering/DayNightLightingSystem.js';
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
@@ -35,6 +38,14 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus: setGameplayStatus });
     await game.start();
+
+    const worldTime = new WorldTimeSystem();
+    const dayNightLighting = new DayNightLightingSystem({ sceneSystem: game.sceneSystem });
+    const worldTimeRuntime = new WorldTimeRuntime({ worldTime, lighting: dayNightLighting });
+    game.worldTime = worldTime;
+    game.dayNightLighting = dayNightLighting;
+    game.worldTimeRuntime = worldTimeRuntime;
+    worldTimeRuntime.sync();
 
     const stairConstructionRuntime = new StairConstructionRuntimeController({ game });
     stairConstructionRuntime.start();
@@ -99,17 +110,22 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       const carryingLog = game.physicalLogs?.isCarrying() ?? false;
       game.toolPresentation?.setEquippedTool(carryingLog ? null : toolId);
       game.player?.setSpearEquipped(!carryingLog && toolId === 'spear');
+      worldTimeRuntime.start();
       saveController.start();
       setStatus('CONTINUE · AUTOSAVE ACTIVE');
     } else {
       const arrivalIntro = new BeachArrivalIntroController({
         game,
         setStatus: setGameplayStatus,
-        onComplete: () => saveController.start({ saveImmediately: true })
+        onComplete: () => {
+          worldTimeRuntime.start();
+          saveController.start({ saveImmediately: true });
+        }
       });
       game.arrivalIntro = arrivalIntro;
       const arrivalStarted = arrivalIntro.start();
       if (!arrivalStarted) {
+        worldTimeRuntime.start();
         saveController.start({ saveImmediately: true });
         setStatus('DAY 1 · ASHORE');
       }
