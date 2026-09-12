@@ -69,7 +69,7 @@ export class LandscapingRuntimeController {
   }
 
   confirmPlacement() {
-    if (!this.system.isActive()) return false;
+    if (!this.system.isActive() || this.game.toolbelt?.getEquippedToolId() !== 'shovel') return false;
     this.#updateSystem();
     const before = this.system.getState();
     if (!before.previewValid) {
@@ -124,6 +124,10 @@ export class LandscapingRuntimeController {
     const hud = this.game.hud;
     if (!hud) return;
     this.#ensureMenu();
+
+    if (this.system.isActive() && this.game.toolbelt?.getEquippedToolId() !== 'shovel') {
+      this.#closeLandscaping({ announce: false });
+    }
 
     if (!this.system.isActive()) {
       this.lastStatusKey = '';
