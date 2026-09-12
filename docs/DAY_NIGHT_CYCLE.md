@@ -28,7 +28,7 @@ The beach-arrival cinematic does not consume the Day 1 survival clock. The clock
 - `DayNightLightingSystem` is presentation only. It interpolates the existing `SceneSystem` sky, fog, hemisphere light, shared celestial key light, sky fill, ambient fill, and tone-mapping exposure.
 - `CelestialBodySystem` is presentation only. It renders the visible sun and moon from the same world-time snapshot without owning time or gameplay rules.
 - `CelestialOrbit` is the shared orbital calculation used by the visible sun/moon and the directional key light, preventing competing notions of where the sun or moon is.
-- `CelestialShadowSystem` owns the mobile shadow budget and caster/receiver policy. It reuses the existing celestial directional light rather than creating a second shadow-casting light.
+- `CelestialShadowSystem` owns the mobile shadow budget, caster/receiver policy, and the Ranger's lightweight contact shadow. It reuses the existing celestial directional light rather than creating a second shadow-casting light.
 - `CelestialDefinitions` centralizes orbital distance, sky-path orientation, disc size, halo values, and horizon fading.
 - `CelestialShadowDefinitions` centralizes shadow-map resolution, local coverage, refresh rate, camera range, and bias tuning.
 - `SceneSystem` still owns the actual Three.js scene, camera, and lighting objects.
@@ -55,18 +55,21 @@ The existing directional `sun` light is the shared celestial key light for rende
 
 The light and its target are translated around the Ranger while preserving the orbital direction. This keeps the useful shadow camera local to gameplay rather than covering the entire expanded island.
 
-The first mobile shadow budget is deliberately conservative:
+The mobile shadow budget remains deliberately conservative:
 
 - one **512 × 512 PCF** shadow map;
 - one shadow-casting directional light only;
 - approximately **56 m × 56 m** local orthographic coverage around the Ranger;
 - shadow-map redraw capped at **10 Hz**, while normal rendering may continue faster;
-- opaque non-instanced gameplay meshes automatically cast and receive shadows;
+- opaque gameplay/building meshes automatically cast and receive shadows;
 - terrain receives shadows;
-- large instanced vegetation batches do not cast or receive dynamic shadows;
-- transparent water, grass/fern presentation, build previews, celestial visuals, smoke/flame/spark effects, trails, and distant mountains stay out of the shadow pass.
+- the animated Ranger is **receiver-only** in the throttled global map and uses a small transparent contact shadow that follows the walkable surface every presentation frame;
+- the existing static `forest-tree-batch-*` instanced meshes cast and receive celestial shadows while preserving the forest batching architecture;
+- lightweight instanced understory, grass/fern presentation, transparent water, build previews, celestial visuals, smoke/flame/spark effects, trails, and distant mountains stay out of the shadow pass.
 
-This policy prioritizes readable Ranger, structure, rock, log, and nearby-object shadows without turning the forest into a second full geometry pass every frame. If device testing shows sufficient headroom, vegetation shadow proxies or a larger local shadow map can be evaluated later without replacing the architecture.
+The Ranger contact shadow deliberately replaces a full animated Ranger caster in the throttled map. This prevents a 10 Hz shadow silhouette from visibly trailing a character that is rendered and moved every frame, while keeping the character's standard materials fully responsive to the day/night rig and local torch light.
+
+Forest trees are a bounded exception to the generic instanced-vegetation exclusion. They remain static, are already grouped into a small number of `InstancedMesh` batches, and therefore can participate in the low-frequency celestial shadow pass without turning 540 trees into hundreds of separate draw calls. Small understory remains excluded. Player-built structures continue through the normal opaque-mesh policy, so their standard materials receive the same celestial and torch lighting without construction-specific shadow logic.
 
 ## Mobile rendering policy
 
@@ -74,7 +77,9 @@ Lighting transitions continuously through night, dawn, day, and dusk. Night rema
 
 The sun and moon use small procedural Three.js sphere meshes and lightweight basic materials. They require no downloaded textures, volumetric atmosphere, post-processing, or additional animation loop. Their glow is a low-cost transparent halo and they reuse the existing world-time runtime frame.
 
-Dynamic shadows are enabled only through the bounded celestial shadow system described above. The renderer does not continuously redraw a full-island shadow map.
+Dynamic shadows are enabled only through the bounded celestial shadow system described above. The renderer does not continuously redraw a full-island shadow map. The Ranger's contact shadow is two tiny transparent discs and does not require a shadow-map redraw, so normal movement stays visually smooth while the expensive map remains capped at 10 Hz.
+
+The handheld torch remains one local spotlight with local shadow casting disabled for mobile performance. Trees, buildings, and the Ranger use lit materials, so surfaces still brighten and shade according to the torch direction and falloff even though the torch does not create a second dynamic shadow map.
 
 ## Integration contract for later systems
 
@@ -82,7 +87,7 @@ Gameplay systems that need time should read or subscribe to `game.worldTime`; th
 
 The celestial bodies are therefore a player-facing time cue, not gameplay authority.
 
-Construction and world systems do not need shadow-specific logic for ordinary opaque meshes. `CelestialShadowSystem` periodically discovers newly added scene meshes and applies the centralized rendering policy. Systems that intentionally use transparent, instanced, or effect presentation remain outside the expensive caster path.
+Construction and world systems do not need shadow-specific logic for ordinary opaque meshes. `CelestialShadowSystem` periodically discovers newly added scene meshes and applies the centralized rendering policy. Static forest tree batches are recognized centrally by their established `forest-tree-batch-*` presentation names; other instanced/effect presentation remains outside the expensive caster path.
 
 The current cycle deliberately does **not** change animal behavior, villager behavior, hunger, damage, campfire rules, or tutorial progression.
 
@@ -112,7 +117,9 @@ The existing design still calls for the first night to unlock sleeping near a va
 - exactly one shadow-casting celestial key light;
 - sun direction by day and moon direction at night;
 - Ranger-relative key-light targeting;
-- opaque dynamic caster/receiver enrollment;
-- transparent/effect and instanced-vegetation exclusions;
+- opaque building/dynamic receiver enrollment;
+- receiver-only animated Ranger policy plus per-frame ground-following contact shadow;
+- static instanced forest-tree caster/receiver enrollment while understory stays excluded;
+- transparent/effect exclusions;
 - delayed discovery of newly built meshes without construction-system coupling;
 - boot wiring and inclusion in the full repository check suite.

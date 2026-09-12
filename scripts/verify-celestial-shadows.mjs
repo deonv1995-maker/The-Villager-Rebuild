@@ -47,8 +47,50 @@ const instanced = new THREE.InstancedMesh(
   4
 );
 instanced.name = 'forest-tree-batch-test';
+instanced.castShadow = false;
 instanced.receiveShadow = true;
 scene.add(instanced);
+
+const understory = new THREE.InstancedMesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x447744 }),
+  4
+);
+understory.name = 'understory-shrub-batch';
+understory.castShadow = true;
+understory.receiveShadow = true;
+scene.add(understory);
+
+const rangerRoot = new THREE.Group();
+rangerRoot.position.set(4, 4.8, -3);
+const rangerMesh = new THREE.Mesh(
+  new THREE.CapsuleGeometry(0.3, 1, 4, 8),
+  new THREE.MeshStandardMaterial({ color: 0x6b7d4a })
+);
+rangerMesh.name = 'kaykit-ranger-test-mesh';
+rangerMesh.castShadow = true;
+rangerMesh.receiveShadow = true;
+rangerRoot.add(rangerMesh);
+scene.add(rangerRoot);
+
+let firstPerson = false;
+const player = {
+  root: rangerRoot,
+  getPosition(target) {
+    return target.copy(rangerRoot.position);
+  },
+  isFirstPerson() {
+    return firstPerson;
+  }
+};
+const terrain = {
+  heightAt() {
+    return 1.4;
+  },
+  walkableHeightAt() {
+    return 1.4;
+  }
+};
 
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 const skyFill = new THREE.DirectionalLight(0xffffff, 0.4);
@@ -73,7 +115,12 @@ const sceneSystem = {
   }
 };
 
-const shadows = new CelestialShadowSystem({ sceneSystem, now: () => nowMs });
+const shadows = new CelestialShadowSystem({
+  sceneSystem,
+  player,
+  terrain,
+  now: () => nowMs
+});
 assert.equal(renderer.shadowMap.enabled, true, 'Celestial shadows must enable the renderer shadow path');
 assert.equal(renderer.shadowMap.type, THREE.PCFShadowMap, 'Low-cost shadows must use PCF rather than the softer expensive path');
 assert.equal(renderer.shadowMap.autoUpdate, false, 'Shadow maps must not redraw every rendered frame');
@@ -86,14 +133,35 @@ assert.equal(sun.shadow.camera.right, CELESTIAL_SHADOWS.cameraHalfSize);
 assert.equal(opaque.castShadow, true, 'Opaque gameplay/building meshes must automatically cast local shadows');
 assert.equal(opaque.receiveShadow, true, 'Opaque gameplay/building meshes must automatically receive local shadows');
 assert.equal(transparent.castShadow, false, 'Transparent effects must stay out of the shadow pass');
-assert.equal(instanced.castShadow, false, 'Large instanced vegetation batches must not cast expensive shadow geometry');
-assert.equal(instanced.receiveShadow, false, 'Large instanced vegetation batches must not pay the shadow receive cost');
+assert.equal(instanced.castShadow, true, 'Static instanced tree batches must cast into the bounded celestial shadow map');
+assert.equal(instanced.receiveShadow, true, 'Static instanced tree batches must receive celestial/environment shadows');
+assert.equal(understory.castShadow, false, 'Lightweight understory must stay out of the caster pass');
+assert.equal(understory.receiveShadow, false, 'Lightweight understory must stay out of the receive pass');
+assert.equal(rangerMesh.castShadow, false, 'Animated Ranger geometry must not cast into the throttled global map');
+assert.equal(rangerMesh.receiveShadow, true, 'Ranger materials must still receive environment shadows and lighting');
+
+const contactShadow = scene.getObjectByName('ranger-contact-shadow');
+assert.ok(contactShadow, 'Ranger must receive a lightweight contact shadow');
+assert.equal(contactShadow.visible, true);
+assert.equal(contactShadow.position.x, rangerRoot.position.x);
+assert.equal(contactShadow.position.z, rangerRoot.position.z);
+assert.ok(contactShadow.position.y > 1.4, 'Contact shadow must sit just above the current walkable surface');
 
 shadows.apply({ minuteOfDay: 12 * 60 });
 renderer.shadowMap.needsUpdate = false;
 nowMs = 50;
+rangerRoot.position.set(7, 6.2, 2);
 shadows.apply({ minuteOfDay: 12 * 60 });
 assert.equal(renderer.shadowMap.needsUpdate, false, 'Shadow map must not refresh faster than the configured cap');
+assert.equal(contactShadow.position.x, 7, 'Contact shadow must follow Ranger movement every presentation frame');
+assert.equal(contactShadow.position.z, 2, 'Contact shadow must follow Ranger movement without waiting for a map refresh');
+assert.ok(contactShadow.position.y < rangerRoot.position.y, 'Jumping Ranger contact shadow must remain on the ground');
+
+firstPerson = true;
+shadows.apply({ minuteOfDay: 12 * 60 });
+assert.equal(contactShadow.visible, false, 'Contact shadow must hide with the third-person Ranger presentation');
+firstPerson = false;
+
 nowMs = 101;
 shadows.apply({ minuteOfDay: 12 * 60 });
 assert.equal(renderer.shadowMap.needsUpdate, true, 'Shadow map must refresh after the throttled interval');
@@ -126,12 +194,20 @@ assert.ok(
 
 const main = read('src/main.js');
 const sceneSource = read('src/rendering/SceneSystem.js');
+const shadowSource = read('src/rendering/CelestialShadowSystem.js');
 const packageJson = JSON.parse(read('package.json'));
 const checks = [
-  ['gameplay boot creates one celestial shadow system', main.includes('new CelestialShadowSystem({ sceneSystem: game.sceneSystem })')],
+  [
+    'gameplay boot gives the celestial shadow system Ranger and terrain context',
+    main.includes('new CelestialShadowSystem({') &&
+      main.includes('player: game.player') &&
+      main.includes('terrain: game.island')
+  ],
   ['world time fans into shadows after lighting and visible celestial bodies', main.includes('presentations: [dayNightLighting, celestialBodies, celestialShadows]')],
   ['day/night lighting receives Ranger focus for a local shadow camera', main.includes('focusProvider: lightFocus')],
   ['SceneSystem owns the directional-light target rather than the shadow feature creating another light', sceneSource.includes("sun.target.name = 'celestial-key-target'") && sceneSource.includes('this.scene.add(sun, sun.target)')],
+  ['animated Ranger geometry uses the receiver-only shadow policy', shadowSource.includes('celestialShadowPolicy = RECEIVER_ONLY_POLICY')],
+  ['static forest batches are the only instanced vegetation promoted into the caster path', shadowSource.includes('startsWith(STATIC_TREE_BATCH_PREFIX)')],
   ['full check suite includes celestial shadow regression', packageJson.scripts.check.includes('npm run verify:celestial-shadows')]
 ];
 
@@ -143,6 +219,9 @@ for (const [label, ok] of checks) {
     console.error(`FAIL ${label}`);
   }
 }
+
+shadows.dispose();
+assert.equal(contactShadow.parent, null, 'Contact shadow resources must release cleanly');
 
 if (failed > 0) process.exitCode = 1;
 else console.log(`Low-cost celestial shadow regression checks passed (${checks.length} integration contracts).`);
