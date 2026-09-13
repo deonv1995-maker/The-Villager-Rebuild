@@ -14,6 +14,10 @@ export const GROUND_SURFACE_COLORS = Object.freeze({
   meadowLush: 0x438f43,
   meadowDry: 0x9b784f,
   forest: 0x386d40,
+  jungleSoil: 0x513822,
+  jungleHumus: 0x3d2d22,
+  jungleLeafLitter: 0x6a4a2e,
+  jungleMoss: 0x53683c,
   trailSoil: 0x6f4d2f
 });
 
@@ -87,7 +91,8 @@ export function terrainSurfaceColorAt({
   slope,
   sand,
   forestCover = 0,
-  grassPatchStrength = 0
+  grassPatchStrength = 0,
+  jungleSoilStrength = 0
 }, target = new THREE.Color()) {
   const { broad, detail, dry } = terrainSurfaceToneFieldsAt(x, z);
   const { lawnPatch, dryPatch, fleck } = terrainSurfacePatchFieldsAt(x, z);
@@ -127,6 +132,24 @@ export function terrainSurfaceColorAt({
   target.lerp(COLORS.meadowDry, dryStrength);
   target.lerp(COLORS.meadowLush, lushStrength);
   target.lerp(COLORS.forest, forest * 0.24);
-  target.offsetHSL(0, 0, (stepped(detail, 5) - 0.5) * 0.065 + (fleck - 0.5) * 0.025);
+
+  const jungle = clamp01(jungleSoilStrength);
+  if (jungle > 0) {
+    const litterPatch = clamp01(0.32 + dryPatch * 0.42 + fleck * 0.26);
+    const dampHumus = clamp01(0.42 + (1 - detail) * 0.38 + forest * 0.2);
+    const mossPatch = clamp01(lawnPatch * 0.5 + (1 - dry) * 0.28 + forest * 0.22);
+    target.lerp(COLORS.jungleSoil, jungle * (0.6 + litterPatch * 0.14));
+    target.lerp(COLORS.jungleHumus, jungle * dampHumus * 0.2);
+    target.lerp(COLORS.jungleLeafLitter, jungle * litterPatch * 0.16);
+    target.lerp(COLORS.jungleMoss, jungle * mossPatch * 0.13);
+  }
+
+  target.offsetHSL(
+    0,
+    0,
+    (stepped(detail, 5) - 0.5) * 0.065
+      + (fleck - 0.5) * 0.025
+      + (fleck - 0.5) * jungle * 0.018
+  );
   return target;
 }
