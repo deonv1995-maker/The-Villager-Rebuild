@@ -91,7 +91,13 @@ for (const resourceId of tuning.collectibleResourceIds) {
   const f = fixture();
   const item = f.add(resourceId, 0, -3);
   f.tick(6);
-  assert.ok(f.controller.compression, `${resourceId}: compression must start`);
+  assert.ok(f.controller.target, `${resourceId}: target must stay selected during the scan-lock pause`);
+  assert.equal(f.controller.compression, null, `${resourceId}: compression must wait until scanning finishes`);
+  assert.equal(f.controller.getPresentationState().scanning, true, `${resourceId}: scanner stays active while approaching/locking`);
+  assert.equal(f.controller.getPresentationState().scanTarget?.z, item.root.position.z, `${resourceId}: presentation exposes the selected scan target`);
+  f.tick(Math.ceil((tuning.targetScanHoldSeconds + 0.15) / 0.05));
+  assert.ok(f.controller.compression, `${resourceId}: compression must start after scan lock`);
+  assert.equal(f.controller.getPresentationState().scanning, false, `${resourceId}: scanner must switch off before compression`);
   assert.ok(item.active && item.reservedBy, 'Reserved item stays authoritative until commit');
   assert.equal(f.inventory.get(resourceId), 0);
   f.position.set(30, 0, 0);
@@ -167,7 +173,10 @@ for (const resourceId of tuning.collectibleResourceIds) {
   f.tick(Math.ceil((tuning.idleAfterSeconds + 0.3) / 0.05));
   const item = f.add('stick', f.root.position.x, f.root.position.z + 0.6);
   f.tick(6);
-  assert.ok(f.controller.compression, 'Idle collection must reserve a nearby loose resource');
+  assert.ok(f.controller.target, 'Idle collection must scan-lock a nearby loose resource before reserving it');
+  assert.equal(f.controller.compression, null, 'Idle collection must not overlap target scanning and compression');
+  f.tick(Math.ceil((tuning.targetScanHoldSeconds + 0.15) / 0.05));
+  assert.ok(f.controller.compression, 'Idle collection must reserve the resource after the scan-lock pause');
   assert.ok(f.controller.compression.inspectDuration >= tuning.idleInspectMinSeconds,
     'Idle collection must include an inspection beat before compression');
   f.tick(8);
@@ -210,6 +219,8 @@ for (const resourceId of tuning.collectibleResourceIds) {
   const f = fixture();
   const item = f.add('stick', 0, -3);
   f.tick(6);
+  f.tick(Math.ceil((tuning.targetScanHoldSeconds + 0.05) / 0.05));
+  assert.ok(f.controller.compression, 'Disposal test requires an active reserved transfer');
   f.controller.dispose();
   assert.ok(item.active && item.root.visible && !item.reservedBy, 'Disposal releases reservation');
   assert.equal(f.inventory.get('stick'), 0);
@@ -227,4 +238,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: transaction, catch-up, delayed follow sensing, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, delayed follow sensing, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
