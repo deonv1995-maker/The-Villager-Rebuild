@@ -36,6 +36,9 @@ export class SproutVisualRuntimeController {
     this.frameId = null;
     this.lastTimestamp = null;
     this.originalClaim = null;
+    this.terrainHeightAt = typeof game.island?.heightAt === 'function'
+      ? (x, z) => game.island.heightAt(x, z)
+      : null;
   }
 
   start() {
@@ -85,7 +88,8 @@ export class SproutVisualRuntimeController {
       updateSproutScannerVisual(this.visual, this.elapsed, {
         powered,
         scanning,
-        target: scanTarget
+        target: scanTarget,
+        terrainHeightAt: this.terrainHeightAt
       });
     }
 
