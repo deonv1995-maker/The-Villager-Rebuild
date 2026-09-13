@@ -41,6 +41,7 @@ export const SPROUT_COMPANION = Object.freeze({
   collectionRadius: 9,
   beamRange: 2.15,
   scanIntervalSeconds: 0.18,
+  targetScanHoldSeconds: 0.55,
   collectionCooldownSeconds: 0.12,
   compressionSeconds: 0.52,
   logCompressionSeconds: 0.78,
