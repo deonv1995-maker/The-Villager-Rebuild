@@ -2,78 +2,107 @@
 
 ## Scope
 
-The torch is the first portable night-navigation item layered onto the shared day/night clock. It is deliberately isolated from ordinary tool durability: axes, hammers, pickaxes, shovels, spears and swords keep their established per-use durability behavior, while a torch consumes time only while it is actively held.
+The torch is the first portable and placeable night-lighting item layered onto the shared day/night clock. It remains deliberately isolated from ordinary tool durability: axes, hammers, pickaxes, shovels, spears and swords keep their established per-use durability behavior. A handheld torch consumes fuel only while it is actively held, while a torch transferred into the world as a mounted light continues burning independently until its own fuel expires.
 
 ## Gameplay contract
 
 - The torch is crafted from **1 Stick + 2 Grass**.
 - Crafted torches are inventory-backed and occupy a normal tool-belt slot.
+- Every real tool-belt slot displays its available quantity. The Hand pseudo-slot is the only slot without a quantity badge.
 - Equipping a torch shows a simple handheld torch prop in third-person view and creates a warm local light whose origin follows the flame itself rather than the Ranger root.
 - Torch illumination radiates in **all directions** from the flame. A burning torch is a local fire source, not a forward-facing flashlight or modern spotlight.
-- The torch is a practical night-navigation tool, not only a close-range glow. Its configured reach is **15 world units**, while base intensity remains **58** and physically natural inverse-square-style decay remains **2**. Extending the cutoff instead of boosting close-range intensity preserves a warm fire-light centre while allowing terrain, trees and nearby structures to become readable farther ahead.
+- The handheld torch is a practical night-navigation tool, not only a close-range glow. Its configured reach is **15 world units**, while base intensity remains **58** and physically natural inverse-square-style decay remains **2**.
 - The flame visibly flutters while held, while emitted light intensity/reach use a damped version of the same bounded fire signal so the environment does not pulse harshly.
-- The light position follows the animated flame anchor through a short exponential presentation damper. This removes frame-to-frame hand-bob jitter from the illuminated world while still keeping the source visually attached to the handheld torch. Large discontinuities snap immediately so teleports/restores do not create a trailing light.
-- The local torch light casts softened shadows from nearby opaque world geometry, including the Ranger and shadow-enabled forest tree batches. Torch shadow opacity is intentionally below full strength so nearby occlusion reads naturally instead of becoming a hard black cutout. The Ranger is promoted to a local shadow caster only while the torch is burning, then restored to the normal celestial receiver-only policy when the torch is put away or expires.
-- Torch fuel decreases only while `torch` is the equipped tool. Switching to another tool or the hand pauses the remaining burn time.
-- A torch lasts **half of the configured night phase**. With the current 20:00–05:00 night, that is 270 in-game minutes (4.5 in-game hours). The duration is derived from `WORLD_TIME` rather than hard-coded to real seconds, so future day-length tuning preserves the half-night rule.
-- When a torch expires, exactly one torch inventory unit is consumed. If another torch is available while the player is still holding the torch slot, the next unit takes over at full fuel. When the final torch expires, the tool belt falls back to the hand.
-- The existing belt durability bar is reused as a fuel meter for the torch. The tool-belt model marks this meter as `fuel`, keeping the runtime state distinct from conventional durability.
+- The handheld light position follows the animated flame anchor through a short exponential presentation damper. This removes frame-to-frame hand-bob jitter from the illuminated world while still keeping the source visually attached to the torch.
+- The handheld local light casts softened shadows from nearby opaque world geometry. The Ranger is promoted to a local shadow caster only while the handheld torch is burning, then restored to the normal celestial receiver-only policy when the torch is put away or expires.
+- Handheld torch fuel decreases only while `torch` is the equipped tool. Switching to another tool or the Hand pauses the active inventory unit.
+- A torch lasts **half of the configured night phase**. With the current 20:00–05:00 night, that is 270 in-game minutes (4.5 in-game hours). The duration remains derived from `WORLD_TIME` rather than hard-coded real seconds.
+- When a handheld torch expires, exactly one torch inventory unit is consumed. If another torch is available while the player is still holding the torch slot, the next unit takes over at full fuel. When the final torch expires, the tool belt falls back to the Hand.
+- The existing belt durability bar is reused as a fuel meter for the handheld torch. The tool-belt model marks this meter as `fuel`, keeping the runtime state distinct from conventional durability.
+- With a torch equipped, aiming at a valid nearby mount exposes the existing contextual action as **PLACE**. No separate torch-build menu is introduced.
+- Valid current mounts are solid semantic construction walls, existing physical split-log walls, and existing vertical frame/support posts. One torch may occupy a mount at a time.
+- Door and window openings are not treated as flat wall mounts. Jamb-specific mounting should be added only when those semantic geometry anchors are explicitly exposed.
+- The repository currently has no independent fence-post subsystem. Existing vertical frame/support posts provide the current post-mount contract. A future fence system should expose compatible wall/post mount targets instead of adding torch-specific fence logic.
+- Mounting transfers the currently burning inventory unit into the world, preserving that unit's remaining fuel and reducing the available tool-belt quantity by one. If another inventory torch remains, it becomes the next full handheld unit.
+- Mounted torches burn continuously on the same authoritative world clock even when the player equips another tool or leaves the area. Each mounted torch has independent remaining fuel.
+- When a mounted torch burns out, its visual and local light are removed. It does not silently consume a second inventory torch.
+- Mounted torches persist through Save/Continue inside the existing dedicated torch save state, including position, mount identity, orientation and remaining fuel.
 
 ## Architecture
 
-`TorchRuntimeController` owns torch burn state, handheld presentation, fire flicker, light-follow smoothing, and the local light. It does **not** own an animation frame or gameplay wall-clock timer. `WorldTimeRuntime` fans the same authoritative `WorldTimeSystem` snapshot into both visual presentations (lighting/celestial systems) and gameplay time consumers. The torch therefore advances in game-time and cannot silently burn while the world clock is stopped or before the beach-arrival intro completes.
+`TorchRuntimeController` remains the single authority for torch burn state, handheld presentation, mounted presentation, fire flicker and torch-owned lights. It does **not** own an animation frame or gameplay wall-clock timer. `WorldTimeRuntime` fans the same authoritative `WorldTimeSystem` snapshot into visual presentations and gameplay time consumers, so handheld and mounted fuel advance from one clock and cannot silently burn while world time is stopped.
 
-The handheld torch contains a dedicated flame anchor. Each runtime update resolves that anchor to world space. The point light follows that target through centralized `TORCH.light.follow` response, delta clamp, and snap-distance tuning instead of copying every small animated hand displacement directly. This remains the authoritative portable fire source: there is no competing forward cone, Ranger-root glow, or second motion system.
+`TorchPlacementTargetResolver` owns mount discovery. It reads semantic solid-wall geometry from `PanelStructureRegistry.wallPlacementWorld(...)`, allowing wall position, side normal and height to come from the construction source of truth. During the transition from legacy physical construction, it also exposes active physical wall entries and vertical `frame` entries as wall/post mounts. The resolver applies one centralized reach/aim policy and excludes mount ids already occupied by a placed torch.
 
-Flicker is deterministic and bounded. Three phase-offset waves produce the fire signal. The visible flame uses the raw signal for life, while illumination intensity and reach use a low-pass version controlled by `TORCH.light.flicker.smoothingResponse`. Base intensity, reach, decay, frequency, variance and smoothing all live under `TORCH.light`, so the effect can be tuned without duplicating presentation constants in runtime code. The current baseline keeps intensity at **58**, reach at **15**, decay at **2**, and emitted-light intensity variance at **8%**.
+`EquipmentRuntimeController` owns only the player-facing contextual **PLACE** action. It asks `TorchRuntimeController` for the currently valid mount and delegates placement back to the torch runtime. This keeps HUD interaction, structural target resolution and torch fuel/light state as separate responsibilities.
 
-Torch shadows reuse the renderer shadow pipeline already owned by `CelestialShadowSystem`; the torch does not create a second renderer or shadow manager. The shared renderer uses `PCFSoftShadowMap`. Under Three.js r180, `LightShadow.radius` does not provide the intended softness with this renderer mode, so torch softness is controlled by the local shadow-map resolution and shadow intensity instead of relying on a misleading radius tuning value.
+The handheld torch contains a dedicated flame anchor. Each runtime update resolves that anchor to world space. Its point light follows that target through centralized `TORCH.light.follow` response, delta clamp and snap-distance tuning instead of copying every small animated hand displacement directly. This remains the authoritative portable fire source: there is no competing forward cone, Ranger-root glow or second motion system.
 
-The torch owns a **128 × 128** point-light shadow map with shadow intensity **0.72** and a bounded **30 Hz** refresh cadence. The lower map resolution broadens the PCF-soft edge while the higher temporal cadence reduces visible stepping as the handheld source moves. The shadow camera far plane is **16 world units**, covering the 15-unit light radius plus its small bounded reach flicker so newly readable geometry can cast local shadows at the edge of illumination. These values remain centralized under `TORCH.light.shadow`.
+Flicker is deterministic and bounded. Three phase-offset waves produce the fire signal. The handheld visible flame uses the raw signal for life, while handheld illumination intensity and reach use a low-pass version controlled by `TORCH.light.flicker.smoothingResponse`. Base intensity, reach, decay, frequency, variance and smoothing remain centralized under `TORCH.light`.
 
-The renderer remains globally gated with `shadowMap.autoUpdate = false`, while both the celestial key light and torch opt into explicit per-light invalidation through `LightShadow.autoUpdate = false` and `LightShadow.needsUpdate`. A torch refresh therefore invalidates the torch shadow plus the shared renderer gate without forcing the 512px celestial shadow map to redraw at torch cadence. The celestial system keeps its established 10 Hz refresh contract.
+Mounted torches reuse the same visual assets and fire-wave family but have independent deterministic phase offsets so a group of wall lights does not pulse in lockstep. Mounted-light tuning lives under `TORCH.placement.light`, while targeting and mobile budget values live under `TORCH.placement`.
 
-While the torch burns, `TorchRuntimeController` temporarily enables `castShadow` on the Ranger's render meshes, excluding the torch prop itself. Existing centralized shadow enrollment keeps static/chunked forest tree batches and ordinary opaque world meshes eligible as casters and receivers. Ranger caster flags are restored when the torch is no longer active.
+Torch shadows reuse the renderer shadow pipeline already owned by `CelestialShadowSystem`; the torch does not create a second renderer or shadow manager. The handheld torch owns a **128 × 128** point-light shadow map with shadow intensity **0.72** and a bounded **30 Hz** refresh cadence. The shadow camera far plane remains **16 world units**, covering the handheld 15-unit light radius plus bounded reach flicker.
+
+The renderer remains globally gated with `shadowMap.autoUpdate = false`, while both the celestial key light and handheld torch opt into explicit per-light invalidation through `LightShadow.autoUpdate = false` and `LightShadow.needsUpdate`. A handheld refresh therefore invalidates the local torch shadow plus the shared renderer gate without forcing the 512px celestial shadow map to redraw at torch cadence.
+
+Mounted torches intentionally do **not** allocate point-light shadow maps. Permanent stronghold/workspace lighting can contain many fire sources, and six-face point-light shadows would multiply mobile GPU work rapidly. The nearest bounded set of mounted torches emits active point lights; more distant mounted torches retain their visible flame but do not add another active local light until they become one of the nearest sources.
+
+While the handheld torch burns, `TorchRuntimeController` temporarily enables `castShadow` on the Ranger's render meshes, excluding the torch prop itself. Existing centralized shadow enrollment keeps static/chunked forest tree batches and ordinary opaque world meshes eligible as casters and receivers. Ranger caster flags are restored when the handheld torch is no longer active.
 
 The generic `RangerToolPresentation` intentionally ignores the `torch` identifier so it cannot create a competing prop. Torch presentation remains owned by `TorchRuntimeController`.
 
-`SaveGameController` persists the active unit's remaining game minutes separately from ordinary equipment durability. Restore resets the torch runtime's previous-clock sample before the world clock resumes, preventing save/load or background time from being charged as burn time.
+`SaveGameController` continues to persist torch state separately from ordinary equipment durability. The same `state.torch` boundary now contains the active inventory unit's remaining minutes plus mounted-torch records. Restore reconstructs mounted visuals/lights without consuming inventory again, then resets the previous-clock sample so save/load or background time is not charged as fuel.
 
 ## Mobile performance and HUD
 
-The torch retains one omnidirectional point light and one local point-light shadow map. The previous shadow configuration used a 256px map at 10 Hz; the current configuration uses a 128px map at 30 Hz. Because shadow-map work scales with map area, the centralized `mapSize² × refreshHz` guard remains below the previous local-shadow budget even though temporal refresh is three times faster. This intentionally trades excess spatial sharpness for softer edges and smoother motion on mobile.
+The handheld torch retains one omnidirectional point light and one local point-light shadow map. Its current **128px / 30 Hz** shadow policy remains below the previous local shadow-work budget and trades excess spatial sharpness for softer edges and smoother motion on mobile.
 
-The 15-unit light cutoff increases the local scene volume affected by the torch without adding another light, renderer, timer or shadow map. The 512px celestial shadow map remains independently capped at 10 Hz through per-light invalidation, so improving the moving torch does not multiply the sun/moon shadow workload. The Ranger remains receiver-only for the normal celestial policy; torch runtime promotion is temporary and scoped to the period in which a torch is actively burning.
+Mounted torches use a softer local ambient baseline than the navigation torch: **42** intensity, **10.5 world-unit** reach and physical decay **2**. They cast no dynamic point-light shadows. At most the nearest **8** mounted point lights are active at once; mounted flames remain rendered beyond that limit so a larger stronghold still reads as populated with fire sources without unbounded lighting cost.
 
-The current crafting menu reuses the existing campfire fire glyph for the torch recipe, while the belt uses the approved dedicated torch artwork. The eight-slot belt retains the narrow-screen sizing rule so the full belt remains inside the viewport on small mobile widths.
+The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity badges now use the already-existing badge element for spear, axe, hammer, pickaxe, shovel, sword and torch; no parallel inventory counter UI was introduced.
 
 ## Regression coverage
 
-`scripts/verify-torch-system.mjs` protects the following contracts:
+`scripts/verify-torch-system.mjs` protects the established portable-torch contracts, including:
 
 - half-night duration remains derived from configured night boundaries;
 - primitive recipe and tool-belt registration remain intact;
-- fuel advances only while held;
-- one unit is consumed at expiry and spare torches roll over cleanly;
+- handheld fuel advances only while held;
+- one unit is consumed at handheld expiry and spare torches roll over cleanly;
 - the belt meter reports fuel percentage;
-- partial fuel persists across save/restore without offline burn;
+- partial handheld fuel persists across save/restore without offline burn;
 - the torch uses the shared world-time runtime rather than a second timer loop;
-- the local light is a flame-anchored omnidirectional `PointLight`;
-- navigation reach stays in the intended practical-fire range while decay remains physically natural;
-- intensity/reach/flame flutter remains bounded by centralized tuning;
-- the shadow far plane covers maximum bounded torch reach so edge-lit geometry can still occlude correctly;
-- local point-light shadows remain soft, partially transparent, and within the previous mobile map-size × refresh-rate work budget;
-- local torch refresh uses per-light invalidation at 24–30 Hz rather than forcing the celestial map to the same cadence;
-- the Ranger temporarily casts while the torch burns and returns to the normal non-caster state when the torch is put away;
-- centralized forest-tree batches remain eligible shadow casters;
-- the eight-slot belt retains a narrow-screen layout contract.
+- the handheld light is a flame-anchored omnidirectional `PointLight`;
+- navigation reach, decay and bounded flicker stay centralized;
+- local point-light shadows stay soft and within the mobile work budget;
+- handheld shadow refresh uses bounded per-light invalidation;
+- Ranger and forest shadow-caster policies remain intact;
+- the eight-slot belt retains its narrow-screen layout contract.
 
-`scripts/verify-celestial-shadows.mjs` also protects the complementary renderer contract: the celestial key light is explicitly invalidated per light and remains on its established 512px / 10 Hz policy.
+`scripts/verify-placeable-torches.mjs` protects the mounted-light additions:
+
+- vertical frame/support posts and walls resolve as mount targets;
+- occupied mounts cannot stack duplicate torches;
+- placement transfers exactly one inventory torch and preserves the active unit's remaining fuel;
+- mounted torches burn independently on the shared game clock;
+- fixed torches do not allocate shadow maps;
+- only the nearest configured number of mounted point lights are active;
+- mounted torch state survives capture/restore without consuming inventory again;
+- semantic wall targeting remains tied to `PanelStructureRegistry`;
+- all actual tool slots display their available quantity;
+- mounted state stays inside the dedicated torch persistence boundary.
+
+`scripts/verify-celestial-shadows.mjs` protects the complementary renderer contract: the celestial key light is explicitly invalidated per light and remains on its established 512px / 10 Hz policy.
 
 ## Device verification
 
-After merge/deploy, verify on a physical phone that the eighth tool-belt slot remains comfortable to tap, the light visibly stays with the torch flame without visibly snapping on each walking step, illumination spreads naturally around the Ranger instead of forming a flashlight cone, and the softer brightness/flicker reads as fire rather than electronic pulsing.
+After merge/deploy, verify on a physical phone that every crafted tool slot shows the correct available quantity without obscuring the icon, durability/fuel meter or tap target, including the torch slot after mounting one or more torches.
 
-For navigation reach, walk through open terrain and forest at night and confirm that terrain contours, tree trunks and nearby structures become readable noticeably farther ahead than before, while the area immediately around the Ranger is not washed out and the outer edge fades naturally rather than ending as an obvious bright ring.
+At night, equip a torch and approach several solid building walls and vertical frame/support posts. Confirm that **PLACE** appears only for a sensible nearby aimed mount, that placing consumes exactly one available torch, the mounted flame sits against the expected wall/post side, and the next inventory torch remains usable when available. Confirm that the same mount does not accept a second torch.
 
-For the shadow refinement specifically, walk and turn near the Ranger, trees, building walls and uneven terrain at night. Confirm that torch-cast shadows are visibly lighter, their edges read softer rather than hard-cut, and motion no longer advances in obvious 10 Hz steps. Also verify that no shadow acne, detached shadow trails, or distracting low-resolution blocks appear at normal phone viewing distance, that the wider point-light/shadow volume remains smooth on the target Android device, that the night scene is not washed out, and that first-person navigation remains readable while the handheld prop itself is hidden.
+Build a larger lit workspace/stronghold and place enough torches to exceed the eight-active-light budget. Walk through it and confirm that nearby areas remain warmly illuminated as the nearest active-light set changes without obvious popping, while distant mounted flames remain visible and frame rate stays comfortable on the target Android device.
+
+Save and Continue with several mounted torches at different fuel levels. Confirm that every torch returns at the same position/orientation and resumes from its saved fuel rather than burning offline. Let a mounted torch expire and confirm that its world light/visual disappears without consuming another inventory torch.
+
+For the handheld light, retain the established checks: flame-follow should not visibly snap on each walking step; illumination should spread naturally around the Ranger rather than forming a flashlight cone; terrain and nearby structures should remain readable at night; and softened handheld shadows should remain stable without acne, detached trails or distracting low-resolution blocks.

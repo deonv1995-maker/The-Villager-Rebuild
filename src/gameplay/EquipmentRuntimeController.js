@@ -4,6 +4,7 @@ import { ToolDurabilitySystem } from './ToolDurabilitySystem.js';
 
 const RETRIEVAL_ACTION_ID = 'spear-retrieve';
 const STUMP_ACTION_ID = 'shovel-stump';
+const TORCH_PLACEMENT_ACTION_ID = 'torch-place';
 const CAMPFIRE_RECIPE_ID = 'campfire';
 
 export class EquipmentRuntimeController {
@@ -21,6 +22,7 @@ export class EquipmentRuntimeController {
     this.boundCraft = recipeId => this.craft(recipeId);
     this.boundRetrieve = () => this.retrieveSpear();
     this.boundDigStump = () => this.digStump();
+    this.boundPlaceTorch = () => this.placeTorch();
   }
 
   start() {
@@ -44,6 +46,7 @@ export class EquipmentRuntimeController {
     while (this.restorers.length > 0) this.restorers.pop()?.();
     this.game.hud?.setExternalAction(RETRIEVAL_ACTION_ID, null);
     this.game.hud?.setExternalAction(STUMP_ACTION_ID, null);
+    this.game.hud?.setExternalAction(TORCH_PLACEMENT_ACTION_ID, null);
     this.started = false;
   }
 
@@ -111,6 +114,22 @@ export class EquipmentRuntimeController {
     this.#syncHud();
     this.game.setStatus('STUMP REMOVED · +1 LOG FOR BUILDING');
     this.game.hud?.setObjective('Physical Log dropped · lift it with the hand action when ready to build');
+    return result;
+  }
+
+  placeTorch() {
+    if (
+      this.game.toolbelt.getEquippedToolId() !== 'torch' ||
+      this.game.physicalLogs?.isCarrying()
+    ) return null;
+    const target = this.game.torchRuntime?.getPlacementTarget?.();
+    if (!target) {
+      this.#updateTorchPlacementAction();
+      return null;
+    }
+    const result = this.game.torchRuntime?.place?.(target) ?? null;
+    if (!result) return null;
+    this.#syncHud();
     return result;
   }
 
@@ -215,6 +234,7 @@ export class EquipmentRuntimeController {
       this.#ensureHud();
       this.#updateRetrievalAction();
       this.#updateStumpAction();
+      this.#updateTorchPlacementAction();
       if (event) this.#scheduleSync();
       return event;
     };
@@ -257,6 +277,7 @@ export class EquipmentRuntimeController {
     hud.setCrafting(this.#craftingSnapshot());
     this.#updateRetrievalAction();
     this.#updateStumpAction();
+    this.#updateTorchPlacementAction();
 
     const equippedToolId = this.game.toolbelt.getEquippedToolId();
     if (!this.game.physicalLogs?.isCarrying()) {
@@ -338,6 +359,34 @@ export class EquipmentRuntimeController {
       label: target.actionLabel,
       caption: 'DIG',
       onTrigger: this.boundDigStump
+    });
+  }
+
+  #updateTorchPlacementAction() {
+    const hud = this.game.hud;
+    const torchRuntime = this.game.torchRuntime;
+    if (!hud || !torchRuntime) return;
+    if (
+      this.game.physicalLogs?.isCarrying() ||
+      this.game.toolbelt.getEquippedToolId() !== 'torch'
+    ) {
+      hud.setExternalAction(TORCH_PLACEMENT_ACTION_ID, null);
+      return;
+    }
+
+    const target = torchRuntime.getPlacementTarget?.();
+    if (!target) {
+      hud.setExternalAction(TORCH_PLACEMENT_ACTION_ID, null);
+      return;
+    }
+
+    hud.setExternalAction(TORCH_PLACEMENT_ACTION_ID, {
+      available: true,
+      priority: 850,
+      icon: 'torch',
+      label: `Mount torch on ${target.label}`,
+      caption: 'PLACE',
+      onTrigger: this.boundPlaceTorch
     });
   }
 }

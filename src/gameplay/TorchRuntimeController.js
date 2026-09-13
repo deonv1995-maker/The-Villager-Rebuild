@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_DAY_MINUTES } from '../data/WorldTimeDefinitions.js';
 import { TORCH } from '../data/TorchDefinitions.js';
+import { TorchPlacementTargetResolver } from './TorchPlacementTargetResolver.js';
 
 const TAU = Math.PI * 2;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
@@ -35,7 +36,15 @@ export class TorchRuntimeController {
     this.smoothedFlicker = 0;
     this.smoothedReachPulse = 0;
     this.playerShadowState = new Map();
-    this.visualRoot = this.#createVisual();
+    this.placedTorches = [];
+    this.nextPlacedTorchId = 0;
+    this.placementResolver = new TorchPlacementTargetResolver({ game, definition });
+    this.visualAssets = this.#createVisualAssets();
+
+    const handheld = this.#createVisual('ranger-handheld-torch');
+    this.visualRoot = handheld.root;
+    this.flame = handheld.flame;
+    this.flameAnchor = handheld.flameAnchor;
     this.handMounted = game.player.mountRightHandObject?.(this.visualRoot) ?? false;
     if (!this.handMounted) {
       if (!this.visualRoot.parent) game.player.root.add(this.visualRoot);
@@ -63,11 +72,13 @@ export class TorchRuntimeController {
       : Math.max(0, currentAbsoluteGameMinute - this.lastAbsoluteGameMinute);
     this.lastAbsoluteGameMinute = currentAbsoluteGameMinute;
 
-    if (elapsedGameMinutes > 0 && this.#isBurning()) {
-      this.#burn(elapsedGameMinutes);
+    if (elapsedGameMinutes > 0) {
+      if (this.#isBurning()) this.#burn(elapsedGameMinutes);
+      this.#burnPlaced(elapsedGameMinutes);
     }
 
     this.#syncPresentation();
+    this.#syncPlacedPresentation();
     return this.snapshot();
   }
 
@@ -82,8 +93,48 @@ export class TorchRuntimeController {
       remainingGameMinutes: roundTenth(remaining),
       maxGameMinutes: maximum,
       percent: maximum > 0 ? roundTenth((remaining / maximum) * 100) : 0,
-      burning: this.#isBurning()
+      burning: this.#isBurning(),
+      placedQuantity: this.placedTorches.length
     };
+  }
+
+  getPlacementTarget() {
+    if (
+      this.game.toolbelt.getEquippedToolId() !== this.definition.itemId ||
+      !this.game.inventory.has(this.definition.itemId, 1)
+    ) return null;
+    return this.placementResolver.getTarget();
+  }
+
+  place(target = this.getPlacementTarget()) {
+    if (!target || !this.game.inventory.has(this.definition.itemId, 1)) return null;
+    if (this.game.toolbelt.getEquippedToolId() !== this.definition.itemId) return null;
+
+    const remainingGameMinutes = clamp(
+      this.remainingGameMinutes,
+      0.1,
+      this.definition.burnDurationGameMinutes
+    );
+    const consumed = this.game.inventory.consume([{ itemId: this.definition.itemId, quantity: 1 }]);
+    if (!consumed) return null;
+
+    const entry = this.#createPlacedTorch({
+      id: `placed-torch-${this.nextPlacedTorchId}`,
+      mountKind: target.kind,
+      mountId: target.id,
+      position: target.position,
+      yaw: target.yaw,
+      remainingGameMinutes
+    });
+    this.nextPlacedTorchId += 1;
+    this.remainingGameMinutes = this.definition.burnDurationGameMinutes;
+    this.game.toolbelt.clearIfUnavailable();
+    this.#syncPresentation();
+    this.#syncPlacedPresentation();
+    this.game.setStatus?.(
+      `TORCH MOUNTED ON ${String(target.label ?? target.kind ?? 'SURFACE').toUpperCase()} · ${this.game.inventory.get(this.definition.itemId)} AVAILABLE`
+    );
+    return this.#placedSnapshot(entry);
   }
 
   captureState() {
@@ -92,7 +143,9 @@ export class TorchRuntimeController {
         this.remainingGameMinutes,
         0,
         this.definition.burnDurationGameMinutes
-      ))
+      )),
+      nextPlacedTorchId: this.nextPlacedTorchId,
+      placedTorches: this.placedTorches.map(entry => this.#placedSnapshot(entry))
     };
   }
 
@@ -103,9 +156,40 @@ export class TorchRuntimeController {
     } else {
       this.remainingGameMinutes = this.definition.burnDurationGameMinutes;
     }
+
+    this.#clearPlacedTorches();
+    let derivedNextPlacedId = 0;
+    for (const savedTorch of Array.isArray(state?.placedTorches) ? state.placedTorches : []) {
+      const remaining = Number(savedTorch?.remainingGameMinutes);
+      const position = savedTorch?.position;
+      if (
+        !Number.isFinite(remaining) || remaining <= 0 ||
+        !Number.isFinite(position?.x) ||
+        !Number.isFinite(position?.y) ||
+        !Number.isFinite(position?.z)
+      ) continue;
+      const id = typeof savedTorch.id === 'string'
+        ? savedTorch.id
+        : `placed-torch-${derivedNextPlacedId}`;
+      const match = /^placed-torch-(\d+)$/.exec(id);
+      if (match) derivedNextPlacedId = Math.max(derivedNextPlacedId, Number(match[1]) + 1);
+      this.#createPlacedTorch({
+        id,
+        mountKind: typeof savedTorch.mountKind === 'string' ? savedTorch.mountKind : 'surface',
+        mountId: typeof savedTorch.mountId === 'string' ? savedTorch.mountId : null,
+        position,
+        yaw: Number.isFinite(savedTorch.yaw) ? savedTorch.yaw : 0,
+        remainingGameMinutes: clamp(remaining, 0.1, this.definition.burnDurationGameMinutes)
+      });
+    }
+    this.nextPlacedTorchId = Math.max(
+      derivedNextPlacedId,
+      Number.isInteger(state?.nextPlacedTorchId) ? state.nextPlacedTorchId : 0
+    );
     this.lastAbsoluteGameMinute = null;
     this.#syncPresentation();
-    return Number.isFinite(saved) && saved > 0;
+    this.#syncPlacedPresentation();
+    return (Number.isFinite(saved) && saved > 0) || this.placedTorches.length > 0;
   }
 
   dispose() {
@@ -113,6 +197,8 @@ export class TorchRuntimeController {
     this.light.parent?.remove(this.light);
     this.light.shadow?.map?.dispose?.();
     this.visualRoot.parent?.remove(this.visualRoot);
+    this.#clearPlacedTorches();
+    this.#disposeVisualAssets();
   }
 
   #isBurning() {
@@ -142,6 +228,133 @@ export class TorchRuntimeController {
 
       this.game.setStatus?.(`TORCH BURNED OUT · ${this.game.inventory.get(this.definition.itemId)} READY`);
     }
+  }
+
+  #burnPlaced(elapsedGameMinutes) {
+    if (!this.placedTorches.length) return;
+    const expired = [];
+    for (const entry of this.placedTorches) {
+      entry.remainingGameMinutes -= elapsedGameMinutes;
+      if (entry.remainingGameMinutes <= 0) expired.push(entry);
+    }
+    if (!expired.length) return;
+    for (const entry of expired) this.#removePlacedTorch(entry);
+    this.game.setStatus?.(
+      this.placedTorches.length
+        ? `PLACED TORCH BURNED OUT · ${this.placedTorches.length} STILL LIT`
+        : 'PLACED TORCH BURNED OUT'
+    );
+  }
+
+  #createPlacedTorch({ id, mountKind, mountId, position, yaw, remainingGameMinutes }) {
+    const visual = this.#createVisual(id);
+    visual.root.position.set(position.x, position.y, position.z);
+    visual.root.rotation.y = yaw;
+    this.game.sceneSystem.scene.add(visual.root);
+
+    const lightDefinition = this.definition.placement.light;
+    const light = new THREE.PointLight(
+      this.definition.light.color,
+      lightDefinition.intensity,
+      lightDefinition.distance,
+      lightDefinition.decay
+    );
+    light.name = `${id}-light`;
+    light.castShadow = false;
+    light.visible = false;
+    visual.flameAnchor.getWorldPosition(light.position);
+    this.game.sceneSystem.scene.add(light);
+
+    const entry = {
+      id,
+      mountKind,
+      mountId,
+      position: { x: position.x, y: position.y, z: position.z },
+      yaw,
+      remainingGameMinutes,
+      root: visual.root,
+      flame: visual.flame,
+      flameAnchor: visual.flameAnchor,
+      light,
+      phaseOffset: this.#phaseOffsetForId(id)
+    };
+    this.placedTorches.push(entry);
+    return entry;
+  }
+
+  #placedSnapshot(entry) {
+    return {
+      id: entry.id,
+      mountKind: entry.mountKind,
+      mountId: entry.mountId,
+      position: { ...entry.position },
+      yaw: entry.yaw,
+      remainingGameMinutes: roundTenth(clamp(
+        entry.remainingGameMinutes,
+        0,
+        this.definition.burnDurationGameMinutes
+      ))
+    };
+  }
+
+  #syncPlacedPresentation() {
+    if (!this.placedTorches.length) return;
+    const timestamp = (Number(this.now()) || 0) / 1000;
+    this.game.player.getPosition(this.position);
+    const activeLights = new Set(
+      [...this.placedTorches]
+        .sort((left, right) => (
+          this.#distanceSquaredToPlayer(left) - this.#distanceSquaredToPlayer(right)
+        ))
+        .slice(0, this.definition.placement.maxActiveLights)
+    );
+    const flickerDefinition = this.definition.light.flicker;
+    const placedLightDefinition = this.definition.placement.light;
+
+    for (const entry of this.placedTorches) {
+      const time = timestamp + entry.phaseOffset;
+      const slow = Math.sin(time * TAU * flickerDefinition.slowHz + 0.35);
+      const middle = Math.sin(time * TAU * flickerDefinition.middleHz + 1.7);
+      const high = Math.sin(time * TAU * flickerDefinition.highHz + 2.4);
+      const flicker = clamp((slow * 0.5) + (middle * 0.32) + (high * 0.18), -1, 1);
+      const reachPulse = clamp((middle * 0.68) + (high * 0.32), -1, 1);
+      const flameScale = 1 + flicker * flickerDefinition.flameScaleVariance;
+      entry.flame.scale.set(
+        1 - flicker * flickerDefinition.flameScaleVariance * 0.22,
+        flameScale,
+        1 - flicker * flickerDefinition.flameScaleVariance * 0.22
+      );
+      entry.flameAnchor.getWorldPosition(entry.light.position);
+      entry.light.visible = activeLights.has(entry);
+      entry.light.intensity = placedLightDefinition.intensity
+        * (1 + flicker * placedLightDefinition.intensityVariance);
+      entry.light.distance = placedLightDefinition.distance
+        * (1 + reachPulse * placedLightDefinition.distanceVariance);
+    }
+  }
+
+  #distanceSquaredToPlayer(entry) {
+    const dx = entry.position.x - this.position.x;
+    const dy = entry.position.y - this.position.y;
+    const dz = entry.position.z - this.position.z;
+    return dx * dx + dy * dy + dz * dz;
+  }
+
+  #phaseOffsetForId(id) {
+    let hash = 0;
+    for (const character of String(id)) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+    return (hash % 1000) / 997;
+  }
+
+  #removePlacedTorch(entry) {
+    entry.light.parent?.remove(entry.light);
+    entry.root.parent?.remove(entry.root);
+    const index = this.placedTorches.indexOf(entry);
+    if (index >= 0) this.placedTorches.splice(index, 1);
+  }
+
+  #clearPlacedTorches() {
+    for (const entry of [...this.placedTorches]) this.#removePlacedTorch(entry);
   }
 
   #configureShadow() {
@@ -290,48 +503,53 @@ export class TorchRuntimeController {
     return false;
   }
 
-  #createVisual() {
-    const group = new THREE.Group();
-    group.name = 'ranger-handheld-torch';
-    group.userData.celestialShadowPolicy = 'receiver-only';
-
-    const handle = new THREE.Mesh(
-      new THREE.CylinderGeometry(
+  #createVisualAssets() {
+    return {
+      handleGeometry: new THREE.CylinderGeometry(
         this.definition.visual.handleRadius * 0.82,
         this.definition.visual.handleRadius,
         this.definition.visual.handleLength,
         7
       ),
-      new THREE.MeshStandardMaterial({ color: 0x6d4528, roughness: 1 })
-    );
+      handleMaterial: new THREE.MeshStandardMaterial({ color: 0x6d4528, roughness: 1 }),
+      wrapGeometry: new THREE.CylinderGeometry(0.075, 0.065, 0.16, 7),
+      wrapMaterial: new THREE.MeshStandardMaterial({ color: 0x4d3427, roughness: 1 }),
+      flameGeometry: new THREE.ConeGeometry(0.105, this.definition.visual.flameHeight, 7),
+      flameMaterial: new THREE.MeshBasicMaterial({ color: this.definition.light.color })
+    };
+  }
+
+  #createVisual(name) {
+    const group = new THREE.Group();
+    group.name = name;
+    group.userData.celestialShadowPolicy = 'receiver-only';
+
+    const handle = new THREE.Mesh(this.visualAssets.handleGeometry, this.visualAssets.handleMaterial);
     handle.position.y = 0.08;
     handle.castShadow = false;
     group.add(handle);
 
-    const wrap = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.075, 0.065, 0.16, 7),
-      new THREE.MeshStandardMaterial({ color: 0x4d3427, roughness: 1 })
-    );
+    const wrap = new THREE.Mesh(this.visualAssets.wrapGeometry, this.visualAssets.wrapMaterial);
     wrap.position.y = this.definition.visual.handleLength * 0.44;
     wrap.castShadow = false;
     group.add(wrap);
 
-    const flame = new THREE.Mesh(
-      new THREE.ConeGeometry(0.105, this.definition.visual.flameHeight, 7),
-      new THREE.MeshBasicMaterial({ color: this.definition.light.color })
-    );
-    flame.name = 'ranger-torch-flame';
+    const flame = new THREE.Mesh(this.visualAssets.flameGeometry, this.visualAssets.flameMaterial);
+    flame.name = `${name}-flame`;
     flame.position.y = this.definition.visual.handleLength * 0.6;
     flame.castShadow = false;
     flame.receiveShadow = false;
     group.add(flame);
-    this.flame = flame;
 
-    this.flameAnchor = new THREE.Object3D();
-    this.flameAnchor.name = 'ranger-torch-flame-anchor';
-    this.flameAnchor.position.copy(flame.position);
-    group.add(this.flameAnchor);
+    const flameAnchor = new THREE.Object3D();
+    flameAnchor.name = `${name}-flame-anchor`;
+    flameAnchor.position.copy(flame.position);
+    group.add(flameAnchor);
 
-    return group;
+    return { root: group, flame, flameAnchor };
+  }
+
+  #disposeVisualAssets() {
+    for (const value of Object.values(this.visualAssets)) value.dispose?.();
   }
 }
