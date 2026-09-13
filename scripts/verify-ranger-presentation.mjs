@@ -6,6 +6,47 @@ import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../src/data/Pl
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
+function readGlbJson(path) {
+  const bytes = readFileSync(new URL(`../${path}`, import.meta.url));
+  assert.equal(bytes.toString('utf8', 0, 4), 'glTF', `${path} should be a valid GLB`);
+  const jsonChunkLength = bytes.readUInt32LE(12);
+  const jsonChunkType = bytes.readUInt32LE(16);
+  assert.equal(jsonChunkType, 0x4e4f534a, `${path} should start with a JSON chunk`);
+  return JSON.parse(bytes.toString('utf8', 20, 20 + jsonChunkLength).replace(/\u0000+$/g, '').trim());
+}
+
+const rangerGlb = readGlbJson('public/assets/kaykit/adventurers/Ranger.glb');
+const jointIndices = new Set((rangerGlb.skins ?? []).flatMap(skin => skin.joints ?? []));
+const productionJointNames = [...jointIndices]
+  .map(index => rangerGlb.nodes?.[index]?.name)
+  .filter(Boolean);
+assert.ok(productionJointNames.length > 0, 'production Ranger GLB should expose named rig joints');
+
+const productionRoot = new THREE.Group();
+const productionModel = new THREE.Group();
+productionRoot.add(productionModel);
+for (const name of productionJointNames) {
+  const joint = new THREE.Bone();
+  joint.name = name;
+  productionModel.add(joint);
+}
+const productionPlayer = {
+  model: productionModel,
+  root: productionRoot,
+  getPosition(target) {
+    return target.copy(productionRoot.position);
+  },
+  isFirstPerson() {
+    return false;
+  }
+};
+const productionContract = new ScoutCharacterPresentation({ player: productionPlayer });
+assert.equal(
+  productionContract.mode,
+  'scout-rigged',
+  `Scout bone resolver must support the production KayKit rig joints: ${productionJointNames.join(', ')}`
+);
+
 const root = new THREE.Group();
 const model = new THREE.Group();
 root.add(model);
