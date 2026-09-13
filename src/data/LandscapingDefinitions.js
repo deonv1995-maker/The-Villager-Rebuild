@@ -56,7 +56,10 @@ export function landscapingStrokeUnits(mode, length) {
   const definition = landscapingDefinition(mode);
   if (!definition) return 0;
   const safeLength = Number.isFinite(length) ? Math.max(0, length) : 0;
-  return Math.max(1, Math.ceil(safeLength / definition.costUnitLength));
+  // Endpoint math can land a few ulps above an exact unit boundary. Subtracting a
+  // scale-relative epsilon prevents a visually exact one/two-span run overcharging.
+  const boundaryEpsilon = definition.costUnitLength * 0.000001;
+  return Math.max(1, Math.ceil(Math.max(0, safeLength - boundaryEpsilon) / definition.costUnitLength));
 }
 
 export function landscapingCost(mode, length = 0) {
