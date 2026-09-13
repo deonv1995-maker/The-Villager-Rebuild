@@ -28,8 +28,12 @@ export class TorchRuntimeController {
     this.remainingGameMinutes = definition.burnDurationGameMinutes;
     this.lastAbsoluteGameMinute = null;
     this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
+    this.lastPresentationMs = null;
     this.wasBurning = false;
     this.position = new THREE.Vector3();
+    this.lightPositionInitialized = false;
+    this.smoothedFlicker = 0;
+    this.smoothedReachPulse = 0;
     this.playerShadowState = new Map();
     this.visualRoot = this.#createVisual();
     this.handMounted = game.player.mountRightHandObject?.(this.visualRoot) ?? false;
@@ -149,17 +153,18 @@ export class TorchRuntimeController {
     shadow.camera.far = shadowDefinition.far;
     shadow.bias = shadowDefinition.bias;
     shadow.normalBias = shadowDefinition.normalBias;
+    shadow.radius = shadowDefinition.radius;
     shadow.camera.updateProjectionMatrix();
   }
 
   #syncPresentation() {
     const burning = this.#isBurning();
+    const stateChanged = burning !== this.wasBurning;
     this.visualRoot.visible = burning && !Boolean(this.game.player.isFirstPerson?.());
     this.light.visible = burning;
 
-    if (burning !== this.wasBurning) {
+    if (stateChanged) {
       this.#setPlayerShadowCasting(burning);
-      this.#requestShadowRefresh(true);
       this.wasBurning = burning;
     }
 
@@ -168,28 +173,72 @@ export class TorchRuntimeController {
       this.light.intensity = this.definition.light.intensity;
       this.light.distance = this.definition.light.distance;
       this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
+      this.lastPresentationMs = null;
+      this.lightPositionInitialized = false;
+      this.smoothedFlicker = 0;
+      this.smoothedReachPulse = 0;
+      if (stateChanged) this.#requestShadowRefresh(true);
       return;
     }
 
+    const timestamp = Number(this.now()) || 0;
+    const deltaSeconds = this.#presentationDelta(timestamp);
     this.flameAnchor.getWorldPosition(this.position);
-    this.light.position.copy(this.position);
-    this.#applyFlicker();
-    this.#requestShadowRefresh();
+    this.#syncLightPosition(deltaSeconds);
+    this.#applyFlicker(timestamp / 1000, deltaSeconds);
+    this.#requestShadowRefresh(stateChanged, timestamp);
   }
 
-  #applyFlicker() {
-    const time = (Number(this.now()) || 0) / 1000;
-    const fast = Math.sin(time * TAU * 4.73 + 0.35);
-    const middle = Math.sin(time * TAU * 7.91 + 1.7);
-    const high = Math.sin(time * TAU * 13.37 + 2.4);
-    const flicker = clamp((fast * 0.5) + (middle * 0.32) + (high * 0.18), -1, 1);
-    const reachPulse = clamp((middle * 0.68) + (high * 0.32), -1, 1);
+  #presentationDelta(timestamp) {
+    if (this.lastPresentationMs === null) {
+      this.lastPresentationMs = timestamp;
+      return 0;
+    }
+
+    const deltaSeconds = Math.max(0, (timestamp - this.lastPresentationMs) / 1000);
+    this.lastPresentationMs = timestamp;
+    return Math.min(deltaSeconds, this.definition.light.follow.maxDeltaSeconds);
+  }
+
+  #syncLightPosition(deltaSeconds) {
+    const followDefinition = this.definition.light.follow;
+    const snapDistance = followDefinition.snapDistance;
+    const shouldSnap = !this.lightPositionInitialized
+      || this.light.position.distanceToSquared(this.position) > snapDistance * snapDistance;
+
+    if (shouldSnap) {
+      this.light.position.copy(this.position);
+      this.lightPositionInitialized = true;
+      return;
+    }
+
+    if (deltaSeconds <= 0) return;
+    const blend = 1 - Math.exp(-followDefinition.response * deltaSeconds);
+    this.light.position.lerp(this.position, blend);
+  }
+
+  #applyFlicker(time, deltaSeconds) {
     const flickerDefinition = this.definition.light.flicker;
+    const slow = Math.sin(time * TAU * flickerDefinition.slowHz + 0.35);
+    const middle = Math.sin(time * TAU * flickerDefinition.middleHz + 1.7);
+    const high = Math.sin(time * TAU * flickerDefinition.highHz + 2.4);
+    const flicker = clamp((slow * 0.5) + (middle * 0.32) + (high * 0.18), -1, 1);
+    const reachPulse = clamp((middle * 0.68) + (high * 0.32), -1, 1);
+    const smoothingBlend = deltaSeconds <= 0
+      ? 1
+      : 1 - Math.exp(-flickerDefinition.smoothingResponse * deltaSeconds);
+
+    this.smoothedFlicker = THREE.MathUtils.lerp(this.smoothedFlicker, flicker, smoothingBlend);
+    this.smoothedReachPulse = THREE.MathUtils.lerp(
+      this.smoothedReachPulse,
+      reachPulse,
+      smoothingBlend
+    );
 
     this.light.intensity = this.definition.light.intensity
-      * (1 + flicker * flickerDefinition.intensityVariance);
+      * (1 + this.smoothedFlicker * flickerDefinition.intensityVariance);
     this.light.distance = this.definition.light.distance
-      * (1 + reachPulse * flickerDefinition.distanceVariance);
+      * (1 + this.smoothedReachPulse * flickerDefinition.distanceVariance);
 
     const flameScale = 1 + flicker * flickerDefinition.flameScaleVariance;
     this.flame.scale.set(
@@ -199,16 +248,16 @@ export class TorchRuntimeController {
     );
   }
 
-  #requestShadowRefresh(force = false) {
+  #requestShadowRefresh(force = false, timestamp = null) {
     const shadowMap = this.game.sceneSystem.renderer?.shadowMap;
     if (!shadowMap) return;
 
-    const timestamp = Number(this.now()) || 0;
+    const resolvedTimestamp = timestamp ?? (Number(this.now()) || 0);
     const refreshIntervalMs = 1000 / this.definition.light.shadow.refreshHz;
-    if (!force && timestamp - this.lastShadowRefreshMs < refreshIntervalMs) return;
+    if (!force && resolvedTimestamp - this.lastShadowRefreshMs < refreshIntervalMs) return;
 
     shadowMap.needsUpdate = true;
-    this.lastShadowRefreshMs = timestamp;
+    this.lastShadowRefreshMs = resolvedTimestamp;
   }
 
   #setPlayerShadowCasting(enabled) {
