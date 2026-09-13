@@ -26,13 +26,13 @@ export const TORCH = Object.freeze({
       smoothingResponse: 9
     }),
     shadow: Object.freeze({
-      mapSize: 256,
+      mapSize: 128,
       near: 0.12,
       far: 11,
       bias: -0.0015,
       normalBias: 0.035,
-      radius: 2,
-      refreshHz: 10
+      intensity: 0.72,
+      refreshHz: 30
     })
   }),
   visual: Object.freeze({

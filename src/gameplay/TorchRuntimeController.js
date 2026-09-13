@@ -148,12 +148,13 @@ export class TorchRuntimeController {
     const shadowDefinition = this.definition.light.shadow;
     const shadow = this.light.shadow;
     this.light.castShadow = true;
+    shadow.autoUpdate = false;
     shadow.mapSize.set(shadowDefinition.mapSize, shadowDefinition.mapSize);
     shadow.camera.near = shadowDefinition.near;
     shadow.camera.far = shadowDefinition.far;
     shadow.bias = shadowDefinition.bias;
     shadow.normalBias = shadowDefinition.normalBias;
-    shadow.radius = shadowDefinition.radius;
+    shadow.intensity = shadowDefinition.intensity;
     shadow.camera.updateProjectionMatrix();
   }
 
@@ -256,6 +257,7 @@ export class TorchRuntimeController {
     const refreshIntervalMs = 1000 / this.definition.light.shadow.refreshHz;
     if (!force && resolvedTimestamp - this.lastShadowRefreshMs < refreshIntervalMs) return;
 
+    this.light.shadow.needsUpdate = true;
     shadowMap.needsUpdate = true;
     this.lastShadowRefreshMs = resolvedTimestamp;
   }
