@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v2';
+const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v1';
 const SIMPLE_HUMANOID_MESH_BUDGET = 16;
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
