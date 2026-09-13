@@ -24,7 +24,7 @@ export const SPROUT_COMPANION = Object.freeze({
   idleInspectMinSeconds: 0.9,
   idleInspectMaxSeconds: 1.65,
   idleAnimationAfterSeconds: 10,
-  idleAnimationRadius: 3,
+  idleAnimationRadius: 3.5,
   idleAnimationCooldownMinSeconds: 10,
   idleAnimationCooldownMaxSeconds: 16,
   idleAffectionSeconds: 2.2,
