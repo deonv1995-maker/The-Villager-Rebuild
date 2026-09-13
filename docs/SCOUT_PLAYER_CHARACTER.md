@@ -10,9 +10,9 @@ The historical `RangerController` and KayKit medium rig remain internal compatib
 
 ## Current visual foundation
 
-`src/player/ScoutCharacterPresentation.js` remains the stable rig-following layer. It resolves the existing KayKit medium-rig bones, hides the old Ranger render meshes and maps visible geometry onto the animated skeleton.
+`src/player/ScoutCharacterPresentation.js` remains the low-level rig-following geometry layer. `src/player/SimpleHumanoidPresentation.js` is the active runtime presentation and now adds a stricter side-binding contract before any visible limb is allowed to follow the rig.
 
-`src/player/SimpleHumanoidPresentation.js` is now the runtime presentation layer. It intentionally removes the earlier mock-up-specific styling and keeps only the essential humanoid pieces:
+The active presentation intentionally keeps only the essential humanoid pieces:
 
 - one head with two simple eyes;
 - one torso;
@@ -23,13 +23,21 @@ The historical `RangerController` and KayKit medium rig remain internal compatib
 - left and right shins;
 - left and right feet.
 
-There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems are not deleted from repository history; they are simply no longer part of the active player appearance while the body and motion foundation are verified.
+There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems remain in repository history but are not part of the active player appearance while body and motion correctness are verified.
 
-The active visual revision is `simple-humanoid-v1`. It uses a strict 16-mesh presentation budget so limb alignment and movement remain easy to inspect on mobile.
+The active visual revision is `simple-humanoid-v2`. It keeps the strict 16-mesh presentation budget so limb alignment and movement remain easy to inspect on mobile.
 
-`src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code, but now routes to `SimpleHumanoidPresentation`.
+`src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code and routes to `SimpleHumanoidPresentation`.
 
-If the expected medium rig cannot be resolved, the presentation still falls back to the legacy Ranger render instead of making the player invisible.
+## Explicit left/right rig binding
+
+Device testing exposed a real rig-resolution bug in the first humanoid foundation. The older fuzzy resolver used single letters such as `l` and `r` as unrestricted substring matches. That meant the `r` inside words such as `arm`, `upper` and `lower` could make a right-side upper/lower limb resolve to a left-side joint encountered earlier in the rig traversal. The visible hand could still resolve correctly, producing the exact cross-body stretching and folded limbs seen on device.
+
+`SimpleHumanoidPresentation` now requires an **explicit side marker** before binding a visible limb. Accepted side markers include full `Left`/`Right` naming and explicit `L`/`R` tokens or suffixes such as `UpperArm_L`, `UpperArm_R`, `UpperLegL` and `UpperLegR`. A letter occurring inside an ordinary word never counts as a side marker.
+
+If a complete explicit left/right set cannot be resolved, the simple presentation does not guess. It restores the legacy Ranger render as a safe fallback instead of showing a mangled humanoid.
+
+This explicit side-binding layer is the foundation for future character styling. New clothing or body-detail work should build on this verified humanoid presentation rather than bypassing it.
 
 ## Why the mock-up is paused
 
@@ -37,9 +45,9 @@ Repeated polish passes were mixing two separate problems: **body/rig correctness
 
 The order from this point is:
 
-1. verify humanoid proportions and limb movement;
+1. verify humanoid proportions and left/right limb movement;
 2. verify hands and feet stay aligned through locomotion, jumping and tools;
-3. fix any rig-following or body-proportion problems at the foundation layer;
+3. fix any remaining rig-following or body-proportion problems at the foundation layer;
 4. only then add clothing, hair, accessories and final Scout identity back in controlled increments.
 
 This keeps future visual work additive instead of repeatedly compensating for uncertain proportions underneath.
@@ -58,23 +66,26 @@ The second jump resets upward velocity rather than adding to the current vertica
 
 ## Systems deliberately unchanged
 
-This foundation pass does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, tool anchors or the existing KayKit animation files.
+This foundation repair does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, tool anchors or the existing KayKit animation files.
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` now verifies the simple humanoid compatibility boundary, the 16 essential visible meshes, production KayKit joint compatibility, first-person visibility, visible hand/foot joint following and the existing double-jump tuning.
+`npm run verify:ranger-presentation` continues to verify the simple humanoid compatibility boundary, the 16 essential visible meshes, production KayKit joint compatibility, first-person visibility, visible hand/foot joint following and existing double-jump tuning.
 
-The full `npm run check` remains the merge gate.
+`npm run verify:humanoid-side-binding` specifically reproduces the left-before-right naming order that exposed the device bug and verifies that upper arms, lower arms, hands, thighs, shins and feet bind to distinct explicit left/right joints and remain on the correct side of a neutral test pose.
+
+Both checks are part of the full `npm run check` merge gate.
 
 Device verification after deployment should confirm:
 
-1. the character clearly reads as a basic humanoid in third person;
-2. both arms bend and move from the correct shoulders/elbows;
+1. both shoulders and elbows stay on their own side of the torso in idle and movement;
+2. neither arm stretches through the chest to reach the opposite hand;
 3. both hands remain attached to the correct wrists;
-4. both legs move from the correct hips/knees;
-5. both feet remain attached and face the expected direction while walking, running and jumping;
-6. axe, hammer, pickaxe and spear still align with the visible right hand;
-7. first person hides the body as before;
-8. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
+4. both thighs and shins remain separated instead of collapsing onto one side;
+5. knees bend in the expected direction through walk/run/jump animations;
+6. both feet remain attached and face the expected direction;
+7. axe, hammer, pickaxe and spear still align with the visible right hand;
+8. first person hides the body as before;
+9. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
 
 Final clothing, hair, face, scarf, cape, satchel and boot styling should not resume until this foundation has been accepted on-device.
