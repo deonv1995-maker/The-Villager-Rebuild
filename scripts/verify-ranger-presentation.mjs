@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from '../src/player/ScoutCharacterPresentation.js';
+import { RangerAppearancePresentation } from '../src/player/RangerAppearancePresentation.js';
 import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../src/data/PlayerTraversalTuning.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -107,17 +108,26 @@ const player = {
 };
 
 root.updateMatrixWorld(true);
-const presentation = new ScoutCharacterPresentation({ player });
+const presentation = new RangerAppearancePresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'compatible medium rigs should activate the Scout presentation');
 assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger quiver should stay detached');
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should be hidden behind the Scout presentation');
 assert.equal(presentation.visualRoot.parent, root, 'Scout presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing character identity should be Scout');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'scout-polish-v2', 'runtime Scout should use the polished visual revision');
+assert.equal(presentation.visualRoot.userData.visualMeshBudget, 72, 'Scout visual polish should retain an explicit mobile mesh budget');
 assert.ok(presentation.visualRoot.getObjectByName('scout-tunic'), 'Scout should include the low-poly tunic silhouette');
 assert.ok(presentation.visualRoot.getObjectByName('scout-scarf'), 'Scout should include the green scarf/cowl');
 assert.ok(presentation.visualRoot.getObjectByName('scout-satchel'), 'Scout should include the readable satchel shape');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot'), 'Scout should include chunky traversal boots');
+assert.ok(presentation.visualRoot.getObjectByName('scout-left-pupil'), 'Scout polish should add readable eye detail');
+assert.ok(presentation.visualRoot.getObjectByName('scout-nose'), 'Scout polish should add a simple faceted nose');
+assert.ok(presentation.visualRoot.getObjectByName('scout-belt-buckle'), 'Scout polish should add a visible belt buckle');
+assert.ok(presentation.visualRoot.getObjectByName('scout-left-tunic-sleeve'), 'Scout polish should layer green tunic sleeves over the undershirt');
+assert.ok(presentation.visualRoot.getObjectByName('scout-left-forearm-wrap'), 'Scout polish should add leather forearm wraps');
+assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot-sole'), 'Scout polish should give traversal boots a layered sole');
+assert.ok(presentation.visualRoot.getObjectByName('scout-cape-center-seam'), 'Scout polish should keep the cape visibly faceted and layered');
 
 let scoutMeshCount = 0;
 presentation.visualRoot.traverse(object => {
@@ -125,7 +135,11 @@ presentation.visualRoot.traverse(object => {
   scoutMeshCount += 1;
   assert.equal(object.material.flatShading, true, `${object.name} should retain low-poly flat shading`);
 });
-assert.ok(scoutMeshCount >= 20, 'Scout should be composed from a readable set of low-poly parts');
+assert.ok(scoutMeshCount >= 60, 'Scout polish should add enough layered geometry to read as a finished character');
+assert.ok(
+  scoutMeshCount <= presentation.visualRoot.userData.visualMeshBudget,
+  `Scout polish should stay within its mobile mesh budget (${scoutMeshCount}/72)`
+);
 
 presentation.update(1 / 60);
 root.position.z += 0.12;
@@ -144,13 +158,19 @@ assert.equal(presentation.visualRoot.visible, true, 'Scout body should restore i
 
 const compatibilityModule = read('src/player/RangerAppearancePresentation.js');
 assert.ok(
-  compatibilityModule.includes("ScoutCharacterPresentation as RangerAppearancePresentation"),
-  'historical Ranger presentation imports should resolve through the Scout compatibility boundary'
+  compatibilityModule.includes('PolishedScoutCharacterPresentation as RangerAppearancePresentation'),
+  'historical Ranger presentation imports should resolve through the polished Scout compatibility boundary'
+);
+const polishModule = read('src/player/ScoutVisualPolish.js');
+assert.ok(
+  polishModule.includes('extends ScoutCharacterPresentation')
+    && polishModule.includes("visualRevision = POLISH_REVISION"),
+  'Scout visual polish should remain layered on the stable rig-following presentation instead of replacing it'
 );
 
 const controller = read('src/player/RangerController.js');
 assert.ok(
-  controller.includes("PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed"),
+  controller.includes('PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed'),
   'player controller should consume centralized traversal tuning'
 );
 assert.ok(
@@ -166,7 +186,7 @@ assert.ok(
   'legacy realistic jump constants should no longer drive traversal'
 );
 assert.ok(
-  controller.includes("if (!event.repeat) this.jump();"),
+  controller.includes('if (!event.repeat) this.jump();'),
   'holding Space must not consume both jump stages through keyboard repeat'
 );
 
@@ -193,4 +213,4 @@ assert.ok(
   'full repository check must retain player-presentation and traversal regression coverage'
 );
 
-console.log('Scout presentation and double-jump regression checks passed.');
+console.log('Scout presentation, visual polish, and double-jump regression checks passed.');
