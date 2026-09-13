@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
 const POLISH_REVISION = 'scout-polish-v2';
 
@@ -187,9 +188,9 @@ export function applyScoutVisualPolish(presentation) {
   root.userData.visualMeshBudget = 72;
 }
 
-export class PolishedScoutCharacterPresentation {
-  constructor({ basePresentation }) {
-    this.basePresentation = basePresentation;
-    applyScoutVisualPolish(basePresentation);
+export class PolishedScoutCharacterPresentation extends ScoutCharacterPresentation {
+  constructor(options) {
+    super(options);
+    applyScoutVisualPolish(this);
   }
 }
