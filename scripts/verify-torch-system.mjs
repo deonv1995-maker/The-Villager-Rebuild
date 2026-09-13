@@ -36,9 +36,21 @@ assert.ok(
   'Torch emitted-light flicker must stay subtle rather than harsh'
 );
 assert.ok(TORCH.light.follow.response > 0, 'Torch light must retain damped hand-follow response');
-assert.ok(TORCH.light.shadow.radius >= 1, 'Torch local shadows must retain a softened edge radius');
-assert.ok(TORCH.light.shadow.mapSize <= 256, 'Portable point-light shadows must stay within the mobile shadow budget');
-assert.ok(TORCH.light.shadow.refreshHz <= 10, 'Portable shadow refresh must remain bounded for mobile');
+assert.ok(TORCH.light.shadow.mapSize <= 128, 'Torch shadow map must stay low resolution enough for a soft local penumbra');
+assert.ok(
+  TORCH.light.shadow.intensity >= 0.5 && TORCH.light.shadow.intensity < 1,
+  'Torch shadows must remain visible without becoming fully opaque and harsh'
+);
+assert.ok(
+  TORCH.light.shadow.refreshHz >= 24 && TORCH.light.shadow.refreshHz <= 30,
+  'Portable torch shadows must refresh smoothly while staying bounded for mobile'
+);
+const previousShadowWorkBudget = 256 ** 2 * 10;
+const currentShadowWorkBudget = TORCH.light.shadow.mapSize ** 2 * TORCH.light.shadow.refreshHz;
+assert.ok(
+  currentShadowWorkBudget <= previousShadowWorkBudget,
+  'Smoother torch refresh must not exceed the previous map-size × refresh-rate work budget'
+);
 assert.deepEqual(
   CRAFTING_RECIPES.torch.ingredients,
   [{ itemId: 'stick', quantity: 1 }, { itemId: 'grass', quantity: 2 }],
@@ -100,11 +112,12 @@ torch.apply({ day: 1, minuteOfDay: 20 * 60 });
 assert.equal(torch.light.visible, true, 'Equipped torch must emit light');
 assert.equal(torch.light.isPointLight, true, 'Burning torch must radiate in all directions from one point light');
 assert.equal(torch.light.castShadow, true, 'Burning torch must own a bounded local shadow map');
+assert.equal(torch.light.shadow.autoUpdate, false, 'Torch shadow must use explicit per-light invalidation');
 assert.equal(torch.light.shadow.mapSize.width, TORCH.light.shadow.mapSize);
 assert.equal(torch.light.shadow.mapSize.height, TORCH.light.shadow.mapSize);
 assert.equal(torch.light.shadow.camera.near, TORCH.light.shadow.near);
 assert.equal(torch.light.shadow.camera.far, TORCH.light.shadow.far);
-assert.equal(torch.light.shadow.radius, TORCH.light.shadow.radius);
+assert.equal(torch.light.shadow.intensity, TORCH.light.shadow.intensity);
 assert.equal(torch.light.position.x, 3, 'Torch light X must come from the handheld flame anchor');
 assert.ok(
   nearlyEqual(torch.light.position.y, 2 + TORCH.visual.handleLength * 0.6, 0.0001),
@@ -112,8 +125,11 @@ assert.ok(
 );
 assert.equal(torch.light.position.z, -4, 'Torch light Z must come from the handheld flame anchor');
 assert.equal(rangerMesh.castShadow, true, 'Ranger must become a torch-shadow caster while the torch burns');
-assert.equal(rendererShadowMap.needsUpdate, true, 'Torch activation must request a local shadow refresh');
+assert.equal(torch.light.shadow.needsUpdate, true, 'Torch activation must invalidate only its local shadow');
+assert.equal(rendererShadowMap.needsUpdate, true, 'Torch activation must request the shared shadow renderer pass');
 
+torch.light.shadow.needsUpdate = false;
+rendererShadowMap.needsUpdate = false;
 const initialLightX = torch.light.position.x;
 playerRoot.position.x += 0.6;
 shadowClock += 16;
@@ -124,6 +140,12 @@ assert.ok(
   torch.light.position.x > initialLightX && torch.light.position.x < currentFlamePosition.x,
   'Torch light movement must damp hand-bob displacement instead of snapping to the flame anchor'
 );
+assert.equal(
+  torch.light.shadow.needsUpdate,
+  false,
+  'Torch shadow must not redraw faster than its higher but still bounded local cadence'
+);
+assert.equal(rendererShadowMap.needsUpdate, false);
 
 const firstIntensity = torch.light.intensity;
 const firstFlameScale = torch.flame.scale.y;
@@ -135,6 +157,8 @@ assert.ok(
   Math.abs(torch.light.intensity - TORCH.light.intensity) <= TORCH.light.intensity * TORCH.light.flicker.intensityVariance + 0.001,
   'Torch flicker must stay inside its centralized intensity variance'
 );
+assert.equal(torch.light.shadow.needsUpdate, true, 'Torch shadow must invalidate after its local refresh interval');
+assert.equal(rendererShadowMap.needsUpdate, true);
 
 torch.apply({ day: 1, minuteOfDay: 22 * 60 + 15 });
 assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135));
@@ -215,7 +239,8 @@ const checks = [
   ['torch light is a flame-anchored omnidirectional point source', torchRuntimeSource.includes('new THREE.PointLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
   ['torch light follows the hand through one damped presentation response', torchRuntimeSource.includes('this.#syncLightPosition(deltaSeconds)') && torchRuntimeSource.includes('Math.exp(-followDefinition.response * deltaSeconds)')],
   ['torch emitted-light flicker is low-pass filtered before intensity/reach output', torchRuntimeSource.includes('this.smoothedFlicker = THREE.MathUtils.lerp') && torchRuntimeSource.includes('flickerDefinition.smoothingResponse')],
-  ['torch uses bounded shadow refresh rather than per-frame shadow ownership', torchRuntimeSource.includes('this.definition.light.shadow.refreshHz') && torchRuntimeSource.includes('shadowMap.needsUpdate = true')],
+  ['torch uses bounded per-light shadow invalidation rather than forcing every light to redraw', torchRuntimeSource.includes('this.light.shadow.needsUpdate = true') && torchRuntimeSource.includes('this.definition.light.shadow.refreshHz')],
+  ['celestial shadow refresh is independently invalidated at its existing cadence', celestialShadowSource.includes('shadow.autoUpdate = false') && celestialShadowSource.includes('this.light.shadow.needsUpdate = true')],
   ['forest tree batches remain centralized shadow casters', celestialShadowSource.includes('return { cast: staticTreeBatch, receive: staticTreeBatch }')],
   ['mobile HUD exposes the dedicated torch artwork', mobileHud.includes('torch: ui.torch')],
   ['eight-slot mobile belt has a narrow-screen layout contract', torchCss.includes('@media (max-width: 420px)') && torchCss.includes('10.6vw')],
