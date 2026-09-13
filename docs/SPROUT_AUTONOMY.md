@@ -1,4 +1,4 @@
-# Sprout autonomy and bonding
+# Sprout autonomy and idle animation
 
 Status: **active companion-behaviour layer**.
 
@@ -20,16 +20,15 @@ Loose-resource retrieval still has priority over decorative roaming. When Sprout
 
 Sprout still does not harvest intact trees, rocks or grass patches. Idle curiosity is not a second harvesting system.
 
-## Ranger bonding interactions
+## Automatic extended-idle flourish
 
-Bonding interactions are **player-triggered**, not forced ambient cinematics. When the Ranger has been idle and Sprout is nearby, the existing context-action system may offer one low-priority Sprout action. World pickup, work-tool, combat and higher-priority external actions continue to win first.
+Sprout's longer idle animation is ambient companion personality, not a player command. After the Ranger has remained inactive for an extended period, Sprout automatically performs a short visual flourish when no collection target or compression transaction has priority and Sprout is still nearby.
 
-Two interactions are currently available and alternate after use:
+There is **no context-action button** for this behavior. PET/COUNT actions are not exposed, and the automatic flourish does not call the Ranger cinematic boundary, play a Ranger interaction clip, change inventory, write status feedback or require input. Ranger control remains available throughout.
 
-- **PET** — the Ranger faces Sprout and uses the existing interaction animation while Sprout moves into a close, lowered hover for a head-rub moment.
-- **COUNT** — the Ranger and Sprout face one another while Sprout enters a scanner-active inventory-check pose; the existing shared inventory snapshot is summarized through normal status feedback.
+The flourish alternates between two lightweight Sprout-only presentation beats: a playful close hover/tilt and a scanner-focused curiosity pose. Both remain outside the Ranger personal-space radius. A cooldown keeps the behavior occasional rather than repetitive.
 
-These interactions intentionally reuse the Ranger's existing cinematic/animation boundary and Sprout's existing procedural presentation. They do not add a relationship stat, affection currency, second inventory or new persistence authority. Exact hand contact and final timing remain a device-level animation-polish concern because the current KayKit Ranger clips were not authored specifically for Sprout.
+Ranger movement immediately cancels an active flourish and resets the extended-idle timer. Normal follow, catch-up, collection and collision behavior then resumes through the existing companion controller.
 
 ## Presentation states
 
@@ -37,13 +36,13 @@ These interactions intentionally reuse the Ranger's existing cinematic/animation
 
 ## Architecture boundaries
 
-- `SproutCompanionController`: follow sampling, reaction delay, formation drift, idle roam/scan, collection approach, inspection/compression presentation and bonding orchestration.
+- `SproutCompanionController`: follow sampling, reaction delay, formation drift, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
 - `GatherableSystem`: loose-resource identity, reservation/release, capacity re-check and committed removal.
 - `InventorySystem`: the single Ranger/Sprout item-count authority.
-- `RangerController`: Ranger locomotion plus the existing cinematic/animation execution boundary used only after the player triggers a bonding action.
-- `MobileHud` / `ContextActionPolicy`: existing context-action presentation and priority; no Sprout-specific inventory authority.
+- `RangerController`: Ranger locomotion and existing cinematics remain independent; Sprout's ambient idle flourish does not seize this boundary.
+- `MobileHud` / `ContextActionPolicy`: unchanged; Sprout's idle flourish does not register an external action.
 - `SproutVisualRuntimeController` / `SproutVisualAsset`: visual state only.
 
 ## Verification target
 
-Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, PET does not visibly intersect the Ranger, COUNT remains readable on a phone screen, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
+Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
