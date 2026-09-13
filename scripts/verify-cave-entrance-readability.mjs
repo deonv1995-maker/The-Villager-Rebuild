@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
+import { caveTerrainOffsetAt } from '../src/world/CaveTerrainProfile.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 
 const caveDefinition = EXPLORATION_POIS.find(poi => poi.type === 'cave');
 assert.ok(caveDefinition, 'exploration POI definitions must retain the authored cave');
+assert.ok(caveDefinition.terrainCut, 'authored cave must own its terrain-cut profile');
 
 const terrain = new ExpandedIslandTerrainSystem(new THREE.Group());
 const group = new THREE.Group();
@@ -37,8 +39,9 @@ const distanceToSpawn = point => Math.hypot(point.x - WORLD_LAYOUT.spawn.x, poin
 const mouthWorld = localToWorld(0, 0);
 const approachWorld = localToWorld(0, -4.4);
 const foothillSampleWorld = localToWorld(0, -6);
+const midTunnelWorld = localToWorld(0, caveDefinition.depth * 0.55);
 const interiorWorld = localToWorld(0, caveDefinition.depth);
-const mountainSampleWorld = localToWorld(0, 10);
+const shoulderWorld = localToWorld(caveDefinition.mouthWidth * 0.82, caveDefinition.depth * 0.48);
 assert.equal(
   distanceToSpawn(approachWorld) < distanceToSpawn(mouthWorld) - 3,
   true,
@@ -50,19 +53,61 @@ assert.equal(
   'cave depth must continue away from the player route into the northern highlands'
 );
 
+const mouthCut = caveTerrainOffsetAt(caveDefinition, mouthWorld.x, mouthWorld.z);
+const approachCut = caveTerrainOffsetAt(caveDefinition, approachWorld.x, approachWorld.z);
+const interiorCut = caveTerrainOffsetAt(caveDefinition, interiorWorld.x, interiorWorld.z);
+const shoulderCut = caveTerrainOffsetAt(caveDefinition, shoulderWorld.x, shoulderWorld.z);
+assert.equal(mouthCut <= -0.6, true, 'cave mouth must be sunk below the surrounding terrain');
+assert.equal(Math.abs(approachCut) < 0.08, true, 'terrain cut must fade out before the exterior approach');
+assert.equal(interiorCut <= -2.4, true, 'cave floor must be carved substantially deeper toward the back of the tunnel');
+assert.equal(Math.abs(shoulderCut) < 0.08, true, 'cave terrain cut must leave the surrounding hillside shoulders intact');
+
 const mouthTerrainY = terrain.heightAt(mouthWorld.x, mouthWorld.z);
 const foothillApproachY = terrain.heightAt(foothillSampleWorld.x, foothillSampleWorld.z);
-const mountainBehindY = terrain.heightAt(mountainSampleWorld.x, mountainSampleWorld.z);
-assert.equal(mouthTerrainY < 8, true, 'first cave must sit on the mountain foothill rather than the elevated mountain core');
+const midTunnelY = terrain.heightAt(midTunnelWorld.x, midTunnelWorld.z);
+const interiorTerrainY = terrain.heightAt(interiorWorld.x, interiorWorld.z);
+const shoulderTerrainY = terrain.heightAt(shoulderWorld.x, shoulderWorld.z);
+assert.equal(mouthTerrainY < 8, true, 'first cave must stay on the mountain foothill rather than the elevated mountain core');
 assert.equal(
-  mouthTerrainY - foothillApproachY >= 0.8,
+  mouthTerrainY - foothillApproachY <= 0.45,
   true,
-  'ground must fall away toward the cave approach so the entrance reads at the base of the mountain'
+  'cave threshold must no longer perch conspicuously above the exterior approach'
 );
 assert.equal(
-  mountainBehindY - mouthTerrainY >= 1.5,
+  midTunnelY < mouthTerrainY - 0.15,
   true,
-  'authoritative terrain must rise behind the cave mouth so the entrance reads as cut into the mountain'
+  'authoritative cave floor must descend after the player crosses the threshold'
+);
+assert.equal(
+  interiorTerrainY < midTunnelY - 0.1,
+  true,
+  'authoritative cave floor must keep descending into the hill instead of climbing with the surface'
+);
+assert.equal(
+  shoulderTerrainY - midTunnelY >= 1.2,
+  true,
+  'undisturbed hillside must remain clearly above the carved tunnel floor so the cave reads as cut into the ground'
+);
+
+const terrainRenderGroup = new THREE.Group();
+const terrainRender = new ExpandedIslandTerrainSystem(terrainRenderGroup);
+terrainRender.create();
+const chunkSize = 72;
+const caveChunkX = Math.floor(caveDefinition.x / chunkSize);
+const caveChunkZ = Math.floor(caveDefinition.z / chunkSize);
+const caveTerrainChunk = terrainRenderGroup.getObjectByName(`terrain-chunk-${caveChunkX}-${caveChunkZ}`);
+assert.ok(caveTerrainChunk, 'terrain renderer must retain the chunk containing the cave');
+assert.equal(
+  caveTerrainChunk.userData.terrainSegments,
+  terrainRender.chunkTerrainSegments * 2,
+  'only cave-influenced terrain chunks must receive enough local tessellation to show the carved entrance'
+);
+const farTerrainChunk = terrainRenderGroup.getObjectByName('terrain-chunk-0-0');
+assert.ok(farTerrainChunk, 'terrain renderer must retain ordinary mainland chunks');
+assert.equal(
+  farTerrainChunk.userData.terrainSegments,
+  terrainRender.chunkTerrainSegments,
+  'ordinary terrain chunks must keep the established mobile mesh density'
 );
 
 const landform = root.getObjectByName(`${caveDefinition.id}-landform`);
@@ -134,7 +179,7 @@ assert.equal(
   true,
   'freestanding tunnel ribs must begin behind the continuous mouth shell so they cannot clutter the entrance silhouette'
 );
-assert.equal(tunnelRibs.userData.terrainConforming, true, 'tunnel ribs must follow the actual highland ground profile');
+assert.equal(tunnelRibs.userData.terrainConforming, true, 'tunnel ribs must follow the actual carved highland ground profile');
 assert.ok(
   root.getObjectByName(`${caveDefinition.id}-tunnel-rib-2-crown`),
   'tunnel depth cues must continue toward the back of the alcove'
@@ -148,11 +193,11 @@ assert.equal(
   true,
   'dark terminus must stay recessed at the back of the alcove'
 );
-assert.equal(darkness.userData.terrainConforming, true, 'dark terminus must stay anchored to the terrain at the back of the alcove');
+assert.equal(darkness.userData.terrainConforming, true, 'dark terminus must stay anchored to the carved terrain at the back of the alcove');
 
 const floor = root.getObjectByName(`${caveDefinition.id}-floor`);
 assert.ok(floor, 'cave must retain a walk-in alcove floor');
-assert.equal(floor.userData.terrainConforming, true, 'walk-in cave floor must conform to the authoritative terrain instead of floating through it');
+assert.equal(floor.userData.terrainConforming, true, 'walk-in cave floor must conform to the authoritative carved terrain instead of floating through it');
 floor.geometry.computeBoundingBox();
 assert.equal(floor.geometry.boundingBox.min.z >= -0.01, true, 'cave floor must begin at the threshold rather than extending outside the mouth');
 assert.equal(
@@ -168,7 +213,7 @@ approach.geometry.computeBoundingBox();
 assert.equal(approach.geometry.boundingBox.min.z < -4, true, 'worn approach must lead visibly out in front of the cave mouth');
 assert.equal(approach.geometry.boundingBox.max.z > 0, true, 'worn approach must blend through the cave threshold');
 
-assert.equal(obstacles.length, 4, 'cave polish must preserve the established side-rock collision contract');
+assert.equal(obstacles.length, 4, 'cave terrain cut must preserve the established side-rock collision contract');
 assert.equal(obstacles.every(obstacle => obstacle.type === 'cave-rock'), true, 'cave collision must retain its established obstacle type');
 
-console.log('cave foothill placement, terrain embedding, facing, depth and collision contracts verified');
+console.log('cave terrain cut, foothill embedding, depth, local tessellation and collision contracts verified');
