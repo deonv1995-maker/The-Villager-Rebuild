@@ -2,37 +2,51 @@
 
 ## Status
 
-The player-facing main character is now **the Scout**. The historical `RangerController` and KayKit medium rig remain internal compatibility infrastructure so established locomotion clips, tool hand anchors, spear throwing, cinematics, camera modes, grounding, and collision contracts do not need to be rewritten.
+The player-facing character remains **the Scout**, but the approved visual mock-up is deliberately paused for now.
 
-This is an intentional architecture boundary: **Scout is the visual/gameplay identity; Ranger naming is legacy implementation detail until a future dedicated rig migration is justified.**
+The current milestone is a **simple humanoid foundation**: prove the correct head, torso, arms, hands, legs and feet follow the established animation rig cleanly before adding character-specific styling again.
 
-## Visual direction
+The historical `RangerController` and KayKit medium rig remain internal compatibility infrastructure. They continue to own locomotion clips, hand/tool anchors, spear throwing, cinematics, camera modes, grounding and collision. This avoids destabilizing proven gameplay while the visible body is rebuilt incrementally.
 
-The Scout follows the approved low-poly character mock-up:
+## Current visual foundation
 
-- angular, chunky, flat-shaded forms that belong in the low-poly terrain;
-- brown faceted hair and a simple readable face;
-- olive tunic with a darker green scarf/cowl and short cape;
-- cream undershirt, dark brown trousers, leather gloves/wraps and oversized traversal boots;
-- readable cross-body strap and side satchel;
-- earthy palette shared with forest, stone and handcrafted-building materials;
-- playful heroic proportions rather than smooth or realistic anatomy.
+`src/player/ScoutCharacterPresentation.js` remains the stable rig-following layer. It resolves the existing KayKit medium-rig bones, hides the old Ranger render meshes and maps visible geometry onto the animated skeleton.
 
-`src/player/ScoutCharacterPresentation.js` owns the stable rig-following body presentation. It resolves the existing medium-rig bones, hides only the old rendered Ranger meshes, and builds the Scout from low-poly Three.js geometry. The animated rig remains active underneath as the single source of truth for pose and hand-mounted gameplay objects.
+`src/player/SimpleHumanoidPresentation.js` is now the runtime presentation layer. It intentionally removes the earlier mock-up-specific styling and keeps only the essential humanoid pieces:
 
-`src/player/ScoutVisualPolish.js` layers the finished character read on top of that stable presentation without replacing the rig contract. The runtime polish adds readable pupils/brows/nose/mouth, extra faceted hair, a layered collar and tunic hem, belt hardware and pouch, scarf knot/tails/cape clasps, green sleeve shells, leather forearm wraps, cream trouser cuffs, layered oversized boots, satchel trim and a faceted cape seam/hem. All added meshes remain flat-shaded and share a small material palette.
+- one head with two simple eyes;
+- one torso;
+- left and right upper arms;
+- left and right lower arms;
+- left and right hands;
+- left and right thighs;
+- left and right shins;
+- left and right feet.
 
-The polish layer is deliberately attached as children of the already animated Scout parts, so locomotion, jump, work-tool, spear, cinematic and first-person behavior continue to be driven by the existing presentation rather than by a second animation system. The runtime visual revision is `scout-polish-v2`, with an explicit 72-mesh mobile budget enforced by regression coverage.
+There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems are not deleted from repository history; they are simply no longer part of the active player appearance while the body and motion foundation are verified.
 
-`src/player/RangerAppearancePresentation.js` is intentionally retained as the compatibility boundary used by stable tool presentation code. It now routes that historical import to the polished Scout subclass while preserving the same public update behavior.
+The active visual revision is `simple-humanoid-v1`. It uses a strict 16-mesh presentation budget so limb alignment and movement remain easy to inspect on mobile.
 
-If the expected medium rig cannot be resolved, the presentation falls back to the legacy Ranger render instead of making the player invisible.
+`src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code, but now routes to `SimpleHumanoidPresentation`.
+
+If the expected medium rig cannot be resolved, the presentation still falls back to the legacy Ranger render instead of making the player invisible.
+
+## Why the mock-up is paused
+
+Repeated polish passes were mixing two separate problems: **body/rig correctness** and **final character art direction**. The project now separates them.
+
+The order from this point is:
+
+1. verify humanoid proportions and limb movement;
+2. verify hands and feet stay aligned through locomotion, jumping and tools;
+3. fix any rig-following or body-proportion problems at the foundation layer;
+4. only then add clothing, hair, accessories and final Scout identity back in controlled increments.
+
+This keeps future visual work additive instead of repeatedly compensating for uncertain proportions underneath.
 
 ## Traversal direction
 
-The Scout uses a deliberately game-like double jump so world shaping can use stronger vertical separation without making traversal frustrating.
-
-The tuning source of truth is `src/data/PlayerTraversalTuning.js`:
+The current Scout traversal is unchanged. The tuning source of truth remains `src/data/PlayerTraversalTuning.js`:
 
 - first launch speed: `6.8`;
 - second launch speed: `6.4`;
@@ -40,27 +54,27 @@ The tuning source of truth is `src/data/PlayerTraversalTuning.js`:
 - falling gravity multiplier: `1.18`;
 - available mid-air jumps: `1`.
 
-The second jump resets upward velocity rather than adding to the current vertical velocity. This makes the input predictable whether the player triggers it while rising or falling. The air-jump charge resets on landing. Walking off a ledge still leaves the one mid-air recovery jump available.
-
-Keyboard repeat is ignored for Space so holding the button cannot consume both jumps automatically. Mobile continues to use the existing jump action path and therefore receives the same two-stage behavior.
+The second jump resets upward velocity rather than adding to the current vertical velocity. The air-jump charge resets on landing. Keyboard repeat is ignored for Space, and mobile continues to use the same jump action path.
 
 ## Systems deliberately unchanged
 
-This visual-polish pass does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, or the existing KayKit animation files.
-
-The increased jump envelope is intended to give later terrain-shaping work more vertical room; terrain should not be reshaped merely to compensate for this character pass until the Scout has been verified on-device.
+This foundation pass does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, tool anchors or the existing KayKit animation files.
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` covers the Scout compatibility boundary, the polished visual revision, the mobile mesh budget, first-person visibility and double-jump tuning. The full `npm run check` remains the merge gate.
+`npm run verify:ranger-presentation` now verifies the simple humanoid compatibility boundary, the 16 essential visible meshes, production KayKit joint compatibility, first-person visibility, visible hand/foot joint following and the existing double-jump tuning.
+
+The full `npm run check` remains the merge gate.
 
 Device verification after deployment should confirm:
 
-1. Scout proportions and forward-facing orientation look correct in third person.
-2. The new face, layered hair, tunic hem, scarf, satchel and boots read clearly at normal gameplay distance without looking noisy.
-3. Hair, scarf/cape, satchel, hands, sleeve shells, forearm wraps and boots stay aligned through idle/walk/run/jump/tool animations.
-4. Axe, hammer, pickaxe and spear still line up with the visible right hand.
-5. First person hides the Scout body as before.
-6. One press jumps, a second airborne press performs the double jump, and a third airborne press does nothing.
-7. Landing restores the double jump.
-8. The higher arc feels playful without allowing obvious traversal through collision barriers or construction shells.
+1. the character clearly reads as a basic humanoid in third person;
+2. both arms bend and move from the correct shoulders/elbows;
+3. both hands remain attached to the correct wrists;
+4. both legs move from the correct hips/knees;
+5. both feet remain attached and face the expected direction while walking, running and jumping;
+6. axe, hammer, pickaxe and spear still align with the visible right hand;
+7. first person hides the body as before;
+8. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
+
+Final clothing, hair, face, scarf, cape, satchel and boot styling should not resume until this foundation has been accepted on-device.
