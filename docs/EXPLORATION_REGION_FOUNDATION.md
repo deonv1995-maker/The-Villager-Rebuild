@@ -21,13 +21,13 @@ The mainland remains **2.25x the original linear coast scale**. The established 
 - vegetation/canopy multipliers and minimum biome floors;
 - biome-specific ground profiles such as soil strength, meadow suppression and fern-understory bias;
 - bounded region-specific tree quotas used by the existing environment scatter system;
-- bounded jungle-floor ambient density for vines, mossy stones and fallen logs;
+- bounded jungle-floor density for leaf litter, surface roots, vines, mossy stones and fallen logs;
 - point-of-interest categories allowed in each region.
 
 The current first regions are:
 
 - `northernHighlands` — a substantially elevated, rugged mountain mass with sparse canopy and cave/pass/lookout eligibility;
-- `westernJungle` — a dense forest/jungle core with a strong continuous canopy floor, fertile shaded soil, fern-heavy understory and bounded jungle-floor dressing;
+- `westernJungle` — a dense forest/jungle core with a strong continuous canopy floor, fertile shaded soil, fern-heavy understory and layered jungle-floor dressing;
 - `easternWilds` — broken woodland/upland exploration space;
 - `southernFrontier` — forested outer transition space.
 
@@ -50,15 +50,18 @@ The western jungle uses a minimum forest-cover floor that fades with region stre
 
 The jungle therefore becomes visibly denser without adding a second tree renderer or a parallel harvesting system.
 
-The jungle ground now has a matching biome presentation instead of remaining generic green meadow beneath the denser canopy. The regional ground profile drives the established systems:
+The jungle ground has a matching biome presentation instead of remaining generic green meadow beneath the denser canopy. The regional ground profile drives the established systems:
 
-- `TerrainSurfacePresentation` blends the jungle floor toward dark fertile soil, damp humus and leaf litter, with restrained moss variation;
+- `TerrainSurfacePresentation` blends the jungle floor toward dark fertile soil and now uses deterministic jungle microclimate fields for wet soil, humus, leaf litter, exposed clay and restrained moss. These fields create larger patches rather than one uniform brown tint;
 - `ExpandedIslandTerrainSystem.grassDensityAt()` reduces generic meadow grass under the canopy while preserving the same ecology query path;
 - `GroundCoverPresentationSystem` reduces its short meadow carpet in proportion to jungle strength so the soil remains visible instead of being immediately covered by lawn-like micro-grass;
 - `ExpandedIslandTerrainSystem.fernDensityAt()` raises the existing reactive fern field through a regional multiplier and minimum floor rather than introducing a second fern renderer;
-- `AmbientWorldDetailSystem` owns non-interactive jungle-floor vines, moss-covered stones and fallen logs alongside its existing ambient world details. These props use deterministic bounded populations, instanced low-poly geometry, chunk ownership and the same construction-floor occlusion rule as the existing ambient dressing.
+- `JungleFloorPresentationSystem` adds the near-ground layer that terrain vertex colour cannot provide: deterministic leaf/twig litter and low exposed root fans. It consumes the same jungle microclimate fields as the terrain colour so litter/root geometry and the underlying surface agree spatially;
+- `AmbientWorldDetailSystem` continues to own the larger non-interactive jungle props: ground vines, moss-covered stones and fallen logs.
 
-This separation is deliberate: terrain/region data describes what the biome should be, existing ecology systems decide where reactive vegetation belongs, and the ambient-detail system handles cheap non-interactive dressing. There is no separate jungle coordinate map or competing vegetation simulation.
+This separation is deliberate. Terrain/region data describes what the biome should be, terrain colour handles broad material breakup, `JungleFloorPresentationSystem` handles only low micro-surface dressing, existing ecology systems own reactive vegetation, and `AmbientWorldDetailSystem` owns larger decorative props. There is no separate jungle coordinate map, second terrain authority or competing vegetation simulation.
+
+The layered approach also preserves visual scale separation. The ground now reads in ordered bands: soil/humus/clay at the base, leaf and twig debris directly on the surface, exposed roots and mossy stones breaking silhouette, fern/vine understory above that, then the established tree canopy. This is preferable to simply increasing one vegetation count until the jungle becomes visually noisy.
 
 The northern highlands remain part of the authoritative height field. Their stronger height bias, ruggedness and ridge term create a true mountain-scale landform while preserving the existing `WorldCollisionSystem`, slope limit and traversal rules.
 
@@ -90,7 +93,9 @@ The mainland remains one mathematical world for gameplay queries and chunked pre
 
 The base forest budget remains bounded. Additional biome density is expressed as explicit regional quotas rather than scaling every prop count with total island area. This keeps the performance cost measurable and prevents a larger island from silently multiplying all scene content.
 
-The jungle-floor pass follows the same rule. Vines, mossy stones and fallen logs have explicit maximum populations and are rendered as instanced, no-shadow low-poly geometry grouped by render chunk. Fern density is increased through the already-budgeted reactive fern system rather than adding another reactive field. Device verification must still confirm jungle readability and frame-time stability before any later pass raises these budgets.
+The jungle-floor pass follows the same rule. Vines, mossy stones and fallen logs retain explicit maximum populations. Leaf/twig litter and surface-root fans also have explicit budgets and are rendered as instanced, no-shadow low-poly geometry grouped by render chunk. All of these layers remain construction-aware, and the litter/root layer also participates in shared presentation exclusions. Fern density is increased through the already-budgeted reactive fern system rather than adding another reactive field.
+
+The new litter and root meshes intentionally contain no textures. Vertex colours and low geometry complexity preserve the project's stylized low-poly presentation while avoiding new runtime texture memory. Device verification must still confirm jungle readability and frame-time stability before any later pass raises these budgets.
 
 The first cave root is also registered with `WorldChunkSystem`, so it does not become permanent always-rendered world geometry. The cave readability pass continues to use simple generated low-poly geometry and shared materials rather than introducing a new asset-loading or terrain system.
 
@@ -108,10 +113,11 @@ This pass strengthens exploration readability without skipping ahead into later 
 
 1. a true dense jungle/forest core;
 2. a matching fertile jungle floor with reduced meadow grass, broader ferns, ground vines, mossy stones and fallen logs;
-3. stronger mountain-scale northern highlands;
-4. the first visible cave entrance/alcove, refined into a negative-space cliff opening with a continuous recessed tunnel shell and an approach-facing, terrain-following walk-in presentation;
-5. bounded regional scatter and ambient-detail budgets;
-6. regression coverage and documentation.
+3. a second jungle-terrain polish layer with wet/dry microclimate breakup, leaf/twig litter and exposed surface roots that share deterministic placement fields with the ground colour;
+4. stronger mountain-scale northern highlands;
+5. the first visible cave entrance/alcove, refined into a negative-space cliff opening with a continuous recessed tunnel shell and an approach-facing, terrain-following walk-in presentation;
+6. bounded regional scatter and ambient/presentation budgets;
+7. regression coverage and documentation.
 
 It does **not** add a full cave dungeon, abandoned structures, hostile exploration content, quests or settlement systems.
 
@@ -129,7 +135,7 @@ It does **not** add a full cave dungeon, abandoned structures, hostile explorati
 - creation of the named cave root, dark interior and walk-in floor presentation;
 - the existing satellite-island, chunk-culling, tree-registry and shallow-water contracts.
 
-`npm run verify:ground-surface` protects the brown jungle-soil palette, the visible colour separation from ordinary forest ground, rock/sand isolation and the reduction of generic meadow micro-cover under the jungle canopy.
+`npm run verify:ground-surface` protects the brown jungle-soil palette, deterministic normalized jungle microclimate fields, visible wet/litter/clay/moss breakup, rock/sand isolation, reduced generic meadow micro-cover, the bounded instanced leaf-litter/root presentation, shared presentation exclusions and construction-floor occlusion.
 
 `npm run verify:ambient` protects deterministic ambient budgets, instancing, construction-floor occlusion and the bounded jungle-specific vine, moss-rock and fallen-log batches.
 
