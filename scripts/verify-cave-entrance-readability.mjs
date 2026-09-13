@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
+import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 
@@ -21,6 +22,31 @@ assert.equal(system.create(), 1, 'cave readability pass must still create exactl
 
 const root = group.getObjectByName(`exploration-poi-${caveDefinition.id}`);
 assert.ok(root, 'cave must retain its named POI root');
+assert.equal(root.userData.approachLocalZ, -1, 'cave POI must document negative local Z as the exterior approach side');
+assert.equal(root.userData.tunnelLocalZ, 1, 'cave POI must document positive local Z as tunnel depth');
+
+const localToWorld = (localX, localZ) => {
+  const c = Math.cos(caveDefinition.yaw);
+  const s = Math.sin(caveDefinition.yaw);
+  return {
+    x: caveDefinition.x + localX * c + localZ * s,
+    z: caveDefinition.z - localX * s + localZ * c
+  };
+};
+const distanceToSpawn = point => Math.hypot(point.x - WORLD_LAYOUT.spawn.x, point.z - WORLD_LAYOUT.spawn.z);
+const mouthWorld = localToWorld(0, 0);
+const approachWorld = localToWorld(0, -4.4);
+const interiorWorld = localToWorld(0, caveDefinition.depth);
+assert.equal(
+  distanceToSpawn(approachWorld) < distanceToSpawn(mouthWorld) - 3,
+  true,
+  'cave exterior approach must point toward the southern player route instead of hiding the mouth on the far side'
+);
+assert.equal(
+  distanceToSpawn(interiorWorld) > distanceToSpawn(mouthWorld) + 6,
+  true,
+  'cave depth must continue away from the player route into the northern highlands'
+);
 
 const landform = root.getObjectByName(`${caveDefinition.id}-landform`);
 assert.ok(landform, 'cave must include a surrounding hillside landform');
@@ -53,6 +79,11 @@ assert.equal(
   true,
   'continuous entrance shell must provide visible tunnel-wall depth behind the cliff face'
 );
+assert.equal(
+  mouthShell.material[0].color.getHex() > mouthShell.material[1].color.getHex(),
+  true,
+  'outer cave rock must retain value separation from the darker tunnel walls for low-light readability'
+);
 
 const entranceDressing = root.getObjectByName(`${caveDefinition.id}-entrance-dressing`);
 assert.ok(entranceDressing, 'cave must retain restrained rock dressing around the entrance shell');
@@ -71,6 +102,7 @@ assert.equal(
   true,
   'freestanding tunnel ribs must begin behind the continuous mouth shell so they cannot clutter the entrance silhouette'
 );
+assert.equal(tunnelRibs.userData.terrainConforming, true, 'tunnel ribs must follow the actual highland ground profile');
 assert.ok(
   root.getObjectByName(`${caveDefinition.id}-tunnel-rib-2-crown`),
   'tunnel depth cues must continue toward the back of the alcove'
@@ -84,17 +116,27 @@ assert.equal(
   true,
   'dark terminus must stay recessed at the back of the alcove'
 );
+assert.equal(darkness.userData.terrainConforming, true, 'dark terminus must stay anchored to the terrain at the back of the alcove');
 
 const floor = root.getObjectByName(`${caveDefinition.id}-floor`);
 assert.ok(floor, 'cave must retain a walk-in alcove floor');
+assert.equal(floor.userData.terrainConforming, true, 'walk-in cave floor must conform to the authoritative terrain instead of floating through it');
+floor.geometry.computeBoundingBox();
+assert.equal(floor.geometry.boundingBox.min.z >= -0.01, true, 'cave floor must begin at the threshold rather than extending outside the mouth');
+assert.equal(
+  floor.geometry.boundingBox.max.z >= caveDefinition.depth * 0.9,
+  true,
+  'cave floor must continue through most of the authored alcove depth'
+);
 
 const approach = root.getObjectByName(`${caveDefinition.id}-approach`);
 assert.ok(approach, 'cave must include a terrain-conforming worn approach');
+assert.equal(approach.userData.terrainConforming, true, 'cave approach must remain terrain-conforming');
 approach.geometry.computeBoundingBox();
 assert.equal(approach.geometry.boundingBox.min.z < -4, true, 'worn approach must lead visibly out in front of the cave mouth');
 assert.equal(approach.geometry.boundingBox.max.z > 0, true, 'worn approach must blend through the cave threshold');
 
-assert.equal(obstacles.length, 4, 'visual readability polish must preserve the established side-rock collision contract');
+assert.equal(obstacles.length, 4, 'cave polish must preserve the established side-rock collision contract');
 assert.equal(obstacles.every(obstacle => obstacle.type === 'cave-rock'), true, 'cave collision must retain its established obstacle type');
 
-console.log('cave negative-space mouth, tunnel shell, approach and collision contracts verified');
+console.log('cave facing, low-light contrast, terrain-conforming depth and collision contracts verified');
