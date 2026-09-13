@@ -178,24 +178,22 @@ for (const resourceId of tuning.collectibleResourceIds) {
 }
 {
   const f = fixture();
-  f.tick(Math.ceil((tuning.bondingIdleSeconds + 0.4) / 0.05));
-  const petAction = f.externalActions.get('sprout-bond');
-  assert.equal(petAction?.caption, 'PET', 'Idle nearby Sprout must expose a player-triggered PET action');
-  assert.equal(petAction?.onTrigger?.(), true);
-  assert.equal(f.player.cinematicDriver !== null, true, 'PET must use the Ranger cinematic boundary only after trigger');
+  f.tick(Math.ceil((tuning.idleAnimationAfterSeconds - 0.5) / 0.05));
+  assert.equal(f.controller.idleAnimation, null, 'Extended-idle flourish must not start early');
+  assert.equal(f.externalActions.has('sprout-bond'), false, 'Sprout idle must not create a context action');
+
+  f.tick(Math.ceil(0.8 / 0.05));
+  assert.ok(f.controller.idleAnimation, 'Extended Ranger inactivity must automatically start Sprout idle animation');
+  assert.equal(f.controller.idleAnimation.kind, 'affection', 'First idle flourish should use the playful affection pose');
   assert.equal(f.controller.getPresentationState().affectionate, true);
-  f.tick(60);
-  assert.equal(f.player.cinematicDriver, null, 'PET interaction must release Ranger control');
-  f.controller.bondingCooldown = 0;
-  f.controller.rangerIdleElapsed = tuning.bondingIdleSeconds + 0.1;
+  assert.equal(f.player.cinematicDriver, null, 'Automatic Sprout idle animation must never take Ranger cinematic control');
+  assert.equal(f.externalActions.size, 0, 'Automatic Sprout idle animation must not expose PET, COUNT or another button');
+
+  f.position.x += 0.25;
   f.tick();
-  const countAction = f.externalActions.get('sprout-bond');
-  assert.equal(countAction?.caption, 'COUNT', 'Bond action must alternate to inventory counting');
-  assert.equal(countAction?.onTrigger?.(), true);
-  assert.equal(f.controller.getPresentationState().scanning, true, 'COUNT must drive scanner presentation');
-  assert.ok(f.statuses.some(message => message.includes('INVENTORY CHECK')), 'COUNT must summarize shared inventory through status feedback');
-  f.tick(70);
-  assert.equal(f.player.cinematicDriver, null, 'COUNT interaction must release Ranger control');
+  assert.equal(f.controller.idleAnimation, null, 'Ranger movement must cancel the autonomous idle animation immediately');
+  assert.equal(f.controller.rangerIdleElapsed, 0, 'Ranger movement must reset the extended-idle timer');
+  assert.equal(f.player.cinematicDriver, null, 'Cancelling idle animation must leave Ranger control untouched');
 }
 {
   const f = fixture();
@@ -229,4 +227,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: transaction, catch-up, delayed follow sensing, idle roam/inspection, bonding, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: transaction, catch-up, delayed follow sensing, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
