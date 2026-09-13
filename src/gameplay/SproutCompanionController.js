@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
 
 const BLUE = 0x62cfff;
-const BOND_ACTION_ID = 'sprout-bond';
 const clampDt = dt => Math.min(Math.max(0, dt), 0.05);
 const easeOutCubic = value => 1 - ((1 - THREE.MathUtils.clamp(value, 0, 1)) ** 3);
 
@@ -46,9 +45,9 @@ export class SproutCompanionController {
     this.idleTargetValid = false;
     this.idleRoamRemaining = 0;
     this.idleScanRemaining = 0;
-    this.bonding = null;
-    this.bondingCooldown = 0;
-    this.nextBondKind = 'pet';
+    this.idleAnimation = null;
+    this.idleAnimationCooldown = 0;
+    this.nextIdleAnimationKind = 'affection';
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3(0, 0, 1);
     this.previousPlayerPosition = new THREE.Vector3();
@@ -59,12 +58,6 @@ export class SproutCompanionController {
     this.resourcePosition = new THREE.Vector3();
     this.tempQuaternion = new THREE.Quaternion();
     this.tempScale = new THREE.Vector3();
-    this.bondingDriver = {
-      update: (_dt, ranger) => {
-        if (!this.bonding || !this.root) return;
-        ranger.faceWorldPoint(this.root.position);
-      }
-    };
   }
 
   start() {
@@ -79,8 +72,7 @@ export class SproutCompanionController {
     if (this.frameId !== null) window.cancelAnimationFrame(this.frameId);
     this.frameId = null;
     this.running = false;
-    this.#clearBondAction();
-    this.#endBondingInteraction({ announce: false });
+    this.#endIdleAnimation({ applyCooldown: false });
     this.#cancelCompression();
     this.target = null;
   }
@@ -91,9 +83,9 @@ export class SproutCompanionController {
         this.target
         || this.compression
         || this.idleScanRemaining > 0
-        || this.bonding?.kind === 'inventory'
+        || this.idleAnimation?.kind === 'scan'
       ),
-      affectionate: this.bonding?.kind === 'pet'
+      affectionate: this.idleAnimation?.kind === 'affection'
     };
   }
 
@@ -108,16 +100,13 @@ export class SproutCompanionController {
   };
 
   update(dt) {
-    if (!this.arrival.isAllied?.()) {
-      this.#clearBondAction();
-      return;
-    }
+    if (!this.arrival.isAllied?.()) return;
     if (!this.root && !this.#activate()) return;
 
     dt = clampDt(dt);
     this.elapsed += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
-    this.bondingCooldown = Math.max(0, this.bondingCooldown - dt);
+    this.idleAnimationCooldown = Math.max(0, this.idleAnimationCooldown - dt);
     this.scanElapsed += dt;
 
     this.player.getPosition(this.playerPosition);
@@ -128,18 +117,18 @@ export class SproutCompanionController {
 
     this.#updateRangerMotion(dt);
 
-    if (this.bonding) {
-      this.#clearBondAction();
-      this.#updateBondingInteraction(dt);
-      return;
+    if (this.idleAnimation) {
+      if (this.rangerMoving) this.#endIdleAnimation();
+      else {
+        this.#updateIdleAnimation(dt);
+        return;
+      }
     }
 
     this.#updatePerceivedRanger(dt);
-    this.#syncBondAction();
     this.#separateFromRanger();
 
     if (this.compression) {
-      this.#clearBondAction();
       this.#settleHover(this.root.position.x, this.root.position.z, dt);
       this.#updateCompression(dt);
       return;
@@ -158,21 +147,18 @@ export class SproutCompanionController {
     );
 
     if (!this.target && rangerDistance >= SPROUT_COMPANION.hardCatchUpDistance) {
-      this.#clearBondAction();
       this.#cancelCollectionIntent();
       this.#snapNearRanger();
       return;
     }
 
     if (!this.target && rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
-      this.#clearBondAction();
       this.#cancelCollectionIntent();
       this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
       return;
     }
 
     if (this.target) {
-      this.#clearBondAction();
       const live = this.gatherables.getLooseResource?.(this.target.id);
       if (!live) {
         this.target = null;
@@ -200,12 +186,13 @@ export class SproutCompanionController {
         resourceId => this.allowedResources.has(resourceId)
       ) ?? null;
       if (this.target) {
-        this.#clearBondAction();
         this.approachElapsed = 0;
         this.idleTargetValid = false;
         return;
       }
     }
+
+    if (this.#tryStartIdleAnimation()) return;
 
     if (this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds) {
       this.#updateIdleBehavior(dt);
@@ -214,8 +201,6 @@ export class SproutCompanionController {
       this.idleScanRemaining = 0;
       this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
     }
-
-    this.#syncBondAction();
   }
 
   #activate() {
@@ -606,7 +591,6 @@ export class SproutCompanionController {
     };
     this.target = null;
     this.idleTargetValid = false;
-    this.#clearBondAction();
     this.#updateBeam();
     return true;
   }
@@ -690,87 +674,54 @@ export class SproutCompanionController {
     position.needsUpdate = true;
   }
 
-  #syncBondAction() {
-    const hud = this.game.hud;
-    if (!hud || !this.root || this.bonding || this.target || this.compression || this.bondingCooldown > 0) {
-      this.#clearBondAction();
-      return;
-    }
-    if (this.rangerIdleElapsed < SPROUT_COMPANION.bondingIdleSeconds) {
-      this.#clearBondAction();
-      return;
-    }
+  #tryStartIdleAnimation() {
+    if (this.idleAnimation || this.target || this.compression || this.idleAnimationCooldown > 0) return false;
+    if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds) return false;
 
     const distance = Math.hypot(
       this.root.position.x - this.playerPosition.x,
       this.root.position.z - this.playerPosition.z
     );
-    if (distance > SPROUT_COMPANION.bondingRadius) {
-      this.#clearBondAction();
-      return;
-    }
+    if (distance > SPROUT_COMPANION.idleAnimationRadius) return false;
 
-    const kind = this.nextBondKind;
-    hud.setExternalAction(BOND_ACTION_ID, {
-      available: true,
-      priority: -20,
-      icon: 'hand',
-      label: kind === 'pet' ? 'Give Sprout a head rub' : 'Count stored supplies with Sprout',
-      caption: kind === 'pet' ? 'PET' : 'COUNT',
-      onTrigger: () => this.#beginBondingInteraction(kind)
-    });
+    return this.#beginIdleAnimation(this.nextIdleAnimationKind);
   }
 
-  #clearBondAction() {
-    this.game.hud?.setExternalAction(BOND_ACTION_ID, null);
-  }
-
-  #beginBondingInteraction(kind) {
-    if (this.bonding || this.target || this.compression || !this.root) return false;
-    if (this.rangerIdleElapsed < SPROUT_COMPANION.bondingIdleSeconds || this.bondingCooldown > 0) return false;
-    if (!this.player.beginCinematic(this.bondingDriver)) return false;
+  #beginIdleAnimation(kind) {
+    if (this.idleAnimation || this.target || this.compression || !this.root) return false;
+    if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds || this.idleAnimationCooldown > 0) return false;
 
     const dx = this.root.position.x - this.playerPosition.x;
     const dz = this.root.position.z - this.playerPosition.z;
     const length = Math.hypot(dx, dz);
-    const directionX = length > 0.001 ? dx / length : this.playerFacing.x;
-    const directionZ = length > 0.001 ? dz / length : this.playerFacing.z;
-    const baseDuration = kind === 'inventory'
-      ? SPROUT_COMPANION.inventoryInteractionSeconds
-      : SPROUT_COMPANION.petInteractionSeconds;
+    const directionX = length > 0.001 ? dx / length : -this.playerFacing.x;
+    const directionZ = length > 0.001 ? dz / length : -this.playerFacing.z;
+    const duration = kind === 'scan'
+      ? SPROUT_COMPANION.idleScanFlourishSeconds
+      : SPROUT_COMPANION.idleAffectionSeconds;
 
-    this.bonding = {
+    this.idleAnimation = {
       kind,
       elapsed: 0,
-      duration: baseDuration,
+      duration,
       directionX,
       directionZ,
-      targetRadius: kind === 'inventory' ? 1.3 : 0.95
+      targetRadius: kind === 'scan'
+        ? SPROUT_COMPANION.rangerPersonalSpace + 0.45
+        : SPROUT_COMPANION.rangerPersonalSpace + 0.18
     };
-    this.#clearBondAction();
-    this.player.faceWorldPoint(this.root.position);
-
-    const animation = kind === 'inventory'
-      ? this.player.playCinematicAnimation(['Working', 'Interact', 'Idle_B'], { loop: true, timeScale: 0.92 })
-      : this.player.playCinematicAnimation(['Interact', 'Working', 'Idle_B'], { loop: false, timeScale: 0.78 });
-    if (kind === 'pet' && animation?.duration > 0) {
-      this.bonding.duration = Math.max(1.35, Math.min(baseDuration, animation.duration + 0.35));
-    }
-
-    if (kind === 'inventory') {
-      this.game.setStatus?.(`SPROUT · INVENTORY CHECK · ${this.#inventorySummary()}`);
-    } else {
-      this.game.setStatus?.('SPROUT · HAPPY BEEP');
-    }
+    this.idleTargetValid = false;
+    this.idleScanRemaining = 0;
+    this.currentMoveSpeed = 0;
     return true;
   }
 
-  #updateBondingInteraction(dt) {
-    const state = this.bonding;
+  #updateIdleAnimation(dt) {
+    const state = this.idleAnimation;
     if (!state || !this.root) return;
     state.elapsed += dt;
 
-    const sway = state.kind === 'inventory' ? Math.sin(state.elapsed * 1.55) * 0.12 : 0;
+    const sway = state.kind === 'scan' ? Math.sin(state.elapsed * 1.55) * 0.16 : Math.sin(state.elapsed * 2.2) * 0.06;
     const cos = Math.cos(sway);
     const sin = Math.sin(sway);
     const directionX = state.directionX * cos - state.directionZ * sin;
@@ -785,9 +736,12 @@ export class SproutCompanionController {
       this.root.position.x = THREE.MathUtils.lerp(this.root.position.x, targetX, blend);
       this.root.position.z = THREE.MathUtils.lerp(this.root.position.z, targetZ, blend);
     }
+
     const ground = this.island.heightAt(this.root.position.x, this.root.position.z);
-    const heightOffset = state.kind === 'pet' ? -0.14 : 0.03;
-    const bob = state.kind === 'inventory' ? Math.sin(state.elapsed * 3.2) * 0.035 : 0;
+    const heightOffset = state.kind === 'affection' ? -0.08 : 0.03;
+    const bobSpeed = state.kind === 'scan' ? 3.2 : 4.4;
+    const bobAmount = state.kind === 'scan' ? 0.035 : 0.045;
+    const bob = Math.sin(state.elapsed * bobSpeed) * bobAmount;
     const targetY = ground + SPROUT_COMPANION.hoverHeight + heightOffset + bob;
     this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, targetY, Math.min(1, dt * 6));
 
@@ -796,42 +750,30 @@ export class SproutCompanionController {
       this.playerPosition.z - this.root.position.z
     );
     this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, desiredYaw, Math.min(1, dt * 5));
-    this.root.rotation.z = state.kind === 'pet'
-      ? Math.sin(state.elapsed * 2.2) * 0.045
-      : Math.sin(state.elapsed * 1.4) * 0.018;
+    this.root.rotation.z = state.kind === 'affection'
+      ? Math.sin(state.elapsed * 2.6) * 0.055
+      : Math.sin(state.elapsed * 1.4) * 0.022;
 
-    if (state.elapsed >= state.duration) this.#endBondingInteraction();
+    if (state.elapsed >= state.duration) this.#endIdleAnimation();
   }
 
-  #endBondingInteraction({ announce = true } = {}) {
-    const state = this.bonding;
+  #endIdleAnimation({ applyCooldown = true } = {}) {
+    const state = this.idleAnimation;
     if (!state) return false;
-    this.bonding = null;
-    this.root.rotation.z = 0;
-    this.player.endCinematic(this.bondingDriver);
-    this.bondingCooldown = SPROUT_COMPANION.bondingCooldownSeconds;
-    this.nextBondKind = state.kind === 'pet' ? 'inventory' : 'pet';
+    this.idleAnimation = null;
+    if (this.root) this.root.rotation.z = 0;
+    if (applyCooldown) {
+      this.idleAnimationCooldown = this.#randomBetween(
+        SPROUT_COMPANION.idleAnimationCooldownMinSeconds,
+        SPROUT_COMPANION.idleAnimationCooldownMaxSeconds
+      );
+      this.nextIdleAnimationKind = state.kind === 'affection' ? 'scan' : 'affection';
+    }
     this.followReactionRemaining = this.#randomBetween(
       SPROUT_COMPANION.followReactionMinSeconds,
       SPROUT_COMPANION.followReactionMaxSeconds
     );
-    this.rangerIdleElapsed = 0;
-    if (announce) {
-      this.game.setStatus?.(
-        state.kind === 'inventory'
-          ? `SPROUT · INVENTORY CONFIRMED · ${this.#inventorySummary()}`
-          : 'SPROUT · CONTENTED CHIRP'
-      );
-    }
     return true;
-  }
-
-  #inventorySummary() {
-    const entries = this.inventory.snapshot()
-      .filter(entry => entry.quantity > 0)
-      .slice(0, 4)
-      .map(entry => `${entry.quantity} ${entry.label.toUpperCase()}`);
-    return entries.length > 0 ? entries.join(' · ') : 'EMPTY';
   }
 
   #cancelCollectionIntent() {
