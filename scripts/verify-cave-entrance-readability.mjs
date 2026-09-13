@@ -23,18 +23,56 @@ const root = group.getObjectByName(`exploration-poi-${caveDefinition.id}`);
 assert.ok(root, 'cave must retain its named POI root');
 
 const landform = root.getObjectByName(`${caveDefinition.id}-landform`);
-assert.ok(landform, 'cave must include a surrounding landform mass instead of a freestanding rock ring');
-assert.equal(landform.children.length >= 6, true, 'cave landform must have enough overlapping masses to read as a hillside');
+assert.ok(landform, 'cave must include a surrounding hillside landform');
+assert.equal(landform.children.length >= 6, true, 'cave landform must retain enough overlapping masses to read as a hillside');
+for (const rock of landform.children.filter(child => child.position.z < 5.5)) {
+  assert.equal(
+    Math.abs(rock.position.x) >= caveDefinition.mouthWidth * 0.6,
+    true,
+    'near-front hillside masses must stay lateral so the cave aperture remains visible'
+  );
+}
 
-const entranceArch = root.getObjectByName(`${caveDefinition.id}-entrance-arch`);
-assert.ok(entranceArch, 'cave must retain a distinct entrance arch layer');
-assert.equal(entranceArch.children.length >= 13, true, 'entrance arch must form a continuous irregular rock frame');
+const entranceShell = root.getObjectByName(`${caveDefinition.id}-entrance-shell`);
+assert.ok(entranceShell, 'cave must include a continuous cliff/tunnel entrance shell');
+const mouthShell = root.getObjectByName(`${caveDefinition.id}-mouth-shell`);
+assert.ok(mouthShell, 'cave entrance shell must expose a named mouth mesh');
+assert.equal(mouthShell.geometry.type, 'ExtrudeGeometry', 'cave mouth must be true negative space through a continuous extruded cliff shell');
+assert.equal(
+  mouthShell.userData.clearOpeningWidth >= caveDefinition.mouthWidth * 0.8,
+  true,
+  'cave mouth must preserve a broad readable central opening'
+);
+assert.equal(
+  mouthShell.userData.clearOpeningHeight >= caveDefinition.mouthHeight * 0.9,
+  true,
+  'cave mouth must preserve a tall readable central opening'
+);
+assert.equal(
+  mouthShell.userData.tunnelDepth >= 3.5,
+  true,
+  'continuous entrance shell must provide visible tunnel-wall depth behind the cliff face'
+);
+
+const entranceDressing = root.getObjectByName(`${caveDefinition.id}-entrance-dressing`);
+assert.ok(entranceDressing, 'cave must retain restrained rock dressing around the entrance shell');
+assert.equal(entranceDressing.children.length >= 4, true, 'entrance needs enough side dressing to break up the cliff face');
+assert.equal(
+  entranceDressing.children.every(rock => Math.abs(rock.position.x) > caveDefinition.mouthWidth * 0.55),
+  true,
+  'entrance dressing must stay outside the central mouth instead of rebuilding a boulder arch across it'
+);
 
 const tunnelRibs = root.getObjectByName(`${caveDefinition.id}-tunnel-ribs`);
-assert.ok(tunnelRibs, 'cave must include recessed tunnel geometry behind the mouth');
-assert.equal(tunnelRibs.children.length >= 12, true, 'recessed tunnel must have repeated side and crown depth cues');
+assert.ok(tunnelRibs, 'cave must retain recessed tunnel geometry behind the mouth');
+assert.equal(tunnelRibs.children.length >= 9, true, 'recessed tunnel must retain repeated side and crown depth cues');
+assert.equal(
+  tunnelRibs.children.every(rock => rock.position.z > mouthShell.userData.tunnelDepth),
+  true,
+  'freestanding tunnel ribs must begin behind the continuous mouth shell so they cannot clutter the entrance silhouette'
+);
 assert.ok(
-  root.getObjectByName(`${caveDefinition.id}-tunnel-rib-3-crown`),
+  root.getObjectByName(`${caveDefinition.id}-tunnel-rib-2-crown`),
   'tunnel depth cues must continue toward the back of the alcove'
 );
 
@@ -59,4 +97,4 @@ assert.equal(approach.geometry.boundingBox.max.z > 0, true, 'worn approach must 
 assert.equal(obstacles.length, 4, 'visual readability polish must preserve the established side-rock collision contract');
 assert.equal(obstacles.every(obstacle => obstacle.type === 'cave-rock'), true, 'cave collision must retain its established obstacle type');
 
-console.log('cave entrance landform, tunnel depth, approach and collision contracts verified');
+console.log('cave negative-space mouth, tunnel shell, approach and collision contracts verified');

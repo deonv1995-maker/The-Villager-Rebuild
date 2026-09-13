@@ -66,13 +66,12 @@ export class ExplorationPoiSystem {
       earthRockMaterial
     });
 
-    this.#createEntranceArch({
+    this.#createEntranceShell({
       definition,
       root,
       geometry: rockGeometry,
       rockMaterial,
-      darkRockMaterial,
-      sideX
+      darkRockMaterial
     });
 
     this.#createTunnelRibs({
@@ -128,13 +127,17 @@ export class ExplorationPoiSystem {
     const landform = new THREE.Group();
     landform.name = `${definition.id}-landform`;
 
+    // Keep the front-centre aperture empty. The broad masses live beside and behind
+    // the entrance so the cave reads as negative space cut into a hillside, not a
+    // pile of boulders stacked across the player's view.
     const masses = [
-      { x: -5.15, z: 3.6, scale: [3.25, 2.35, 3.9], rotation: [0.02, -0.2, -0.08] },
-      { x: 5.05, z: 3.85, scale: [3.2, 2.45, 4.05], rotation: [-0.04, 0.24, 0.08] },
-      { x: -3.35, z: 6.0, scale: [3.45, 2.5, 3.6], rotation: [0.08, 0.18, -0.04] },
-      { x: 3.2, z: 6.15, scale: [3.4, 2.55, 3.7], rotation: [-0.05, -0.16, 0.06] },
-      { x: 0, z: 6.7, scale: [4.65, 2.65, 4.1], rotation: [0.04, 0.1, -0.02] },
-      { x: 0.2, z: 9.1, scale: [5.0, 2.15, 3.15], rotation: [-0.03, -0.08, 0.03] }
+      { x: -5.35, z: 3.25, scale: [3.45, 2.55, 4.15], rotation: [0.02, -0.2, -0.08] },
+      { x: 5.25, z: 3.4, scale: [3.4, 2.6, 4.2], rotation: [-0.04, 0.24, 0.08] },
+      { x: -4.05, z: 6.65, scale: [3.6, 2.65, 3.65], rotation: [0.08, 0.18, -0.04] },
+      { x: 3.95, z: 6.8, scale: [3.55, 2.7, 3.75], rotation: [-0.05, -0.16, 0.06] },
+      { x: -2.35, z: 9.0, scale: [3.85, 2.55, 3.45], rotation: [0.03, 0.12, -0.04] },
+      { x: 2.25, z: 9.15, scale: [3.8, 2.5, 3.5], rotation: [-0.04, -0.11, 0.05] },
+      { x: 0.1, z: 10.7, scale: [5.25, 2.7, 3.35], rotation: [-0.03, -0.08, 0.03] }
     ];
 
     masses.forEach((mass, index) => {
@@ -153,67 +156,92 @@ export class ExplorationPoiSystem {
     root.add(landform);
   }
 
-  #createEntranceArch({ definition, root, geometry, rockMaterial, darkRockMaterial, sideX }) {
-    const archGroup = new THREE.Group();
-    archGroup.name = `${definition.id}-entrance-arch`;
+  #createEntranceShell({ definition, root, geometry, rockMaterial, darkRockMaterial }) {
+    const entrance = new THREE.Group();
+    entrance.name = `${definition.id}-entrance-shell`;
 
-    const sideRows = [
-      { z: 0.25, offset: 0, y: 1.35, scale: [1.72, 1.95, 1.7] },
-      { z: 1.95, offset: 0.14, y: 1.52, scale: [1.82, 2.1, 1.82] },
-      { z: 3.85, offset: 0.28, y: 1.7, scale: [1.95, 2.25, 1.95] }
+    const face = new THREE.Shape();
+    const halfWidth = definition.mouthWidth * 0.82;
+    const height = definition.mouthHeight * 1.38;
+    face.moveTo(-halfWidth * 0.96, -0.48);
+    face.lineTo(-halfWidth, height * 0.36);
+    face.lineTo(-halfWidth * 0.78, height * 0.72);
+    face.lineTo(-halfWidth * 0.42, height * 0.96);
+    face.lineTo(-halfWidth * 0.08, height);
+    face.lineTo(halfWidth * 0.32, height * 0.95);
+    face.lineTo(halfWidth * 0.72, height * 0.76);
+    face.lineTo(halfWidth * 0.98, height * 0.4);
+    face.lineTo(halfWidth * 0.94, -0.48);
+    face.closePath();
+
+    const mouth = this.#createMouthPath(definition, 1);
+    face.holes.push(mouth);
+
+    const tunnelDepth = Math.min(definition.depth * 0.56, 4.7);
+    const shellGeometry = new THREE.ExtrudeGeometry(face, {
+      depth: tunnelDepth,
+      steps: 1,
+      curveSegments: 1,
+      bevelEnabled: true,
+      bevelSegments: 1,
+      bevelSize: 0.12,
+      bevelThickness: 0.1
+    });
+    shellGeometry.computeVertexNormals();
+
+    const shell = new THREE.Mesh(shellGeometry, [rockMaterial, darkRockMaterial]);
+    shell.name = `${definition.id}-mouth-shell`;
+    shell.castShadow = false;
+    shell.receiveShadow = true;
+    shell.userData.clearOpeningWidth = definition.mouthWidth * 0.84;
+    shell.userData.clearOpeningHeight = definition.mouthHeight * 0.98;
+    shell.userData.tunnelDepth = tunnelDepth;
+    entrance.add(shell);
+
+    // Small side dressing breaks up the planar cliff face without putting any
+    // freestanding rocks back into the opening itself.
+    const dressing = new THREE.Group();
+    dressing.name = `${definition.id}-entrance-dressing`;
+    const sideRocks = [
+      { x: -4.65, y: 1.35, z: -0.28, scale: [1.35, 1.55, 1.0], rotation: [0.08, -0.18, -0.08] },
+      { x: 4.62, y: 1.45, z: -0.24, scale: [1.3, 1.62, 1.02], rotation: [-0.05, 0.2, 0.07] },
+      { x: -4.55, y: 4.45, z: -0.16, scale: [1.18, 1.25, 0.9], rotation: [0.12, -0.14, -0.04] },
+      { x: 4.5, y: 4.55, z: -0.12, scale: [1.16, 1.2, 0.92], rotation: [-0.09, 0.16, 0.05] }
     ];
-
-    for (const side of [-1, 1]) {
-      sideRows.forEach((row, index) => {
-        this.#addRock({
-          parent: archGroup,
-          geometry,
-          material: index === sideRows.length - 1 ? darkRockMaterial : rockMaterial,
-          name: `${definition.id}-side-${side < 0 ? 'left' : 'right'}-${index}`,
-          position: [side * (sideX + row.offset), row.y, row.z],
-          scale: row.scale,
-          rotation: [(index - 1) * 0.07, side * (0.15 + index * 0.09), side * 0.07]
-        });
-      });
-    }
-
-    const crownCount = 7;
-    for (let index = 0; index < crownCount; index += 1) {
-      const t = index / (crownCount - 1);
-      const localX = THREE.MathUtils.lerp(-definition.mouthWidth * 0.45, definition.mouthWidth * 0.45, t);
-      const arch = 1 - Math.abs(t - 0.5) * 2;
+    sideRocks.forEach((rock, index) => {
       this.#addRock({
-        parent: archGroup,
+        parent: dressing,
         geometry,
-        material: index === 0 || index === crownCount - 1 ? rockMaterial : darkRockMaterial,
-        name: `${definition.id}-crown-${index}`,
-        position: [localX, definition.mouthHeight - 0.38 + arch * 0.68, 0.5 + Math.abs(t - 0.5) * 0.34],
-        scale: [1.28 + arch * 0.16, 1.28 + arch * 0.24, 1.55],
-        rotation: [0.06 * (index - 3), 0.11 * (index - 3), 0.08 * (t - 0.5)]
+        material: rockMaterial,
+        name: `${definition.id}-entrance-side-dressing-${index}`,
+        position: [rock.x, rock.y, rock.z],
+        scale: rock.scale,
+        rotation: rock.rotation
       });
-    }
+    });
+    entrance.add(dressing);
 
-    root.add(archGroup);
+    root.add(entrance);
   }
 
   #createTunnelRibs({ definition, root, geometry, darkRockMaterial }) {
     const tunnel = new THREE.Group();
     tunnel.name = `${definition.id}-tunnel-ribs`;
-    const depths = [1.9, 3.45, 5.1, 6.65];
+    const depths = [4.95, 6.2, 7.35];
 
     depths.forEach((localZ, index) => {
-      const narrowing = 1 - index * 0.055;
-      const sideX = definition.mouthWidth * 0.41 * narrowing;
-      const sideScaleY = definition.mouthHeight * 0.3;
+      const narrowing = 1 - index * 0.07;
+      const sideX = definition.mouthWidth * 0.36 * narrowing;
+      const sideScaleY = definition.mouthHeight * 0.25;
       for (const side of [-1, 1]) {
         this.#addRock({
           parent: tunnel,
           geometry,
           material: darkRockMaterial,
           name: `${definition.id}-tunnel-rib-${index}-${side < 0 ? 'left' : 'right'}`,
-          position: [side * sideX, definition.mouthHeight * 0.35, localZ],
-          scale: [0.86, sideScaleY, 1.05],
-          rotation: [0.08 * (index % 2), side * 0.08, side * 0.08]
+          position: [side * sideX, definition.mouthHeight * 0.33, localZ],
+          scale: [0.58, sideScaleY, 0.78],
+          rotation: [0.06 * (index % 2), side * 0.08, side * 0.07]
         });
       }
 
@@ -222,28 +250,43 @@ export class ExplorationPoiSystem {
         geometry,
         material: darkRockMaterial,
         name: `${definition.id}-tunnel-rib-${index}-crown`,
-        position: [0, definition.mouthHeight * 0.82, localZ + 0.08],
-        scale: [definition.mouthWidth * 0.28 * narrowing, 0.72, 1.02],
-        rotation: [0.04, index % 2 === 0 ? 0.06 : -0.05, 0.02]
+        position: [0, definition.mouthHeight * 0.82, localZ + 0.06],
+        scale: [definition.mouthWidth * 0.24 * narrowing, 0.54, 0.76],
+        rotation: [0.03, index % 2 === 0 ? 0.05 : -0.04, 0.02]
       });
     });
 
     root.add(tunnel);
   }
 
+  #createMouthPath(definition, scale = 1) {
+    const halfWidth = definition.mouthWidth * 0.42 * scale;
+    const height = definition.mouthHeight * 0.98 * scale;
+    const path = new THREE.Path();
+    path.moveTo(-halfWidth * 0.96, -0.12);
+    path.lineTo(-halfWidth, height * 0.3);
+    path.lineTo(-halfWidth * 0.8, height * 0.68);
+    path.lineTo(-halfWidth * 0.44, height * 0.92);
+    path.lineTo(-halfWidth * 0.08, height);
+    path.lineTo(halfWidth * 0.38, height * 0.94);
+    path.lineTo(halfWidth * 0.76, height * 0.7);
+    path.lineTo(halfWidth, height * 0.32);
+    path.lineTo(halfWidth * 0.94, -0.12);
+    path.closePath();
+    return path;
+  }
+
   #createDarkInterior(definition) {
-    const width = definition.mouthWidth;
-    const height = definition.mouthHeight;
     const shape = new THREE.Shape();
-    shape.moveTo(-width * 0.4, height * 0.03);
-    shape.lineTo(-width * 0.46, height * 0.34);
-    shape.lineTo(-width * 0.34, height * 0.72);
-    shape.lineTo(-width * 0.14, height * 0.94);
-    shape.lineTo(width * 0.12, height * 0.97);
-    shape.lineTo(width * 0.35, height * 0.76);
-    shape.lineTo(width * 0.45, height * 0.38);
-    shape.lineTo(width * 0.39, height * 0.03);
-    shape.closePath();
+    const mouthPath = this.#createMouthPath(definition, 0.82);
+    const points = mouthPath.getPoints();
+    if (points.length > 0) {
+      shape.moveTo(points[0].x, points[0].y);
+      for (let index = 1; index < points.length; index += 1) {
+        shape.lineTo(points[index].x, points[index].y);
+      }
+      shape.closePath();
+    }
 
     const darkness = new THREE.Mesh(
       new THREE.ShapeGeometry(shape),
