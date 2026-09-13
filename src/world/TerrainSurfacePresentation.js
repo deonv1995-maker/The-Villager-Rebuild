@@ -138,10 +138,10 @@ export function terrainSurfaceColorAt({
     const litterPatch = clamp01(0.32 + dryPatch * 0.42 + fleck * 0.26);
     const dampHumus = clamp01(0.42 + (1 - detail) * 0.38 + forest * 0.2);
     const mossPatch = clamp01(lawnPatch * 0.5 + (1 - dry) * 0.28 + forest * 0.22);
-    target.lerp(COLORS.jungleSoil, jungle * (0.6 + litterPatch * 0.14));
-    target.lerp(COLORS.jungleHumus, jungle * dampHumus * 0.2);
-    target.lerp(COLORS.jungleLeafLitter, jungle * litterPatch * 0.16);
-    target.lerp(COLORS.jungleMoss, jungle * mossPatch * 0.13);
+    target.lerp(COLORS.jungleSoil, jungle * (0.82 + litterPatch * 0.08));
+    target.lerp(COLORS.jungleHumus, jungle * dampHumus * 0.16);
+    target.lerp(COLORS.jungleLeafLitter, jungle * litterPatch * 0.11);
+    target.lerp(COLORS.jungleMoss, jungle * mossPatch * 0.055);
   }
 
   target.offsetHSL(
