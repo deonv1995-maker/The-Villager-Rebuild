@@ -1,3 +1,3 @@
 // Compatibility boundary: stable player/tool systems still import the historical Ranger name,
-// while the player-facing visual identity is the polished low-poly Scout presentation.
-export { PolishedScoutCharacterPresentation as RangerAppearancePresentation } from './ScoutVisualFidelityPresentation.js';
+// while the runtime presentation is intentionally reduced to a simple rig-readable humanoid.
+export { SimpleHumanoidPresentation as RangerAppearancePresentation } from './SimpleHumanoidPresentation.js';
