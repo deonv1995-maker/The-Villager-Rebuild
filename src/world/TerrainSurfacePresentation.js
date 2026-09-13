@@ -147,9 +147,9 @@ export function terrainSurfaceColorAt({
   forestCover = 0,
   grassPatchStrength = 0,
   jungleSoilStrength = 0,
-  jungleDampStrength = 0,
-  jungleLitterStrength = 0,
-  jungleMossStrength = 0
+  jungleDampStrength = jungleSoilStrength,
+  jungleLitterStrength = jungleSoilStrength,
+  jungleMossStrength = jungleSoilStrength * 0.56
 }, target = new THREE.Color()) {
   const { broad, detail, dry } = terrainSurfaceToneFieldsAt(x, z);
   const { lawnPatch, dryPatch, fleck } = terrainSurfacePatchFieldsAt(x, z);
