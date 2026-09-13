@@ -6,211 +6,39 @@ import { RangerAppearancePresentation } from '../src/player/RangerAppearancePres
 import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../src/data/PlayerTraversalTuning.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-
-function readGlbJson(path) {
-  const bytes = readFileSync(new URL(`../${path}`, import.meta.url));
-  assert.equal(bytes.toString('utf8', 0, 4), 'glTF', `${path} should be a valid GLB`);
-  const jsonChunkLength = bytes.readUInt32LE(12);
-  const jsonChunkType = bytes.readUInt32LE(16);
-  assert.equal(jsonChunkType, 0x4e4f534a, `${path} should start with a JSON chunk`);
-  return JSON.parse(bytes.toString('utf8', 20, 20 + jsonChunkLength).replace(/\u0000+$/g, '').trim());
-}
-
-const rangerGlb = readGlbJson('public/assets/kaykit/adventurers/Ranger.glb');
-const jointIndices = new Set((rangerGlb.skins ?? []).flatMap(skin => skin.joints ?? []));
-const productionJointNames = [...jointIndices]
-  .map(index => rangerGlb.nodes?.[index]?.name)
-  .filter(Boolean);
-assert.ok(productionJointNames.length > 0, 'production Ranger GLB should expose named rig joints');
-
-const productionRoot = new THREE.Group();
-const productionModel = new THREE.Group();
-productionRoot.add(productionModel);
-for (const name of productionJointNames) {
-  const joint = new THREE.Bone();
-  joint.name = name;
-  productionModel.add(joint);
-}
-const productionPlayer = {
-  model: productionModel,
-  root: productionRoot,
-  getPosition(target) {
-    return target.copy(productionRoot.position);
-  },
-  isFirstPerson() {
-    return false;
-  }
-};
-const productionContract = new ScoutCharacterPresentation({ player: productionPlayer });
-assert.equal(
-  productionContract.mode,
-  'scout-rigged',
-  `Scout bone resolver must support the production KayKit rig joints: ${productionJointNames.join(', ')}`
-);
-
-const root = new THREE.Group();
-const model = new THREE.Group();
-root.add(model);
-
-const sourceMesh = new THREE.Mesh(
-  new THREE.BoxGeometry(0.5, 1.5, 0.35),
-  new THREE.MeshStandardMaterial()
-);
-sourceMesh.name = 'Ranger_Source_Mesh';
-model.add(sourceMesh);
-
-const quiver = new THREE.Object3D();
-quiver.name = 'Ranger_Quiver';
-model.add(quiver);
-
-function bone(name, x, y, z) {
-  const result = new THREE.Bone();
-  result.name = name;
-  result.position.set(x, y, z);
-  model.add(result);
-  return result;
-}
-
-bone('Pelvis', 0, 0.95, 0);
-bone('Spine_03', 0, 1.48, 0);
-bone('Head', 0, 1.83, 0);
-bone('UpperArm_L', -0.34, 1.5, 0);
-bone('LowerArm_L', -0.58, 1.25, 0);
-bone('Hand_L', -0.7, 1.03, 0);
-bone('UpperArm_R', 0.34, 1.5, 0);
-bone('LowerArm_R', 0.58, 1.25, 0);
-bone('Hand_R', 0.7, 1.03, 0);
-bone('Thigh_L', -0.17, 0.9, 0);
-bone('Calf_L', -0.17, 0.48, 0);
-bone('Foot_L', -0.17, 0.08, 0.08);
-bone('Thigh_R', 0.17, 0.9, 0);
-bone('Calf_R', 0.17, 0.48, 0);
-bone('Foot_R', 0.17, 0.08, 0.08);
-
-let firstPerson = false;
-let cameraModeListener = null;
-const player = {
-  model,
-  root,
-  getPosition(target) {
-    return target.copy(root.position);
-  },
-  isFirstPerson() {
-    return firstPerson;
-  },
-  onCameraModeChange(listener) {
-    cameraModeListener = listener;
-    listener(firstPerson ? 'first-person' : 'third-person');
-    return () => {
-      if (cameraModeListener === listener) cameraModeListener = null;
-    };
-  }
-};
-
+function readGlbJson(path) { const bytes=readFileSync(new URL(`../${path}`,import.meta.url)); assert.equal(bytes.toString('utf8',0,4),'glTF'); const len=bytes.readUInt32LE(12); assert.equal(bytes.readUInt32LE(16),0x4e4f534a); return JSON.parse(bytes.toString('utf8',20,20+len).replace(/\u0000+$/g,'').trim()); }
+const rangerGlb=readGlbJson('public/assets/kaykit/adventurers/Ranger.glb');
+const jointIndices=new Set((rangerGlb.skins??[]).flatMap(s=>s.joints??[]));
+const productionJointNames=[...jointIndices].map(i=>rangerGlb.nodes?.[i]?.name).filter(Boolean);
+assert.ok(productionJointNames.length>0);
+const productionRoot=new THREE.Group(),productionModel=new THREE.Group(); productionRoot.add(productionModel);
+for(const name of productionJointNames){const j=new THREE.Bone();j.name=name;productionModel.add(j);}
+const productionPlayer={model:productionModel,root:productionRoot,getPosition:t=>t.copy(productionRoot.position),isFirstPerson:()=>false};
+assert.equal(new ScoutCharacterPresentation({player:productionPlayer}).mode,'scout-rigged');
+const root=new THREE.Group(),model=new THREE.Group();root.add(model);
+const sourceMesh=new THREE.Mesh(new THREE.BoxGeometry(.5,1.5,.35),new THREE.MeshStandardMaterial());sourceMesh.name='Ranger_Source_Mesh';model.add(sourceMesh);
+const quiver=new THREE.Object3D();quiver.name='Ranger_Quiver';model.add(quiver);
+function bone(name,x,y,z){const b=new THREE.Bone();b.name=name;b.position.set(x,y,z);model.add(b);}
+bone('Pelvis',0,.95,0);bone('Spine_03',0,1.48,0);bone('Head',0,1.83,0);bone('UpperArm_L',-.34,1.5,0);bone('LowerArm_L',-.58,1.25,0);bone('Hand_L',-.7,1.03,0);bone('UpperArm_R',.34,1.5,0);bone('LowerArm_R',.58,1.25,0);bone('Hand_R',.7,1.03,0);bone('Thigh_L',-.17,.9,0);bone('Calf_L',-.17,.48,0);bone('Foot_L',-.17,.08,.08);bone('Thigh_R',.17,.9,0);bone('Calf_R',.17,.48,0);bone('Foot_R',.17,.08,.08);
+let firstPerson=false,cameraModeListener=null;
+const player={model,root,getPosition:t=>t.copy(root.position),isFirstPerson:()=>firstPerson,onCameraModeChange(listener){cameraModeListener=listener;listener(firstPerson?'first-person':'third-person');return()=>{if(cameraModeListener===listener)cameraModeListener=null;};}};
 root.updateMatrixWorld(true);
-const presentation = new RangerAppearancePresentation({ player });
-
-assert.equal(presentation.mode, 'scout-rigged', 'compatible medium rigs should activate the Scout presentation');
-assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger quiver should stay detached');
-assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should be hidden behind the Scout presentation');
-assert.equal(presentation.visualRoot.parent, root, 'Scout presentation should live at the stable player root');
-assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing character identity should be Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'scout-polish-v2', 'runtime Scout should use the polished visual revision');
-assert.equal(presentation.visualRoot.userData.visualMeshBudget, 72, 'Scout visual polish should retain an explicit mobile mesh budget');
-assert.ok(presentation.visualRoot.getObjectByName('scout-tunic'), 'Scout should include the low-poly tunic silhouette');
-assert.ok(presentation.visualRoot.getObjectByName('scout-scarf'), 'Scout should include the green scarf/cowl');
-assert.ok(presentation.visualRoot.getObjectByName('scout-satchel'), 'Scout should include the readable satchel shape');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot'), 'Scout should include chunky traversal boots');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-pupil'), 'Scout polish should add readable eye detail');
-assert.ok(presentation.visualRoot.getObjectByName('scout-nose'), 'Scout polish should add a simple faceted nose');
-assert.ok(presentation.visualRoot.getObjectByName('scout-belt-buckle'), 'Scout polish should add a visible belt buckle');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-tunic-sleeve'), 'Scout polish should layer green tunic sleeves over the undershirt');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-forearm-wrap'), 'Scout polish should add leather forearm wraps');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot-sole'), 'Scout polish should give traversal boots a layered sole');
-assert.ok(presentation.visualRoot.getObjectByName('scout-cape-center-seam'), 'Scout polish should keep the cape visibly faceted and layered');
-
-let scoutMeshCount = 0;
-presentation.visualRoot.traverse(object => {
-  if (!object.isMesh) return;
-  scoutMeshCount += 1;
-  assert.equal(object.material.flatShading, true, `${object.name} should retain low-poly flat shading`);
-});
-assert.ok(scoutMeshCount >= 60, 'Scout polish should add enough layered geometry to read as a finished character');
-assert.ok(
-  scoutMeshCount <= presentation.visualRoot.userData.visualMeshBudget,
-  `Scout polish should stay within its mobile mesh budget (${scoutMeshCount}/72)`
-);
-
-presentation.update(1 / 60);
-root.position.z += 0.12;
-root.position.y += 0.08;
-root.updateMatrixWorld(true);
-presentation.update(1 / 60);
-assert.ok(presentation.capeTrail > 0, 'Scout cape should react to player movement');
-assert.ok(Number.isFinite(presentation.headGroup.position.y), 'Scout head should follow the animation rig');
-
-firstPerson = true;
-cameraModeListener?.('first-person');
-assert.equal(presentation.visualRoot.visible, false, 'Scout body should hide in first person to preserve camera readability');
-firstPerson = false;
-cameraModeListener?.('third-person');
-assert.equal(presentation.visualRoot.visible, true, 'Scout body should restore in third person');
-
-const compatibilityModule = read('src/player/RangerAppearancePresentation.js');
-assert.ok(
-  compatibilityModule.includes('PolishedScoutCharacterPresentation as RangerAppearancePresentation'),
-  'historical Ranger presentation imports should resolve through the polished Scout compatibility boundary'
-);
-const polishModule = read('src/player/ScoutVisualPolish.js');
-assert.ok(
-  polishModule.includes('extends ScoutCharacterPresentation')
-    && polishModule.includes("visualRevision = POLISH_REVISION"),
-  'Scout visual polish should remain layered on the stable rig-following presentation instead of replacing it'
-);
-
-const controller = read('src/player/RangerController.js');
-assert.ok(
-  controller.includes('PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed'),
-  'player controller should consume centralized traversal tuning'
-);
-assert.ok(
-  controller.includes('this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;')
-    && controller.includes('this.jumpVelocity = doubleJumpSpeed;')
-    && controller.includes('this.jumpStage = 2;'),
-  'player controller should expose one explicit mid-air jump stage'
-);
-assert.ok(
-  controller.includes('gravityForVerticalSpeed(this.jumpVelocity)')
-    && !controller.includes('this.jumpVelocity -= 13.5 * dt')
-    && !controller.includes('this.jumpVelocity = 5.4;'),
-  'legacy realistic jump constants should no longer drive traversal'
-);
-assert.ok(
-  controller.includes('if (!event.repeat) this.jump();'),
-  'holding Space must not consume both jump stages through keyboard repeat'
-);
-
-const { jump } = PLAYER_TRAVERSAL_TUNING;
-assert.equal(jump.maxAirJumps, 1, 'Scout should receive exactly one double-jump charge');
-assert.ok(jump.launchSpeed > 5.4, 'first jump should be stronger than the retired Ranger jump');
-assert.ok(jump.doubleJumpSpeed > 0, 'double jump should restore upward velocity');
-assert.ok(
-  gravityForVerticalSpeed(-1) > gravityForVerticalSpeed(1),
-  'descent should be slightly faster than ascent for a crisp platformer arc'
-);
-
-function apexHeight(initialSpeed, gravity) {
-  return (initialSpeed * initialSpeed) / (2 * gravity);
-}
-const firstApex = apexHeight(jump.launchSpeed, jump.gravity);
-const secondApexGain = apexHeight(jump.doubleJumpSpeed, jump.gravity);
-assert.ok(firstApex > 1.4, 'first jump should support meaningfully taller terrain than before');
-assert.ok(firstApex + secondApexGain > 2.6, 'double jump should open substantially higher platform routes');
-
-const packageJson = JSON.parse(read('package.json'));
-assert.ok(
-  packageJson.scripts.check.includes('npm run verify:ranger-presentation'),
-  'full repository check must retain player-presentation and traversal regression coverage'
-);
-
-console.log('Scout presentation, visual polish, and double-jump regression checks passed.');
+const presentation=new RangerAppearancePresentation({player});
+assert.equal(presentation.mode,'scout-rigged');assert.equal(model.getObjectByName('Ranger_Quiver'),undefined);assert.equal(sourceMesh.visible,false);assert.equal(presentation.visualRoot.parent,root);assert.equal(presentation.visualRoot.userData.characterIdentity,'scout');
+assert.equal(presentation.visualRoot.userData.visualRevision,'scout-polish-v3','runtime Scout should use the mockup-fidelity revision');
+assert.equal(presentation.visualRoot.userData.visualMeshBudget,72);
+const silhouette=presentation.visualRoot.userData.mockupSilhouette;
+assert.ok(silhouette.headRadius>=0.36,'Scout head should retain the larger heroic mockup proportion');
+assert.ok(silhouette.scarfOuterRadius>=0.5,'Scout cowl should retain the broad mockup silhouette');
+assert.ok(silhouette.bootDepth>=0.55,'Scout traversal boots should retain the oversized mockup silhouette');
+for(const name of ['scout-tunic','scout-scarf','scout-satchel','scout-left-boot','scout-left-pupil','scout-nose','scout-belt-buckle','scout-left-tunic-sleeve','scout-left-forearm-wrap','scout-left-boot-sole','scout-cape-center-seam']) assert.ok(presentation.visualRoot.getObjectByName(name),`Scout should include ${name}`);
+let scoutMeshCount=0;presentation.visualRoot.traverse(o=>{if(!o.isMesh)return;scoutMeshCount++;assert.equal(o.material.flatShading,true,`${o.name} should retain low-poly flat shading`);});assert.ok(scoutMeshCount>=60);assert.ok(scoutMeshCount<=72);
+presentation.update(1/60);root.position.z+=.12;root.position.y+=.08;root.updateMatrixWorld(true);presentation.update(1/60);assert.ok(presentation.capeTrail>0);assert.ok(Number.isFinite(presentation.headGroup.position.y));
+firstPerson=true;cameraModeListener?.('first-person');assert.equal(presentation.visualRoot.visible,false);firstPerson=false;cameraModeListener?.('third-person');assert.equal(presentation.visualRoot.visible,true);
+const compatibilityModule=read('src/player/RangerAppearancePresentation.js');assert.ok(compatibilityModule.includes('PolishedScoutCharacterPresentation as RangerAppearancePresentation'));
+const polishModule=read('src/player/ScoutVisualPolish.js');assert.ok(polishModule.includes('extends ScoutCharacterPresentation')&&polishModule.includes('visualRevision=POLISH_REVISION'));
+const controller=read('src/player/RangerController.js');assert.ok(controller.includes('PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed'));assert.ok(controller.includes('this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;')&&controller.includes('this.jumpVelocity = doubleJumpSpeed;')&&controller.includes('this.jumpStage = 2;'));assert.ok(controller.includes('gravityForVerticalSpeed(this.jumpVelocity)')&&!controller.includes('this.jumpVelocity -= 13.5 * dt')&&!controller.includes('this.jumpVelocity = 5.4;'));assert.ok(controller.includes('if (!event.repeat) this.jump();'));
+const {jump}=PLAYER_TRAVERSAL_TUNING;assert.equal(jump.maxAirJumps,1);assert.ok(jump.launchSpeed>5.4);assert.ok(jump.doubleJumpSpeed>0);assert.ok(gravityForVerticalSpeed(-1)>gravityForVerticalSpeed(1));
+const apex=(v,g)=>(v*v)/(2*g);assert.ok(apex(jump.launchSpeed,jump.gravity)>1.4);assert.ok(apex(jump.launchSpeed,jump.gravity)+apex(jump.doubleJumpSpeed,jump.gravity)>2.6);
+const packageJson=JSON.parse(read('package.json'));assert.ok(packageJson.scripts.check.includes('npm run verify:ranger-presentation'));
+console.log('Scout presentation, mockup fidelity, and double-jump regression checks passed.');
