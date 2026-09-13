@@ -140,9 +140,6 @@ function rebuildHair(root, mats) {
   for (const [x, y, z, rx, ry, rz, radius, height] of locks) {
     addCone(head, mats.hair, 'scout-hair-spike', radius, height, [x, y, z], [rx, ry, rz], 4);
   }
-
-  addFacetedBlob(head, mats.hair, 'scout-hair-crown-left', 0.16, [1.15, 0.7, 0.78], [-0.21, 0.36, -0.02], [0.15, 0.2, -0.28]);
-  addFacetedBlob(head, mats.hair, 'scout-hair-crown-right', 0.15, [1.12, 0.68, 0.78], [0.2, 0.35, -0.025], [0.14, -0.2, 0.26]);
 }
 
 function tuneBaseSilhouette(presentation, mats) {
@@ -370,7 +367,7 @@ export function applyScoutVisualPolish(presentation) {
 
   presentation.visualPolishMaterials = mats;
   root.userData.visualRevision = POLISH_REVISION;
-  root.userData.visualMeshBudget = 74;
+  root.userData.visualMeshBudget = 72;
   root.userData.mockupTarget = 'approved-scout-sheet';
   root.userData.mockupSilhouette = { ...MOCKUP_SILHOUETTE };
 }
