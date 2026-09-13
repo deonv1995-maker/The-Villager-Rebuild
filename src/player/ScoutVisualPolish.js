@@ -1,196 +1,24 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const POLISH_REVISION = 'scout-polish-v2';
-
-const DETAIL_PALETTE = Object.freeze({
-  tunicLight: 0x78885a,
-  scarfLight: 0x566f3c,
-  creamShadow: 0xbeb6a3,
-  leatherLight: 0x7a5638,
-  leatherEdge: 0x4b3326,
-  sole: 0x2e2824,
-  eyeWhite: 0xe7e0d2,
-  pupil: 0x252321,
-  mouth: 0x70483d,
-  metal: 0xb1aa98
-});
-
-function material(color, { metalness = 0 } = {}) {
-  return new THREE.MeshStandardMaterial({
-    color,
-    roughness: metalness > 0 ? 0.72 : 0.96,
-    metalness,
-    flatShading: true
-  });
-}
-
-function detailMesh(geometry, mat, name) {
-  const result = new THREE.Mesh(geometry, mat);
-  result.name = name;
-  result.castShadow = true;
-  result.receiveShadow = true;
-  return result;
-}
-
-function addBox(parent, mat, name, size, position, rotation = [0, 0, 0]) {
-  if (!parent) return null;
-  const result = detailMesh(new THREE.BoxGeometry(...size), mat, name);
-  result.position.set(...position);
-  result.rotation.set(...rotation);
-  parent.add(result);
-  return result;
-}
-
-function addCone(parent, mat, name, radius, height, position, rotation = [0, 0, 0], radialSegments = 4) {
-  if (!parent) return null;
-  const result = detailMesh(new THREE.ConeGeometry(radius, height, radialSegments), mat, name);
-  result.position.set(...position);
-  result.rotation.set(...rotation);
-  parent.add(result);
-  return result;
-}
-
-function addCylinder(parent, mat, name, radiusTop, radiusBottom, height, position, rotation = [0, 0, 0], radialSegments = 6) {
-  if (!parent) return null;
-  const result = detailMesh(
-    new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments, 1),
-    mat,
-    name
-  );
-  result.position.set(...position);
-  result.rotation.set(...rotation);
-  parent.add(result);
-  return result;
-}
-
-function addFaceDetails(root, mats) {
-  const head = root.getObjectByName('scout-head');
-  if (!head) return;
-
-  for (const side of ['left', 'right']) {
-    const sign = side === 'left' ? -1 : 1;
-    const eye = root.getObjectByName(`scout-eye-${side}`);
-    if (eye) {
-      eye.material = mats.eyeWhite;
-      eye.scale.set(1.08, 0.92, 0.7);
-    }
-    addBox(head, mats.pupil, `scout-${side}-pupil`, [0.03, 0.045, 0.018], [sign * 0.09, 0.02, 0.265]);
-    addBox(
-      head,
-      mats.hair,
-      `scout-${side}-eyebrow`,
-      [0.09, 0.018, 0.02],
-      [sign * 0.09, 0.105, 0.258],
-      [0, 0, sign * -0.08]
-    );
-  }
-
-  addCone(head, mats.skin, 'scout-nose', 0.045, 0.085, [0, -0.018, 0.277], [Math.PI / 2, 0, 0], 4);
-  addBox(head, mats.mouth, 'scout-mouth', [0.085, 0.014, 0.014], [0, -0.105, 0.255], [0, 0, -0.04]);
-
-  addCone(head, mats.hair, 'scout-hair-side-left', 0.1, 0.24, [-0.255, 0.145, 0.015], [0.12, 0, -0.75], 4);
-  addCone(head, mats.hair, 'scout-hair-side-right', 0.1, 0.24, [0.255, 0.145, 0.015], [0.12, 0, 0.75], 4);
-  addCone(head, mats.hair, 'scout-hair-back-lock', 0.115, 0.3, [0.02, 0.12, -0.255], [-0.7, 0, 0.04], 5);
-}
-
-function addTorsoDetails(root, mats) {
-  const torso = root.getObjectByName('scout-tunic');
-  const belt = root.getObjectByName('scout-belt');
-  const strap = root.getObjectByName('scout-crossbody-strap');
-
-  addBox(torso, mats.creamShadow, 'scout-collar-left', [0.2, 0.055, 0.045], [-0.075, 0.255, 0.295], [0.05, 0, -0.52]);
-  addBox(torso, mats.creamShadow, 'scout-collar-right', [0.2, 0.055, 0.045], [0.075, 0.255, 0.295], [0.05, 0, 0.52]);
-
-  addBox(torso, mats.tunicLight, 'scout-tunic-front-flap', [0.24, 0.28, 0.055], [0, -0.405, 0.19], [-0.05, 0, 0]);
-  addBox(torso, mats.tunicLight, 'scout-tunic-left-flap', [0.18, 0.25, 0.05], [-0.255, -0.39, 0.04], [0, -0.4, -0.12]);
-  addBox(torso, mats.tunicLight, 'scout-tunic-right-flap', [0.18, 0.25, 0.05], [0.255, -0.39, 0.04], [0, 0.4, 0.12]);
-
-  addBox(belt, mats.metal, 'scout-belt-buckle', [0.13, 0.13, 0.045], [0, 0, 0.385]);
-  addBox(belt, mats.leatherLight, 'scout-belt-pouch', [0.19, 0.19, 0.14], [-0.3, -0.035, 0.12], [0, 0.2, -0.08]);
-
-  addBox(strap, mats.metal, 'scout-strap-clasp', [0.1, 0.12, 0.075], [0, -0.12, 0.01], [0, 0, 0.03]);
-}
-
-function addScarfDetails(root, mats) {
-  const scarf = root.getObjectByName('scout-scarf');
-  if (!scarf) return;
-
-  addBox(scarf, mats.scarfLight, 'scout-scarf-knot', [0.17, 0.15, 0.13], [0, -0.04, 0.325], [0.08, 0, 0.08]);
-  addBox(scarf, mats.scarfLight, 'scout-scarf-tail-left', [0.12, 0.34, 0.07], [-0.075, -0.22, 0.25], [0.12, 0.02, -0.12]);
-  addBox(scarf, mats.scarfLight, 'scout-scarf-tail-right', [0.1, 0.29, 0.065], [0.085, -0.205, 0.245], [0.08, -0.02, 0.16]);
-  addCylinder(scarf, mats.metal, 'scout-cape-clasp-left', 0.04, 0.04, 0.025, [-0.235, 0.015, 0.285], [Math.PI / 2, 0, 0], 6);
-  addCylinder(scarf, mats.metal, 'scout-cape-clasp-right', 0.04, 0.04, 0.025, [0.235, 0.015, 0.285], [Math.PI / 2, 0, 0], 6);
-}
-
-function addLimbDetails(root, mats) {
-  for (const side of ['left', 'right']) {
-    const upperArm = root.getObjectByName(`scout-${side}-upper-arm`);
-    const lowerArm = root.getObjectByName(`scout-${side}-lower-arm`);
-    const boot = root.getObjectByName(`scout-${side}-boot`);
-    const cuff = root.getObjectByName(`scout-${side}-boot-cuff`);
-
-    addCylinder(upperArm, mats.tunicLight, `scout-${side}-tunic-sleeve`, 0.145, 0.135, 0.42, [0, -0.29, 0], [0, 0, 0], 5);
-    addCylinder(lowerArm, mats.leatherLight, `scout-${side}-forearm-wrap`, 0.112, 0.1, 0.34, [0, 0.32, 0], [0, 0, 0], 5);
-
-    if (cuff && mats.creamShadow) cuff.material = mats.creamShadow;
-    if (boot) {
-      addBox(boot, mats.sole, `scout-${side}-boot-sole`, [0.29, 0.08, 0.48], [0, -0.17, 0.025]);
-      addBox(boot, mats.leatherLight, `scout-${side}-boot-toe`, [0.27, 0.17, 0.2], [0, -0.025, 0.22], [-0.08, 0, 0]);
-      boot.scale.set(1.08, 1.03, 1.12);
-    }
-  }
-}
-
-function addSatchelDetails(root, mats) {
-  const satchel = root.getObjectByName('scout-satchel');
-  if (!satchel) return;
-  addBox(satchel, mats.leatherEdge, 'scout-satchel-bottom-band', [0.35, 0.055, 0.19], [0, -0.19, 0]);
-  addBox(satchel, mats.metal, 'scout-satchel-rivet', [0.035, 0.035, 0.025], [0, 0.065, 0.112]);
-}
-
-function addCapeDetails(root, mats) {
-  const cape = root.getObjectByName('scout-cape');
-  if (!cape) return;
-  addBox(cape, mats.scarfLight, 'scout-cape-center-seam', [0.035, 0.61, 0.018], [0, -0.34, 0.012], [0, 0, 0.02]);
-  addBox(cape, mats.scarfLight, 'scout-cape-left-hem', [0.22, 0.055, 0.02], [-0.255, -0.68, 0.008], [0, 0, -0.11]);
-  addBox(cape, mats.scarfLight, 'scout-cape-right-hem', [0.22, 0.055, 0.02], [0.255, -0.68, 0.008], [0, 0, 0.11]);
-}
-
-export function applyScoutVisualPolish(presentation) {
-  const root = presentation?.visualRoot;
-  if (!presentation?.rigReady || !root || root.userData.visualRevision === POLISH_REVISION) return;
-
-  const mats = {
-    tunicLight: material(DETAIL_PALETTE.tunicLight),
-    scarfLight: material(DETAIL_PALETTE.scarfLight),
-    creamShadow: material(DETAIL_PALETTE.creamShadow),
-    leatherLight: material(DETAIL_PALETTE.leatherLight),
-    leatherEdge: material(DETAIL_PALETTE.leatherEdge),
-    sole: material(DETAIL_PALETTE.sole),
-    eyeWhite: material(DETAIL_PALETTE.eyeWhite),
-    pupil: material(DETAIL_PALETTE.pupil),
-    mouth: material(DETAIL_PALETTE.mouth),
-    metal: material(DETAIL_PALETTE.metal, { metalness: 0.12 }),
-    skin: presentation.materials?.skin ?? material(0xd59b72),
-    hair: presentation.materials?.hair ?? material(0x563824)
-  };
-
-  addFaceDetails(root, mats);
-  addTorsoDetails(root, mats);
-  addScarfDetails(root, mats);
-  addLimbDetails(root, mats);
-  addSatchelDetails(root, mats);
-  addCapeDetails(root, mats);
-
-  presentation.visualPolishMaterials = mats;
-  root.userData.visualRevision = POLISH_REVISION;
-  root.userData.visualMeshBudget = 72;
-}
-
-export class PolishedScoutCharacterPresentation extends ScoutCharacterPresentation {
-  constructor(options) {
-    super(options);
-    applyScoutVisualPolish(this);
-  }
-}
+const POLISH_REVISION = 'scout-polish-v3';
+const MOCKUP_SILHOUETTE = Object.freeze({ headRadius: 0.365, torsoShoulderRadius: 0.43, torsoWaistRadius: 0.33, scarfOuterRadius: 0.5, capeLength: 0.64, bootDepth: 0.56 });
+const DETAIL_PALETTE = Object.freeze({ tunicLight: 0x82915f, scarfLight: 0x5a7140, creamShadow: 0xd1c7b0, leatherLight: 0x8a5e3d, leatherEdge: 0x513629, sole: 0x342b25, eyeWhite: 0xf6f0e3, pupil: 0x242220, mouth: 0x7d4b40, metal: 0xbdb5a4 });
+function material(color,{metalness=0,side=THREE.FrontSide}={}){return new THREE.MeshStandardMaterial({color,roughness:metalness>0?0.72:0.96,metalness,flatShading:true,side});}
+function detailMesh(geometry,mat,name){const r=new THREE.Mesh(geometry,mat);r.name=name;r.castShadow=true;r.receiveShadow=true;return r;}
+function replaceGeometry(object,geometry){if(!object)return;object.geometry?.dispose?.();object.geometry=geometry;}
+function addBox(parent,mat,name,size,position,rotation=[0,0,0]){if(!parent)return null;const r=detailMesh(new THREE.BoxGeometry(...size),mat,name);r.position.set(...position);r.rotation.set(...rotation);parent.add(r);return r;}
+function addCone(parent,mat,name,radius,height,position,rotation=[0,0,0],radialSegments=4){if(!parent)return null;const r=detailMesh(new THREE.ConeGeometry(radius,height,radialSegments),mat,name);r.position.set(...position);r.rotation.set(...rotation);parent.add(r);return r;}
+function addCylinder(parent,mat,name,rt,rb,height,position,rotation=[0,0,0],segments=6){if(!parent)return null;const r=detailMesh(new THREE.CylinderGeometry(rt,rb,height,segments,1),mat,name);r.position.set(...position);r.rotation.set(...rotation);parent.add(r);return r;}
+function addTriangle(parent,mat,name,points){if(!parent)return null;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(points.flat(),3));g.setIndex([0,1,2]);g.computeVertexNormals();const r=detailMesh(g,mat,name);parent.add(r);return r;}
+function tuneBasePalette(p){const m=p.materials;if(!m)return;m.tunic.color.setHex(0x748254);m.scarf.color.setHex(0x4c6338);m.shirt.color.setHex(0xe2d9c6);m.trousers.color.setHex(0x51443b);m.leather.color.setHex(0x765039);m.leatherDark.color.setHex(0x43332b);m.skin.color.setHex(0xe4a47a);m.hair.color.setHex(0x5a3826);m.buckle.color.setHex(0xbdb5a4);}
+function rebuildHair(root,mats){const head=root.getObjectByName('scout-head'),cap=root.getObjectByName('scout-hair-cap');if(!head||!cap)return;replaceGeometry(cap,new THREE.DodecahedronGeometry(0.39,0));cap.scale.set(1.08,0.67,1.05);cap.position.set(0,0.235,-0.025);for(const c of [...head.children]){if(c.name!=='scout-hair-spike')continue;c.removeFromParent();c.geometry?.dispose?.();}const locks=[[-0.24,0.3,0.23,0.88,0,-0.58,0.145,0.38],[-0.09,0.37,0.27,1.04,0,-0.22,0.15,0.4],[0.08,0.38,0.25,0.96,0,0.18,0.145,0.38],[0.23,0.34,0.18,0.78,0,0.52,0.14,0.36],[-0.25,0.43,0.02,0.4,0,-0.62,0.135,0.35]];for(const [x,y,z,rx,ry,rz,r,h] of locks)addCone(head,mats.hair,'scout-hair-spike',r,h,[x,y,z],[rx,ry,rz],4);}
+function tuneBaseSilhouette(p,mats){const root=p.visualRoot,torso=root.getObjectByName('scout-tunic'),scarf=root.getObjectByName('scout-scarf'),strap=root.getObjectByName('scout-crossbody-strap'),chest=root.getObjectByName('scout-shirt-collar');replaceGeometry(torso,new THREE.CylinderGeometry(MOCKUP_SILHOUETTE.torsoShoulderRadius,MOCKUP_SILHOUETTE.torsoWaistRadius,0.68,6,1));if(p.head){replaceGeometry(p.head,new THREE.DodecahedronGeometry(MOCKUP_SILHOUETTE.headRadius,0));p.head.scale.set(1,1.02,0.9);}const le=root.getObjectByName('scout-eye-left'),re=root.getObjectByName('scout-eye-right');if(le&&re){const g=new THREE.BoxGeometry(0.105,0.135,0.032);le.geometry?.dispose?.();le.geometry=g;re.geometry=g;le.position.set(-0.12,0.005,0.326);re.position.set(0.12,0.005,0.326);}rebuildHair(root,mats);replaceGeometry(scarf,new THREE.CylinderGeometry(0.43,MOCKUP_SILHOUETTE.scarfOuterRadius,0.29,6,1));if(chest)replaceGeometry(chest,new THREE.BoxGeometry(0.42,0.13,0.075));if(strap)replaceGeometry(strap,new THREE.BoxGeometry(0.105,1.02,0.065));if(p.satchelGroup)p.satchelGroup.scale.set(1.28,1.2,1.16);const bag=root.getObjectByName('scout-satchel-bag'),flap=root.getObjectByName('scout-satchel-flap'),buckle=root.getObjectByName('scout-satchel-buckle');if(bag){replaceGeometry(bag,new THREE.BoxGeometry(0.4,0.46,0.22));bag.position.z=0.09;}if(flap){replaceGeometry(flap,new THREE.BoxGeometry(0.42,0.17,0.235));flap.position.set(0,0.15,0.09);}if(buckle){replaceGeometry(buckle,new THREE.BoxGeometry(0.1,0.09,0.035));buckle.position.set(0,0.12,0.225);}const cape=root.getObjectByName('scout-cape');if(cape){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([-0.4,0,0,0.4,0,0,-0.48,-0.31,-0.02,0.48,-0.31,-0.02,-0.28,-0.64,-0.05,0.28,-0.64,-0.05],3));g.setIndex([0,2,1,1,2,3,2,4,3,3,4,5]);g.computeVertexNormals();replaceGeometry(cape,g);}for(const side of ['left','right']){const boot=root.getObjectByName(`scout-${side}-boot`),cuff=root.getObjectByName(`scout-${side}-boot-cuff`);if(boot){replaceGeometry(boot,new THREE.BoxGeometry(0.33,0.32,MOCKUP_SILHOUETTE.bootDepth));boot.scale.set(1.12,1.04,1.18);}if(cuff)replaceGeometry(cuff,new THREE.CylinderGeometry(0.18,0.205,0.21,5,1));}}
+function addFaceDetails(root,mats){const head=root.getObjectByName('scout-head');if(!head)return;for(const side of ['left','right']){const sign=side==='left'?-1:1,eye=root.getObjectByName(`scout-eye-${side}`);if(eye){eye.material=mats.eyeWhite;eye.scale.set(1,1,0.8);}addBox(head,mats.pupil,`scout-${side}-pupil`,[0.046,0.085,0.02],[sign*0.12,0,0.35]);addBox(head,mats.hair,`scout-${side}-eyebrow`,[0.13,0.025,0.024],[sign*0.12,0.125,0.338],[0,0,sign*-0.08]);}addCone(head,mats.skin,'scout-nose',0.055,0.105,[0,-0.035,0.36],[Math.PI/2,0,0],4);addBox(head,mats.mouth,'scout-mouth',[0.11,0.015,0.016],[0,-0.145,0.33],[0,0,-0.03]);addCone(head,mats.hair,'scout-hair-side-left',0.125,0.32,[-0.32,0.17,0.02],[0.16,0,-0.86],4);addCone(head,mats.hair,'scout-hair-side-right',0.125,0.32,[0.32,0.17,0.02],[0.16,0,0.86],4);addCone(head,mats.hair,'scout-hair-back-lock',0.14,0.35,[0.02,0.14,-0.32],[-0.78,0,0.04],5);}
+function addTorsoDetails(root,m){const torso=root.getObjectByName('scout-tunic'),belt=root.getObjectByName('scout-belt'),strap=root.getObjectByName('scout-crossbody-strap');addBox(torso,m.creamShadow,'scout-collar-left',[0.24,0.065,0.055],[-0.095,0.24,0.37],[0.06,0,-0.5]);addBox(torso,m.creamShadow,'scout-collar-right',[0.24,0.065,0.055],[0.095,0.24,0.37],[0.06,0,0.5]);addBox(torso,m.tunicLight,'scout-tunic-front-flap',[0.24,0.34,0.065],[0,-0.4,0.265],[-0.06,0,0]);addBox(torso,m.tunicLight,'scout-tunic-left-flap',[0.22,0.33,0.06],[-0.27,-0.39,0.13],[0.02,-0.34,-0.12]);addBox(torso,m.tunicLight,'scout-tunic-right-flap',[0.22,0.33,0.06],[0.27,-0.39,0.13],[0.02,0.34,0.12]);addBox(belt,m.metal,'scout-belt-buckle',[0.16,0.16,0.055],[0,0,0.39]);addBox(belt,m.leatherLight,'scout-belt-pouch',[0.22,0.21,0.16],[-0.32,-0.035,0.12],[0,0.2,-0.08]);addBox(strap,m.metal,'scout-strap-clasp',[0.105,0.125,0.078],[0,-0.12,0.01],[0,0,0.03]);}
+function addScarfDetails(root,m){const scarf=root.getObjectByName('scout-scarf');if(!scarf)return;addBox(scarf,m.scarfLight,'scout-scarf-knot',[0.24,0.16,0.16],[0,-0.035,0.445],[0.08,0,0.04]);addBox(scarf,m.scarfLight,'scout-scarf-tail-left',[0.16,0.31,0.08],[-0.14,-0.2,0.34],[0.1,0.04,-0.2]);addBox(scarf,m.scarfLight,'scout-scarf-tail-right',[0.14,0.27,0.075],[0.15,-0.19,0.335],[0.08,-0.04,0.2]);addCylinder(scarf,m.metal,'scout-cape-clasp-left',0.045,0.045,0.028,[-0.28,0,0.37],[Math.PI/2,0,0],6);addCylinder(scarf,m.metal,'scout-cape-clasp-right',0.045,0.045,0.028,[0.28,0,0.37],[Math.PI/2,0,0],6);}
+function addLimbDetails(root,m){for(const side of ['left','right']){const upper=root.getObjectByName(`scout-${side}-upper-arm`),lower=root.getObjectByName(`scout-${side}-lower-arm`),boot=root.getObjectByName(`scout-${side}-boot`),cuff=root.getObjectByName(`scout-${side}-boot-cuff`);addCylinder(upper,m.tunicLight,`scout-${side}-tunic-sleeve`,0.165,0.145,0.46,[0,-0.27,0],[0,0,0],5);addCylinder(lower,m.leatherLight,`scout-${side}-forearm-wrap`,0.125,0.108,0.35,[0,0.3,0],[0,0,0],5);if(cuff)cuff.material=m.creamShadow;if(boot){addBox(boot,m.sole,`scout-${side}-boot-sole`,[0.37,0.085,0.62],[0,-0.18,0.035]);addBox(boot,m.leatherLight,`scout-${side}-boot-toe`,[0.35,0.19,0.28],[0,-0.02,0.275],[-0.08,0,0]);}}}
+function addSatchelDetails(root,m){const s=root.getObjectByName('scout-satchel');if(!s)return;addBox(s,m.leatherEdge,'scout-satchel-bottom-band',[0.41,0.065,0.23],[0,-0.21,0.09]);addBox(s,m.metal,'scout-satchel-rivet',[0.045,0.045,0.03],[0,0.065,0.225]);}
+function addCapeDetails(root,m){const cape=root.getObjectByName('scout-cape');if(!cape)return;addBox(cape,m.scarfLight,'scout-cape-center-seam',[0.038,0.53,0.018],[0,-0.31,0.012],[0,0,0.02]);addBox(cape,m.scarfLight,'scout-cape-left-hem',[0.23,0.05,0.02],[-0.22,-0.605,0.008],[0,0,-0.08]);addBox(cape,m.scarfLight,'scout-cape-right-hem',[0.23,0.05,0.02],[0.22,-0.605,0.008],[0,0,0.08]);addTriangle(cape,m.emblem,'scout-cape-emblem-large',[[-0.11,-0.24,0.02],[0,-0.07,0.02],[0.1,-0.24,0.02]]);addTriangle(cape,m.emblem,'scout-cape-emblem-small',[[0.02,-0.24,0.021],[0.1,-0.13,0.021],[0.155,-0.24,0.021]]);}
+export function applyScoutVisualPolish(p){const root=p?.visualRoot;if(!p?.rigReady||!root||root.userData.visualRevision===POLISH_REVISION)return;tuneBasePalette(p);const m={tunicLight:material(DETAIL_PALETTE.tunicLight),scarfLight:material(DETAIL_PALETTE.scarfLight),creamShadow:material(DETAIL_PALETTE.creamShadow),leatherLight:material(DETAIL_PALETTE.leatherLight),leatherEdge:material(DETAIL_PALETTE.leatherEdge),sole:material(DETAIL_PALETTE.sole),eyeWhite:material(DETAIL_PALETTE.eyeWhite),pupil:material(DETAIL_PALETTE.pupil),mouth:material(DETAIL_PALETTE.mouth),metal:material(DETAIL_PALETTE.metal,{metalness:0.12}),emblem:material(DETAIL_PALETTE.creamShadow,{side:THREE.DoubleSide}),skin:p.materials?.skin??material(0xe4a47a),hair:p.materials?.hair??material(0x5a3826)};tuneBaseSilhouette(p,m);addFaceDetails(root,m);addTorsoDetails(root,m);addScarfDetails(root,m);addLimbDetails(root,m);addSatchelDetails(root,m);addCapeDetails(root,m);p.visualPolishMaterials=m;root.userData.visualRevision=POLISH_REVISION;root.userData.visualMeshBudget=72;root.userData.mockupTarget='approved-scout-sheet';root.userData.mockupSilhouette={...MOCKUP_SILHOUETTE};}
+export class PolishedScoutCharacterPresentation extends ScoutCharacterPresentation{constructor(options){super(options);applyScoutVisualPolish(this);}}
