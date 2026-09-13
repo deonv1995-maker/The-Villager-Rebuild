@@ -115,19 +115,27 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger q
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should be hidden behind the Scout presentation');
 assert.equal(presentation.visualRoot.parent, root, 'Scout presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing character identity should be Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'scout-polish-v2', 'runtime Scout should use the polished visual revision');
-assert.equal(presentation.visualRoot.userData.visualMeshBudget, 72, 'Scout visual polish should retain an explicit mobile mesh budget');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'scout-polish-v3', 'runtime Scout should use the screenshot-informed visual revision');
+assert.equal(presentation.visualRoot.userData.visualMeshBudget, 72, 'Scout visual polish should retain the established mobile mesh budget');
 assert.ok(presentation.visualRoot.getObjectByName('scout-tunic'), 'Scout should include the low-poly tunic silhouette');
 assert.ok(presentation.visualRoot.getObjectByName('scout-scarf'), 'Scout should include the green scarf/cowl');
 assert.ok(presentation.visualRoot.getObjectByName('scout-satchel'), 'Scout should include the readable satchel shape');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot'), 'Scout should include chunky traversal boots');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-pupil'), 'Scout polish should add readable eye detail');
+assert.ok(presentation.visualRoot.getObjectByName('scout-ear-left'), 'Scout should include the visible ears from the approved mock-up');
 assert.ok(presentation.visualRoot.getObjectByName('scout-nose'), 'Scout polish should add a simple faceted nose');
 assert.ok(presentation.visualRoot.getObjectByName('scout-belt-buckle'), 'Scout polish should add a visible belt buckle');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-tunic-sleeve'), 'Scout polish should layer green tunic sleeves over the undershirt');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-forearm-wrap'), 'Scout polish should add leather forearm wraps');
 assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot-sole'), 'Scout polish should give traversal boots a layered sole');
 assert.ok(presentation.visualRoot.getObjectByName('scout-cape-center-seam'), 'Scout polish should keep the cape visibly faceted and layered');
+
+const silhouette = presentation.visualRoot.userData.mockupSilhouette;
+assert.ok(silhouette, 'Scout should expose the approved mock-up silhouette contract');
+assert.ok(silhouette.headRadius >= 0.36, 'Scout head should keep the larger youthful mock-up proportion');
+assert.ok(silhouette.torsoShoulderRadius >= 0.42, 'Scout shoulders should read broader than the prior blocky silhouette');
+assert.ok(silhouette.scarfOuterRadius >= 0.49, 'Scout scarf/cowl should remain broad and readable from gameplay distance');
+assert.ok(silhouette.bootDepth >= 0.55, 'Scout boots should retain the oversized traversal silhouette');
 
 let scoutMeshCount = 0;
 presentation.visualRoot.traverse(object => {
@@ -138,7 +146,7 @@ presentation.visualRoot.traverse(object => {
 assert.ok(scoutMeshCount >= 60, 'Scout polish should add enough layered geometry to read as a finished character');
 assert.ok(
   scoutMeshCount <= presentation.visualRoot.userData.visualMeshBudget,
-  `Scout polish should stay within its mobile mesh budget (${scoutMeshCount}/72)`
+  `Scout polish should stay within its mobile mesh budget (${scoutMeshCount}/${presentation.visualRoot.userData.visualMeshBudget})`
 );
 
 presentation.update(1 / 60);
@@ -164,7 +172,7 @@ assert.ok(
 const polishModule = read('src/player/ScoutVisualPolish.js');
 assert.ok(
   polishModule.includes('extends ScoutCharacterPresentation')
-    && polishModule.includes("visualRevision = POLISH_REVISION"),
+    && polishModule.includes('visualRevision = POLISH_REVISION'),
   'Scout visual polish should remain layered on the stable rig-following presentation instead of replacing it'
 );
 
