@@ -25,9 +25,15 @@ export class TorchPlacementTargetResolver {
   getTarget() {
     this.game.player.getPosition(this.playerPosition);
     this.#resolveAimDirection();
+    const occupiedMountIds = new Set(
+      (this.game.torchRuntime?.placedTorches ?? [])
+        .map(entry => entry?.mountId)
+        .filter(Boolean)
+    );
 
     let best = null;
     for (const target of this.#collectTargets()) {
+      if (occupiedMountIds.has(target.id)) continue;
       const score = this.#score(target);
       if (score === null || (best && score >= best.score)) continue;
       best = { ...target, score };
