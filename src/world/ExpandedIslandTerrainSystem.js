@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { EXPLORATION_WORLD } from '../data/ExplorationRegionDefinitions.js';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
 import { ExplorationRegionSystem } from './ExplorationRegionSystem.js';
+import { caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
 import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const MAINLAND_SCALE = EXPLORATION_WORLD.mainlandScale;
@@ -134,6 +136,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const explorationTerrain = this.explorationRegions.terrainOffsetAt(x, z);
 
     height += shoreFade * (outerFeatures + longNoise + explorationTerrain);
+    for (const definition of EXPLORATION_POIS) {
+      height += caveTerrainOffsetAt(definition, x, z);
+    }
     return height;
   }
 
@@ -227,7 +232,6 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
   #createChunkedTerrain() {
     const chunkSize = this.chunks?.chunkSize ?? 72;
-    const segments = this.chunkTerrainSegments;
     const minIx = Math.floor(-this.extentX / chunkSize);
     const maxIx = Math.floor(this.extentX / chunkSize);
     const minIz = Math.floor((this.centerZ - this.extentZ) / chunkSize);
@@ -237,6 +241,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       for (let iz = minIz; iz <= maxIz; iz += 1) {
         const centerX = (ix + 0.5) * chunkSize;
         const centerZ = (iz + 0.5) * chunkSize;
+        const needsCaveDetail = EXPLORATION_POIS.some(definition => (
+          caveTerrainNeedsRefinement(definition, centerX, centerZ, chunkSize)
+        ));
+        const segments = needsCaveDetail ? this.chunkTerrainSegments * 2 : this.chunkTerrainSegments;
         const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
         geometry.rotateX(-Math.PI / 2);
         const position = geometry.attributes.position;
@@ -273,6 +281,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         geometry.computeBoundingSphere();
         const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
         mesh.name = `terrain-chunk-${ix}-${iz}`;
+        mesh.userData.terrainSegments = segments;
         mesh.position.set(centerX, 0, centerZ);
         mesh.receiveShadow = true;
         if (this.chunks) this.chunks.addObjectToKey(mesh, `${ix}:${iz}`);
