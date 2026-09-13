@@ -5,17 +5,17 @@ import {
   LANDSCAPING_MODES,
   LANDSCAPING_SCHEMA_VERSION,
   landscapingCost,
-  landscapingDefinition
+  landscapingDefinition,
+  landscapingStrokeUnits
 } from '../data/LandscapingDefinitions.js';
-import { PANEL_DIRECTIONS } from '../data/PanelConstructionDefinitions.js';
-import { panelCellKey } from './PanelConstructionGrid.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
 const TARGET_DISTANCE = LANDSCAPING_GRID.cellSize * 0.78;
 const AIM_GROUND_STEP = 0.22;
 const EPSILON = 0.000001;
-const DIRECTIONS = Object.values(PANEL_DIRECTIONS);
+const DUPLICATE_TOLERANCE = LANDSCAPING_GRID.cellSize * 0.08;
+const X_AXIS = new THREE.Vector3(1, 0, 0);
 
 const finitePoint = point => Number.isFinite(point?.x) && Number.isFinite(point?.z);
 const finiteAim = aim => (
@@ -27,6 +27,10 @@ const finiteAim = aim => (
   Number.isFinite(aim?.direction?.z)
 );
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const distance2d = (a, b) => Math.hypot((a?.x ?? 0) - (b?.x ?? 0), (a?.z ?? 0) - (b?.z ?? 0));
+const quantize = value => Math.round(value / LANDSCAPING_GRID.previewQuantization) * LANDSCAPING_GRID.previewQuantization;
+
 function disposeObject(root) {
   root?.traverse?.(object => {
     object.geometry?.dispose?.();
@@ -36,21 +40,51 @@ function disposeObject(root) {
   root?.removeFromParent?.();
 }
 
+function stringHash(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededUnit(seed, index, channel = 0) {
+  let value = (seed ^ Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(channel + 7, 0x85ebca6b)) >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  value ^= value >>> 16;
+  return (value >>> 0) / 4294967295;
+}
+
+function strokeYaw(start, end, fallback = 0) {
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  if (Math.hypot(dx, dz) <= EPSILON) return fallback;
+  return Math.atan2(-dz, dx);
+}
+
 export class LandscapingSystem {
-  constructor({ group, terrain, collision, inventory, panelConstruction }) {
-    if (!group || !terrain || !collision || !inventory || !panelConstruction) {
-      throw new Error('LandscapingSystem requires group, terrain, collision, inventory and panelConstruction');
+  constructor({ group, terrain, collision, inventory }) {
+    if (!group || !terrain || !collision || !inventory) {
+      throw new Error('LandscapingSystem requires group, terrain, collision and inventory');
     }
     this.group = group;
     this.terrain = terrain;
     this.collision = collision;
     this.inventory = inventory;
-    this.panelConstruction = panelConstruction;
     this.entries = new Map();
+    this.nextEntryId = 0;
     this.active = false;
     this.mode = 'fence';
+    this.strokeStart = null;
+    this.strokeSeed = 0;
+    this.currentTarget = null;
+    this.currentTargetValid = false;
     this.previewRoot = null;
-    this.previewPlacement = null;
+    this.previewStroke = null;
     this.previewValid = false;
     this.previewSignature = '';
     this.tempAimDirection = new THREE.Vector3();
@@ -60,67 +94,136 @@ export class LandscapingSystem {
     return this.active;
   }
 
+  hasPinnedStart() {
+    return Boolean(this.strokeStart);
+  }
+
   setActive(active) {
     this.active = Boolean(active);
-    if (!this.active) this.#clearPreview();
+    if (!this.active) this.#resetInteraction();
     return this.active;
   }
 
   setMode(mode) {
     if (!LANDSCAPING_MODES.includes(mode)) return false;
     this.mode = mode;
-    this.#clearPreview();
+    this.#resetInteraction();
     return true;
   }
 
   getState() {
     const definition = landscapingDefinition(this.mode);
-    const cost = landscapingCost(this.mode);
+    const length = this.strokeStart ? (this.previewStroke?.length ?? 0) : 0;
+    const cost = landscapingCost(this.mode, length);
     const materialQuantity = definition ? this.inventory.get(definition.resourceId) : 0;
-    const required = cost[0]?.quantity ?? 0;
-    const canAfford = materialQuantity >= required;
+    const canAfford = cost.every(item => this.inventory.get(item.itemId) >= item.quantity);
+    const strokePinned = Boolean(this.strokeStart);
     return {
       mode: this.mode,
       label: definition?.label ?? 'Landscaping',
       cost,
       materialQuantity,
       canAfford,
-      previewValid: Boolean(this.previewValid && canAfford),
-      snappedToBuilding: this.previewPlacement?.gridKind === 'structure'
+      previewValid: strokePinned
+        ? Boolean(this.previewValid && canAfford)
+        : Boolean(this.currentTargetValid && canAfford),
+      canPin: Boolean(!strokePinned && this.currentTargetValid && canAfford),
+      strokePinned,
+      interactionPhase: strokePinned ? 'drag' : 'pin',
+      strokeLength: length,
+      unitCount: landscapingStrokeUnits(this.mode, length),
+      pathWidth: this.mode === 'cobble' ? definition?.width ?? LANDSCAPING_GRID.pathWidth : null,
+      maxStrokeLength: definition?.maxStrokeLength ?? LANDSCAPING_GRID.maxStrokeLength,
+      snappedToBuilding: false
     };
   }
 
   update(playerPosition, facingDirection, aim = null) {
     if (!this.active || !finitePoint(playerPosition) || !finitePoint(facingDirection)) {
       this.#clearPreview();
+      this.currentTarget = null;
+      this.currentTargetValid = false;
       return null;
     }
 
-    const placement = this.#resolvePlacement(playerPosition, facingDirection, aim);
-    const cost = landscapingCost(this.mode);
+    const rawTarget = this.#placementTarget(playerPosition, facingDirection, aim);
+    const target = this.#clampStrokeTarget(rawTarget);
+    this.currentTarget = target;
+    this.currentTargetValid = this.#targetValid(target, playerPosition);
+
+    if (!this.strokeStart) {
+      this.previewStroke = null;
+      this.previewValid = false;
+      this.#renderPinPreview(target, this.currentTargetValid);
+      return target;
+    }
+
+    const stroke = this.#createStroke(this.strokeStart, target, this.strokeSeed);
+    const cost = landscapingCost(this.mode, stroke.length);
     const canAfford = cost.every(item => this.inventory.get(item.itemId) >= item.quantity);
-    this.previewPlacement = placement;
-    this.previewValid = Boolean(placement?.valid && canAfford);
-    this.#renderPreview(placement, this.previewValid);
-    return placement;
+    stroke.valid = this.#strokeValid(stroke, playerPosition) && canAfford;
+    this.previewStroke = stroke;
+    this.previewValid = stroke.valid;
+    this.#renderStrokePreview(stroke, stroke.valid);
+    return stroke;
+  }
+
+  pin(playerPosition, facingDirection, aim = null) {
+    if (!this.active || this.strokeStart) return false;
+    this.update(playerPosition, facingDirection, aim);
+    if (!this.currentTargetValid) return false;
+    const minimumCost = landscapingCost(this.mode, 0);
+    if (!minimumCost.every(item => this.inventory.get(item.itemId) >= item.quantity)) return false;
+
+    this.strokeStart = { ...this.currentTarget };
+    this.strokeSeed = stringHash([
+      this.mode,
+      quantize(this.strokeStart.x).toFixed(3),
+      quantize(this.strokeStart.z).toFixed(3),
+      this.nextEntryId
+    ].join(':'));
+    this.update(playerPosition, facingDirection, aim);
+    return true;
+  }
+
+  cancelStroke() {
+    if (!this.strokeStart) return false;
+    this.strokeStart = null;
+    this.strokeSeed = 0;
+    this.previewStroke = null;
+    this.previewValid = false;
+    this.#clearPreview();
+    return true;
   }
 
   build(playerPosition, facingDirection, aim = null) {
-    if (!this.active) return null;
-    const placement = this.update(playerPosition, facingDirection, aim);
-    if (!placement?.valid || this.entries.has(placement.key)) return null;
+    if (!this.active || !this.strokeStart) return null;
+    const stroke = this.update(playerPosition, facingDirection, aim);
+    if (!stroke?.valid) return null;
 
-    const cost = landscapingCost(this.mode);
+    const cost = landscapingCost(this.mode, stroke.length);
     if (!cost.every(item => this.inventory.get(item.itemId) >= item.quantity)) return null;
     if (!this.inventory.consume(cost)) return null;
 
-    const entry = this.#materialize({ ...placement, mode: this.mode });
+    const placement = {
+      ...stroke,
+      key: `landscape:stroke:${this.nextEntryId}`,
+      mode: this.mode,
+      entryKind: 'stroke'
+    };
+    this.nextEntryId += 1;
+    const entry = this.#materialize(placement);
+    this.strokeStart = null;
+    this.strokeSeed = 0;
+    this.previewStroke = null;
+    this.previewValid = false;
     this.update(playerPosition, facingDirection, aim);
     return {
       ...entry,
       label: landscapingDefinition(this.mode)?.label ?? 'Landscaping',
       cost: cost.map(item => ({ ...item })),
-      snapped: placement.gridKind === 'structure'
+      unitCount: landscapingStrokeUnits(this.mode, stroke.length),
+      snapped: false
     };
   }
 
@@ -128,14 +231,17 @@ export class LandscapingSystem {
     return {
       schemaVersion: LANDSCAPING_SCHEMA_VERSION,
       mode: this.mode,
+      nextEntryId: this.nextEntryId,
       entries: [...this.entries.values()].map(entry => ({
         key: entry.key,
         mode: entry.mode,
-        gridKind: entry.gridKind,
-        structureId: entry.structureId ?? null,
-        cellX: entry.cellX ?? null,
-        cellZ: entry.cellZ ?? null,
-        edgeKey: entry.edgeKey ?? null,
+        entryKind: 'stroke',
+        startX: entry.start.x,
+        startZ: entry.start.z,
+        endX: entry.end.x,
+        endZ: entry.end.z,
+        seed: entry.seed,
+        width: entry.width ?? null,
         x: entry.x,
         y: entry.y,
         z: entry.z,
@@ -147,162 +253,146 @@ export class LandscapingSystem {
   restore(snapshot) {
     this.#clearRuntimeEntries();
     this.mode = LANDSCAPING_MODES.includes(snapshot?.mode) ? snapshot.mode : 'fence';
+    this.nextEntryId = Number.isInteger(snapshot?.nextEntryId) && snapshot.nextEntryId >= 0
+      ? snapshot.nextEntryId
+      : 0;
     this.active = false;
 
     for (const saved of snapshot?.entries ?? []) {
-      if (
-        typeof saved?.key !== 'string' ||
-        !LANDSCAPING_MODES.includes(saved?.mode) ||
-        !Number.isFinite(saved?.x) ||
-        !Number.isFinite(saved?.y) ||
-        !Number.isFinite(saved?.z) ||
-        !Number.isFinite(saved?.yaw)
-      ) continue;
-
-      this.#materialize({
-        key: saved.key,
-        mode: saved.mode,
-        gridKind: saved.gridKind === 'structure' ? 'structure' : 'world',
-        structureId: typeof saved.structureId === 'string' ? saved.structureId : null,
-        cellX: Number.isInteger(saved.cellX) ? saved.cellX : null,
-        cellZ: Number.isInteger(saved.cellZ) ? saved.cellZ : null,
-        edgeKey: typeof saved.edgeKey === 'string' ? saved.edgeKey : null,
-        x: saved.x,
-        y: saved.y,
-        z: saved.z,
-        yaw: saved.yaw,
-        valid: true
-      });
+      if (typeof saved?.key !== 'string' || !LANDSCAPING_MODES.includes(saved?.mode)) continue;
+      const restored = this.#restorePlacement(saved);
+      if (!restored) continue;
+      this.#materialize(restored);
+      const idMatch = /^landscape:stroke:(\d+)$/.exec(saved.key);
+      if (idMatch) this.nextEntryId = Math.max(this.nextEntryId, Number(idMatch[1]) + 1);
     }
 
-    this.#clearPreview();
+    this.#resetInteraction();
     return true;
   }
 
-  #resolvePlacement(playerPosition, facingDirection, aim) {
-    const target = this.#placementTarget(playerPosition, facingDirection, aim);
-    const registry = this.panelConstruction.registry;
-    const structure = registry?.nearestStructure?.(
-      target.x,
-      target.z,
-      LANDSCAPING_GRID.structureJoinRange
+  #restorePlacement(saved) {
+    if (
+      Number.isFinite(saved.startX) &&
+      Number.isFinite(saved.startZ) &&
+      Number.isFinite(saved.endX) &&
+      Number.isFinite(saved.endZ)
+    ) {
+      return this.#createStroke(
+        { x: saved.startX, z: saved.startZ },
+        { x: saved.endX, z: saved.endZ },
+        Number.isInteger(saved.seed) ? saved.seed >>> 0 : stringHash(saved.key),
+        {
+          key: saved.key,
+          mode: saved.mode,
+          entryKind: 'stroke',
+          width: Number.isFinite(saved.width) && saved.width > 0 ? saved.width : undefined
+        }
+      );
+    }
+
+    // Schema-1 compatibility: convert old one-cell/one-edge entries into a single
+    // stroke. Legacy cobble keeps its former full-cell width so existing saves do not
+    // visually lose half their paving on Continue.
+    if (
+      !Number.isFinite(saved.x) ||
+      !Number.isFinite(saved.z) ||
+      !Number.isFinite(saved.yaw)
+    ) return null;
+    const halfLength = LANDSCAPING_GRID.cellSize * 0.5;
+    const dx = Math.cos(saved.yaw) * halfLength;
+    const dz = -Math.sin(saved.yaw) * halfLength;
+    return this.#createStroke(
+      { x: saved.x - dx, z: saved.z - dz },
+      { x: saved.x + dx, z: saved.z + dz },
+      stringHash(saved.key),
+      {
+        key: saved.key,
+        mode: saved.mode,
+        entryKind: 'stroke',
+        width: saved.mode === 'cobble' ? LANDSCAPING_GRID.cellSize : undefined
+      }
     );
-    const placement = structure
-      ? this.#structurePlacement(structure, target)
-      : this.#worldPlacement(target);
-    if (!placement) return null;
+  }
 
-    const inReach = Math.hypot(
-      placement.x - playerPosition.x,
-      placement.z - playerPosition.z
-    ) <= LANDSCAPING_GRID.placementReach;
-    const playable = this.terrain.isPlayable?.(placement.x, placement.z, 0.16) !== false;
+  #createStroke(start, end, seed, overrides = {}) {
+    const mode = overrides.mode ?? this.mode;
+    const definition = landscapingDefinition(mode);
+    const length = distance2d(start, end);
+    const midpoint = {
+      x: (start.x + end.x) * 0.5,
+      z: (start.z + end.z) * 0.5
+    };
     return {
-      ...placement,
-      valid: inReach && playable && !this.entries.has(placement.key) && placement.structuralConflict !== true
+      key: overrides.key ?? null,
+      mode,
+      entryKind: overrides.entryKind ?? 'stroke',
+      start: { x: start.x, z: start.z },
+      end: { x: end.x, z: end.z },
+      length,
+      seed: seed >>> 0,
+      width: overrides.width ?? (mode === 'cobble' ? definition?.width : null),
+      x: midpoint.x,
+      y: this.#baseHeightAt(midpoint.x, midpoint.z),
+      z: midpoint.z,
+      yaw: strokeYaw(start, end),
+      valid: false
     };
   }
 
-  #structurePlacement(structure, target) {
-    const registry = this.panelConstruction.registry;
-    const cell = registry.worldToCell(structure, target.x, target.z);
-    if (!cell) return null;
-
-    if (this.mode === 'cobble') {
-      const center = registry.cellCenterWorld(structure, cell);
-      const cellKey = panelCellKey({ x: cell.x, z: cell.z, storey: 0 });
-      return {
-        key: `landscape:${structure.id}:cobble:${cellKey}`,
-        gridKind: 'structure',
-        structureId: structure.id,
-        cellX: cell.x,
-        cellZ: cell.z,
-        edgeKey: null,
-        x: center.x,
-        y: this.#baseHeightAt(center.x, center.z),
-        z: center.z,
-        yaw: structure.yaw,
-        structuralConflict: false
-      };
-    }
-
-    let best = null;
-    for (const direction of DIRECTIONS) {
-      const edge = registry.edgePlacementWorld(structure, {
-        x: cell.x,
-        z: cell.z,
-        storey: 0,
-        direction: direction.id
-      });
-      if (!edge) continue;
-      const distance = Math.hypot(edge.x - target.x, edge.z - target.z);
-      if (!best || distance < best.distance) best = { edge, distance };
-    }
-    if (!best) return null;
-
+  #clampStrokeTarget(target) {
+    if (!this.strokeStart) return target;
+    const definition = landscapingDefinition(this.mode);
+    const maxLength = definition?.maxStrokeLength ?? LANDSCAPING_GRID.maxStrokeLength;
+    const dx = target.x - this.strokeStart.x;
+    const dz = target.z - this.strokeStart.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= maxLength || length <= EPSILON) return target;
+    const scale = maxLength / length;
     return {
-      key: `landscape:${structure.id}:fence:${best.edge.key}`,
-      gridKind: 'structure',
-      structureId: structure.id,
-      cellX: cell.x,
-      cellZ: cell.z,
-      edgeKey: best.edge.key,
-      x: best.edge.x,
-      y: this.#baseHeightAt(best.edge.x, best.edge.z),
-      z: best.edge.z,
-      yaw: best.edge.yaw,
-      structuralConflict: structure.grid.walls.has(best.edge.key)
+      x: this.strokeStart.x + dx * scale,
+      z: this.strokeStart.z + dz * scale
     };
   }
 
-  #worldPlacement(target) {
-    const cellSize = LANDSCAPING_GRID.cellSize;
-    const centerX = Math.round(target.x / cellSize) * cellSize;
-    const centerZ = Math.round(target.z / cellSize) * cellSize;
-    const cellX = Math.round(centerX / cellSize);
-    const cellZ = Math.round(centerZ / cellSize);
+  #targetValid(target, playerPosition) {
+    if (!finitePoint(target)) return false;
+    const inReach = distance2d(target, playerPosition) <= LANDSCAPING_GRID.placementReach;
+    return inReach && this.terrain.isPlayable?.(target.x, target.z, 0.16) !== false;
+  }
 
-    if (this.mode === 'cobble') {
-      return {
-        key: `landscape:world:cobble:${cellX}:${cellZ}`,
-        gridKind: 'world',
-        structureId: null,
-        cellX,
-        cellZ,
-        edgeKey: null,
-        x: centerX,
-        y: this.#baseHeightAt(centerX, centerZ),
-        z: centerZ,
-        yaw: 0,
-        structuralConflict: false
-      };
+  #strokeValid(stroke, playerPosition) {
+    const definition = landscapingDefinition(stroke.mode);
+    if (!definition || stroke.length < definition.minStrokeLength) return false;
+    if (stroke.length > definition.maxStrokeLength + EPSILON) return false;
+    if (!this.#targetValid(stroke.end, playerPosition)) return false;
+    if (!this.#strokePlayable(stroke)) return false;
+    if (stroke.mode === 'fence' && this.#duplicatesFence(stroke)) return false;
+    return true;
+  }
+
+  #strokePlayable(stroke) {
+    const step = Math.max(0.3, Math.min(LANDSCAPING_GRID.pathWidth * 0.5, LANDSCAPING_GRID.cellSize * 0.5));
+    const samples = Math.max(1, Math.ceil(stroke.length / step));
+    for (let index = 0; index <= samples; index += 1) {
+      const t = index / samples;
+      const x = THREE.MathUtils.lerp(stroke.start.x, stroke.end.x, t);
+      const z = THREE.MathUtils.lerp(stroke.start.z, stroke.end.z, t);
+      if (this.terrain.isPlayable?.(x, z, 0.16) === false) return false;
     }
+    return true;
+  }
 
-    const half = cellSize * 0.5;
-    const edges = [
-      { x: centerX, z: centerZ - half, yaw: 0, edgeKey: `x:${cellX}:${cellZ}` },
-      { x: centerX, z: centerZ + half, yaw: Math.PI, edgeKey: `x:${cellX}:${cellZ + 1}` },
-      { x: centerX + half, z: centerZ, yaw: Math.PI * 0.5, edgeKey: `z:${cellX + 1}:${cellZ}` },
-      { x: centerX - half, z: centerZ, yaw: -Math.PI * 0.5, edgeKey: `z:${cellX}:${cellZ}` }
-    ];
-    edges.sort((a, b) => (
-      Math.hypot(a.x - target.x, a.z - target.z) -
-      Math.hypot(b.x - target.x, b.z - target.z)
-    ));
-    const edge = edges[0];
-    return {
-      key: `landscape:world:fence:${edge.edgeKey}`,
-      gridKind: 'world',
-      structureId: null,
-      cellX,
-      cellZ,
-      edgeKey: edge.edgeKey,
-      x: edge.x,
-      y: this.#baseHeightAt(edge.x, edge.z),
-      z: edge.z,
-      yaw: edge.yaw,
-      structuralConflict: false
-    };
+  #duplicatesFence(stroke) {
+    for (const entry of this.entries.values()) {
+      if (entry.mode !== 'fence') continue;
+      const direct = distance2d(stroke.start, entry.start) <= DUPLICATE_TOLERANCE &&
+        distance2d(stroke.end, entry.end) <= DUPLICATE_TOLERANCE;
+      const reverse = distance2d(stroke.start, entry.end) <= DUPLICATE_TOLERANCE &&
+        distance2d(stroke.end, entry.start) <= DUPLICATE_TOLERANCE;
+      if (direct || reverse) return true;
+    }
+    return false;
   }
 
   #placementTarget(playerPosition, facingDirection, aim) {
@@ -333,144 +423,260 @@ export class LandscapingSystem {
     return 0;
   }
 
-  #renderPreview(placement, valid) {
-    if (!placement) {
-      this.#disposePreviewRoot();
-      this.previewSignature = '';
+  #renderPinPreview(target, valid) {
+    if (!target) {
+      this.#clearPreview();
       return;
     }
-
     const signature = [
+      'pin',
       this.mode,
-      placement.key,
-      placement.x.toFixed(4),
-      placement.y.toFixed(4),
-      placement.z.toFixed(4),
-      placement.yaw.toFixed(4),
+      quantize(target.x).toFixed(3),
+      quantize(target.z).toFixed(3),
       valid ? 'valid' : 'invalid'
     ].join(':');
     if (this.previewRoot && signature === this.previewSignature) return;
 
     this.#disposePreviewRoot();
-    const material = new THREE.MeshBasicMaterial({
+    const material = this.#previewMaterial(valid);
+    this.previewRoot = this.#createPinVisual(target, material);
+    this.previewRoot.name = `landscape-preview-${this.mode}-pin`;
+    this.group.add(this.previewRoot);
+    this.previewSignature = signature;
+  }
+
+  #renderStrokePreview(stroke, valid) {
+    if (!stroke) {
+      this.#clearPreview();
+      return;
+    }
+    const signature = [
+      'stroke',
+      stroke.mode,
+      quantize(stroke.start.x).toFixed(3),
+      quantize(stroke.start.z).toFixed(3),
+      quantize(stroke.end.x).toFixed(3),
+      quantize(stroke.end.z).toFixed(3),
+      valid ? 'valid' : 'invalid'
+    ].join(':');
+    if (this.previewRoot && signature === this.previewSignature) return;
+
+    this.#disposePreviewRoot();
+    const material = this.#previewMaterial(valid);
+    this.previewRoot = stroke.length < EPSILON
+      ? this.#createPinVisual(stroke.start, material)
+      : stroke.mode === 'fence'
+        ? this.#createFenceVisual(stroke, material)
+        : this.#createCobbleVisual(stroke, material);
+    this.previewRoot.name = `landscape-preview-${stroke.mode}-stroke`;
+    this.group.add(this.previewRoot);
+    this.previewSignature = signature;
+  }
+
+  #previewMaterial(valid) {
+    return new THREE.MeshBasicMaterial({
       color: valid ? PREVIEW_VALID : PREVIEW_INVALID,
       transparent: true,
       opacity: 0.45,
       depthWrite: false
     });
-    this.previewRoot = this.mode === 'fence'
-      ? this.#createFenceVisual(placement, material)
-      : this.#createCobbleVisual(placement, material);
-    this.previewRoot.name = `landscape-preview-${this.mode}`;
-    this.group.add(this.previewRoot);
-    this.previewSignature = signature;
   }
 
-  #materialize(placement) {
-    const definition = LANDSCAPING_DEFINITIONS[placement.mode];
-    const material = placement.mode === 'fence'
-      ? new THREE.MeshStandardMaterial({ color: 0x6f4e32, roughness: 0.9 })
-      : new THREE.MeshStandardMaterial({ color: 0x78766f, roughness: 1 });
-    const root = placement.mode === 'fence'
-      ? this.#createFenceVisual(placement, material)
-      : this.#createCobbleVisual(placement, material);
-    root.name = placement.key;
-    root.userData.landscapingKey = placement.key;
-    root.userData.landscapingMode = placement.mode;
-    this.group.add(root);
-
-    let collisionHandle = null;
-    if (placement.mode === 'fence') {
-      collisionHandle = this.collision.addBox({
-        x: placement.x,
-        z: placement.z,
-        halfX: LANDSCAPING_GRID.cellSize * 0.48,
-        halfZ: definition.postThickness * 0.48,
-        yaw: placement.yaw,
-        type: 'landscape-fence',
-        label: placement.key,
-        bottomY: placement.y - 0.03,
-        topY: placement.y + definition.height
-      });
-    }
-
-    const entry = {
-      key: placement.key,
-      mode: placement.mode,
-      gridKind: placement.gridKind,
-      structureId: placement.structureId ?? null,
-      cellX: placement.cellX ?? null,
-      cellZ: placement.cellZ ?? null,
-      edgeKey: placement.edgeKey ?? null,
-      x: placement.x,
-      y: placement.y,
-      z: placement.z,
-      yaw: placement.yaw,
-      root,
-      collisionHandle
-    };
-    this.entries.set(entry.key, entry);
-    return entry;
-  }
-
-  #createFenceVisual(placement, sourceMaterial) {
-    const definition = LANDSCAPING_DEFINITIONS.fence;
+  #createPinVisual(target, sourceMaterial) {
+    const definition = landscapingDefinition(this.mode);
     const root = new THREE.Group();
-    root.position.set(placement.x, placement.y, placement.z);
-    root.rotation.y = placement.yaw;
-    const usableLength = LANDSCAPING_GRID.cellSize * 0.92;
-
-    for (const x of [-usableLength * 0.5, usableLength * 0.5]) {
+    const y = this.#baseHeightAt(target.x, target.z);
+    if (this.mode === 'fence') {
       const post = new THREE.Mesh(
         new THREE.BoxGeometry(definition.postThickness, definition.height, definition.postThickness),
         sourceMaterial.clone()
       );
-      post.position.set(x, definition.height * 0.5, 0);
-      post.castShadow = true;
-      post.receiveShadow = true;
+      post.position.set(target.x, y + definition.height * 0.5, target.z);
       root.add(post);
-    }
-
-    for (const y of [definition.height * 0.36, definition.height * 0.68]) {
-      const rail = new THREE.Mesh(
-        new THREE.BoxGeometry(usableLength, definition.railThickness, definition.railThickness),
+    } else {
+      const radius = (definition.width ?? LANDSCAPING_GRID.pathWidth) * 0.12;
+      const marker = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius * 1.08, definition.thickness, 7),
         sourceMaterial.clone()
       );
-      rail.position.set(0, y, 0);
-      rail.castShadow = true;
-      rail.receiveShadow = true;
-      root.add(rail);
+      marker.position.set(target.x, y + definition.thickness * 0.5, target.z);
+      root.add(marker);
     }
     sourceMaterial.dispose();
     return root;
   }
 
-  #createCobbleVisual(placement, sourceMaterial) {
-    const definition = LANDSCAPING_DEFINITIONS.cobble;
-    const root = new THREE.Group();
-    root.position.set(placement.x, placement.y + definition.thickness * 0.5, placement.z);
-    root.rotation.y = placement.yaw;
-    const count = 4;
-    const available = LANDSCAPING_GRID.cellSize - definition.inset * 2;
-    const gap = 0.045;
-    const stoneSize = (available - gap * (count - 1)) / count;
-    const start = -available * 0.5 + stoneSize * 0.5;
+  #materialize(stroke) {
+    const definition = LANDSCAPING_DEFINITIONS[stroke.mode];
+    const material = stroke.mode === 'fence'
+      ? new THREE.MeshStandardMaterial({ color: 0x6f4e32, roughness: 0.9 })
+      : new THREE.MeshStandardMaterial({ color: 0x78766f, roughness: 1 });
+    const root = stroke.mode === 'fence'
+      ? this.#createFenceVisual(stroke, material)
+      : this.#createCobbleVisual(stroke, material);
+    root.name = stroke.key;
+    root.userData.landscapingKey = stroke.key;
+    root.userData.landscapingMode = stroke.mode;
+    root.userData.pathWidth = stroke.mode === 'cobble' ? stroke.width : null;
+    this.group.add(root);
 
-    for (let row = 0; row < count; row += 1) {
-      for (let column = 0; column < count; column += 1) {
-        const stone = new THREE.Mesh(
-          new THREE.BoxGeometry(stoneSize, definition.thickness, stoneSize),
+    const collisionHandles = stroke.mode === 'fence'
+      ? this.#createFenceCollision(stroke, definition)
+      : [];
+
+    const entry = {
+      key: stroke.key,
+      mode: stroke.mode,
+      entryKind: 'stroke',
+      start: { ...stroke.start },
+      end: { ...stroke.end },
+      length: stroke.length,
+      seed: stroke.seed >>> 0,
+      width: stroke.width ?? null,
+      x: stroke.x,
+      y: stroke.y,
+      z: stroke.z,
+      yaw: stroke.yaw,
+      root,
+      collisionHandles
+    };
+    this.entries.set(entry.key, entry);
+    return entry;
+  }
+
+  #createFenceVisual(stroke, sourceMaterial) {
+    const definition = LANDSCAPING_DEFINITIONS.fence;
+    const root = new THREE.Group();
+    const spans = Math.max(1, Math.ceil(stroke.length / definition.postSpacing));
+    const points = [];
+    for (let index = 0; index <= spans; index += 1) {
+      const t = index / spans;
+      const x = THREE.MathUtils.lerp(stroke.start.x, stroke.end.x, t);
+      const z = THREE.MathUtils.lerp(stroke.start.z, stroke.end.z, t);
+      points.push({ x, y: this.#baseHeightAt(x, z), z });
+    }
+
+    for (const point of points) {
+      const post = new THREE.Mesh(
+        new THREE.BoxGeometry(definition.postThickness, definition.height, definition.postThickness),
+        sourceMaterial.clone()
+      );
+      post.position.set(point.x, point.y + definition.height * 0.5, point.z);
+      post.castShadow = true;
+      post.receiveShadow = true;
+      root.add(post);
+    }
+
+    const railLevels = [definition.height * 0.36, definition.height * 0.68];
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const from = points[index];
+      const to = points[index + 1];
+      for (const railHeight of railLevels) {
+        const fromPoint = new THREE.Vector3(from.x, from.y + railHeight, from.z);
+        const toPoint = new THREE.Vector3(to.x, to.y + railHeight, to.z);
+        const vector = toPoint.clone().sub(fromPoint);
+        const railLength = vector.length();
+        if (railLength <= EPSILON) continue;
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(railLength, definition.railThickness, definition.railThickness),
           sourceMaterial.clone()
         );
-        stone.position.set(
-          start + column * (stoneSize + gap),
-          0,
-          start + row * (stoneSize + gap)
-        );
-        stone.receiveShadow = true;
-        root.add(stone);
+        rail.position.copy(fromPoint).add(toPoint).multiplyScalar(0.5);
+        rail.quaternion.setFromUnitVectors(X_AXIS, vector.normalize());
+        rail.castShadow = true;
+        rail.receiveShadow = true;
+        root.add(rail);
       }
     }
+    sourceMaterial.dispose();
+    return root;
+  }
+
+  #createFenceCollision(stroke, definition) {
+    const handles = [];
+    const spans = Math.max(1, Math.ceil(stroke.length / definition.postSpacing));
+    for (let index = 0; index < spans; index += 1) {
+      const startT = index / spans;
+      const endT = (index + 1) / spans;
+      const start = {
+        x: THREE.MathUtils.lerp(stroke.start.x, stroke.end.x, startT),
+        z: THREE.MathUtils.lerp(stroke.start.z, stroke.end.z, startT)
+      };
+      const end = {
+        x: THREE.MathUtils.lerp(stroke.start.x, stroke.end.x, endT),
+        z: THREE.MathUtils.lerp(stroke.start.z, stroke.end.z, endT)
+      };
+      const length = distance2d(start, end);
+      if (length <= EPSILON) continue;
+      const startY = this.#baseHeightAt(start.x, start.z);
+      const endY = this.#baseHeightAt(end.x, end.z);
+      handles.push(this.collision.addBox({
+        x: (start.x + end.x) * 0.5,
+        z: (start.z + end.z) * 0.5,
+        halfX: length * 0.5,
+        halfZ: definition.postThickness * 0.48,
+        yaw: strokeYaw(start, end),
+        type: 'landscape-fence',
+        label: `${stroke.key}:${index}`,
+        bottomY: Math.min(startY, endY) - 0.03,
+        topY: Math.max(startY, endY) + definition.height
+      }));
+    }
+    return handles;
+  }
+
+  #createCobbleVisual(stroke, sourceMaterial) {
+    const definition = LANDSCAPING_DEFINITIONS.cobble;
+    const root = new THREE.Group();
+    const width = stroke.width ?? definition.width;
+    root.userData.pathWidth = width;
+
+    const length = Math.max(stroke.length, definition.rowSpacing);
+    const forwardX = stroke.length > EPSILON ? (stroke.end.x - stroke.start.x) / stroke.length : 1;
+    const forwardZ = stroke.length > EPSILON ? (stroke.end.z - stroke.start.z) / stroke.length : 0;
+    const rightX = -forwardZ;
+    const rightZ = forwardX;
+    const rowCount = Math.max(1, Math.ceil(length / definition.rowSpacing));
+    const rowLength = stroke.length > EPSILON ? stroke.length / rowCount : definition.rowSpacing;
+
+    let stoneIndex = 0;
+    for (let row = 0; row < rowCount; row += 1) {
+      const t = rowCount === 1 ? 0.5 : (row + 0.5) / rowCount;
+      const centerX = THREE.MathUtils.lerp(stroke.start.x, stroke.end.x, t);
+      const centerZ = THREE.MathUtils.lerp(stroke.start.z, stroke.end.z, t);
+      const columns = row % 2 === 0 ? 3 : 2;
+      const slotWidth = width / columns;
+      for (let column = 0; column < columns; column += 1) {
+        const baseLateral = (column - (columns - 1) * 0.5) * slotWidth;
+        const lateralJitter = (seededUnit(stroke.seed, stoneIndex, 1) - 0.5) * slotWidth * 0.22;
+        const longitudinalJitter = (seededUnit(stroke.seed, stoneIndex, 2) - 0.5) * rowLength * 0.28;
+        const stoneX = centerX + rightX * (baseLateral + lateralJitter) + forwardX * longitudinalJitter;
+        const stoneZ = centerZ + rightZ * (baseLateral + lateralJitter) + forwardZ * longitudinalJitter;
+        const radius = slotWidth * (0.38 + seededUnit(stroke.seed, stoneIndex, 3) * 0.08);
+        const longScale = clamp(
+          rowLength / Math.max(radius * 2, EPSILON) * (0.82 + seededUnit(stroke.seed, stoneIndex, 4) * 0.2),
+          0.72,
+          1.5
+        );
+        const crossScale = 0.82 + seededUnit(stroke.seed, stoneIndex, 5) * 0.2;
+        const thicknessScale = 0.82 + seededUnit(stroke.seed, stoneIndex, 6) * 0.34;
+        const stone = new THREE.Mesh(
+          new THREE.CylinderGeometry(radius, radius * (0.94 + seededUnit(stroke.seed, stoneIndex, 7) * 0.1), definition.thickness * thicknessScale, 6),
+          sourceMaterial.clone()
+        );
+        stone.scale.set(longScale, 1, crossScale);
+        stone.position.set(
+          stoneX,
+          this.#baseHeightAt(stoneX, stoneZ) + definition.thickness * thicknessScale * 0.5 + 0.008,
+          stoneZ
+        );
+        stone.rotation.y = stroke.yaw + (seededUnit(stroke.seed, stoneIndex, 8) - 0.5) * 0.34;
+        stone.receiveShadow = true;
+        root.add(stone);
+        stoneIndex += 1;
+      }
+    }
+
     sourceMaterial.dispose();
     return root;
   }
@@ -483,14 +689,24 @@ export class LandscapingSystem {
 
   #clearPreview() {
     this.#disposePreviewRoot();
-    this.previewPlacement = null;
-    this.previewValid = false;
     this.previewSignature = '';
+  }
+
+  #resetInteraction() {
+    this.strokeStart = null;
+    this.strokeSeed = 0;
+    this.currentTarget = null;
+    this.currentTargetValid = false;
+    this.previewStroke = null;
+    this.previewValid = false;
+    this.#clearPreview();
   }
 
   #clearRuntimeEntries() {
     for (const entry of this.entries.values()) {
-      if (entry.collisionHandle) this.collision.removeObstacle(entry.collisionHandle);
+      for (const handle of entry.collisionHandles ?? []) {
+        if (handle) this.collision.removeObstacle(handle);
+      }
       disposeObject(entry.root);
     }
     this.entries.clear();
