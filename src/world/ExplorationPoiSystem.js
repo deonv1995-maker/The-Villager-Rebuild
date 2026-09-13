@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 
-const ROCK_COLOR = 0x5f5b52;
-const ROCK_DARK = 0x48453f;
-const ROCK_EARTH = 0x666252;
+const ROCK_COLOR = 0x746f65;
+const ROCK_DARK = 0x393834;
+const ROCK_EARTH = 0x666052;
 const CAVE_FLOOR = 0x34302a;
-const CAVE_APPROACH = 0x625746;
+const CAVE_APPROACH = 0x756650;
 
 export class ExplorationPoiSystem {
   constructor({ group, terrain, chunks = null, collision = null }) {
@@ -36,6 +36,8 @@ export class ExplorationPoiSystem {
     root.name = `exploration-poi-${definition.id}`;
     root.userData.explorationPoi = definition.id;
     root.userData.poiType = definition.type;
+    root.userData.approachLocalZ = -1;
+    root.userData.tunnelLocalZ = 1;
     root.position.set(definition.x, baseY, definition.z);
     root.rotation.y = definition.yaw;
 
@@ -76,22 +78,16 @@ export class ExplorationPoiSystem {
 
     this.#createTunnelRibs({
       definition,
+      baseY,
       root,
       geometry: rockGeometry,
       darkRockMaterial
     });
 
-    const darkness = this.#createDarkInterior(definition);
+    const darkness = this.#createDarkInterior(definition, baseY);
     root.add(darkness);
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(definition.mouthWidth * 0.76, definition.depth * 0.96),
-      new THREE.MeshStandardMaterial({ color: CAVE_FLOOR, roughness: 1, side: THREE.DoubleSide })
-    );
-    floor.name = `${definition.id}-floor`;
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(0, 0.055, definition.depth * 0.48);
-    floor.receiveShadow = true;
+    const floor = this.#createTerrainConformingFloor(definition, baseY);
     root.add(floor);
 
     const approach = this.#createTerrainConformingApproach(definition, baseY);
@@ -164,13 +160,13 @@ export class ExplorationPoiSystem {
     const halfWidth = definition.mouthWidth * 0.82;
     const height = definition.mouthHeight * 1.38;
     face.moveTo(-halfWidth * 0.96, -0.48);
-    face.lineTo(-halfWidth, height * 0.36);
-    face.lineTo(-halfWidth * 0.78, height * 0.72);
-    face.lineTo(-halfWidth * 0.42, height * 0.96);
-    face.lineTo(-halfWidth * 0.08, height);
-    face.lineTo(halfWidth * 0.32, height * 0.95);
-    face.lineTo(halfWidth * 0.72, height * 0.76);
-    face.lineTo(halfWidth * 0.98, height * 0.4);
+    face.lineTo(-halfWidth, height * 0.34);
+    face.lineTo(-halfWidth * 0.76, height * 0.74);
+    face.lineTo(-halfWidth * 0.4, height * 0.97);
+    face.lineTo(-halfWidth * 0.02, height);
+    face.lineTo(halfWidth * 0.36, height * 0.93);
+    face.lineTo(halfWidth * 0.74, height * 0.73);
+    face.lineTo(halfWidth, height * 0.38);
     face.lineTo(halfWidth * 0.94, -0.48);
     face.closePath();
 
@@ -224,7 +220,7 @@ export class ExplorationPoiSystem {
     root.add(entrance);
   }
 
-  #createTunnelRibs({ definition, root, geometry, darkRockMaterial }) {
+  #createTunnelRibs({ definition, baseY, root, geometry, darkRockMaterial }) {
     const tunnel = new THREE.Group();
     tunnel.name = `${definition.id}-tunnel-ribs`;
     const depths = [4.95, 6.2, 7.35];
@@ -234,28 +230,31 @@ export class ExplorationPoiSystem {
       const sideX = definition.mouthWidth * 0.36 * narrowing;
       const sideScaleY = definition.mouthHeight * 0.25;
       for (const side of [-1, 1]) {
+        const terrainY = this.#terrainRelativeY(definition, baseY, side * sideX, localZ);
         this.#addRock({
           parent: tunnel,
           geometry,
           material: darkRockMaterial,
           name: `${definition.id}-tunnel-rib-${index}-${side < 0 ? 'left' : 'right'}`,
-          position: [side * sideX, definition.mouthHeight * 0.33, localZ],
+          position: [side * sideX, terrainY + definition.mouthHeight * 0.33, localZ],
           scale: [0.58, sideScaleY, 0.78],
           rotation: [0.06 * (index % 2), side * 0.08, side * 0.07]
         });
       }
 
+      const crownTerrainY = this.#terrainRelativeY(definition, baseY, 0, localZ + 0.06);
       this.#addRock({
         parent: tunnel,
         geometry,
         material: darkRockMaterial,
         name: `${definition.id}-tunnel-rib-${index}-crown`,
-        position: [0, definition.mouthHeight * 0.82, localZ + 0.06],
+        position: [0, crownTerrainY + definition.mouthHeight * 0.82, localZ + 0.06],
         scale: [definition.mouthWidth * 0.24 * narrowing, 0.54, 0.76],
         rotation: [0.03, index % 2 === 0 ? 0.05 : -0.04, 0.02]
       });
     });
 
+    tunnel.userData.terrainConforming = true;
     root.add(tunnel);
   }
 
@@ -264,19 +263,19 @@ export class ExplorationPoiSystem {
     const height = definition.mouthHeight * 0.98 * scale;
     const path = new THREE.Path();
     path.moveTo(-halfWidth * 0.96, -0.12);
-    path.lineTo(-halfWidth, height * 0.3);
-    path.lineTo(-halfWidth * 0.8, height * 0.68);
-    path.lineTo(-halfWidth * 0.44, height * 0.92);
+    path.lineTo(-halfWidth, height * 0.28);
+    path.lineTo(-halfWidth * 0.82, height * 0.66);
+    path.lineTo(-halfWidth * 0.48, height * 0.91);
     path.lineTo(-halfWidth * 0.08, height);
-    path.lineTo(halfWidth * 0.38, height * 0.94);
-    path.lineTo(halfWidth * 0.76, height * 0.7);
-    path.lineTo(halfWidth, height * 0.32);
-    path.lineTo(halfWidth * 0.94, -0.12);
+    path.lineTo(halfWidth * 0.34, height * 0.94);
+    path.lineTo(halfWidth * 0.74, height * 0.71);
+    path.lineTo(halfWidth, height * 0.34);
+    path.lineTo(halfWidth * 0.92, -0.12);
     path.closePath();
     return path;
   }
 
-  #createDarkInterior(definition) {
+  #createDarkInterior(definition, baseY) {
     const shape = new THREE.Shape();
     const mouthPath = this.#createMouthPath(definition, 0.82);
     const points = mouthPath.getPoints();
@@ -290,11 +289,42 @@ export class ExplorationPoiSystem {
 
     const darkness = new THREE.Mesh(
       new THREE.ShapeGeometry(shape),
-      new THREE.MeshBasicMaterial({ color: 0x080a09, side: THREE.DoubleSide, depthWrite: true })
+      new THREE.MeshBasicMaterial({ color: 0x050706, side: THREE.DoubleSide, depthWrite: true })
     );
     darkness.name = `${definition.id}-dark-interior`;
-    darkness.position.set(0, 0.02, definition.depth);
+    darkness.position.set(
+      0,
+      this.#terrainRelativeY(definition, baseY, 0, definition.depth) + 0.04,
+      definition.depth
+    );
+    darkness.userData.terrainConforming = true;
     return darkness;
+  }
+
+  #createTerrainConformingFloor(definition, baseY) {
+    const width = definition.mouthWidth * 0.76;
+    const length = definition.depth * 0.96;
+    const geometry = new THREE.PlaneGeometry(width, length, 5, 10);
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(0, 0, length * 0.5);
+
+    const positions = geometry.getAttribute('position');
+    for (let index = 0; index < positions.count; index += 1) {
+      const localX = positions.getX(index);
+      const localZ = positions.getZ(index);
+      positions.setY(index, this.#terrainRelativeY(definition, baseY, localX, localZ) + 0.035);
+    }
+    positions.needsUpdate = true;
+    geometry.computeVertexNormals();
+
+    const floor = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({ color: CAVE_FLOOR, roughness: 1, side: THREE.DoubleSide })
+    );
+    floor.name = `${definition.id}-floor`;
+    floor.receiveShadow = true;
+    floor.userData.terrainConforming = true;
+    return floor;
   }
 
   #createTerrainConformingApproach(definition, baseY) {
@@ -320,6 +350,7 @@ export class ExplorationPoiSystem {
     );
     approach.name = `${definition.id}-approach`;
     approach.receiveShadow = true;
+    approach.userData.terrainConforming = true;
     return approach;
   }
 
