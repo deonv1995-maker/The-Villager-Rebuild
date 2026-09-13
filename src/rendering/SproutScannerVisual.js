@@ -8,6 +8,12 @@ const GROUND_Y = -BEAM_HEIGHT;
 const MIN_VISUAL_LENGTH = 0.35;
 const MIN_VISUAL_RADIUS = 0.28;
 const MAX_VISUAL_RADIUS = 1;
+const TERRAIN_GRID_DIVISIONS = 6;
+const TERRAIN_GRID_HALF_EXTENT = 1.18;
+const TERRAIN_GRID_LIFT = 0.028;
+const TARGET_RING_SEGMENTS = 18;
+const TARGET_GROUND_RADIUS = 0.28;
+const TARGET_ITEM_RADIUS = 0.2;
 const FALLBACK_LENS_POSITION = Object.freeze({ x: -0.36, y: 0.33, z: 0.415 });
 const DOWN_AXIS = new THREE.Vector3(0, -1, 0);
 const lensWorld = new THREE.Vector3();
@@ -15,6 +21,8 @@ const targetWorld = new THREE.Vector3();
 const lensLocal = new THREE.Vector3();
 const targetLocal = new THREE.Vector3();
 const scanDirection = new THREE.Vector3();
+const terrainPointWorld = new THREE.Vector3();
+const terrainPointLocal = new THREE.Vector3();
 
 const makeAdditiveMaterial = (opacity, { lines = false } = {}) => {
   const options = {
@@ -53,6 +61,20 @@ const createSweepGeometry = () => {
     0, 0, 0,
     BEAM_RADIUS * 0.98, 0, 0
   ], 3));
+  return geometry;
+};
+
+const createTerrainGridGeometry = () => {
+  const segmentCount = (TERRAIN_GRID_DIVISIONS + 1) * TERRAIN_GRID_DIVISIONS * 2;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 2 * 3), 3));
+  return geometry;
+};
+
+const createTargetMarkerGeometry = () => {
+  const segmentCount = TARGET_RING_SEGMENTS * 2 + 5;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(segmentCount * 2 * 3), 3));
   return geometry;
 };
 
@@ -96,6 +118,107 @@ const resolveBeamTransform = (root, target, widthPulse = 1) => {
   beamPivot.scale.set(radius, length, radius);
 };
 
+const writeLocalPoint = (root, array, offset, x, y, z) => {
+  terrainPointWorld.set(x, y, z);
+  terrainPointLocal.copy(terrainPointWorld);
+  root.worldToLocal(terrainPointLocal);
+  array[offset] = terrainPointLocal.x;
+  array[offset + 1] = terrainPointLocal.y;
+  array[offset + 2] = terrainPointLocal.z;
+};
+
+const updateTerrainProjection = (root, target, terrainHeightAt) => {
+  const terrainGrid = root.userData.sproutScannerTerrainGrid;
+  const targetMarker = root.userData.sproutScannerTargetMarker;
+  if (!terrainGrid || !targetMarker) return false;
+
+  const active = isFiniteTarget(target) && typeof terrainHeightAt === 'function';
+  terrainGrid.visible = active;
+  targetMarker.visible = active;
+  if (!active) return false;
+
+  root.updateWorldMatrix?.(true, true);
+  const gridPosition = terrainGrid.geometry.attributes.position;
+  const gridArray = gridPosition.array;
+  const step = (TERRAIN_GRID_HALF_EXTENT * 2) / TERRAIN_GRID_DIVISIONS;
+  let offset = 0;
+
+  const appendSegment = (ax, az, bx, bz) => {
+    const ay = terrainHeightAt(ax, az) + TERRAIN_GRID_LIFT;
+    const by = terrainHeightAt(bx, bz) + TERRAIN_GRID_LIFT;
+    writeLocalPoint(root, gridArray, offset, ax, ay, az);
+    offset += 3;
+    writeLocalPoint(root, gridArray, offset, bx, by, bz);
+    offset += 3;
+  };
+
+  for (let line = 0; line <= TERRAIN_GRID_DIVISIONS; line += 1) {
+    const axisOffset = -TERRAIN_GRID_HALF_EXTENT + line * step;
+    for (let segment = 0; segment < TERRAIN_GRID_DIVISIONS; segment += 1) {
+      const alongA = -TERRAIN_GRID_HALF_EXTENT + segment * step;
+      const alongB = alongA + step;
+      appendSegment(
+        target.x + axisOffset,
+        target.z + alongA,
+        target.x + axisOffset,
+        target.z + alongB
+      );
+      appendSegment(
+        target.x + alongA,
+        target.z + axisOffset,
+        target.x + alongB,
+        target.z + axisOffset
+      );
+    }
+  }
+  gridPosition.needsUpdate = true;
+  terrainGrid.geometry.computeBoundingSphere?.();
+
+  const markerPosition = targetMarker.geometry.attributes.position;
+  const markerArray = markerPosition.array;
+  const groundY = terrainHeightAt(target.x, target.z) + TERRAIN_GRID_LIFT * 1.35;
+  const itemY = Math.max(groundY + 0.12, target.y + 0.08);
+  offset = 0;
+
+  const appendMarkerSegment = (ax, ay, az, bx, by, bz) => {
+    writeLocalPoint(root, markerArray, offset, ax, ay, az);
+    offset += 3;
+    writeLocalPoint(root, markerArray, offset, bx, by, bz);
+    offset += 3;
+  };
+
+  for (let index = 0; index < TARGET_RING_SEGMENTS; index += 1) {
+    const angleA = index * (Math.PI * 2 / TARGET_RING_SEGMENTS);
+    const angleB = (index + 1) * (Math.PI * 2 / TARGET_RING_SEGMENTS);
+    appendMarkerSegment(
+      target.x + Math.cos(angleA) * TARGET_GROUND_RADIUS,
+      groundY,
+      target.z + Math.sin(angleA) * TARGET_GROUND_RADIUS,
+      target.x + Math.cos(angleB) * TARGET_GROUND_RADIUS,
+      groundY,
+      target.z + Math.sin(angleB) * TARGET_GROUND_RADIUS
+    );
+    appendMarkerSegment(
+      target.x + Math.cos(angleA) * TARGET_ITEM_RADIUS,
+      itemY,
+      target.z + Math.sin(angleA) * TARGET_ITEM_RADIUS,
+      target.x + Math.cos(angleB) * TARGET_ITEM_RADIUS,
+      itemY,
+      target.z + Math.sin(angleB) * TARGET_ITEM_RADIUS
+    );
+  }
+
+  appendMarkerSegment(target.x - 0.42, groundY, target.z, target.x + 0.42, groundY, target.z);
+  appendMarkerSegment(target.x, groundY, target.z - 0.42, target.x, groundY, target.z + 0.42);
+  appendMarkerSegment(target.x, groundY, target.z, target.x, itemY, target.z);
+  appendMarkerSegment(target.x - 0.13, itemY, target.z, target.x + 0.13, itemY, target.z);
+  appendMarkerSegment(target.x, itemY, target.z - 0.13, target.x, itemY, target.z + 0.13);
+
+  markerPosition.needsUpdate = true;
+  targetMarker.geometry.computeBoundingSphere?.();
+  return true;
+};
+
 export function ensureSproutScannerVisual(root) {
   if (!root?.userData?.sproutProductionVisual) return null;
   if (root.userData.sproutScannerVisual) return root.userData.sproutScannerVisual;
@@ -113,6 +236,8 @@ export function ensureSproutScannerVisual(root) {
   const gridMaterial = makeAdditiveMaterial(0.36, { lines: true });
   const footprintMaterial = makeAdditiveMaterial(0.62);
   const sweepMaterial = makeAdditiveMaterial(0.72, { lines: true });
+  const terrainGridMaterial = makeAdditiveMaterial(0.52, { lines: true });
+  const targetMarkerMaterial = makeAdditiveMaterial(0.88, { lines: true });
 
   const beam = new THREE.Mesh(
     new THREE.ConeGeometry(BEAM_RADIUS, BEAM_HEIGHT, 24, 1, true),
@@ -183,6 +308,20 @@ export function ensureSproutScannerVisual(root) {
   footprint.add(sweep);
   beamPivot.add(footprint);
 
+  const terrainGrid = new THREE.LineSegments(createTerrainGridGeometry(), terrainGridMaterial);
+  terrainGrid.name = 'sprout-laser-terrain-grid';
+  terrainGrid.visible = false;
+  terrainGrid.frustumCulled = false;
+  terrainGrid.renderOrder = 12;
+  scannerVisual.add(terrainGrid);
+
+  const targetMarker = new THREE.LineSegments(createTargetMarkerGeometry(), targetMarkerMaterial);
+  targetMarker.name = 'sprout-laser-detected-item-marker';
+  targetMarker.visible = false;
+  targetMarker.frustumCulled = false;
+  targetMarker.renderOrder = 13;
+  scannerVisual.add(targetMarker);
+
   root.add(scannerVisual);
   root.userData.sproutScannerVisual = scannerVisual;
   root.userData.sproutScannerBeamPivot = beamPivot;
@@ -192,10 +331,14 @@ export function ensureSproutScannerVisual(root) {
   root.userData.sproutScannerFootprintRing = footprintRing;
   root.userData.sproutScannerInnerRing = innerRing;
   root.userData.sproutScannerSweep = sweep;
+  root.userData.sproutScannerTerrainGrid = terrainGrid;
+  root.userData.sproutScannerTargetMarker = targetMarker;
   root.userData.sproutScannerBeamMaterial = beamMaterial;
   root.userData.sproutScannerGridMaterial = gridMaterial;
   root.userData.sproutScannerFootprintMaterial = footprintMaterial;
   root.userData.sproutScannerSweepMaterial = sweepMaterial;
+  root.userData.sproutScannerTerrainGridMaterial = terrainGridMaterial;
+  root.userData.sproutScannerTargetMarkerMaterial = targetMarkerMaterial;
 
   return scannerVisual;
 }
@@ -203,7 +346,8 @@ export function ensureSproutScannerVisual(root) {
 export function updateSproutScannerVisual(root, elapsed, {
   powered = true,
   scanning = false,
-  target = null
+  target = null,
+  terrainHeightAt = null
 } = {}) {
   const scannerVisual = ensureSproutScannerVisual(root);
   if (!scannerVisual) return;
@@ -218,20 +362,28 @@ export function updateSproutScannerVisual(root, elapsed, {
   const gridMaterial = root.userData.sproutScannerGridMaterial;
   const footprintMaterial = root.userData.sproutScannerFootprintMaterial;
   const sweepMaterial = root.userData.sproutScannerSweepMaterial;
+  const terrainGridMaterial = root.userData.sproutScannerTerrainGridMaterial;
+  const targetMarkerMaterial = root.userData.sproutScannerTargetMarkerMaterial;
 
   if (beamMaterial) beamMaterial.opacity = 0.065 + pulse * 0.045;
   if (gridMaterial) gridMaterial.opacity = 0.24 + pulse * 0.22;
   if (footprintMaterial) footprintMaterial.opacity = 0.48 + pulse * 0.26;
   if (sweepMaterial) sweepMaterial.opacity = 0.48 + slowerPulse * 0.34;
+  if (terrainGridMaterial) terrainGridMaterial.opacity = 0.34 + pulse * 0.34;
+  if (targetMarkerMaterial) targetMarkerMaterial.opacity = 0.68 + slowerPulse * 0.3;
 
   const widthPulse = 0.985 + slowerPulse * 0.03;
   resolveBeamTransform(root, target, widthPulse);
+  const terrainProjectionActive = updateTerrainProjection(root, target, terrainHeightAt);
 
   const grid = root.userData.sproutScannerGrid;
   if (grid) grid.rotation.y = elapsed * 0.38;
 
   const footprint = root.userData.sproutScannerFootprint;
-  if (footprint) footprint.rotation.y = -elapsed * 0.16;
+  if (footprint) {
+    footprint.visible = !terrainProjectionActive;
+    footprint.rotation.y = -elapsed * 0.16;
+  }
 
   const footprintRing = root.userData.sproutScannerFootprintRing;
   if (footprintRing) {
