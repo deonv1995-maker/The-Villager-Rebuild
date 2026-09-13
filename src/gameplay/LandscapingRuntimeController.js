@@ -5,18 +5,19 @@ import { LandscapingSystem } from '../world/LandscapingSystem.js';
 
 const LANDSCAPING_ACTION_ID = 'landscaping-place';
 
+const materialName = mode => mode === 'cobble' ? 'STONE' : 'LOG';
+
 export class LandscapingRuntimeController {
   constructor({ game }) {
-    if (!game?.island || !game?.inventory || !game?.player || !game?.panelConstruction) {
-      throw new Error('LandscapingRuntimeController requires a started game with panel construction');
+    if (!game?.island || !game?.inventory || !game?.player) {
+      throw new Error('LandscapingRuntimeController requires a started game');
     }
     this.game = game;
     this.system = new LandscapingSystem({
       group: game.island.group,
       terrain: game.island,
       collision: game.island.collision,
-      inventory: game.inventory,
-      panelConstruction: game.panelConstruction
+      inventory: game.inventory
     });
     this.game.landscaping = this.system;
     this.running = false;
@@ -72,13 +73,31 @@ export class LandscapingRuntimeController {
     if (!this.system.isActive() || this.game.toolbelt?.getEquippedToolId() !== 'shovel') return false;
     this.#updateSystem();
     const before = this.system.getState();
+    const required = before.cost?.[0]?.quantity ?? 0;
+    const resource = materialName(before.mode);
+
+    if (!before.strokePinned) {
+      if (!before.canPin) {
+        this.game.setStatus(
+          before.canAfford
+            ? `${before.label.toUpperCase()} · NEED CLEAR START POINT`
+            : `${before.label.toUpperCase()} · NEED ${required} ${resource}${required === 1 ? '' : 'S'} · HAVE ${before.materialQuantity}`
+        );
+        return false;
+      }
+      if (!this.system.pin(this.playerPosition, this.playerFacing, this.#currentAim())) return false;
+      this.#updateSystem();
+      const pinned = this.system.getState();
+      this.game.setStatus(`${pinned.label.toUpperCase()} · START PINNED · DRAG END POINT · CONFIRM`);
+      this.#syncHud();
+      return true;
+    }
+
     if (!before.previewValid) {
-      const required = before.cost?.[0]?.quantity ?? 0;
-      const resource = before.mode === 'cobble' ? 'STONE' : 'LOGS';
       this.game.setStatus(
         before.canAfford
-          ? `${before.label.toUpperCase()} · NEED CLEAR POSITION`
-          : `${before.label.toUpperCase()} · NEED ${required} ${resource} · HAVE ${before.materialQuantity}`
+          ? `${before.label.toUpperCase()} · DRAG TO A LONGER CLEAR RUN`
+          : `${before.label.toUpperCase()} · NEED ${required} ${resource}${required === 1 ? '' : 'S'} · HAVE ${before.materialQuantity}`
       );
       return false;
     }
@@ -89,16 +108,15 @@ export class LandscapingRuntimeController {
       this.#currentAim()
     );
     if (!built) {
-      this.game.setStatus('LANDSCAPING POSITION CHANGED · TRY AGAIN');
+      this.game.setStatus('LANDSCAPING RUN CHANGED · TRY AGAIN');
       return false;
     }
 
-    const required = built.cost?.[0]?.quantity ?? 0;
-    const resource = built.mode === 'cobble' ? 'STONE' : 'LOG';
+    const used = built.cost?.[0]?.quantity ?? 0;
     this.game.equipmentRuntime?.recordUse?.('shovel');
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     this.game.setStatus(
-      `${built.label.toUpperCase()} ${built.snapped ? 'SNAPPED TO BUILDING' : 'PLACED'} · ${required} ${resource}${required === 1 ? '' : 'S'} USED`
+      `${built.label.toUpperCase()} PLACED · ${built.unitCount} SECTION${built.unitCount === 1 ? '' : 'S'} · ${used} ${resource}${used === 1 ? '' : 'S'} USED`
     );
     this.#syncHud();
     return true;
@@ -146,35 +164,57 @@ export class LandscapingRuntimeController {
       canAfford: state.canAfford,
       materialQuantity: state.materialQuantity,
       cost: required,
-      snappedToBuilding: state.snappedToBuilding
+      strokePinned: state.strokePinned,
+      strokeLength: state.strokeLength,
+      unitCount: state.unitCount,
+      pathWidth: state.pathWidth
     });
 
+    const canAct = state.strokePinned ? state.previewValid : state.canPin;
     hud.setAttackTarget(null, 'shovel');
     hud.setExternalAction(LANDSCAPING_ACTION_ID, {
-      available: state.previewValid,
+      available: canAct,
       icon: 'shovel',
-      label: state.previewValid ? `Place ${state.label}` : `Cannot place ${state.label} here`,
-      caption: 'PLACE',
+      label: state.strokePinned
+        ? (state.previewValid ? `Confirm ${state.label} run` : `Cannot confirm ${state.label} here`)
+        : (state.canPin ? `Pin ${state.label} start` : `Cannot pin ${state.label} here`),
+      caption: state.strokePinned ? 'CONFIRM' : 'PIN',
       priority: 210,
       onTrigger: () => this.confirmPlacement()
     });
 
-    const resource = state.mode === 'cobble' ? 'STONE' : 'LOGS';
-    const statusKey = `${state.mode}:${state.previewValid}:${state.materialQuantity}:${state.snappedToBuilding}`;
+    const resource = materialName(state.mode);
+    const lengthKey = Math.round(state.strokeLength * 10) / 10;
+    const statusKey = `${state.mode}:${state.interactionPhase}:${state.previewValid}:${state.materialQuantity}:${state.unitCount}:${lengthKey}`;
     if (statusKey !== this.lastStatusKey) {
       this.lastStatusKey = statusKey;
-      this.game.setStatus(
-        state.previewValid
-          ? `${state.label.toUpperCase()} · READY${state.snappedToBuilding ? ' · BUILDING GRID SNAP' : ''} · COST ${required} ${resource}`
-          : state.canAfford
-            ? `${state.label.toUpperCase()} · MOVE TO VALID POSITION`
-            : `${state.label.toUpperCase()} · NEED ${required} ${resource} · HAVE ${state.materialQuantity}`
-      );
-      hud.setObjective(
-        state.previewValid
-          ? 'Green landscaping preview · Shovel action places it'
-          : 'Red landscaping preview · move, aim at another slot, or gather materials'
-      );
+      if (state.strokePinned) {
+        this.game.setStatus(
+          state.previewValid
+            ? `${state.label.toUpperCase()} · ${state.strokeLength.toFixed(1)}M · COST ${required} ${resource}${required === 1 ? '' : 'S'} · CONFIRM`
+            : state.canAfford
+              ? `${state.label.toUpperCase()} · START PINNED · DRAG END POINT`
+              : `${state.label.toUpperCase()} · NEED ${required} ${resource}${required === 1 ? '' : 'S'} · HAVE ${state.materialQuantity}`
+        );
+        hud.setObjective(
+          state.previewValid
+            ? 'Green run preview · drag the endpoint until it looks right, then CONFIRM'
+            : 'Start is pinned · aim or move to drag the endpoint onto clear terrain'
+        );
+      } else {
+        this.game.setStatus(
+          state.canPin
+            ? `${state.label.toUpperCase()} · READY · PIN START`
+            : state.canAfford
+              ? `${state.label.toUpperCase()} · MOVE TO A CLEAR START POINT`
+              : `${state.label.toUpperCase()} · NEED ${required} ${resource}${required === 1 ? '' : 'S'} · HAVE ${state.materialQuantity}`
+        );
+        hud.setObjective(
+          state.canPin
+            ? 'Green pin preview · tap PIN to anchor the start of the run'
+            : 'Move or aim for a clear landscaping start point'
+        );
+      }
     }
   }
 
@@ -277,7 +317,13 @@ export class LandscapingRuntimeController {
     if (this.system.isActive() && (event.code === 'KeyG' || event.code === 'Escape')) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      this.#closeLandscaping();
+      if (this.system.cancelStroke()) {
+        this.game.setStatus('LANDSCAPING RUN CANCELLED · PIN A NEW START');
+        this.#updateSystem();
+        this.#syncHud();
+      } else {
+        this.#closeLandscaping();
+      }
     }
   }
 }
