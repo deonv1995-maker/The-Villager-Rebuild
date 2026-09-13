@@ -157,6 +157,7 @@ export class CelestialShadowSystem {
   }
 
   requestRefresh() {
+    this.light.shadow.needsUpdate = true;
     this.renderer.shadowMap.needsUpdate = true;
   }
 
@@ -185,6 +186,7 @@ export class CelestialShadowSystem {
   #configureLight() {
     const shadow = this.light.shadow;
     this.light.castShadow = true;
+    shadow.autoUpdate = false;
     shadow.mapSize.set(CELESTIAL_SHADOWS.mapSize, CELESTIAL_SHADOWS.mapSize);
     shadow.camera.left = -CELESTIAL_SHADOWS.cameraHalfSize;
     shadow.camera.right = CELESTIAL_SHADOWS.cameraHalfSize;
