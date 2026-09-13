@@ -1,5 +1,3 @@
-import './torch.css';
-import './sprout.css';
 import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';

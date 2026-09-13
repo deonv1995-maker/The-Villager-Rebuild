@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 
 const workflow = await readFile('.github/workflows/deploy-pages.yml', 'utf8');
 const docs = await readFile('docs/PAGES_DEPLOYMENT.md', 'utf8');
+const index = await readFile('index.html', 'utf8');
+const main = await readFile('src/main.js', 'utf8');
 
 for (const requirement of [
   'PRODUCTION_RUN_ID: ${{ github.run_id }}',
@@ -21,13 +23,20 @@ const deployIndex = workflow.indexOf('actions/deploy-pages@v4');
 assert.ok(waitIndex >= 0 && waitIndex < uploadIndex && uploadIndex < deployIndex,
   'Production dist must wait for branch-source Pages and deploy last');
 
+for (const stylesheet of ['./src/torch.css', './src/sprout.css']) {
+  assert.ok(index.includes(`href="${stylesheet}"`), `index.html must load ${stylesheet} directly for raw Pages source compatibility`);
+}
+assert.equal(/import\s+['"][^'"]+\.css['"]\s*;?/.test(main), false,
+  'src/main.js must not import CSS directly because the transient branch-source Pages artifact runs source modules in the browser');
+
 for (const requirement of [
   'FOUNDATION 0.3.8 · STARTING',
   '`head_sha`',
   'created at or after',
-  'Vite `dist` artifact to be the final Pages deployment'
+  'Vite `dist` artifact to be the final Pages deployment',
+  'remains browser-runnable'
 ]) {
   assert.ok(docs.includes(requirement), `Pages deployment documentation is missing: ${requirement}`);
 }
 
-console.log('GitHub Pages production ordering contract verified');
+console.log('GitHub Pages production ordering and raw-source startup contracts verified');
