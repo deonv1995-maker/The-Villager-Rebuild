@@ -56,6 +56,7 @@ export class ExplorationRegionSystem {
       vegetationFloor: bestRegion.vegetationFloor ?? 0,
       forestFloor: bestRegion.forestFloor ?? 0,
       scatter: bestRegion.scatter ?? null,
+      ground: bestRegion.ground ?? null,
       poiTypes: bestRegion.poiTypes
     };
   }
@@ -97,6 +98,10 @@ export class ExplorationRegionSystem {
       vegetationFloor: region.vegetationFloor ?? 0,
       forestFloor: region.forestFloor ?? 0,
       scatter: region.scatter ? { ...region.scatter } : null,
+      ground: region.ground ? {
+        ...region.ground,
+        ambient: region.ground.ambient ? { ...region.ground.ambient } : null
+      } : null,
       poiTypes: [...region.poiTypes]
     }));
   }
