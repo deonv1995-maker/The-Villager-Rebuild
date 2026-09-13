@@ -79,9 +79,14 @@ export class SproutVisualRuntimeController {
         ?? companion?.target
         ?? companion?.compression
       );
+      const scanTarget = presentation.scanTarget ?? null;
       const affectionate = Boolean(presentation.affectionate);
       updateSproutVisual(this.visual, this.elapsed, { powered, scanning, affectionate });
-      updateSproutScannerVisual(this.visual, this.elapsed, { powered, scanning });
+      updateSproutScannerVisual(this.visual, this.elapsed, {
+        powered,
+        scanning,
+        target: scanTarget
+      });
     }
 
     this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
