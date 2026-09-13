@@ -13,6 +13,27 @@ const COLORS = Object.freeze({
 });
 
 const PRESENTATION_SCALE = 0.75;
+const MOTION = Object.freeze({
+  bodyBobAmplitude: 0.085,
+  bodyBobSecondaryAmplitude: 0.018,
+  bodyBobFrequency: 1.9,
+  bodySwayAmplitude: 0.035,
+  bodyPitchAmplitude: 0.025,
+  hoverSpinSpeed: 0.62,
+  ringBobAmplitude: 0.042,
+  innerRingBobAmplitude: 0.034,
+  ringTiltAmplitude: 0.06,
+  innerRingTiltAmplitude: 0.08,
+  podPrimaryAmplitude: 0.058,
+  podSecondaryAmplitude: 0.024,
+  podTiltAmplitude: 0.085,
+  finSwingAmplitude: 0.075,
+  finPitchAmplitude: 0.035,
+  armSwingAmplitude: 0.085,
+  armRollAmplitude: 0.055,
+  armBobAmplitude: 0.052,
+  armSecondaryBobAmplitude: 0.014
+});
 
 const makeStandard = (color, options = {}) => new THREE.MeshStandardMaterial({
   color,
@@ -53,6 +74,7 @@ const createArm = ({ side, materials }) => {
   root.position.set(side * 0.47, -0.02, 0.03);
   root.rotation.z = side * -0.18;
   root.userData.baseY = root.position.y;
+  root.userData.baseZRotation = root.rotation.z;
 
   addMesh(root, new THREE.SphereGeometry(0.105, 10, 7), materials.joint, {
     name: `${root.name}-shoulder`
@@ -119,7 +141,7 @@ export function createSproutVisual() {
   const root = new THREE.Group();
   root.name = 'sprout-production-companion';
   root.userData.sproutProductionVisual = true;
-  root.userData.visualVersion = 3;
+  root.userData.visualVersion = 4;
   root.userData.presentationScale = PRESENTATION_SCALE;
 
   const emissiveBase = {
@@ -329,6 +351,14 @@ export function createSproutVisual() {
     stabilizerPods.push(podRoot);
   }
 
+  // Keep the stronger body bob presentation-only by moving the authored model under
+  // an internal motion root. The outer companion root remains owned by gameplay.
+  const motionRoot = new THREE.Group();
+  motionRoot.name = 'sprout-presentation-motion-root';
+  const presentationChildren = [...root.children];
+  for (const child of presentationChildren) motionRoot.add(child);
+  root.add(motionRoot);
+
   root.userData.faceGlow = eyeLeft;
   root.userData.expressionMaterial = materials.expression;
   root.userData.scannerMaterial = materials.scanner;
@@ -338,6 +368,7 @@ export function createSproutVisual() {
   root.userData.rightArm = rightArm;
   root.userData.finLeft = finLeft;
   root.userData.finRight = finRight;
+  root.userData.motionRoot = motionRoot;
   root.userData.hoverAssembly = hoverAssembly;
   root.userData.hoverRing = hoverRing;
   root.userData.hoverInnerRing = hoverInnerRing;
@@ -377,41 +408,69 @@ export function updateSproutVisual(root, elapsed, {
       : 0.04;
   }
 
+  const motionRoot = root.userData.motionRoot;
+  if (motionRoot) {
+    motionRoot.position.y = Math.sin(elapsed * MOTION.bodyBobFrequency) * MOTION.bodyBobAmplitude
+      + Math.sin(elapsed * 0.73 + 0.8) * MOTION.bodyBobSecondaryAmplitude;
+    motionRoot.rotation.z = Math.sin(elapsed * 0.95 + 0.2) * MOTION.bodySwayAmplitude;
+    motionRoot.rotation.x = Math.sin(elapsed * 0.71 + 1.2) * MOTION.bodyPitchAmplitude;
+  }
+
   const hoverAssembly = root.userData.hoverAssembly;
-  if (hoverAssembly) hoverAssembly.rotation.y = elapsed * 0.42;
+  if (hoverAssembly) {
+    hoverAssembly.rotation.y = elapsed * MOTION.hoverSpinSpeed;
+    hoverAssembly.rotation.z = Math.sin(elapsed * 0.88 + 0.4) * 0.025;
+  }
 
   const hoverRing = root.userData.hoverRing;
   const hoverInnerRing = root.userData.hoverInnerRing;
-  if (hoverRing) hoverRing.position.y = Math.sin(elapsed * 1.33) * 0.018;
-  if (hoverInnerRing) hoverInnerRing.position.y = -0.03 + Math.sin(elapsed * 1.08 + 1.7) * 0.014;
+  if (hoverRing) {
+    hoverRing.position.y = Math.sin(elapsed * 1.43) * MOTION.ringBobAmplitude;
+    hoverRing.rotation.z = Math.sin(elapsed * 0.96 + 0.3) * MOTION.ringTiltAmplitude;
+  }
+  if (hoverInnerRing) {
+    hoverInnerRing.position.y = -0.03 + Math.sin(elapsed * 1.19 + 1.7) * MOTION.innerRingBobAmplitude;
+    hoverInnerRing.rotation.z = -Math.sin(elapsed * 1.08 + 1.1) * MOTION.innerRingTiltAmplitude;
+  }
 
   const stabilizerPods = root.userData.stabilizerPods ?? [];
   stabilizerPods.forEach((pod, index) => {
     const phase = pod.userData.phase ?? index * 2.17;
-    const irregular = Math.sin(elapsed * (1.18 + index * 0.09) + phase) * 0.026
-      + Math.sin(elapsed * (2.61 + index * 0.13) + phase * 1.7) * 0.011;
+    const irregular = Math.sin(elapsed * (1.18 + index * 0.09) + phase) * MOTION.podPrimaryAmplitude
+      + Math.sin(elapsed * (2.61 + index * 0.13) + phase * 1.7) * MOTION.podSecondaryAmplitude;
     pod.position.y = (pod.userData.baseY ?? -0.02) + irregular;
-    pod.rotation.z = Math.sin(elapsed * 0.72 + phase) * 0.045;
+    pod.rotation.z = Math.sin(elapsed * 0.72 + phase) * MOTION.podTiltAmplitude;
+    pod.rotation.x = Math.sin(elapsed * 0.61 + phase * 1.35) * MOTION.podTiltAmplitude * 0.62;
   });
 
   const finLeft = root.userData.finLeft;
   const finRight = root.userData.finRight;
-  if (finLeft) finLeft.rotation.z = -0.38 - Math.sin(elapsed * 1.7) * 0.035;
-  if (finRight) finRight.rotation.z = 0.38 + Math.sin(elapsed * 1.7) * 0.035;
+  if (finLeft) {
+    finLeft.rotation.z = -0.38 - Math.sin(elapsed * 1.7) * MOTION.finSwingAmplitude;
+    finLeft.rotation.x = 0.05 + Math.sin(elapsed * 1.13 + 0.5) * MOTION.finPitchAmplitude;
+  }
+  if (finRight) {
+    finRight.rotation.z = 0.38 + Math.sin(elapsed * 1.7) * MOTION.finSwingAmplitude;
+    finRight.rotation.x = 0.05 + Math.sin(elapsed * 1.13 + 1.15) * MOTION.finPitchAmplitude;
+  }
 
   const leftArm = root.userData.leftArm;
   const rightArm = root.userData.rightArm;
   if (leftArm) {
-    leftArm.rotation.x = Math.sin(elapsed * 1.45) * 0.035;
+    leftArm.rotation.x = Math.sin(elapsed * 1.45) * MOTION.armSwingAmplitude;
+    leftArm.rotation.z = (leftArm.userData.baseZRotation ?? 0.18)
+      + Math.sin(elapsed * 1.12 - 0.4) * MOTION.armRollAmplitude;
     leftArm.position.y = (leftArm.userData.baseY ?? -0.02)
-      - Math.sin(elapsed * 2.05 - 0.56) * 0.024
-      + Math.sin(elapsed * 0.83 + 0.4) * 0.006;
+      - Math.sin(elapsed * 2.05 - 0.56) * MOTION.armBobAmplitude
+      + Math.sin(elapsed * 0.83 + 0.4) * MOTION.armSecondaryBobAmplitude;
   }
   if (rightArm) {
-    rightArm.rotation.x = -Math.sin(elapsed * 1.45) * 0.035;
+    rightArm.rotation.x = -Math.sin(elapsed * 1.45) * MOTION.armSwingAmplitude;
+    rightArm.rotation.z = (rightArm.userData.baseZRotation ?? -0.18)
+      - Math.sin(elapsed * 1.08 - 0.72) * MOTION.armRollAmplitude;
     rightArm.position.y = (rightArm.userData.baseY ?? -0.02)
-      - Math.sin(elapsed * 2.05 - 0.74) * 0.022
-      + Math.sin(elapsed * 0.91 + 1.2) * 0.006;
+      - Math.sin(elapsed * 2.05 - 0.74) * MOTION.armBobAmplitude * 0.92
+      + Math.sin(elapsed * 0.91 + 1.2) * MOTION.armSecondaryBobAmplitude;
   }
 
   const eyeLeft = root.userData.eyeLeft;
