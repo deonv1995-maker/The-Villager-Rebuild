@@ -24,6 +24,38 @@ The Scout follows the approved low-poly character mock-up:
 
 If the expected medium rig cannot be resolved, the presentation falls back to the legacy Ranger render instead of making the player invisible.
 
+## to3D model migration gate
+
+`feature/scout-to3d-model` is the isolated integration branch for replacing the temporary procedural Scout render with the approved custom model. The generated model is treated as an **asset candidate**, not as a new animation authority.
+
+The migration must preserve the existing boundary:
+
+- the KayKit medium rig continues to own locomotion, jump, work-tool, spear and cinematic poses unless a dedicated rig migration is separately proven;
+- the right-hand anchor remains authoritative for axe, hammer, pickaxe and spear presentation;
+- first-person body hiding continues to use the existing camera-mode contract;
+- player root position, collision, grounding, movement and double-jump state remain independent from the render asset;
+- the procedural Scout remains the safe fallback until the custom asset has passed model, rig/retarget and device checks.
+
+Image-to-3D output must not be wired directly into `ASSET_PATHS` merely because it renders. A static unrigged mesh would visually regress the current animated Scout even if its silhouette is better.
+
+Candidate inspection is performed with:
+
+```sh
+node scripts/audit-scout-model-candidate.mjs path/to/Scout.gltf
+```
+
+The audit validates glTF 2.0 geometry and reports mesh, primitive, vertex, material, texture, skin, joint, animation and external-dependency counts. An unrigged candidate exits with a non-zero status by design so it cannot be mistaken for a production-ready animated player asset.
+
+Before promotion into the runtime asset registry, the candidate must also be checked for:
+
+1. visual match to the approved Scout mock-up from front, side and gameplay-camera angles;
+2. sensible mobile polygon/material/texture cost;
+3. normalized scale, origin and forward orientation relative to the existing player root;
+4. a tested rig/retarget path that preserves the medium-rig animation contract, or a separately approved replacement rig architecture;
+5. correct visible-hand/tool alignment through idle, walk, run, jump, double jump and work animations;
+6. correct first-person hiding and third-person restoration;
+7. no new dependency on terrain, collision, construction, Sprout, wildlife or PWA systems.
+
 ## Traversal direction
 
 The Scout uses a deliberately game-like double jump so world shaping can use stronger vertical separation without making traversal frustrating.
@@ -48,7 +80,7 @@ The increased jump envelope is intended to give later terrain-shaping work more 
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` now covers the Scout compatibility boundary and double-jump tuning. The full `npm run check` remains the merge gate.
+`npm run verify:ranger-presentation` covers the Scout compatibility boundary and double-jump tuning. The full `npm run check` remains the merge gate for runtime changes.
 
 Device verification after deployment should confirm:
 
