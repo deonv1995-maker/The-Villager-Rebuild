@@ -166,6 +166,12 @@ export class GroundCoverPresentationSystem {
     const dryOpening = THREE.MathUtils.smoothstep(dryPatch, 0.5, 0.9);
     density *= 1 - dryOpening * 0.18;
 
+    const region = this.terrain.regionAt?.(x, z);
+    const meadowCoverMultiplier = region?.ground?.meadowCoverMultiplier;
+    if (Number.isFinite(meadowCoverMultiplier)) {
+      density *= THREE.MathUtils.lerp(1, meadowCoverMultiplier, region.strength ?? 0);
+    }
+
     const trailWear = this.terrain.trailWearAt?.(z) ?? 0;
     if (trailWear > 0 && this.terrain.pathCenterX) {
       const distance = Math.abs(x - this.terrain.pathCenterX(z));
