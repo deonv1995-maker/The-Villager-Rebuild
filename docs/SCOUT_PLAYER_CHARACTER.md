@@ -25,7 +25,7 @@ The active presentation intentionally keeps only the essential humanoid pieces:
 
 There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems remain in repository history but are not part of the active player appearance while body and motion correctness are verified.
 
-The active visual revision is `simple-humanoid-v2`. It keeps the strict 16-mesh presentation budget so limb alignment and movement remain easy to inspect on mobile.
+The active visual revision remains `simple-humanoid-v1`; this repair changes rig binding rather than visual design. The presentation keeps the strict 16-mesh budget so limb alignment and movement remain easy to inspect on mobile.
 
 `src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code and routes to `SimpleHumanoidPresentation`.
 
