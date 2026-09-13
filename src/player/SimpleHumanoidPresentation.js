@@ -19,7 +19,13 @@ function detachMesh(object) {
 }
 
 function removeNamed(root, names) {
-  for (const name of names) detachMesh(root.getObjectByName(name));
+  for (const name of names) {
+    let object = root.getObjectByName(name);
+    while (object) {
+      detachMesh(object);
+      object = root.getObjectByName(name);
+    }
+  }
 }
 
 function applySimplePalette(presentation) {
