@@ -36,9 +36,6 @@ export const EXPLORATION_WORLD = Object.freeze({
       scatter: Object.freeze({ treeQuota: 250, coreScale: 0.72, spacingScale: 0.66, heroChance: 0.08 }),
       ground: Object.freeze({
         soilStrength: 0.92,
-        dampStrength: 0.88,
-        leafLitterStrength: 0.94,
-        mossStrength: 0.52,
         grassMultiplier: 0.22,
         meadowCoverMultiplier: 0.18,
         fernMultiplier: 1.5,
