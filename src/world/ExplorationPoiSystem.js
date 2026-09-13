@@ -162,9 +162,12 @@ export class ExplorationPoiSystem {
     entrance.name = `${definition.id}-entrance-shell`;
 
     const face = new THREE.Shape();
-    const halfWidth = definition.mouthWidth * 0.82;
-    const height = definition.mouthHeight * 1.38;
-    face.moveTo(-halfWidth * 0.96, -0.48);
+    // Keep the visible face tight to the aperture. The surrounding terrain and
+    // terrain-embedded landform masses provide the hillside volume; an oversized
+    // face would read as a freestanding stone arch sitting on the ground.
+    const halfWidth = definition.mouthWidth * 0.72;
+    const height = definition.mouthHeight * 1.1;
+    face.moveTo(-halfWidth * 0.96, -0.62);
     face.lineTo(-halfWidth, height * 0.34);
     face.lineTo(-halfWidth * 0.76, height * 0.74);
     face.lineTo(-halfWidth * 0.4, height * 0.97);
@@ -172,7 +175,7 @@ export class ExplorationPoiSystem {
     face.lineTo(halfWidth * 0.36, height * 0.93);
     face.lineTo(halfWidth * 0.74, height * 0.73);
     face.lineTo(halfWidth, height * 0.38);
-    face.lineTo(halfWidth * 0.94, -0.48);
+    face.lineTo(halfWidth * 0.94, -0.62);
     face.closePath();
 
     const mouth = this.#createMouthPath(definition, 1);
@@ -197,6 +200,9 @@ export class ExplorationPoiSystem {
     shell.userData.clearOpeningWidth = definition.mouthWidth * 0.84;
     shell.userData.clearOpeningHeight = definition.mouthHeight * 0.98;
     shell.userData.tunnelDepth = tunnelDepth;
+    shell.userData.outerFaceHalfWidth = halfWidth;
+    shell.userData.outerFaceHeight = height;
+    shell.userData.hillsideIntegrated = true;
     entrance.add(shell);
 
     // Small side dressing breaks up the planar cliff face without putting any
