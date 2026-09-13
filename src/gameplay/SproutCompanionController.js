@@ -30,6 +30,7 @@ export class SproutCompanionController {
     this.cooldown = 0;
     this.elapsed = 0;
     this.approachElapsed = 0;
+    this.targetScanHoldRemaining = 0;
     this.followSide = 1;
     this.nextFollowSide = 1;
     this.followSenseRemaining = 0;
@@ -74,17 +75,22 @@ export class SproutCompanionController {
     this.running = false;
     this.#endIdleAnimation({ applyCooldown: false });
     this.#cancelCompression();
-    this.target = null;
+    this.#clearCollectionTarget();
   }
 
   getPresentationState() {
+    const scanTarget = this.target?.position;
     return {
       scanning: Boolean(
         this.target
-        || this.compression
         || this.idleScanRemaining > 0
         || this.idleAnimation?.kind === 'scan'
       ),
+      scanTarget: scanTarget ? {
+        x: scanTarget.x,
+        y: scanTarget.y,
+        z: scanTarget.z
+      } : null,
       affectionate: this.idleAnimation?.kind === 'affection'
     };
   }
@@ -134,10 +140,10 @@ export class SproutCompanionController {
       return;
     }
 
-    // A selected pickup gets a bounded approach; a reserved compression always finishes.
+    // A selected pickup gets a bounded approach and scan lock; a reserved compression always finishes.
     if (this.target) this.approachElapsed += dt;
     if (this.target && this.approachElapsed >= SPROUT_COMPANION.approachTimeoutSeconds) {
-      this.target = null;
+      this.#clearCollectionTarget();
       this.cooldown = 1;
     }
 
@@ -161,7 +167,7 @@ export class SproutCompanionController {
     if (this.target) {
       const live = this.gatherables.getLooseResource?.(this.target.id);
       if (!live) {
-        this.target = null;
+        this.#clearCollectionTarget();
       } else {
         this.target = live;
         const distance = Math.hypot(
@@ -169,8 +175,17 @@ export class SproutCompanionController {
           live.position.z - this.root.position.z
         );
         if (distance <= SPROUT_COMPANION.beamRange) {
+          this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 7));
+          this.#settleHover(this.root.position.x, this.root.position.z, dt);
+          const scanYaw = Math.atan2(
+            live.position.x - this.root.position.x,
+            live.position.z - this.root.position.z
+          );
+          this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, scanYaw, Math.min(1, dt * 6.2));
+          this.targetScanHoldRemaining = Math.max(0, this.targetScanHoldRemaining - dt);
+          if (this.targetScanHoldRemaining > 0) return;
           if (this.#beginCompression(live)) return;
-          this.target = null;
+          this.#clearCollectionTarget();
         } else {
           this.#moveToward(live.position, SPROUT_COMPANION.collectionMoveSpeed, dt);
           return;
@@ -187,6 +202,7 @@ export class SproutCompanionController {
       ) ?? null;
       if (this.target) {
         this.approachElapsed = 0;
+        this.targetScanHoldRemaining = SPROUT_COMPANION.targetScanHoldSeconds;
         this.idleTargetValid = false;
         return;
       }
@@ -589,7 +605,7 @@ export class SproutCompanionController {
       transferDuration,
       elapsed: 0
     };
-    this.target = null;
+    this.#clearCollectionTarget();
     this.idleTargetValid = false;
     this.#updateBeam();
     return true;
@@ -776,8 +792,13 @@ export class SproutCompanionController {
     return true;
   }
 
-  #cancelCollectionIntent() {
+  #clearCollectionTarget() {
     this.target = null;
+    this.targetScanHoldRemaining = 0;
+  }
+
+  #cancelCollectionIntent() {
+    this.#clearCollectionTarget();
     this.#cancelCompression();
   }
 
