@@ -91,6 +91,28 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     return THREE.MathUtils.clamp(Math.max(base * region.forestMultiplier, regionalFloor), 0, 1);
   }
 
+  grassDensityAt(x, z) {
+    const base = super.grassDensityAt(x, z);
+    const region = this.explorationRegions.regionAt(x, z);
+    const multiplier = region?.ground?.grassMultiplier;
+    if (!Number.isFinite(multiplier)) return base;
+    const regionalMultiplier = THREE.MathUtils.lerp(1, multiplier, region.strength);
+    return THREE.MathUtils.clamp(base * regionalMultiplier, 0, 1);
+  }
+
+  fernDensityAt(x, z) {
+    const base = super.fernDensityAt(x, z);
+    const region = this.explorationRegions.regionAt(x, z);
+    const profile = region?.ground;
+    if (!profile) return base;
+    const regionalFloor = (profile.fernFloor ?? 0) * region.strength;
+    return THREE.MathUtils.clamp(
+      Math.max(base * (profile.fernMultiplier ?? 1), regionalFloor),
+      0,
+      1
+    );
+  }
+
   heightAt(x, z) {
     let height = super.heightAt(x, z);
     const normalized = this.normalizedRadius(x, z);
@@ -227,6 +249,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
           const y = this.heightAt(worldX, worldZ);
           const slope = this.slopeAt(worldX, worldZ, 1.35);
           const sand = this.isSandAt(worldX, worldZ);
+          const explorationRegion = sand ? null : this.explorationRegions.regionAt(worldX, worldZ);
+          const jungleSoilStrength = explorationRegion?.biome === 'jungle'
+            ? explorationRegion.strength * (explorationRegion.ground?.soilStrength ?? 0)
+            : 0;
           position.setY(index, y);
 
           terrainSurfaceColorAt({
@@ -236,7 +262,8 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
             slope,
             sand,
             forestCover: sand ? 0 : this.forestCoverAt(worldX, worldZ),
-            grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ)
+            grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ),
+            jungleSoilStrength
           }, color);
           colors.push(color.r, color.g, color.b);
         }

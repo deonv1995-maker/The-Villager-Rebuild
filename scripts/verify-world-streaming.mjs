@@ -52,6 +52,19 @@ assert.equal(westernJungle.forestMultiplier > 1, true, 'jungle region must incre
 assert.equal(westernJungle.forestFloor >= 0.8, true, 'jungle must enforce a strong continuous canopy floor rather than only multiplying sparse grove masks');
 assert.equal(terrain.forestCoverAt(-220, 15) >= 0.8, true, 'jungle centre must resolve to dense forest cover');
 assert.equal(westernJungle.scatter?.treeQuota >= 200, true, 'jungle must reserve a bounded regional tree quota for visible forest density');
+assert.equal(westernJungle.ground?.soilStrength >= 0.8, true, 'jungle must expose a strong fertile-soil presentation through the shared region profile');
+assert.equal(westernJungle.ground?.grassMultiplier <= 0.35, true, 'jungle canopy must suppress generic meadow grass rather than looking like dense forest over lawn');
+assert.equal(westernJungle.ground?.meadowCoverMultiplier <= 0.35, true, 'jungle must open the static meadow carpet so soil and leaf-litter tones stay visible');
+assert.equal(westernJungle.ground?.fernFloor >= 0.7, true, 'jungle must keep a broad fern understory footprint beneath the canopy');
+assert.equal(westernJungle.ground?.ambient?.vineDensity >= 0.8, true, 'jungle floor profile must reserve broad vine coverage');
+assert.equal(westernJungle.ground?.ambient?.mossRockDensity >= 0.5, true, 'jungle floor profile must reserve mossy rock dressing');
+assert.equal(westernJungle.ground?.ambient?.fallenLogDensity >= 0.3, true, 'jungle floor profile must reserve fallen-log dressing');
+assert.equal(terrain.fernDensityAt(-220, 15) >= 0.7, true, 'jungle centre must resolve to a dense fern understory through the existing fern system');
+assert.equal(
+  terrain.fernDensityAt(-220, 15) > terrain.grassDensityAt(-220, 15),
+  true,
+  'jungle centre must favour fern understory over generic meadow grass'
+);
 assert.equal(westernJungle.poiTypes.includes('ruin'), true, 'jungle region must remain ready for later abandoned-structure placement');
 assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for cave placement');
 assert.equal(terrain.heightAt(-28, -198) > 11, true, 'northern highlands must rise clearly above hill-scale terrain');

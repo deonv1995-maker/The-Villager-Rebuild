@@ -18,7 +18,10 @@ export class AmbientWorldDetailSystem {
     constructionTerrain = null,
     maxFlowers = 520,
     maxMushrooms = 180,
-    maxCoastalGrass = 320
+    maxCoastalGrass = 320,
+    maxJungleVines = 520,
+    maxMossRocks = 120,
+    maxFallenLogs = 54
   }) {
     this.group = group;
     this.terrain = terrain;
@@ -29,6 +32,9 @@ export class AmbientWorldDetailSystem {
     this.maxFlowers = maxFlowers;
     this.maxMushrooms = maxMushrooms;
     this.maxCoastalGrass = maxCoastalGrass;
+    this.maxJungleVines = maxJungleVines;
+    this.maxMossRocks = maxMossRocks;
+    this.maxFallenLogs = maxFallenLogs;
     this.seed = 0x4f27ad;
     this.state = this.seed;
     this.entries = [];
@@ -40,14 +46,28 @@ export class AmbientWorldDetailSystem {
     this.geometries = Object.freeze({
       flower: buildWildflowerGeometry(),
       mushroom: buildMushroomGeometry(),
-      coastalGrass: buildCoastalGrassGeometry()
+      coastalGrass: buildCoastalGrassGeometry(),
+      jungleVine: buildJungleVineGeometry(),
+      mossRock: buildMossRockGeometry(),
+      fallenLog: buildFallenLogGeometry()
     });
     this.materials = Object.freeze({
       flower: createDetailMaterial(),
       mushroom: createDetailMaterial(),
-      coastalGrass: createDetailMaterial()
+      coastalGrass: createDetailMaterial(),
+      jungleVine: createDetailMaterial(),
+      mossRock: createDetailMaterial(),
+      fallenLog: createDetailMaterial()
     });
-    this.stats = Object.freeze({ flowers: 0, mushrooms: 0, coastalGrass: 0, total: 0 });
+    this.stats = Object.freeze({
+      flowers: 0,
+      mushrooms: 0,
+      coastalGrass: 0,
+      jungleVines: 0,
+      mossRocks: 0,
+      fallenLogs: 0,
+      total: 0
+    });
   }
 
   random() {
@@ -98,12 +118,62 @@ export class AmbientWorldDetailSystem {
       }
     });
 
+    const jungleVines = this.#populateKind({
+      kind: 'jungleVine',
+      maxInstances: this.maxJungleVines,
+      margin: 18,
+      clearance: 0.12,
+      attemptMultiplier: 42,
+      heightOffset: 0.026,
+      suitabilityAt: (x, z) => this.#jungleVineSuitabilityAt(x, z),
+      scaleAt: () => {
+        const footprint = 1.05 + this.random() * 0.95;
+        return { x: footprint, y: 0.9 + this.random() * 0.25, z: footprint * (0.84 + this.random() * 0.34) };
+      }
+    });
+
+    const mossRocks = this.#populateKind({
+      kind: 'mossRock',
+      maxInstances: this.maxMossRocks,
+      margin: 20,
+      clearance: 0.32,
+      attemptMultiplier: 52,
+      heightOffset: 0.012,
+      suitabilityAt: (x, z) => this.#mossRockSuitabilityAt(x, z),
+      scaleAt: () => {
+        const footprint = 0.72 + this.random() * 0.72;
+        return {
+          x: footprint * (0.86 + this.random() * 0.34),
+          y: 0.66 + this.random() * 0.62,
+          z: footprint * (0.82 + this.random() * 0.4)
+        };
+      }
+    });
+
+    const fallenLogs = this.#populateKind({
+      kind: 'fallenLog',
+      maxInstances: this.maxFallenLogs,
+      margin: 22,
+      clearance: 0.48,
+      attemptMultiplier: 80,
+      heightOffset: 0.028,
+      suitabilityAt: (x, z) => this.#fallenLogSuitabilityAt(x, z),
+      scaleAt: () => ({
+        x: 1.8 + this.random() * 1.55,
+        y: 0.78 + this.random() * 0.44,
+        z: 0.84 + this.random() * 0.42
+      })
+    });
+
     this.#buildMeshes();
     const stats = {
       flowers,
       mushrooms,
       coastalGrass,
-      total: flowers + mushrooms + coastalGrass
+      jungleVines,
+      mossRocks,
+      fallenLogs,
+      total: flowers + mushrooms + coastalGrass + jungleVines + mossRocks + fallenLogs
     };
     this.stats = Object.freeze(stats);
     return { ...stats };
@@ -117,7 +187,16 @@ export class AmbientWorldDetailSystem {
     this.#syncConstructionOcclusion();
   }
 
-  #populateKind({ kind, maxInstances, margin, clearance, suitabilityAt, scaleAt }) {
+  #populateKind({
+    kind,
+    maxInstances,
+    margin,
+    clearance,
+    suitabilityAt,
+    scaleAt,
+    attemptMultiplier = 24,
+    heightOffset = 0.018
+  }) {
     const bounds = this.terrain.getScatterBounds?.(margin) ?? {
       halfX: 132,
       halfZ: 109,
@@ -125,7 +204,7 @@ export class AmbientWorldDetailSystem {
     };
     let placed = 0;
     let attempts = 0;
-    const attemptLimit = Math.max(80, maxInstances * 24);
+    const attemptLimit = Math.max(80, maxInstances * attemptMultiplier);
 
     while (placed < maxInstances && attempts < attemptLimit) {
       attempts += 1;
@@ -136,13 +215,14 @@ export class AmbientWorldDetailSystem {
       if (!this.scatter?.isGrassClear?.(x, z, clearance)) continue;
 
       const scale = scaleAt();
-      const naturalY = this.terrain.heightAt(x, z) + 0.018;
+      const naturalY = this.terrain.heightAt(x, z) + heightOffset;
       this.entries.push({
         kind,
         x,
         y: naturalY,
         naturalY,
         z,
+        heightOffset,
         baseYaw: this.random() * Math.PI * 2,
         scaleX: scale.x,
         scaleY: scale.y,
@@ -189,6 +269,70 @@ export class AmbientWorldDetailSystem {
     const elevationBand = smoothstep(aboveWater, 0.14, 0.42) * (1 - smoothstep(aboveWater, 1.45, 2.2));
     const forest = this.terrain.forestCoverAt?.(x, z) ?? 0.2;
     return clamp(coastBand * elevationBand * (1 - forest * 0.58) * this.#trailFadeAt(x, z, 0.66), 0, 0.94);
+  }
+
+  #jungleVineSuitabilityAt(x, z) {
+    if (!this.#isBaseDetailGround(x, z, 3.8, 0.5)) return 0;
+    const region = this.#jungleRegionAt(x, z);
+    if (!region) return 0;
+    const fern = this.terrain.fernDensityAt?.(x, z) ?? 0.55;
+    const damp = 0.72 + 0.28 * (0.5 + Math.sin(x * 0.055 + z * 0.039 + 1.4) * 0.5);
+    return clamp(
+      region.strength
+        * region.ground.ambient.vineDensity
+        * (0.56 + fern * 0.44)
+        * damp
+        * this.#trailFadeAt(x, z, 0.72),
+      0,
+      0.96
+    );
+  }
+
+  #mossRockSuitabilityAt(x, z) {
+    if (!this.#isBaseDetailGround(x, z, 4.4, 0.58)) return 0;
+    const region = this.#jungleRegionAt(x, z);
+    if (!region) return 0;
+    const forest = this.terrain.forestCoverAt?.(x, z) ?? 0.7;
+    const damp = 0.66 + 0.34 * (0.5 + Math.cos(x * 0.041 - z * 0.057 + 0.3) * 0.5);
+    return clamp(
+      region.strength
+        * region.ground.ambient.mossRockDensity
+        * (0.52 + forest * 0.48)
+        * damp
+        * this.#trailFadeAt(x, z, 0.64),
+      0,
+      0.9
+    );
+  }
+
+  #fallenLogSuitabilityAt(x, z) {
+    if (!this.#isBaseDetailGround(x, z, 5.2, 0.4)) return 0;
+    const region = this.#jungleRegionAt(x, z);
+    if (!region) return 0;
+    const forest = this.terrain.forestCoverAt?.(x, z) ?? 0.75;
+    const debrisPatch = clamp(0.58 + (
+      Math.sin(x * 0.029 + z * 0.047 + 2.2)
+      + Math.cos(z * 0.037 - x * 0.021 - 0.7)
+    ) * 0.16, 0.28, 0.92);
+    return clamp(
+      region.strength
+        * region.ground.ambient.fallenLogDensity
+        * (0.55 + forest * 0.45)
+        * debrisPatch
+        * this.#trailFadeAt(x, z, 0.52),
+      0,
+      0.78
+    );
+  }
+
+  #jungleRegionAt(x, z) {
+    const region = this.terrain.regionAt?.(x, z);
+    if (
+      region?.biome !== 'jungle'
+      || !region.ground?.ambient
+      || (region.strength ?? 0) <= 0
+    ) return null;
+    return region;
   }
 
   #isBaseDetailGround(x, z, margin, maxSlope) {
@@ -261,7 +405,7 @@ export class AmbientWorldDetailSystem {
       const hidden = floors.some(floor => constructionFloorCoversVegetation(entry, floor, 0.1));
       const adaptedY = hidden
         ? entry.y
-        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z) ?? this.terrain.heightAt(entry.x, entry.z)) + 0.018;
+        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z) ?? this.terrain.heightAt(entry.x, entry.z)) + entry.heightOffset;
       if (hidden === entry.constructionHidden && Math.abs(adaptedY - entry.y) <= 0.002) continue;
       entry.constructionHidden = hidden;
       entry.y = adaptedY;
@@ -438,6 +582,140 @@ function buildCoastalGrassGeometry() {
       color
     );
   }
+
+  return builder.build();
+}
+
+function buildJungleVineGeometry() {
+  const builder = createGeometryBuilder();
+  const stemColors = [0x315d32, 0x3f7138, 0x4d8241];
+  const leafColors = [0x3f7a3e, 0x4f8e47, 0x608f43];
+
+  for (let tendril = 0; tendril < 3; tendril += 1) {
+    const angle = tendril * Math.PI * 2 / 3 + tendril * 0.21;
+    const dirX = Math.cos(angle);
+    const dirZ = Math.sin(angle);
+    const sideX = -dirZ;
+    const sideZ = dirX;
+    const width = 0.022 + tendril * 0.004;
+    const points = [
+      [dirX * -0.08, 0.012, dirZ * -0.08],
+      [dirX * 0.32 + sideX * 0.12, 0.018, dirZ * 0.32 + sideZ * 0.12],
+      [dirX * 0.72 - sideX * 0.1, 0.024, dirZ * 0.72 - sideZ * 0.1],
+      [dirX * 1.02 + sideX * 0.07, 0.03, dirZ * 1.02 + sideZ * 0.07]
+    ];
+
+    for (let segment = 0; segment < points.length - 1; segment += 1) {
+      const a = points[segment];
+      const b = points[segment + 1];
+      builder.quad(
+        [a[0] - sideX * width, a[1], a[2] - sideZ * width],
+        [a[0] + sideX * width, a[1], a[2] + sideZ * width],
+        [b[0] + sideX * width, b[1], b[2] + sideZ * width],
+        [b[0] - sideX * width, b[1], b[2] - sideZ * width],
+        stemColors[(tendril + segment) % stemColors.length]
+      );
+    }
+
+    for (let leaf = 1; leaf < points.length; leaf += 1) {
+      const p = points[leaf];
+      const side = leaf % 2 === 0 ? 1 : -1;
+      const leafWidth = 0.11 + leaf * 0.012;
+      const leafLength = 0.2 + leaf * 0.018;
+      builder.triangle(
+        [p[0], p[1] + 0.008, p[2]],
+        [p[0] + sideX * leafWidth * side, p[1] + 0.012, p[2] + sideZ * leafWidth * side],
+        [p[0] + dirX * leafLength, p[1] + 0.016, p[2] + dirZ * leafLength],
+        leafColors[(tendril + leaf) % leafColors.length]
+      );
+    }
+  }
+
+  return builder.build();
+}
+
+function buildMossRockGeometry() {
+  const builder = createGeometryBuilder();
+  const rockColors = [0x5c5d50, 0x686757, 0x73705d, 0x55574b];
+  const mossColors = [0x506b3d, 0x607b45, 0x72864b];
+  const sides = 8;
+  const top = [0, 0.36, 0];
+
+  for (let side = 0; side < sides; side += 1) {
+    const a0 = side * Math.PI * 2 / sides;
+    const a1 = (side + 1) * Math.PI * 2 / sides;
+    const r0 = 0.42 + (side % 3) * 0.035;
+    const r1 = 0.42 + ((side + 1) % 3) * 0.035;
+    const rim0 = [Math.cos(a0) * r0, 0.03 + (side % 2) * 0.025, Math.sin(a0) * r0];
+    const rim1 = [Math.cos(a1) * r1, 0.03 + ((side + 1) % 2) * 0.025, Math.sin(a1) * r1];
+    builder.triangle(top, rim0, rim1, rockColors[side % rockColors.length]);
+  }
+
+  const mossCenter = [0.02, 0.374, -0.01];
+  for (let patch = 0; patch < 5; patch += 1) {
+    const a0 = patch * Math.PI * 2 / 5 + 0.22;
+    const a1 = a0 + 0.8;
+    const r = 0.18 + (patch % 2) * 0.04;
+    builder.triangle(
+      mossCenter,
+      [Math.cos(a0) * r, 0.28, Math.sin(a0) * r],
+      [Math.cos(a1) * r, 0.27, Math.sin(a1) * r],
+      mossColors[patch % mossColors.length]
+    );
+  }
+
+  return builder.build();
+}
+
+function buildFallenLogGeometry() {
+  const builder = createGeometryBuilder();
+  const sides = 6;
+  const halfLength = 0.68;
+  const radius = 0.18;
+  const centerY = radius;
+  const barkColors = [0x5e4028, 0x6d4a2e, 0x765338, 0x533924];
+
+  for (let side = 0; side < sides; side += 1) {
+    const a0 = side * Math.PI * 2 / sides - Math.PI / 2;
+    const a1 = (side + 1) * Math.PI * 2 / sides - Math.PI / 2;
+    const y0 = centerY + Math.sin(a0) * radius;
+    const z0 = Math.cos(a0) * radius;
+    const y1 = centerY + Math.sin(a1) * radius;
+    const z1 = Math.cos(a1) * radius;
+    builder.quad(
+      [-halfLength, y0, z0],
+      [halfLength, y0, z0],
+      [halfLength, y1, z1],
+      [-halfLength, y1, z1],
+      barkColors[side % barkColors.length]
+    );
+    builder.triangle(
+      [-halfLength - 0.006, centerY, 0],
+      [-halfLength - 0.006, y1, z1],
+      [-halfLength - 0.006, y0, z0],
+      0x806346
+    );
+    builder.triangle(
+      [halfLength + 0.006, centerY, 0],
+      [halfLength + 0.006, y0, z0],
+      [halfLength + 0.006, y1, z1],
+      0x684c35
+    );
+  }
+
+  builder.quad(
+    [-0.54, centerY + radius + 0.012, -0.075],
+    [0.5, centerY + radius + 0.012, -0.065],
+    [0.42, centerY + radius + 0.018, 0.072],
+    [-0.48, centerY + radius + 0.018, 0.085],
+    0x5c7842
+  );
+  builder.triangle(
+    [-0.15, centerY + radius + 0.022, 0.06],
+    [0.18, centerY + radius + 0.026, 0.05],
+    [0.02, centerY + radius + 0.03, 0.16],
+    0x70894d
+  );
 
   return builder.build();
 }

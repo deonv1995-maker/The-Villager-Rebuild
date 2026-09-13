@@ -74,12 +74,25 @@ forestGrass.getHSL(forestHsl);
 clearingGrass.getHSL(clearingHsl);
 assert.equal(forestHsl.l < clearingHsl.l, true, 'forest cover must darken the ground beneath woodland');
 
-const sand = sample({ sand: true, y: -0.05, slope: 0.04, forestCover: 1, grassPatchStrength: 1 });
+const jungleFloor = sample({ forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 1 });
+const ordinaryCanopyFloor = sample({ forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 0 });
+assert.equal(
+  distance(jungleFloor, ordinaryCanopyFloor) > 0.08,
+  true,
+  'jungle soil strength must materially shift canopy ground away from ordinary green forest terrain'
+);
+assert.equal(
+  jungleFloor.r > jungleFloor.g && jungleFloor.g > jungleFloor.b,
+  true,
+  'jungle canopy ground must resolve to a visibly fertile brown soil family'
+);
+
+const sand = sample({ sand: true, y: -0.05, slope: 0.04, forestCover: 1, grassPatchStrength: 1, jungleSoilStrength: 1 });
 assert.equal(sand.r > sand.g && sand.g > sand.b, true, 'sand must retain a warm non-grass palette');
 
-const steepA = sample({ slope: 0.9, grassPatchStrength: 0, forestCover: 0 });
-const steepB = sample({ slope: 0.9, grassPatchStrength: 1, forestCover: 1 });
-assert.equal(distance(steepA, steepB) < 0.00001, true, 'steep terrain must remain rock-toned instead of inheriting meadow tinting');
+const steepA = sample({ slope: 0.9, grassPatchStrength: 0, forestCover: 0, jungleSoilStrength: 0 });
+const steepB = sample({ slope: 0.9, grassPatchStrength: 1, forestCover: 1, jungleSoilStrength: 1 });
+assert.equal(distance(steepA, steepB) < 0.00001, true, 'steep terrain must remain rock-toned instead of inheriting meadow or jungle-soil tinting');
 
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.meadowDry), true, 'meadow soil colour must remain a shared palette value');
 const meadowSoil = new THREE.Color(GROUND_SURFACE_COLORS.meadowDry);
@@ -87,6 +100,13 @@ assert.equal(
   meadowSoil.r > meadowSoil.g && meadowSoil.g > meadowSoil.b,
   true,
   'dry meadow interruptions must stay visibly earthy brown rather than olive green'
+);
+assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.jungleSoil), true, 'jungle fertile soil colour must remain a shared palette value');
+const jungleSoil = new THREE.Color(GROUND_SURFACE_COLORS.jungleSoil);
+assert.equal(
+  jungleSoil.r > jungleSoil.g && jungleSoil.g > jungleSoil.b,
+  true,
+  'jungle soil palette must remain brown rather than another green ground tone'
 );
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.trailSoil), true, 'worn trail soil colour must remain a shared palette value');
 const trail = new THREE.Color(GROUND_SURFACE_COLORS.trailSoil);
@@ -206,4 +226,25 @@ assert.equal(
   'lush meadow fields must remain denser than open suitable ground'
 );
 
-console.log('ground surface palette, earthy low-poly patches and dense fine construction-aware ground cover verified');
+const jungleCover = new GroundCoverPresentationSystem({
+  group: new THREE.Group(),
+  terrain: {
+    ...coverTerrain,
+    regionAt: () => ({
+      biome: 'jungle',
+      strength: 1,
+      ground: { meadowCoverMultiplier: 0.24 }
+    })
+  },
+  scatter: { isGrassClear: () => true },
+  spacing: 1.2
+});
+const jungleCoverCount = jungleCover.populate();
+assert.equal(
+  jungleCoverCount < coverCount * 0.5,
+  true,
+  'dense canopy jungle must open the generic meadow carpet enough for fertile soil and jungle floor detail to remain visible'
+);
+assert.equal(jungleCoverCount > 0, true, 'jungle floor should retain scattered green micro-cover instead of becoming visually sterile');
+
+console.log('ground surface palette, fertile jungle soil and biome-aware construction-safe ground cover verified');
