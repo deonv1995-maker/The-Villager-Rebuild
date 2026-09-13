@@ -34,6 +34,18 @@ export const EXPLORATION_WORLD = Object.freeze({
       vegetationFloor: 0.9,
       forestFloor: 0.86,
       scatter: Object.freeze({ treeQuota: 250, coreScale: 0.72, spacingScale: 0.66, heroChance: 0.08 }),
+      ground: Object.freeze({
+        soilStrength: 0.9,
+        grassMultiplier: 0.28,
+        meadowCoverMultiplier: 0.24,
+        fernMultiplier: 1.45,
+        fernFloor: 0.76,
+        ambient: Object.freeze({
+          vineDensity: 0.95,
+          mossRockDensity: 0.62,
+          fallenLogDensity: 0.4
+        })
+      }),
       poiTypes: Object.freeze(['cave', 'ruin', 'hidden-clearing'])
     }),
     Object.freeze({
