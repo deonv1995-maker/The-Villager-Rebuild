@@ -200,10 +200,19 @@ export function terrainSurfaceColorAt({
 
     target.lerp(COLORS.jungleSoil, jungle * (0.82 + jungleFields.litter * 0.06));
     target.lerp(COLORS.jungleHumus, jungle * (0.11 + dampLayer * 0.13));
-    target.lerp(COLORS.jungleWetSoil, jungle * dampLayer * 0.34);
-    target.lerp(COLORS.jungleLeafLitter, jungle * litterLayer * 0.28);
-    target.lerp(COLORS.jungleClay, jungle * exposedLayer * 0.14);
-    target.lerp(COLORS.jungleMoss, jungle * mossLayer * 0.1);
+    target.lerp(COLORS.jungleWetSoil, jungle * dampLayer * 0.4);
+    target.lerp(COLORS.jungleLeafLitter, jungle * litterLayer * 0.34);
+    target.lerp(COLORS.jungleClay, jungle * exposedLayer * 0.15);
+    target.lerp(COLORS.jungleMoss, jungle * mossLayer * 0.09);
+
+    // Make damp hollows visibly darker and dry litter pockets visibly warmer at gameplay
+    // distance. This is a colour-only contrast layer; it does not alter height or collision.
+    const microLight = jungle * (
+      litterLayer * 0.07
+        - dampLayer * 0.08
+        + mossLayer * 0.025
+    );
+    target.offsetHSL(0, 0, microLight);
   }
 
   target.offsetHSL(
