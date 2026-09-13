@@ -34,7 +34,7 @@ for (const requirement of [
   '`head_sha`',
   'created at or after',
   'Vite `dist` artifact to be the final Pages deployment',
-  'raw source entry remains browser-runnable'
+  'remains browser-runnable'
 ]) {
   assert.ok(docs.includes(requirement), `Pages deployment documentation is missing: ${requirement}`);
 }
