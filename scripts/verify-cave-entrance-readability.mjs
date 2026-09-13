@@ -158,6 +158,28 @@ assert.equal(
   true,
   'cave mouth must preserve a tall readable central opening'
 );
+assert.equal(mouthShell.userData.hillsideIntegrated, true, 'cave mouth shell must explicitly use the compact hillside-integration contract');
+assert.equal(
+  mouthShell.userData.outerFaceHeight <= caveDefinition.mouthHeight * 1.12,
+  true,
+  'cave brow must stay close to the opening height instead of forming a tall freestanding arch'
+);
+assert.equal(
+  mouthShell.userData.outerFaceHalfWidth <= caveDefinition.mouthWidth * 0.75,
+  true,
+  'cave face must stay narrow enough for the surrounding hillside masses to own the silhouette'
+);
+mouthShell.geometry.computeBoundingBox();
+assert.equal(
+  mouthShell.geometry.boundingBox.max.y <= caveDefinition.mouthHeight * 1.15,
+  true,
+  'actual cave-shell geometry must keep a thin rocky brow above the opening'
+);
+assert.equal(
+  Math.max(Math.abs(mouthShell.geometry.boundingBox.min.x), Math.abs(mouthShell.geometry.boundingBox.max.x)) <= caveDefinition.mouthWidth * 0.76,
+  true,
+  'actual cave-shell geometry must remain tucked inside the terrain-embedded side masses'
+);
 assert.equal(
   mouthShell.userData.tunnelDepth >= 3.5,
   true,
@@ -223,4 +245,4 @@ assert.equal(approach.geometry.boundingBox.max.z > 0, true, 'worn approach must 
 assert.equal(obstacles.length, 4, 'cave terrain cut must preserve the established side-rock collision contract');
 assert.equal(obstacles.every(obstacle => obstacle.type === 'cave-rock'), true, 'cave collision must retain its established obstacle type');
 
-console.log('cave terrain cut, foothill embedding, depth, local tessellation and collision contracts verified');
+console.log('cave terrain cut, compact hillside brow, foothill embedding, depth, local tessellation and collision contracts verified');
