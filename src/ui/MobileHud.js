@@ -204,7 +204,7 @@ export class MobileHud {
       const count = button.querySelector('[data-role="tool-count"]');
       if (count) {
         count.textContent = String(entry.quantity ?? 0);
-        count.hidden = entry.id !== 'spear';
+        count.hidden = entry.id === 'hand';
       }
 
       const durabilityTrack = button.querySelector('[data-role="tool-durability-track"]');
