@@ -53,7 +53,7 @@ player.root.updateMatrixWorld(true);
 const presentation = new SimpleHumanoidPresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'strict side binding should keep the humanoid rig active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v2');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v1');
 assert.equal(presentation.visualRoot.userData.rigSideBinding, 'explicit-side-v1');
 
 const expected = {
