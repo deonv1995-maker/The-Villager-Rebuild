@@ -32,6 +32,15 @@ assert.equal(TOOL_ORDER.at(-1), 'torch', 'Torch must be a normal toolbelt slot')
 assert.ok(TORCH.light.flicker.intensityVariance > 0, 'Burning torch light must have visible intensity flutter');
 assert.ok(TORCH.light.intensity <= 60, 'Torch base intensity must remain in the softer fire-light range');
 assert.ok(
+  TORCH.light.distance >= 14 && TORCH.light.distance <= 16,
+  'Torch reach must stay useful for night navigation without becoming an unnatural floodlight'
+);
+assert.equal(TORCH.light.decay, 2, 'Torch must retain physically natural inverse-square-style falloff');
+assert.ok(
+  TORCH.light.shadow.far >= TORCH.light.distance * (1 + TORCH.light.flicker.distanceVariance),
+  'Torch shadow camera must cover maximum bounded light reach'
+);
+assert.ok(
   TORCH.light.flicker.intensityVariance <= 0.1,
   'Torch emitted-light flicker must stay subtle rather than harsh'
 );

@@ -9,7 +9,7 @@ export const TORCH = Object.freeze({
   light: Object.freeze({
     color: 0xffa24f,
     intensity: 58,
-    distance: 10.5,
+    distance: 15,
     decay: 2,
     follow: Object.freeze({
       response: 11,
@@ -28,7 +28,7 @@ export const TORCH = Object.freeze({
     shadow: Object.freeze({
       mapSize: 128,
       near: 0.12,
-      far: 11,
+      far: 16,
       bias: -0.0015,
       normalBias: 0.035,
       intensity: 0.72,
