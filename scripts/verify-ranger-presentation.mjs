@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as THREE from 'three';
-import { ScoutCharacterPresentation } from '../src/player/ScoutCharacterPresentation.js';
 import { RangerAppearancePresentation } from '../src/player/RangerAppearancePresentation.js';
 import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../src/data/PlayerTraversalTuning.js';
 
@@ -16,6 +15,29 @@ function readGlbJson(path) {
   return JSON.parse(bytes.toString('utf8', 20, 20 + jsonChunkLength).replace(/\u0000+$/g, '').trim());
 }
 
+function buildPlayerFromJointNames(jointNames) {
+  const root = new THREE.Group();
+  const model = new THREE.Group();
+  root.add(model);
+
+  for (const name of jointNames) {
+    const joint = new THREE.Bone();
+    joint.name = name;
+    model.add(joint);
+  }
+
+  return {
+    root,
+    model,
+    getPosition(target) {
+      return target.copy(root.position);
+    },
+    isFirstPerson() {
+      return false;
+    }
+  };
+}
+
 const rangerGlb = readGlbJson('public/assets/kaykit/adventurers/Ranger.glb');
 const jointIndices = new Set((rangerGlb.skins ?? []).flatMap(skin => skin.joints ?? []));
 const productionJointNames = [...jointIndices]
@@ -23,29 +45,17 @@ const productionJointNames = [...jointIndices]
   .filter(Boolean);
 assert.ok(productionJointNames.length > 0, 'production Ranger GLB should expose named rig joints');
 
-const productionRoot = new THREE.Group();
-const productionModel = new THREE.Group();
-productionRoot.add(productionModel);
-for (const name of productionJointNames) {
-  const joint = new THREE.Bone();
-  joint.name = name;
-  productionModel.add(joint);
-}
-const productionPlayer = {
-  model: productionModel,
-  root: productionRoot,
-  getPosition(target) {
-    return target.copy(productionRoot.position);
-  },
-  isFirstPerson() {
-    return false;
-  }
-};
-const productionContract = new ScoutCharacterPresentation({ player: productionPlayer });
+const productionPlayer = buildPlayerFromJointNames(productionJointNames);
+const productionPresentation = new RangerAppearancePresentation({ player: productionPlayer });
 assert.equal(
-  productionContract.mode,
+  productionPresentation.mode,
   'scout-rigged',
-  `Scout bone resolver must support the production KayKit rig joints: ${productionJointNames.join(', ')}`
+  `simple humanoid resolver must support the production KayKit joints: ${productionJointNames.join(', ')}`
+);
+assert.equal(
+  productionPresentation.visualRoot.userData.visualRevision,
+  'simple-humanoid-v1',
+  'production presentation should use the simple humanoid foundation'
 );
 
 const root = new THREE.Group();
@@ -110,70 +120,95 @@ const player = {
 root.updateMatrixWorld(true);
 const presentation = new RangerAppearancePresentation({ player });
 
-assert.equal(presentation.mode, 'scout-rigged', 'compatible medium rigs should activate the Scout presentation');
+assert.equal(presentation.mode, 'scout-rigged', 'compatible medium rigs should activate the humanoid presentation');
 assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger quiver should stay detached');
-assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should be hidden behind the Scout presentation');
-assert.equal(presentation.visualRoot.parent, root, 'Scout presentation should live at the stable player root');
-assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing character identity should be Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'scout-polish-v3', 'runtime Scout should use the screenshot-informed visual revision');
-assert.equal(presentation.visualRoot.userData.visualMeshBudget, 72, 'Scout visual polish should retain the established mobile mesh budget');
-assert.ok(presentation.visualRoot.getObjectByName('scout-tunic'), 'Scout should include the low-poly tunic silhouette');
-assert.ok(presentation.visualRoot.getObjectByName('scout-scarf'), 'Scout should include the green scarf/cowl');
-assert.ok(presentation.visualRoot.getObjectByName('scout-satchel'), 'Scout should include the readable satchel shape');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot'), 'Scout should include chunky traversal boots');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-pupil'), 'Scout polish should add readable eye detail');
-assert.ok(presentation.visualRoot.getObjectByName('scout-ear-left'), 'Scout should include the visible ears from the approved mock-up');
-assert.ok(presentation.visualRoot.getObjectByName('scout-nose'), 'Scout polish should add a simple faceted nose');
-assert.ok(presentation.visualRoot.getObjectByName('scout-belt-buckle'), 'Scout polish should add a visible belt buckle');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-tunic-sleeve'), 'Scout polish should layer green tunic sleeves over the undershirt');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-forearm-wrap'), 'Scout polish should add leather forearm wraps');
-assert.ok(presentation.visualRoot.getObjectByName('scout-left-boot-sole'), 'Scout polish should give traversal boots a layered sole');
-assert.ok(presentation.visualRoot.getObjectByName('scout-cape-center-seam'), 'Scout polish should keep the cape visibly faceted and layered');
+assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should stay hidden');
+assert.equal(presentation.visualRoot.parent, root, 'humanoid presentation should live at the stable player root');
+assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing identity should remain Scout');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v1');
+assert.equal(presentation.visualRoot.userData.developmentStage, 'humanoid-foundation');
+assert.equal(presentation.visualRoot.userData.visualMeshBudget, 16);
 
-const silhouette = presentation.visualRoot.userData.mockupSilhouette;
-assert.ok(silhouette, 'Scout should expose the approved mock-up silhouette contract');
-assert.ok(silhouette.headRadius >= 0.36, 'Scout head should keep the larger youthful mock-up proportion');
-assert.ok(silhouette.torsoShoulderRadius >= 0.42, 'Scout shoulders should read broader than the prior blocky silhouette');
-assert.ok(silhouette.scarfOuterRadius >= 0.49, 'Scout scarf/cowl should remain broad and readable from gameplay distance');
-assert.ok(silhouette.bootDepth >= 0.55, 'Scout boots should retain the oversized traversal silhouette');
+for (const name of [
+  'scout-tunic',
+  'scout-head-mesh',
+  'scout-eye-left',
+  'scout-eye-right',
+  'scout-left-upper-arm',
+  'scout-left-lower-arm',
+  'scout-left-hand',
+  'scout-left-thigh',
+  'scout-left-shin',
+  'scout-left-boot',
+  'scout-right-upper-arm',
+  'scout-right-lower-arm',
+  'scout-right-hand',
+  'scout-right-thigh',
+  'scout-right-shin',
+  'scout-right-boot'
+]) {
+  assert.ok(presentation.visualRoot.getObjectByName(name), `simple humanoid should include ${name}`);
+}
 
-let scoutMeshCount = 0;
+for (const name of [
+  'scout-scarf',
+  'scout-satchel',
+  'scout-crossbody-strap',
+  'scout-cape',
+  'scout-hair-cap',
+  'scout-belt',
+  'scout-left-glove',
+  'scout-right-glove',
+  'scout-left-boot-cuff',
+  'scout-right-boot-cuff'
+]) {
+  assert.equal(
+    presentation.visualRoot.getObjectByName(name),
+    undefined,
+    `${name} should stay out of the foundation character until styling resumes`
+  );
+}
+
+let humanoidMeshCount = 0;
 presentation.visualRoot.traverse(object => {
   if (!object.isMesh) return;
-  scoutMeshCount += 1;
-  assert.equal(object.material.flatShading, true, `${object.name} should retain low-poly flat shading`);
+  humanoidMeshCount += 1;
+  assert.equal(object.material.flatShading, true, `${object.name} should retain simple low-poly shading`);
 });
-assert.ok(scoutMeshCount >= 60, 'Scout polish should add enough layered geometry to read as a finished character');
-assert.ok(
-  scoutMeshCount <= presentation.visualRoot.userData.visualMeshBudget,
-  `Scout polish should stay within its mobile mesh budget (${scoutMeshCount}/${presentation.visualRoot.userData.visualMeshBudget})`
-);
+assert.equal(humanoidMeshCount, 16, 'foundation character should contain only the essential humanoid meshes');
 
 presentation.update(1 / 60);
-root.position.z += 0.12;
-root.position.y += 0.08;
+const visibleRightHand = presentation.visualRoot.getObjectByName('scout-right-hand');
+const visibleRightFoot = presentation.visualRoot.getObjectByName('scout-right-boot');
+const handBefore = visibleRightHand.position.clone();
+const footBefore = visibleRightFoot.position.clone();
+
+model.getObjectByName('Hand_R').position.x += 0.16;
+model.getObjectByName('Foot_R').position.z += 0.14;
 root.updateMatrixWorld(true);
 presentation.update(1 / 60);
-assert.ok(presentation.capeTrail > 0, 'Scout cape should react to player movement');
-assert.ok(Number.isFinite(presentation.headGroup.position.y), 'Scout head should follow the animation rig');
+assert.ok(visibleRightHand.position.distanceTo(handBefore) > 0.1, 'visible right hand should follow the animated hand joint');
+assert.ok(visibleRightFoot.position.distanceTo(footBefore) > 0.08, 'visible right foot should follow the animated foot joint');
+assert.ok(Number.isFinite(presentation.headGroup.position.y), 'head should follow the animation rig');
 
 firstPerson = true;
 cameraModeListener?.('first-person');
-assert.equal(presentation.visualRoot.visible, false, 'Scout body should hide in first person to preserve camera readability');
+assert.equal(presentation.visualRoot.visible, false, 'humanoid body should hide in first person');
 firstPerson = false;
 cameraModeListener?.('third-person');
-assert.equal(presentation.visualRoot.visible, true, 'Scout body should restore in third person');
+assert.equal(presentation.visualRoot.visible, true, 'humanoid body should restore in third person');
 
 const compatibilityModule = read('src/player/RangerAppearancePresentation.js');
 assert.ok(
-  compatibilityModule.includes('PolishedScoutCharacterPresentation as RangerAppearancePresentation'),
-  'historical Ranger presentation imports should resolve through the polished Scout compatibility boundary'
+  compatibilityModule.includes('SimpleHumanoidPresentation as RangerAppearancePresentation')
+    && compatibilityModule.includes("'./SimpleHumanoidPresentation.js'"),
+  'historical Ranger imports should route through the simple humanoid compatibility boundary'
 );
-const polishModule = read('src/player/ScoutVisualPolish.js');
+const simpleModule = read('src/player/SimpleHumanoidPresentation.js');
 assert.ok(
-  polishModule.includes('extends ScoutCharacterPresentation')
-    && polishModule.includes('visualRevision = POLISH_REVISION'),
-  'Scout visual polish should remain layered on the stable rig-following presentation instead of replacing it'
+  simpleModule.includes('extends ScoutCharacterPresentation')
+    && simpleModule.includes("developmentStage = 'humanoid-foundation'"),
+  'simple humanoid should remain layered on the proven rig-following presentation'
 );
 
 const controller = read('src/player/RangerController.js');
@@ -185,13 +220,13 @@ assert.ok(
   controller.includes('this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;')
     && controller.includes('this.jumpVelocity = doubleJumpSpeed;')
     && controller.includes('this.jumpStage = 2;'),
-  'player controller should expose one explicit mid-air jump stage'
+  'player controller should preserve one explicit mid-air jump stage'
 );
 assert.ok(
   controller.includes('gravityForVerticalSpeed(this.jumpVelocity)')
     && !controller.includes('this.jumpVelocity -= 13.5 * dt')
     && !controller.includes('this.jumpVelocity = 5.4;'),
-  'legacy realistic jump constants should no longer drive traversal'
+  'legacy realistic jump constants should remain retired'
 );
 assert.ok(
   controller.includes('if (!event.repeat) this.jump();'),
@@ -200,11 +235,11 @@ assert.ok(
 
 const { jump } = PLAYER_TRAVERSAL_TUNING;
 assert.equal(jump.maxAirJumps, 1, 'Scout should receive exactly one double-jump charge');
-assert.ok(jump.launchSpeed > 5.4, 'first jump should be stronger than the retired Ranger jump');
+assert.ok(jump.launchSpeed > 5.4, 'first jump should remain stronger than the retired Ranger jump');
 assert.ok(jump.doubleJumpSpeed > 0, 'double jump should restore upward velocity');
 assert.ok(
   gravityForVerticalSpeed(-1) > gravityForVerticalSpeed(1),
-  'descent should be slightly faster than ascent for a crisp platformer arc'
+  'descent should remain slightly faster than ascent'
 );
 
 function apexHeight(initialSpeed, gravity) {
@@ -212,13 +247,13 @@ function apexHeight(initialSpeed, gravity) {
 }
 const firstApex = apexHeight(jump.launchSpeed, jump.gravity);
 const secondApexGain = apexHeight(jump.doubleJumpSpeed, jump.gravity);
-assert.ok(firstApex > 1.4, 'first jump should support meaningfully taller terrain than before');
-assert.ok(firstApex + secondApexGain > 2.6, 'double jump should open substantially higher platform routes');
+assert.ok(firstApex > 1.4, 'first jump should retain its established terrain reach');
+assert.ok(firstApex + secondApexGain > 2.6, 'double jump should retain its established traversal reach');
 
 const packageJson = JSON.parse(read('package.json'));
 assert.ok(
   packageJson.scripts.check.includes('npm run verify:ranger-presentation'),
-  'full repository check must retain player-presentation and traversal regression coverage'
+  'full repository check must retain humanoid presentation and traversal regression coverage'
 );
 
-console.log('Scout presentation, visual polish, and double-jump regression checks passed.');
+console.log('Simple humanoid rig, visibility, limb-following, and double-jump regression checks passed.');
