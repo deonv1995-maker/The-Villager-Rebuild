@@ -36,7 +36,9 @@ const localToWorld = (localX, localZ) => {
 const distanceToSpawn = point => Math.hypot(point.x - WORLD_LAYOUT.spawn.x, point.z - WORLD_LAYOUT.spawn.z);
 const mouthWorld = localToWorld(0, 0);
 const approachWorld = localToWorld(0, -4.4);
+const foothillSampleWorld = localToWorld(0, -6);
 const interiorWorld = localToWorld(0, caveDefinition.depth);
+const mountainSampleWorld = localToWorld(0, 10);
 assert.equal(
   distanceToSpawn(approachWorld) < distanceToSpawn(mouthWorld) - 3,
   true,
@@ -48,14 +50,44 @@ assert.equal(
   'cave depth must continue away from the player route into the northern highlands'
 );
 
+const mouthTerrainY = terrain.heightAt(mouthWorld.x, mouthWorld.z);
+const foothillApproachY = terrain.heightAt(foothillSampleWorld.x, foothillSampleWorld.z);
+const mountainBehindY = terrain.heightAt(mountainSampleWorld.x, mountainSampleWorld.z);
+assert.equal(mouthTerrainY < 8, true, 'first cave must sit on the mountain foothill rather than the elevated mountain core');
+assert.equal(
+  mouthTerrainY - foothillApproachY >= 0.8,
+  true,
+  'ground must fall away toward the cave approach so the entrance reads at the base of the mountain'
+);
+assert.equal(
+  mountainBehindY - mouthTerrainY >= 1.5,
+  true,
+  'authoritative terrain must rise behind the cave mouth so the entrance reads as cut into the mountain'
+);
+
 const landform = root.getObjectByName(`${caveDefinition.id}-landform`);
 assert.ok(landform, 'cave must include a surrounding hillside landform');
 assert.equal(landform.children.length >= 6, true, 'cave landform must retain enough overlapping masses to read as a hillside');
+assert.equal(landform.userData.terrainEmbedded, true, 'cave hillside rocks must be explicitly treated as terrain-embedded masses');
+assert.equal(landform.userData.embedRatio <= 0.2, true, 'cave hillside rock centres must remain low enough to prevent surface-stacked boulders');
 for (const rock of landform.children.filter(child => child.position.z < 5.5)) {
   assert.equal(
     Math.abs(rock.position.x) >= caveDefinition.mouthWidth * 0.6,
     true,
     'near-front hillside masses must stay lateral so the cave aperture remains visible'
+  );
+}
+for (const rock of landform.children) {
+  const rockWorld = localToWorld(rock.position.x, rock.position.z);
+  const terrainLocalY = terrain.heightAt(rockWorld.x, rockWorld.z) - root.position.y;
+  rock.geometry.computeBoundingBox();
+  const bottomY = rock.position.y + rock.geometry.boundingBox.min.y * rock.scale.y;
+  const topY = rock.position.y + rock.geometry.boundingBox.max.y * rock.scale.y;
+  const buriedDepth = terrainLocalY - bottomY;
+  assert.equal(
+    buriedDepth >= (topY - bottomY) * 0.3,
+    true,
+    'each cave landform mass must be substantially buried into the authoritative terrain instead of resting on top of it'
   );
 }
 
@@ -139,4 +171,4 @@ assert.equal(approach.geometry.boundingBox.max.z > 0, true, 'worn approach must 
 assert.equal(obstacles.length, 4, 'cave polish must preserve the established side-rock collision contract');
 assert.equal(obstacles.every(obstacle => obstacle.type === 'cave-rock'), true, 'cave collision must retain its established obstacle type');
 
-console.log('cave facing, low-light contrast, terrain-conforming depth and collision contracts verified');
+console.log('cave foothill placement, terrain embedding, facing, depth and collision contracts verified');
