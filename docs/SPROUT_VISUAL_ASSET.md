@@ -32,16 +32,17 @@ The model factory owns presentation only. It does not know about inventory, harv
 
 Presentation-only motion includes:
 
-- slow anti-gravity assembly rotation;
-- subtle top-fin movement;
-- delayed helper-arm vertical inertia so the arms follow the body hover with a softer secondary motion;
-- independently phased up/down movement for the three stabilizer pods;
-- separate subtle vertical drift on the main and inner anti-gravity rings;
+- a clearly readable body hover/bob and small body sway through an internal presentation-only motion root;
+- visible anti-gravity assembly rotation and ring tilt/drift;
+- readable top-fin movement rather than near-static fins;
+- delayed helper-arm vertical inertia plus a small swing/roll so the arms visibly trail the body motion;
+- independently phased up/down movement and tilt for the three stabilizer pods;
+- separate vertical drift and counter-motion on the main and inner anti-gravity rings;
 - powered/down expression-light states;
 - expressive arc-eye posing, with a more focused expression while scanning;
 - brighter scanner/lamp behavior while Sprout is actively targeting or compressing a resource.
 
-These effects modify child presentation parts only. Companion movement and collision remain owned by `SproutCompanionController` and the shared world collision service.
+These effects modify child presentation parts only. The stronger body motion is isolated under `sprout-presentation-motion-root`; the outer companion root is not displaced by this visual pass. Companion movement and collision remain owned by `SproutCompanionController` and the shared world collision service.
 
 ## Mobile budget
 
@@ -74,3 +75,16 @@ The supplied concept sheet and current in-game screenshot are now the direct vis
 - The hover assembly now has a second inner ring, and all three stabilizer pods include their own cyan ring/glow. Each pod moves with a smooth asynchronous two-wave offset rather than synchronized or frame-random motion, producing organic-looking movement without nondeterministic jitter.
 
 The v3 changes remain presentation-only. No inventory, harvesting, navigation, collision, story, save, terrain, camera or collection rules are modified by this pass.
+
+## Refinement pass (visual version 4)
+
+The v4 pass increases motion readability after device feedback showed that the v3 secondary animation was too subtle at Sprout's reduced 75% presentation scale.
+
+- A dedicated **presentation-only motion root** now provides a more visible body bob with a small pitch and side-to-side sway. This moves the rendered model below the gameplay root, so Sprout's world position, hover authority and collision remain unchanged.
+- Helper-arm vertical lag is more than doubled and now includes a readable fore/aft swing and roll. The left and right arms keep different phases so they trail the body rather than moving as a mirrored rigid pair.
+- The three stabilizer pods have substantially larger asynchronous vertical travel and a gentle two-axis tilt, making their independent floating behavior visible from the normal mobile gameplay camera.
+- The main and inner anti-gravity rings have larger vertical travel plus opposing tilt rhythms, while the hover assembly rotates faster and carries a small secondary wobble.
+- The top fins use a wider swing and a small pitch variation so the upper silhouette also contributes to Sprout's living mechanical feel.
+- All motion remains deterministic and smooth; no per-frame randomness was introduced, preventing jitter and keeping the mobile rendering cost effectively unchanged.
+
+This pass changes presentation only. Sprout's scale, follow distances, resource collection, collision, navigation, story state, inventory and save behavior are unchanged.
