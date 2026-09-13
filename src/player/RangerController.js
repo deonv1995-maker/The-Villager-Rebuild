@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../data/PlayerTraversalTuning.js';
 import { rangerGroundHeightAt } from './RangerGrounding.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
@@ -61,6 +62,8 @@ export class RangerController {
     this.cameraReturnDelay = 0;
     this.jumpVelocity = 0;
     this.grounded = true;
+    this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
+    this.jumpStage = 0;
     this.walkPhase = 0;
     this.firstPersonMoveDistance = 0;
     this.firstPersonMoveRunning = false;
@@ -223,6 +226,8 @@ export class RangerController {
     this.cameraReturnDelay = 0;
     this.jumpVelocity = 0;
     this.grounded = true;
+    this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
+    this.jumpStage = 0;
     return true;
   }
 
@@ -480,12 +485,25 @@ export class RangerController {
   }
 
   jump() {
-    if (this.cinematicDriver || !this.grounded) return;
-    this.grounded = false;
-    this.jumpVelocity = 5.4;
-    if (this.assetMode === 'kaykit' && this.actions.has('Jump_Full_Short')) {
-      this.#setAnimation('Jump_Full_Short', true);
+    if (this.cinematicDriver) return false;
+    const { launchSpeed, doubleJumpSpeed, maxAirJumps } = PLAYER_TRAVERSAL_TUNING.jump;
+
+    if (this.grounded) {
+      this.grounded = false;
+      this.airJumpsRemaining = maxAirJumps;
+      this.jumpVelocity = launchSpeed;
+      this.jumpStage = 1;
+    } else {
+      if (this.airJumpsRemaining <= 0) return false;
+      this.airJumpsRemaining -= 1;
+      this.jumpVelocity = doubleJumpSpeed;
+      this.jumpStage = 2;
     }
+
+    if (this.assetMode === 'kaykit' && this.actions.has('Jump_Full_Short')) {
+      this.#playOneShot('Jump_Full_Short', this.jumpStage === 2 ? 1.12 : 1);
+    }
+    return true;
   }
 
   update(dt) {
@@ -569,18 +587,22 @@ export class RangerController {
     }
 
     if (!this.grounded) {
-      this.jumpVelocity -= 13.5 * dt;
+      this.jumpVelocity -= gravityForVerticalSpeed(this.jumpVelocity) * dt;
       this.root.position.y += this.jumpVelocity * dt;
       if (this.root.position.y <= ground) {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
         this.grounded = true;
+        this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
+        this.jumpStage = 0;
         if (!throwing && !toolActing) {
           this.#setAnimation(length > 0.08 ? (runningAnimation ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
       }
     } else {
       this.root.position.y = ground;
+      this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
+      this.jumpStage = 0;
     }
 
     this.mixer?.update(dt);
@@ -880,7 +902,7 @@ export class RangerController {
       this.keys.add(event.code);
       if (event.code === 'Space') {
         event.preventDefault();
-        this.jump();
+        if (!event.repeat) this.jump();
       } else if (event.code === 'KeyP' && !event.repeat) {
         event.preventDefault();
         this.toggleCameraMode();
