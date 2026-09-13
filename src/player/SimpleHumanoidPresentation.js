@@ -4,6 +4,8 @@ import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v1';
 const SIMPLE_HUMANOID_MESH_BUDGET = 16;
 
+const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
 function replaceGeometry(object, geometry) {
   if (!object) return;
   object.geometry?.dispose?.();
@@ -26,6 +28,97 @@ function removeNamed(root, names) {
       object = root.getObjectByName(name);
     }
   }
+}
+
+function sideTokens(rawName) {
+  const separated = String(rawName ?? '')
+    .replace(/^([LR])(?=[A-Z])/, '$1 ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase();
+  return separated.split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function hasExplicitSide(rawName, side) {
+  const raw = String(rawName ?? '');
+  const compact = normalize(raw);
+  const long = side === 'left' ? 'left' : 'right';
+  const oppositeLong = side === 'left' ? 'right' : 'left';
+  const short = side === 'left' ? 'l' : 'r';
+  const oppositeShort = side === 'left' ? 'r' : 'l';
+
+  if (compact.includes(oppositeLong)) return false;
+  if (compact.includes(long)) return true;
+
+  const tokens = sideTokens(raw);
+  if (tokens.includes(oppositeShort)) return false;
+  if (tokens.includes(short)) return true;
+
+  // Compact suffixes support names such as UpperArmL/UpperArmR without ever
+  // treating the letters inside words like "arm", "upper" or "lower" as sides.
+  return compact.endsWith(short) && !compact.endsWith(oppositeShort);
+}
+
+const PART_ALIASES = Object.freeze({
+  upperArm: ['upperarm', 'arm'],
+  lowerArm: ['lowerarm', 'forearm'],
+  hand: ['hand'],
+  upperLeg: ['upperleg', 'thigh'],
+  lowerLeg: ['lowerleg', 'calf', 'shin'],
+  foot: ['foot']
+});
+
+function findStrictSideBone(root, side, part) {
+  const aliases = PART_ALIASES[part];
+  let best = null;
+  let bestScore = -Infinity;
+
+  root?.traverse?.(object => {
+    if (!object.isBone || !object.name || !hasExplicitSide(object.name, side)) return;
+    const name = normalize(object.name);
+
+    for (const alias of aliases) {
+      if (!name.includes(alias)) continue;
+      if (part === 'upperArm' && alias === 'arm' && (name.includes('lower') || name.includes('fore'))) continue;
+
+      let score = alias.length;
+      if (name.includes(side)) score += 20;
+      if (name === `${alias}${side === 'left' ? 'l' : 'r'}`) score += 12;
+      if (name.endsWith(`${alias}${side === 'left' ? 'l' : 'r'}`)) score += 8;
+      if (score > bestScore) {
+        best = object;
+        bestScore = score;
+      }
+    }
+  });
+
+  return best;
+}
+
+function resolveStrictSideBones(root) {
+  const resolveSide = side => ({
+    upperArm: findStrictSideBone(root, side, 'upperArm'),
+    lowerArm: findStrictSideBone(root, side, 'lowerArm'),
+    hand: findStrictSideBone(root, side, 'hand'),
+    upperLeg: findStrictSideBone(root, side, 'upperLeg'),
+    lowerLeg: findStrictSideBone(root, side, 'lowerLeg'),
+    foot: findStrictSideBone(root, side, 'foot')
+  });
+
+  return {
+    left: resolveSide('left'),
+    right: resolveSide('right')
+  };
+}
+
+function hasCompleteSide(side) {
+  return Boolean(side.upperArm && side.lowerArm && side.hand && side.upperLeg && side.lowerLeg && side.foot);
+}
+
+function restoreLegacyFallback(presentation) {
+  for (const sourceMesh of presentation.sourceMeshes ?? []) sourceMesh.visible = true;
+  presentation.visualRoot.visible = false;
+  presentation.rigReady = false;
+  presentation.mode = 'legacy-ranger';
 }
 
 function applySimplePalette(presentation) {
@@ -89,12 +182,26 @@ function simplifyBody(presentation) {
   root.userData.developmentStage = 'humanoid-foundation';
   root.userData.visualMeshBudget = SIMPLE_HUMANOID_MESH_BUDGET;
   root.userData.designTarget = 'simple-rig-readable-humanoid';
+  root.userData.rigSideBinding = 'explicit-side-v1';
 }
 
 export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
   constructor(options) {
     super(options);
     if (!this.rigReady) return;
+
+    const strictSides = resolveStrictSideBones(this.model);
+    if (!hasCompleteSide(strictSides.left) || !hasCompleteSide(strictSides.right)) {
+      restoreLegacyFallback(this);
+      return;
+    }
+
+    // The legacy base resolver historically treated single letters as arbitrary
+    // substrings. In names like UpperArm_R, the "r" inside "arm" could bind the
+    // right upper/lower limb to the left joint. The foundation requires explicit
+    // Left/Right or L/R markers before any visible limb follows a joint.
+    this.bones.left = strictSides.left;
+    this.bones.right = strictSides.right;
 
     applySimplePalette(this);
     simplifyBody(this);
