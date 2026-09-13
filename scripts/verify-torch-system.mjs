@@ -30,6 +30,13 @@ assert.ok(
 );
 assert.equal(TOOL_ORDER.at(-1), 'torch', 'Torch must be a normal toolbelt slot');
 assert.ok(TORCH.light.flicker.intensityVariance > 0, 'Burning torch light must have visible intensity flutter');
+assert.ok(TORCH.light.intensity <= 60, 'Torch base intensity must remain in the softer fire-light range');
+assert.ok(
+  TORCH.light.flicker.intensityVariance <= 0.1,
+  'Torch emitted-light flicker must stay subtle rather than harsh'
+);
+assert.ok(TORCH.light.follow.response > 0, 'Torch light must retain damped hand-follow response');
+assert.ok(TORCH.light.shadow.radius >= 1, 'Torch local shadows must retain a softened edge radius');
 assert.ok(TORCH.light.shadow.mapSize <= 256, 'Portable point-light shadows must stay within the mobile shadow budget');
 assert.ok(TORCH.light.shadow.refreshHz <= 10, 'Portable shadow refresh must remain bounded for mobile');
 assert.deepEqual(
@@ -97,6 +104,7 @@ assert.equal(torch.light.shadow.mapSize.width, TORCH.light.shadow.mapSize);
 assert.equal(torch.light.shadow.mapSize.height, TORCH.light.shadow.mapSize);
 assert.equal(torch.light.shadow.camera.near, TORCH.light.shadow.near);
 assert.equal(torch.light.shadow.camera.far, TORCH.light.shadow.far);
+assert.equal(torch.light.shadow.radius, TORCH.light.shadow.radius);
 assert.equal(torch.light.position.x, 3, 'Torch light X must come from the handheld flame anchor');
 assert.ok(
   nearlyEqual(torch.light.position.y, 2 + TORCH.visual.handleLength * 0.6, 0.0001),
@@ -105,6 +113,18 @@ assert.ok(
 assert.equal(torch.light.position.z, -4, 'Torch light Z must come from the handheld flame anchor');
 assert.equal(rangerMesh.castShadow, true, 'Ranger must become a torch-shadow caster while the torch burns');
 assert.equal(rendererShadowMap.needsUpdate, true, 'Torch activation must request a local shadow refresh');
+
+const initialLightX = torch.light.position.x;
+playerRoot.position.x += 0.6;
+shadowClock += 16;
+torch.apply({ day: 1, minuteOfDay: 20 * 60 });
+const currentFlamePosition = new THREE.Vector3();
+torch.flameAnchor.getWorldPosition(currentFlamePosition);
+assert.ok(
+  torch.light.position.x > initialLightX && torch.light.position.x < currentFlamePosition.x,
+  'Torch light movement must damp hand-bob displacement instead of snapping to the flame anchor'
+);
+
 const firstIntensity = torch.light.intensity;
 const firstFlameScale = torch.flame.scale.y;
 shadowClock += 120;
@@ -193,6 +213,8 @@ const checks = [
   ['generic Ranger tool visual does not compete with torch presentation', rangerTools.includes("toolId === 'spear' || toolId === 'torch'")],
   ['torch runtime does not create a second animation loop', !torchRuntimeSource.includes('requestAnimationFrame')],
   ['torch light is a flame-anchored omnidirectional point source', torchRuntimeSource.includes('new THREE.PointLight') && torchRuntimeSource.includes('this.flameAnchor.getWorldPosition(this.position)')],
+  ['torch light follows the hand through one damped presentation response', torchRuntimeSource.includes('this.#syncLightPosition(deltaSeconds)') && torchRuntimeSource.includes('Math.exp(-followDefinition.response * deltaSeconds)')],
+  ['torch emitted-light flicker is low-pass filtered before intensity/reach output', torchRuntimeSource.includes('this.smoothedFlicker = THREE.MathUtils.lerp') && torchRuntimeSource.includes('flickerDefinition.smoothingResponse')],
   ['torch uses bounded shadow refresh rather than per-frame shadow ownership', torchRuntimeSource.includes('this.definition.light.shadow.refreshHz') && torchRuntimeSource.includes('shadowMap.needsUpdate = true')],
   ['forest tree batches remain centralized shadow casters', celestialShadowSource.includes('return { cast: staticTreeBatch, receive: staticTreeBatch }')],
   ['mobile HUD exposes the dedicated torch artwork', mobileHud.includes('torch: ui.torch')],
