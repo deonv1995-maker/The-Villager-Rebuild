@@ -140,6 +140,8 @@ assert.equal(
 );
 assert.equal(renderer.shadowMap.autoUpdate, false, 'Shadow maps must not redraw every rendered frame');
 assert.equal(sun.castShadow, true, 'Exactly the shared celestial key light must cast the shadow map');
+assert.equal(sun.shadow.autoUpdate, false, 'Celestial shadow refresh must be controlled per light');
+assert.equal(sun.shadow.needsUpdate, true, 'Celestial shadow must be explicitly invalidated at startup');
 assert.equal(skyFill.castShadow, false, 'Sky fill must not create a second shadow map');
 assert.equal(sun.shadow.mapSize.width, CELESTIAL_SHADOWS.mapSize);
 assert.equal(sun.shadow.mapSize.height, CELESTIAL_SHADOWS.mapSize);
@@ -166,10 +168,12 @@ assert.ok(contactShadow.position.y > 1.4, 'Contact shadow must sit just above th
 
 shadows.apply({ minuteOfDay: 12 * 60 });
 renderer.shadowMap.needsUpdate = false;
+sun.shadow.needsUpdate = false;
 nowMs = 50;
 rangerRoot.position.set(7, 6.2, 2);
 shadows.apply({ minuteOfDay: 12 * 60 });
 assert.equal(renderer.shadowMap.needsUpdate, false, 'Shadow map must not refresh faster than the configured cap');
+assert.equal(sun.shadow.needsUpdate, false, 'Celestial light must stay clean until its own refresh interval elapses');
 assert.equal(contactShadow.position.x, 7, 'Contact shadow must follow Ranger movement every presentation frame');
 assert.equal(contactShadow.position.z, 2, 'Contact shadow must follow Ranger movement without waiting for a map refresh');
 assert.ok(contactShadow.position.y < rangerRoot.position.y, 'Jumping Ranger contact shadow must remain on the ground');
@@ -181,7 +185,8 @@ firstPerson = false;
 
 nowMs = 101;
 shadows.apply({ minuteOfDay: 12 * 60 });
-assert.equal(renderer.shadowMap.needsUpdate, true, 'Shadow map must refresh after the throttled interval');
+assert.equal(renderer.shadowMap.needsUpdate, true, 'Shadow renderer must run after the throttled interval');
+assert.equal(sun.shadow.needsUpdate, true, 'Only the celestial light must be invalidated by the celestial cadence');
 
 const lateMesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
@@ -225,6 +230,7 @@ const checks = [
   ['day/night lighting receives Ranger focus for a local shadow camera', main.includes('focusProvider: lightFocus')],
   ['SceneSystem owns the directional-light target rather than the shadow feature creating another light', sceneSource.includes("sun.target.name = 'celestial-key-target'") && sceneSource.includes('this.scene.add(sun, sun.target)')],
   ['animated Ranger geometry uses the receiver-only shadow policy', shadowSource.includes('celestialShadowPolicy = RECEIVER_ONLY_POLICY')],
+  ['celestial refresh uses per-light invalidation under the shared renderer gate', shadowSource.includes('shadow.autoUpdate = false') && shadowSource.includes('this.light.shadow.needsUpdate = true')],
   [
     'runtime forest chunking preserves a semantic tree-batch flag consumed by the centralized shadow policy',
     worldChunkSource.includes('chunkBatch.userData.chunkedTreeBatch = true') &&
