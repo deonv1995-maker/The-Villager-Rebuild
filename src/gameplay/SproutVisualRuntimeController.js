@@ -3,6 +3,10 @@ import {
   disposeSproutVisual,
   updateSproutVisual
 } from '../rendering/SproutVisualAsset.js';
+import {
+  ensureSproutScannerVisual,
+  updateSproutScannerVisual
+} from '../rendering/SproutScannerVisual.js';
 
 const disposeFallbackPresentation = root => {
   if (!root) return;
@@ -50,6 +54,7 @@ export class SproutVisualRuntimeController {
     if (this.frameId !== null) globalThis.cancelAnimationFrame?.(this.frameId);
     this.frameId = null;
     this.#restoreCompanionClaim();
+    updateSproutScannerVisual(this.visual, this.elapsed, { powered: false, scanning: false });
     this.visual = null;
   }
 
@@ -76,6 +81,7 @@ export class SproutVisualRuntimeController {
       );
       const affectionate = Boolean(presentation.affectionate);
       updateSproutVisual(this.visual, this.elapsed, { powered, scanning, affectionate });
+      updateSproutScannerVisual(this.visual, this.elapsed, { powered, scanning });
     }
 
     this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
@@ -89,6 +95,7 @@ export class SproutVisualRuntimeController {
       const presentation = this.originalClaim();
       if (presentation?.userData?.sproutProductionVisual) {
         presentation.name = 'sprout-production-companion';
+        ensureSproutScannerVisual(presentation);
         this.visual = presentation;
       }
       return presentation;
@@ -102,16 +109,23 @@ export class SproutVisualRuntimeController {
   }
 
   #ensureInstalled() {
-    if (this.visual?.userData?.sproutProductionVisual) return this.visual;
+    if (this.visual?.userData?.sproutProductionVisual) {
+      ensureSproutScannerVisual(this.visual);
+      return this.visual;
+    }
 
     const existing = this.crashSite.sprout;
     if (!existing) {
       const claimed = this.arrival.companionPresentation;
-      if (claimed?.userData?.sproutProductionVisual) this.visual = claimed;
+      if (claimed?.userData?.sproutProductionVisual) {
+        ensureSproutScannerVisual(claimed);
+        this.visual = claimed;
+      }
       return this.visual;
     }
     if (existing.userData?.sproutProductionVisual) {
       existing.name = 'sprout-production-companion';
+      ensureSproutScannerVisual(existing);
       this.visual = existing;
       this.crashSite.sproutEye = null;
       return existing;
@@ -126,6 +140,7 @@ export class SproutVisualRuntimeController {
     production.scale.copy(existing.scale).multiplyScalar(production.userData.presentationScale ?? 1);
     production.visible = existing.visible;
     production.renderOrder = existing.renderOrder;
+    ensureSproutScannerVisual(production);
     parent.add(production);
 
     this.crashSite.sprout = production;
