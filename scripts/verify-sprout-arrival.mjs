@@ -25,7 +25,7 @@ const checks = [
   ['title event heads toward the island without implementing the later crash-site impact', celestial.includes('this.shootingStarEnd = new THREE.Vector3(-7, 10.5, -81)') && !celestial.includes('crater') && !celestial.includes('crashSite')],
   ['shipwreck documentation preserves the title/gameplay ownership boundary', shipwreckDoc.includes('TitleCelestialEvent') && shipwreckDoc.includes('does not create the Sprout crash site')],
   ['Sprout companion architecture documents one shared inventory', sproutDoc.includes('one authoritative shared inventory') && sproutDoc.includes('not own a second inventory')],
-  ['Sprout companion architecture preserves Ranger harvesting ownership', sproutDoc.includes('Ranger performs the harvesting') && sproutDoc.includes('Sprout performs retrieval')]
+  ['Sprout companion architecture preserves Ranger harvesting ownership', sproutDoc.includes('Ranger performs the harvesting') && sproutDoc.includes('Sprout performs automatic retrieval')]
 ];
 
 const failed = checks.filter(([, ok]) => !ok);

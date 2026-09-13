@@ -6,6 +6,7 @@ import {
   INVENTORY_STORAGE_MODE,
   INVENTORY_STORAGE_PROFILES
 } from '../src/data/InventoryCapacityDefinitions.js';
+import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
 import { InventoryCapacityController } from '../src/gameplay/InventoryCapacityController.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 
@@ -18,6 +19,8 @@ for (const itemId of Object.keys(INVENTORY_DEFINITIONS)) {
 assert.equal(INVENTORY_STORAGE_PROFILES.ranger.capacity, 24, 'Ranger pack tuning must stay explicit');
 assert.equal(INVENTORY_STORAGE_PROFILES.sprout.capacity, 96, 'Sprout compressed capacity tuning must stay explicit');
 assert.equal(INVENTORY_STORAGE_PROFILES.sprout.compressionRatio, 4, 'Sprout compression ratio must stay explicit');
+assert.equal(RESOURCE_DEFINITIONS.log.storage, 'inventory', 'Logs must use the shared inventory authority');
+assert.equal(RESOURCE_DEFINITIONS.log.manualPickup, undefined, 'Manual Log pickup must not divert into the legacy physical-carry path');
 
 const ranger = new InventorySystem();
 assert.equal(ranger.getStorageState().mode, INVENTORY_STORAGE_MODE.RANGER);
@@ -30,6 +33,12 @@ assert.equal(ranger.getStorageState().used, 24);
 assert.equal(ranger.canAdd('stick', 1), false, 'Ranger must not collect beyond human pack capacity');
 assert.equal(ranger.tryAdd('stick', 1).added, false, 'Rejected pickup must not mutate inventory');
 assert.equal(ranger.get('stick'), 0);
+
+const rangerLogs = new InventorySystem();
+assert.equal(rangerLogs.tryAdd('log', 3).added, true, 'Ranger manual Log pickups must enter inventory while capacity allows');
+assert.equal(rangerLogs.get('log'), 3);
+assert.equal(rangerLogs.getStorageState().used, 24, 'Three uncompressed Logs must fill the initial human pack');
+assert.equal(rangerLogs.canAdd('log', 1), false, 'Human pack capacity must still limit manual Log pickup');
 
 ranger.enableSproutCompression();
 assert.equal(ranger.getStorageState().mode, INVENTORY_STORAGE_MODE.SPROUT);
@@ -129,13 +138,14 @@ const main = read('src/main.js');
 const docs = read('docs/SPROUT_COMPANION.md');
 const packageJson = JSON.parse(read('package.json'));
 
-assert.ok(resources.includes("manualPickup: 'physical'"), 'Loose Logs must remain shoulder-carryable by the Ranger before compression');
-assert.ok(gatherables.includes("definition.manualPickup === 'physical'"), 'Manual Log pickup must use the physical pickup path rather than silently entering inventory');
+assert.ok(resources.includes("storage: 'inventory'"), 'Resource definitions must retain inventory-backed pickups');
+assert.ok(!resources.includes("manualPickup: 'physical'"), 'Loose Logs must not be routed into legacy physical carrying');
+assert.ok(gatherables.includes("definition.storage !== 'inventory' || definition.manualPickup === 'physical'"), 'Gatherable routing must still respect explicitly physical resources if one is introduced later');
 assert.ok(gatherables.includes('this.#canStore(item.resourceId, quantity)'), 'Loose pickup selection must obey capacity before removal');
 assert.ok(gatherables.includes('item.reservedBy = null;\n      item.root.visible = true;\n      return null;'), 'Sprout reservation commit must restore the world pickup if capacity changes before transfer');
 assert.ok(contextPolicy.includes("? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')") && contextPolicy.includes(": 'FULL'"), 'Full storage must disable the unified mobile pickup action visibly');
 assert.ok(main.includes('new InventoryCapacityController({ game })'), 'Gameplay boot must install one shared capacity runtime');
-assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual shoulder-carry'), 'Companion architecture must preserve the human-pack and compressed-storage rules');
+assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual Log pickup'), 'Companion architecture must preserve human-pack limits while documenting inventory-backed Log pickup');
 assert.ok(packageJson.scripts.check.includes('npm run verify:inventory-capacity'), 'Full repository check must include capacity regression coverage');
 
-console.log('Human Ranger carrying limits, physical Log pickup, Sprout compression capacity, browser-safe timer binding, HUD state and save-safe shared inventory verified');
+console.log('Human carrying limits, inventory-backed manual Log pickup, Sprout compression capacity, browser-safe timer binding, HUD state and save-safe shared inventory verified');
