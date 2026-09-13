@@ -54,14 +54,18 @@ The northern highlands remain part of the authoritative height field. Their stro
 
 `src/data/ExplorationPoiDefinitions.js` contains the first authored exploration POI: `northern-cave-01` in the northern highlands.
 
-`ExplorationPoiSystem` owns POI presentation. The cave remains a chunk-owned, low-cost overworld entrance/short alcove rather than a new underground world or separate physics system. Its presentation contract is now layered so it reads as a cave instead of a freestanding ring of boulders:
+`ExplorationPoiSystem` owns POI presentation. The cave remains a chunk-owned, low-cost overworld entrance/short alcove rather than a new underground world or separate physics system. Cave readability is **negative-space first**: the entrance must read as a hole cut into a landform before any decorative rock detail is considered.
 
-- overlapping terrain-conforming rock masses form a broad hillside/rock-face silhouette around and behind the opening;
-- a distinct irregular entrance arch defines the mouth without becoming the entire landmark silhouette;
-- repeated dark side/crown ribs provide visible recession through the short alcove;
-- the rear darkness uses an irregular cave-shaped terminus instead of a circular black patch;
+The current presentation contract is:
+
+- broad terrain-conforming rock masses stay beside and behind the entrance, leaving the near-front centre clear instead of stacking boulders across the player's view;
+- a continuous low-poly extruded cliff/tunnel shell contains one large irregular mouth opening, so the opening is real geometric negative space rather than a ring of separate rocks;
+- the shell extends several metres inward and uses darker inner surfaces to create immediate wall/ceiling recession from normal gameplay camera distances;
+- small entrance-dressing rocks are restricted to the lateral cliff face and must not intrude into the central aperture;
+- freestanding dark tunnel ribs begin only behind the continuous entrance shell, where they can reinforce depth without cluttering the mouth silhouette;
+- the rear darkness remains an irregular cave-shaped terminus rather than a circular black patch;
 - a terrain-conforming worn approach reaches out in front of the threshold and visually guides the player toward the opening;
-- the established walk-in floor and side-rock collision contract remain intact.
+- the established walk-in floor, POI definition, chunk ownership and side-rock collision contract remain intact.
 
 This first cave establishes the reusable POI boundary. Future cave interiors, ruins and landmarks should extend the POI system and region metadata rather than being hard-coded into terrain rendering.
 
@@ -71,7 +75,7 @@ The mainland remains one mathematical world for gameplay queries and chunked pre
 
 The base forest budget remains bounded. Additional biome density is expressed as explicit regional quotas rather than scaling every prop count with total island area. This keeps the performance cost measurable and prevents a larger island from silently multiplying all scene content.
 
-The first cave root is also registered with `WorldChunkSystem`, so it does not become permanent always-rendered world geometry. The cave readability pass continues to use simple low-poly geometry and shared materials rather than introducing a new asset-loading or terrain system.
+The first cave root is also registered with `WorldChunkSystem`, so it does not become permanent always-rendered world geometry. The cave readability pass continues to use simple generated low-poly geometry and shared materials rather than introducing a new asset-loading or terrain system.
 
 ## Day-1 compatibility
 
@@ -87,7 +91,7 @@ This pass strengthens exploration readability without skipping ahead into later 
 
 1. a true dense jungle/forest core;
 2. stronger mountain-scale northern highlands;
-3. the first visible cave entrance/alcove, refined into a hillside-backed entrance with visible tunnel depth;
+3. the first visible cave entrance/alcove, refined into a negative-space cliff opening with a continuous recessed tunnel shell;
 4. bounded regional scatter budgets;
 5. regression coverage and documentation.
 
@@ -105,6 +109,6 @@ It does **not** add a full cave dungeon, abandoned structures, hostile explorati
 - creation of the named cave root, dark interior and walk-in floor presentation;
 - the existing satellite-island, chunk-culling, tree-registry and shallow-water contracts.
 
-The cave-readability regression additionally protects the surrounding landform mass, continuous entrance arch, recessed tunnel ribs, irregular dark terminus, terrain-conforming approach and the unchanged side-rock collision count.
+The cave-readability regression additionally protects the lateral/behind landform placement, broad clear aperture, continuous extruded cliff/tunnel shell, side-only entrance dressing, tunnel ribs starting behind the shell, irregular dark terminus, terrain-conforming approach and the unchanged side-rock collision count. This specifically prevents the cave from regressing into a freestanding boulder pile or rock bridge across the mouth.
 
 The full `npm run check` suite remains required before merge, followed by device verification of biome readability, cave readability and mobile performance.
