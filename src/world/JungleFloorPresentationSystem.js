@@ -169,6 +169,36 @@ export class JungleFloorPresentationSystem {
     this.#syncConstructionOcclusion();
   }
 
+  #placementBounds(margin) {
+    const jungle = this.terrain.getExplorationRegions?.()
+      .find(region => region.biome === 'jungle');
+    if (
+      Number.isFinite(jungle?.center?.x)
+      && Number.isFinite(jungle?.center?.z)
+      && Number.isFinite(jungle?.radii?.x)
+      && Number.isFinite(jungle?.radii?.z)
+    ) {
+      return {
+        centerX: jungle.center.x,
+        centerZ: jungle.center.z,
+        halfX: jungle.radii.x + margin,
+        halfZ: jungle.radii.z + margin
+      };
+    }
+
+    const bounds = this.terrain.getScatterBounds?.(margin) ?? {
+      halfX: 132,
+      halfZ: 109,
+      centerZ: -4
+    };
+    return {
+      centerX: bounds.centerX ?? 0,
+      centerZ: bounds.centerZ ?? 0,
+      halfX: bounds.halfX,
+      halfZ: bounds.halfZ
+    };
+  }
+
   #populateGridKind({
     kind,
     spacing,
@@ -182,20 +212,16 @@ export class JungleFloorPresentationSystem {
     scaleAt
   }) {
     if (maxInstances <= 0) return 0;
-    const bounds = this.terrain.getScatterBounds?.(margin) ?? {
-      halfX: 132,
-      halfZ: 109,
-      centerZ: -4
-    };
+    const bounds = this.#placementBounds(margin);
     const columns = Math.ceil((bounds.halfX * 2) / spacing);
     const rows = Math.ceil((bounds.halfZ * 2) / spacing);
-    let placed = 0;
+    const candidates = [];
 
-    for (let row = 0; row <= rows && placed < maxInstances; row += 1) {
-      for (let column = 0; column <= columns && placed < maxInstances; column += 1) {
+    for (let row = 0; row <= rows; row += 1) {
+      for (let column = 0; column <= columns; column += 1) {
         const jitterX = (hash01(column, row, salt + 3) - 0.5) * spacing * 0.78;
         const jitterZ = (hash01(column, row, salt + 7) - 0.5) * spacing * 0.78;
-        const x = -bounds.halfX + column * spacing + jitterX;
+        const x = bounds.centerX - bounds.halfX + column * spacing + jitterX;
         const z = bounds.centerZ - bounds.halfZ + row * spacing + jitterZ;
 
         if (!this.terrain.isPlayable?.(x, z, 3.2)) continue;
@@ -228,12 +254,17 @@ export class JungleFloorPresentationSystem {
           presentationHidden: false
         };
         entry.presentationHidden = this.#isPresentationExcluded(entry);
-        this.entries.push(entry);
-        placed += 1;
+        candidates.push({
+          entry,
+          rank: hash01(column, row, salt + 29)
+        });
       }
     }
 
-    return placed;
+    candidates.sort((left, right) => left.rank - right.rank);
+    const selected = candidates.slice(0, maxInstances);
+    for (const candidate of selected) this.entries.push(candidate.entry);
+    return selected.length;
   }
 
   #buildMeshes() {
