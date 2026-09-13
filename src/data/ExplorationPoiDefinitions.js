@@ -16,12 +16,12 @@ export const EXPLORATION_POIS = Object.freeze([
     depth: 8.5,
     // The cave owns one authored deformation profile consumed by the authoritative
     // terrain heightfield. The threshold is sunk deeply enough to sit inside the
-    // foothill and the floor keeps descending beneath the surrounding ground.
+    // foothill and the floor keeps descending beneath the rising mountain surface.
     terrainCut: Object.freeze({
       approachLength: 4.8,
       backFadeLength: 2.5,
       mouthDrop: 1.25,
-      depthDrop: 3.2,
+      depthDrop: 5.8,
       innerWidthRatio: 0.34,
       outerWidthRatio: 0.7
     })
