@@ -6,6 +6,7 @@ const ROCK_DARK = 0x393834;
 const ROCK_EARTH = 0x666052;
 const CAVE_FLOOR = 0x34302a;
 const CAVE_APPROACH = 0x756650;
+const LANDFORM_EMBED_RATIO = 0.14;
 
 export class ExplorationPoiSystem {
   constructor({ group, terrain, chunks = null, collision = null }) {
@@ -122,10 +123,14 @@ export class ExplorationPoiSystem {
   #createCaveLandform({ definition, baseY, root, geometry, rockMaterial, earthRockMaterial }) {
     const landform = new THREE.Group();
     landform.name = `${definition.id}-landform`;
+    landform.userData.terrainEmbedded = true;
+    landform.userData.embedRatio = LANDFORM_EMBED_RATIO;
 
     // Keep the front-centre aperture empty. The broad masses live beside and behind
     // the entrance so the cave reads as negative space cut into a hillside, not a
-    // pile of boulders stacked across the player's view.
+    // pile of boulders stacked across the player's view. Their centres sit close to
+    // the terrain surface so roughly two fifths of each mass is buried in the
+    // authoritative ground instead of reading as loose rocks placed on top of it.
     const masses = [
       { x: -5.35, z: 3.25, scale: [3.45, 2.55, 4.15], rotation: [0.02, -0.2, -0.08] },
       { x: 5.25, z: 3.4, scale: [3.4, 2.6, 4.2], rotation: [-0.04, 0.24, 0.08] },
@@ -143,7 +148,7 @@ export class ExplorationPoiSystem {
         geometry,
         material: index < 2 ? rockMaterial : earthRockMaterial,
         name: `${definition.id}-landform-rock-${index}`,
-        position: [mass.x, terrainY + mass.scale[1] * 0.58, mass.z],
+        position: [mass.x, terrainY + mass.scale[1] * LANDFORM_EMBED_RATIO, mass.z],
         scale: mass.scale,
         rotation: mass.rotation
       });
