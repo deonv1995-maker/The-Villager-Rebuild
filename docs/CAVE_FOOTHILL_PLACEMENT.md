@@ -4,22 +4,37 @@
 
 The first northern-highlands cave must read as an opening cut into the **base of the mountain**, not as a rock POI placed on top of the mountain surface.
 
-`src/data/ExplorationPoiDefinitions.js` remains the authored POI source. `northern-cave-01` is anchored on the southern foothill where the authoritative terrain falls toward the player approach and rises behind the cave mouth into the mountain mass.
+`src/data/ExplorationPoiDefinitions.js` remains the authored POI source. `northern-cave-01` is anchored on the southern foothill where the surrounding terrain rises into the northern highlands.
 
-`ExpandedIslandTerrainSystem` remains the only terrain-height authority. The cave does not introduce a second terrain mesh or a private collision surface.
+`ExpandedIslandTerrainSystem` remains the only terrain-height authority. The cave does not introduce a second terrain mesh, a hidden collision floor, or a separate cave physics system.
+
+## Terrain-cut contract
+
+The cave now owns one data-driven `terrainCut` profile. `CaveTerrainProfile` converts the authored cave transform into a narrow terrain deformation that:
+
+- leaves the exterior approach almost unchanged;
+- sinks the threshold below the surrounding shoulders;
+- continues downward through the tunnel instead of following the mountain surface upward;
+- fades back into the normal highland terrain behind the authored alcove;
+- leaves the terrain outside the cave corridor unchanged.
+
+The terrain chunk intersecting the cave receives double the normal terrain tessellation so the cut is visible at the scale of the entrance. Ordinary terrain chunks keep the established mobile mesh density.
 
 ## Presentation contract
 
-`ExplorationPoiSystem` keeps the existing negative-space mouth, tunnel shell, terrain-conforming floor/approach and chunk ownership. The surrounding low-poly rock masses are now deliberately terrain-embedded: their centres are held close to the sampled terrain surface so a substantial portion of every mass is buried rather than appearing as a loose boulder pile resting on the ground.
+`ExplorationPoiSystem` still owns the negative-space mouth, tunnel shell, terrain-conforming floor/approach, dark terminus and chunk ownership. Those pieces now sample the carved authoritative terrain, so the entire entrance is lowered into the hillside and the walk-in floor descends beneath the surrounding ground.
 
-This is a presentation placement fix, not a new cave-interior system. The authored cave remains a short overworld alcove and preserves the existing side-rock collision contract.
+The surrounding low-poly rock masses remain terrain-embedded and lateral to the aperture. They support the natural rock face without becoming a freestanding boulder arch across the entrance.
+
+This remains a short overworld alcove rather than a new cave-interior gameplay system. Existing collision ownership and traversal architecture are preserved.
 
 ## Regression contract
 
-`scripts/verify-cave-entrance-readability.mjs` protects three foothill conditions:
+`scripts/verify-cave-entrance-readability.mjs` protects these conditions:
 
-- the mouth remains below the elevated mountain core;
-- terrain falls toward the exterior approach and rises behind the mouth;
-- every broad cave-landform mass is substantially buried into the authoritative terrain.
-
-The existing cave-facing, clear-aperture, tunnel-depth, terrain-conforming floor/approach and collision checks remain in force.
+- the cave keeps its authored approach/tunnel orientation;
+- the threshold receives a meaningful terrain cut while the exterior approach does not;
+- the tunnel floor descends progressively into the hill;
+- the surrounding hillside shoulders remain materially above the tunnel floor;
+- only cave-influenced terrain chunks receive the higher local tessellation;
+- the cave mouth, tunnel depth, terrain-conforming presentation and side-rock collision contract remain intact.
