@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
+import { EXPLORATION_WORLD } from '../src/data/ExplorationRegionDefinitions.js';
 import { GroundCoverPresentationSystem } from '../src/world/GroundCoverPresentationSystem.js';
+import { JungleFloorPresentationSystem } from '../src/world/JungleFloorPresentationSystem.js';
 import {
   GROUND_SURFACE_COLORS,
+  terrainJungleSurfaceFieldsAt,
   terrainSurfaceColorAt,
   terrainSurfacePatchFieldsAt,
   terrainSurfaceToneFieldsAt
@@ -62,6 +65,29 @@ assert.equal(
   'ground patch fields must create visibly different low-poly surface regions'
 );
 
+const jungleFieldsA = terrainJungleSurfaceFieldsAt(-220, 15);
+const jungleFieldsB = terrainJungleSurfaceFieldsAt(-176, 63);
+for (const fields of [jungleFieldsA, jungleFieldsB]) {
+  for (const key of ['litter', 'damp', 'moss', 'root', 'exposed']) {
+    assert.equal(
+      fields[key] >= 0 && fields[key] <= 1,
+      true,
+      `jungle ${key} field must stay normalized`
+    );
+  }
+}
+assert.deepEqual(
+  terrainJungleSurfaceFieldsAt(-220, 15),
+  jungleFieldsA,
+  'jungle microclimate fields must stay deterministic across rebuilds'
+);
+assert.equal(
+  ['litter', 'damp', 'moss', 'root', 'exposed']
+    .reduce((sum, key) => sum + Math.abs(jungleFieldsA[key] - jungleFieldsB[key]), 0) > 0.25,
+  true,
+  'jungle microclimate fields must create materially different litter, damp, moss and root patches'
+);
+
 const openGrass = sample({ grassPatchStrength: 0.05, forestCover: 0 });
 const lushGrass = sample({ grassPatchStrength: 0.95, forestCover: 0 });
 assert.equal(distance(openGrass, lushGrass) > 0.025, true, 'lush grass patches must tint the terrain differently from open meadow');
@@ -74,8 +100,8 @@ forestGrass.getHSL(forestHsl);
 clearingGrass.getHSL(clearingHsl);
 assert.equal(forestHsl.l < clearingHsl.l, true, 'forest cover must darken the ground beneath woodland');
 
-const jungleFloor = sample({ forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 1 });
-const ordinaryCanopyFloor = sample({ forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 0 });
+const jungleFloor = sample({ x: -220, z: 15, forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 1 });
+const ordinaryCanopyFloor = sample({ x: -220, z: 15, forestCover: 1, grassPatchStrength: 0.18, jungleSoilStrength: 0 });
 assert.equal(
   distance(jungleFloor, ordinaryCanopyFloor) > 0.08,
   true,
@@ -84,7 +110,23 @@ assert.equal(
 assert.equal(
   jungleFloor.r > jungleFloor.g && jungleFloor.g > jungleFloor.b,
   true,
-  'jungle canopy ground must resolve to a visibly fertile brown soil family'
+  'jungle canopy ground must remain in a fertile brown soil family after wet/litter/moss layering'
+);
+
+const flatJungleSoil = sample({
+  x: -220,
+  z: 15,
+  forestCover: 1,
+  grassPatchStrength: 0.18,
+  jungleSoilStrength: 1,
+  jungleDampStrength: 0,
+  jungleLitterStrength: 0,
+  jungleMossStrength: 0
+});
+assert.equal(
+  distance(jungleFloor, flatJungleSoil) > 0.025,
+  true,
+  'jungle microclimate layering must visibly break up a flat brown soil base'
 );
 
 const sand = sample({ sand: true, y: -0.05, slope: 0.04, forestCover: 1, grassPatchStrength: 1, jungleSoilStrength: 1 });
@@ -101,7 +143,9 @@ assert.equal(
   true,
   'dry meadow interruptions must stay visibly earthy brown rather than olive green'
 );
-assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.jungleSoil), true, 'jungle fertile soil colour must remain a shared palette value');
+for (const key of ['jungleSoil', 'jungleWetSoil', 'jungleLeafLitter', 'jungleClay']) {
+  assert.equal(Number.isInteger(GROUND_SURFACE_COLORS[key]), true, `${key} must remain a shared jungle palette value`);
+}
 const jungleSoil = new THREE.Color(GROUND_SURFACE_COLORS.jungleSoil);
 assert.equal(
   jungleSoil.r > jungleSoil.g && jungleSoil.g > jungleSoil.b,
@@ -111,6 +155,12 @@ assert.equal(
 assert.equal(Number.isInteger(GROUND_SURFACE_COLORS.trailSoil), true, 'worn trail soil colour must remain a shared palette value');
 const trail = new THREE.Color(GROUND_SURFACE_COLORS.trailSoil);
 assert.equal(trail.r > trail.g && trail.g > trail.b, true, 'worn trail soil should stay visibly warm brown over meadow green');
+
+const westernJungle = EXPLORATION_WORLD.regions.find(region => region.id === 'westernJungle');
+assert.ok(westernJungle, 'western jungle definition must remain present');
+assert.equal(westernJungle.ground.leafLitterDensity >= 0.8, true, 'jungle must reserve a strong leaf-litter footprint');
+assert.equal(westernJungle.ground.surfaceRootDensity >= 0.35, true, 'jungle must reserve a visible but bounded surface-root footprint');
+assert.equal(westernJungle.ground.meadowCoverMultiplier <= 0.2, true, 'jungle should suppress lawn-like meadow cover under the canopy');
 
 const coverTerrain = {
   getScatterBounds: () => ({ halfX: 4, halfZ: 4, centerZ: 0 }),
@@ -233,7 +283,7 @@ const jungleCover = new GroundCoverPresentationSystem({
     regionAt: () => ({
       biome: 'jungle',
       strength: 1,
-      ground: { meadowCoverMultiplier: 0.24 }
+      ground: { meadowCoverMultiplier: 0.18 }
     })
   },
   scatter: { isGrassClear: () => true },
@@ -241,10 +291,88 @@ const jungleCover = new GroundCoverPresentationSystem({
 });
 const jungleCoverCount = jungleCover.populate();
 assert.equal(
-  jungleCoverCount < coverCount * 0.5,
+  jungleCoverCount < coverCount * 0.4,
   true,
-  'dense canopy jungle must open the generic meadow carpet enough for fertile soil and jungle floor detail to remain visible'
+  'dense canopy jungle must open the generic meadow carpet enough for fertile soil and litter to remain visible'
 );
 assert.equal(jungleCoverCount > 0, true, 'jungle floor should retain scattered green micro-cover instead of becoming visually sterile');
 
-console.log('ground surface palette, fertile jungle soil and biome-aware construction-safe ground cover verified');
+const jungleDetailTerrain = {
+  getScatterBounds: () => ({ halfX: 8, halfZ: 8, centerZ: 0 }),
+  isPlayable: () => true,
+  isSandAt: () => false,
+  slopeAt: () => 0.08,
+  forestCoverAt: () => 1,
+  heightAt: () => 0,
+  regionAt: () => ({
+    biome: 'jungle',
+    strength: 1,
+    ground: {
+      leafLitterDensity: 1,
+      surfaceRootDensity: 1
+    }
+  })
+};
+const jungleDetailConstruction = {
+  getRevision: () => 0,
+  heightAt: () => 0
+};
+const jungleDetailGroup = new THREE.Group();
+const jungleDetails = new JungleFloorPresentationSystem({
+  group: jungleDetailGroup,
+  terrain: jungleDetailTerrain,
+  scatter: { isGrassClear: () => true },
+  collision: coverCollision,
+  constructionTerrain: jungleDetailConstruction,
+  maxLeafLitter: 36,
+  maxRootFans: 12,
+  leafSpacing: 1.35,
+  rootSpacing: 2.8
+});
+const jungleDetailStats = jungleDetails.populate();
+assert.equal(jungleDetailStats.leafLitter > 20, true, 'jungle floor must create a broad leaf/twig litter footprint');
+assert.equal(jungleDetailStats.rootFans > 0, true, 'jungle floor must create visible exposed root fans');
+assert.equal(jungleDetailStats.leafLitter <= 36, true, 'leaf litter must respect its explicit mobile budget');
+assert.equal(jungleDetailStats.rootFans <= 12, true, 'surface roots must respect their explicit mobile budget');
+assert.equal(jungleDetails.meshes.length >= 2, true, 'jungle floor kinds must build separate batched render meshes');
+assert.equal(jungleDetails.meshes.every(mesh => mesh.isInstancedMesh), true, 'jungle floor layers must remain instanced for mobile rendering');
+assert.equal(jungleDetails.meshes.every(mesh => mesh.castShadow === false), true, 'jungle micro-layers must avoid per-instance shadow cost');
+assert.ok(jungleDetails.geometries.leafLitter.getAttribute('color'), 'leaf litter must use low-poly vertex colour variation');
+assert.ok(jungleDetails.geometries.rootFan.getAttribute('color'), 'surface roots must use low-poly vertex colour variation');
+
+const secondJungleDetails = new JungleFloorPresentationSystem({
+  group: new THREE.Group(),
+  terrain: jungleDetailTerrain,
+  scatter: { isGrassClear: () => true },
+  maxLeafLitter: 36,
+  maxRootFans: 12,
+  leafSpacing: 1.35,
+  rootSpacing: 2.8
+});
+assert.deepEqual(
+  secondJungleDetails.populate(),
+  jungleDetailStats,
+  'jungle floor litter/root populations must remain deterministic across rebuilds'
+);
+
+jungleDetails.setPresentationExclusions([{ x: 0, z: 0, radius: 100 }]);
+assert.equal(
+  jungleDetails.entries.every(entry => entry.presentationHidden),
+  true,
+  'shared presentation exclusions must clear jungle litter and roots from authored world events'
+);
+jungleDetails.setPresentationExclusions([]);
+assert.equal(
+  jungleDetails.entries.every(entry => entry.presentationHidden === false),
+  true,
+  'jungle floor detail must return when a presentation exclusion is removed'
+);
+
+jungleDetails.update();
+assert.equal(
+  jungleDetails.entries.every(entry => entry.constructionHidden),
+  true,
+  'construction floors must hide jungle leaf litter and exposed roots instead of allowing them through buildings'
+);
+
+console.log('ground surface palette, layered jungle microclimate, leaf litter/root dressing and construction-safe ground cover verified');

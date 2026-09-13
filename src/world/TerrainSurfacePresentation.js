@@ -15,8 +15,10 @@ export const GROUND_SURFACE_COLORS = Object.freeze({
   meadowDry: 0x9b784f,
   forest: 0x386d40,
   jungleSoil: 0x513822,
+  jungleWetSoil: 0x2f2820,
   jungleHumus: 0x3d2d22,
-  jungleLeafLitter: 0x6a4a2e,
+  jungleLeafLitter: 0x765238,
+  jungleClay: 0x815b3d,
   jungleMoss: 0x53683c,
   trailSoil: 0x6f4d2f
 });
@@ -63,6 +65,58 @@ export function terrainSurfacePatchFieldsAt(x, z) {
   return { lawnPatch, dryPatch, fleck };
 }
 
+/**
+ * Jungle-only microclimate fields shared by terrain tinting and physical floor dressing.
+ * Keeping litter/root placement on the same deterministic fields as the terrain colour makes
+ * the forest floor read as one layered surface instead of unrelated random prop scatter.
+ */
+export function terrainJungleSurfaceFieldsAt(x, z) {
+  const broadCellSize = 9.2;
+  const detailCellSize = 3.45;
+  const broadX = Math.floor((x - 2.1) / broadCellSize);
+  const broadZ = Math.floor((z + 3.4) / broadCellSize);
+  const detailX = Math.floor((x + 0.8) / detailCellSize);
+  const detailZ = Math.floor((z - 1.6) / detailCellSize);
+
+  const litter = stepped(
+    hash01(broadX, broadZ, 211) * 0.58
+      + hash01(detailX, detailZ, 223) * 0.42,
+    5
+  );
+
+  const dampRaw = clamp01(
+    0.34
+      + hash01(broadX + 7, broadZ - 5, 239) * 0.38
+      + hash01(detailX - 3, detailZ + 9, 251) * 0.28
+  );
+  const damp = stepped(THREE.MathUtils.smoothstep(dampRaw, 0.36, 0.84), 5);
+
+  const moss = stepped(
+    clamp01(
+      damp * 0.56
+        + hash01(detailX + 11, detailZ - 7, 263) * 0.3
+        + (1 - litter) * 0.14
+    ),
+    5
+  );
+
+  const root = stepped(
+    clamp01(
+      hash01(broadX - 13, broadZ + 3, 277) * 0.64
+        + hash01(detailX + 5, detailZ + 5, 281) * 0.22
+        + (1 - damp) * 0.14
+    ),
+    5
+  );
+
+  const exposed = stepped(
+    clamp01((1 - litter) * 0.72 + (1 - damp) * 0.18 + hash01(detailX, detailZ, 293) * 0.1),
+    5
+  );
+
+  return { litter, damp, moss, root, exposed };
+}
+
 export function terrainSurfaceToneFieldsAt(x, z) {
   const broad = clamp01(0.5 + (
     Math.sin(x * 0.021 + z * 0.012 + 0.6) +
@@ -92,7 +146,10 @@ export function terrainSurfaceColorAt({
   sand,
   forestCover = 0,
   grassPatchStrength = 0,
-  jungleSoilStrength = 0
+  jungleSoilStrength = 0,
+  jungleDampStrength = jungleSoilStrength,
+  jungleLitterStrength = jungleSoilStrength,
+  jungleMossStrength = jungleSoilStrength * 0.56
 }, target = new THREE.Color()) {
   const { broad, detail, dry } = terrainSurfaceToneFieldsAt(x, z);
   const { lawnPatch, dryPatch, fleck } = terrainSurfacePatchFieldsAt(x, z);
@@ -135,13 +192,27 @@ export function terrainSurfaceColorAt({
 
   const jungle = clamp01(jungleSoilStrength);
   if (jungle > 0) {
-    const litterPatch = clamp01(0.32 + dryPatch * 0.42 + fleck * 0.26);
-    const dampHumus = clamp01(0.42 + (1 - detail) * 0.38 + forest * 0.2);
-    const mossPatch = clamp01(lawnPatch * 0.5 + (1 - dry) * 0.28 + forest * 0.22);
-    target.lerp(COLORS.jungleSoil, jungle * (0.82 + litterPatch * 0.08));
-    target.lerp(COLORS.jungleHumus, jungle * dampHumus * 0.16);
-    target.lerp(COLORS.jungleLeafLitter, jungle * litterPatch * 0.11);
-    target.lerp(COLORS.jungleMoss, jungle * mossPatch * 0.055);
+    const jungleFields = terrainJungleSurfaceFieldsAt(x, z);
+    const dampLayer = clamp01(jungleDampStrength) * jungleFields.damp;
+    const litterLayer = clamp01(jungleLitterStrength) * jungleFields.litter;
+    const mossLayer = clamp01(jungleMossStrength) * jungleFields.moss;
+    const exposedLayer = jungleFields.exposed * (1 - dampLayer * 0.45);
+
+    target.lerp(COLORS.jungleSoil, jungle * (0.82 + jungleFields.litter * 0.06));
+    target.lerp(COLORS.jungleHumus, jungle * (0.11 + dampLayer * 0.13));
+    target.lerp(COLORS.jungleWetSoil, jungle * dampLayer * 0.4);
+    target.lerp(COLORS.jungleLeafLitter, jungle * litterLayer * 0.34);
+    target.lerp(COLORS.jungleClay, jungle * exposedLayer * 0.15);
+    target.lerp(COLORS.jungleMoss, jungle * mossLayer * 0.09);
+
+    // Make damp hollows visibly darker and dry litter pockets visibly warmer at gameplay
+    // distance. This is a colour-only contrast layer; it does not alter height or collision.
+    const microLight = jungle * (
+      litterLayer * 0.07
+        - dampLayer * 0.08
+        + mossLayer * 0.025
+    );
+    target.offsetHSL(0, 0, microLight);
   }
 
   target.offsetHSL(

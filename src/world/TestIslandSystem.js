@@ -5,6 +5,7 @@ import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { ExplorationPoiSystem } from './ExplorationPoiSystem.js';
 import { GrassFieldSystem } from './GrassFieldSystem.js';
 import { GroundCoverPresentationSystem } from './GroundCoverPresentationSystem.js';
+import { JungleFloorPresentationSystem } from './JungleFloorPresentationSystem.js';
 import { FernFieldSystem } from './FernFieldSystem.js';
 import { AmbientWorldDetailSystem } from './AmbientWorldDetailSystem.js';
 import { DistantMountainSystem } from './DistantMountainSystem.js';
@@ -53,6 +54,14 @@ export class TestIslandSystem {
       collision: this.collision
     });
     this.groundCover = new GroundCoverPresentationSystem({
+      group: this.group,
+      terrain: this.terrain,
+      scatter: this.scatter,
+      chunks: this.chunks,
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
+    });
+    this.jungleFloor = new JungleFloorPresentationSystem({
       group: this.group,
       terrain: this.terrain,
       scatter: this.scatter,
@@ -159,6 +168,7 @@ export class TestIslandSystem {
   #syncPresentationExclusions() {
     const exclusions = Array.from(this.presentationExclusions.values());
     this.groundCover.setPresentationExclusions?.(exclusions);
+    this.jungleFloor.setPresentationExclusions?.(exclusions);
     this.grass.setPresentationExclusions?.(exclusions);
     this.ferns.setPresentationExclusions?.(exclusions);
   }
@@ -202,6 +212,7 @@ export class TestIslandSystem {
     }
 
     const ambientStats = this.ambientDetails.populate();
+    const jungleFloorStats = this.jungleFloor.populate();
     const groundCoverCount = this.groundCover.populate();
     const grassCount = this.grass.populate();
     const fernCount = this.ferns.populate();
@@ -210,7 +221,7 @@ export class TestIslandSystem {
     const chunkStats = this.chunks.getStats();
     const coastalRockCount = this.scatter.coastalRockCount ?? 0;
     const regionalTreeCount = this.scatter.regionalTreeCount ?? 0;
-    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees (${regionalTreeCount} regional) · ${coastalRockCount} coastal rocks · ${explorationPoiCount} exploration POIs · ${groundCoverCount} ground-cover clumps · ${grassCount} reactive grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
+    console.info(`[WORLD] ${this.assetMode} · ${chunkStats.total} render chunks · ${chunkedTreeCount} chunk-indexed trees (${regionalTreeCount} regional) · ${coastalRockCount} coastal rocks · ${explorationPoiCount} exploration POIs · ${groundCoverCount} ground-cover clumps · ${jungleFloorStats.leafLitter} jungle litter clumps · ${jungleFloorStats.rootFans} jungle root fans · ${grassCount} reactive grass tufts · ${fernCount} reactive ferns · ${ambientStats.total} ambient details · ${mountainCount} horizon landforms`);
   }
 
   #removeObsoleteUnderstory() {
@@ -226,6 +237,7 @@ export class TestIslandSystem {
   update(dt, playerPosition, camera = null) {
     this.chunks.update(camera, playerPosition);
     this.groundCover.update();
+    this.jungleFloor.update();
     this.grass.update(dt, playerPosition);
     this.ferns.update(dt, playerPosition);
     this.ambientDetails.update();
