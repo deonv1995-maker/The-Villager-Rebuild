@@ -34,10 +34,11 @@ export class ShovelLandscapingMenu {
       if (!definition || !cost) return '';
       const resource = resourceDisplay(cost.itemId);
       const materialLabel = cost.quantity === 1 ? resource.singular : resource.plural;
+      const unitLabel = definition.unitLabel ? ` · ${definition.unitLabel}` : '';
       return `
-        <button class="construction-list-item" type="button" data-landscape="${mode}" aria-label="Place ${definition.label.toLowerCase()}">
+        <button class="construction-list-item" type="button" data-landscape="${mode}" aria-label="Use ${definition.label.toLowerCase()}">
           <img src="${this.modeIcons[mode] ?? ui.shovel}" alt="" aria-hidden="true">
-          <span><strong>${definition.label.toUpperCase()}</strong><small>${cost.quantity} ${materialLabel.toUpperCase()}</small></span>
+          <span><strong>${definition.label.toUpperCase()}</strong><small>${cost.quantity} ${materialLabel.toUpperCase()}${unitLabel.toUpperCase()}</small></span>
         </button>
       `;
     }).join('');
@@ -65,11 +66,11 @@ export class ShovelLandscapingMenu {
         <button class="hammer-construction-close" type="button" data-landscape="close" aria-label="Close landscaping and return to normal shovel use">×</button>
       </header>
 
-      <div class="construction-list" aria-label="Select a landscaping module">
+      <div class="construction-list" aria-label="Select a landscaping tool">
         ${moduleRows}
       </div>
 
-      <p class="hammer-construction-help" data-role="landscape-help">More landscaping modules can be added here later</p>
+      <p class="hammer-construction-help" data-role="landscape-help">Pin a start, drag the run, then confirm</p>
     `;
 
     document.body.appendChild(this.root);
@@ -116,7 +117,10 @@ export class ShovelLandscapingMenu {
     canAfford = true,
     materialQuantity = 0,
     cost = 1,
-    snappedToBuilding = false
+    strokePinned = false,
+    strokeLength = 0,
+    unitCount = 1,
+    pathWidth = null
   } = {}) {
     const wasOpen = this.open;
     this.open = Boolean(open);
@@ -143,18 +147,23 @@ export class ShovelLandscapingMenu {
       this.help.textContent = '';
     } else if (!canAfford) {
       const materialLabel = cost === 1 ? resource.singular : resource.plural;
-      this.help.textContent = `${definition?.label ?? 'Landscaping'} needs ${cost} ${materialLabel}`;
+      this.help.textContent = `${definition?.label ?? 'Landscaping'} run needs ${cost} ${materialLabel}`;
+    } else if (strokePinned && previewValid) {
+      const widthText = this.mode === 'cobble' && Number.isFinite(pathWidth)
+        ? ` · ${pathWidth.toFixed(1)}m wide`
+        : '';
+      this.help.textContent = `Pinned · ${strokeLength.toFixed(1)}m · ${unitCount} section${unitCount === 1 ? '' : 's'}${widthText} · confirm when ready`;
+    } else if (strokePinned) {
+      this.help.textContent = 'Start pinned · aim or move to drag a longer clear run';
     } else if (previewValid) {
-      this.help.textContent = snappedToBuilding
-        ? 'Green preview · snapped to the building grid'
-        : 'Green preview · aligned to the landscaping grid';
+      this.help.textContent = 'Green pin · tap PIN to anchor the start';
     } else {
-      this.help.textContent = 'Move or aim for a clear landscaping position';
+      this.help.textContent = 'Move or aim for a clear start point';
     }
   }
 
   #compactModeLabel(mode) {
-    if (mode === 'cobble') return 'COBBLE';
+    if (mode === 'cobble') return 'COBBLE PATH';
     if (mode === 'fence') return 'FENCE';
     return LANDSCAPING_DEFINITIONS[mode]?.label?.toUpperCase?.() ?? 'LANDSCAPE';
   }
