@@ -35,6 +35,24 @@ export const TORCH = Object.freeze({
       refreshHz: 30
     })
   }),
+  placement: Object.freeze({
+    maxDistance: 3.4,
+    minFacingDot: 0.18,
+    aimPenalty: 1.6,
+    wallSurfaceOffset: 0.18,
+    postSurfaceOffset: 0.31,
+    mountHeight: 1.55,
+    minimumMountHeight: 0.72,
+    topClearance: 0.32,
+    maxActiveLights: 8,
+    light: Object.freeze({
+      intensity: 42,
+      distance: 10.5,
+      decay: 2,
+      intensityVariance: 0.05,
+      distanceVariance: 0.025
+    })
+  }),
   visual: Object.freeze({
     handleLength: 0.7,
     handleRadius: 0.035,
