@@ -39,6 +39,7 @@ const distanceToSpawn = point => Math.hypot(point.x - WORLD_LAYOUT.spawn.x, poin
 const mouthWorld = localToWorld(0, 0);
 const approachWorld = localToWorld(0, -4.4);
 const foothillSampleWorld = localToWorld(0, -6);
+const thresholdShoulderWorld = localToWorld(caveDefinition.mouthWidth * 0.82, 0);
 const midTunnelWorld = localToWorld(0, caveDefinition.depth * 0.55);
 const interiorWorld = localToWorld(0, caveDefinition.depth);
 const shoulderWorld = localToWorld(caveDefinition.mouthWidth * 0.82, caveDefinition.depth * 0.48);
@@ -57,21 +58,27 @@ const mouthCut = caveTerrainOffsetAt(caveDefinition, mouthWorld.x, mouthWorld.z)
 const approachCut = caveTerrainOffsetAt(caveDefinition, approachWorld.x, approachWorld.z);
 const interiorCut = caveTerrainOffsetAt(caveDefinition, interiorWorld.x, interiorWorld.z);
 const shoulderCut = caveTerrainOffsetAt(caveDefinition, shoulderWorld.x, shoulderWorld.z);
-assert.equal(mouthCut <= -0.6, true, 'cave mouth must be sunk below the surrounding terrain');
+assert.equal(mouthCut <= -1.15, true, 'cave mouth must be sunk decisively below the surrounding terrain');
 assert.equal(Math.abs(approachCut) < 0.08, true, 'terrain cut must fade out before the exterior approach');
-assert.equal(interiorCut <= -2.4, true, 'cave floor must be carved substantially deeper toward the back of the tunnel');
+assert.equal(interiorCut <= -3, true, 'cave floor must be carved substantially deeper toward the back of the tunnel');
 assert.equal(Math.abs(shoulderCut) < 0.08, true, 'cave terrain cut must leave the surrounding hillside shoulders intact');
 
 const mouthTerrainY = terrain.heightAt(mouthWorld.x, mouthWorld.z);
 const foothillApproachY = terrain.heightAt(foothillSampleWorld.x, foothillSampleWorld.z);
+const thresholdShoulderY = terrain.heightAt(thresholdShoulderWorld.x, thresholdShoulderWorld.z);
 const midTunnelY = terrain.heightAt(midTunnelWorld.x, midTunnelWorld.z);
 const interiorTerrainY = terrain.heightAt(interiorWorld.x, interiorWorld.z);
 const shoulderTerrainY = terrain.heightAt(shoulderWorld.x, shoulderWorld.z);
 assert.equal(mouthTerrainY < 8, true, 'first cave must stay on the mountain foothill rather than the elevated mountain core');
 assert.equal(
-  mouthTerrainY - foothillApproachY <= 0.45,
+  mouthTerrainY > foothillApproachY - 0.4,
   true,
-  'cave threshold must no longer perch conspicuously above the exterior approach'
+  'cave approach must still climb naturally into the foothill rather than becoming a detached trench'
+);
+assert.equal(
+  thresholdShoulderY - mouthTerrainY >= 0.65,
+  true,
+  'ground beside the threshold must stand visibly above the cave floor so the mouth reads as cut into the hillside'
 );
 assert.equal(
   midTunnelY < mouthTerrainY - 0.15,
