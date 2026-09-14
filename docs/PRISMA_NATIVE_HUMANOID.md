@@ -35,7 +35,15 @@ The packed format remains guarded by the existing parser contract:
 - vertices: `3779`;
 - indices: `22662`;
 - native joints: `31`;
-- packed SHA-256 metadata: `bee4031cce3df315462e8ebf984b833a42f75de463adf2852e4795356c84d64c`.
+- packed SHA-256 metadata: `5437ac02efa01f893cdf887d7ff74da3535b892763dcff6eb3d5bd1c11acddc3`.
+
+## Source recovery and generation
+
+PR #274's packed payload was internally corrupted. Its screenshots showed the Simple fallback, so they did not establish native mesh or retargeting quality. The speculative `device-humanoid-v2` shape adjustment has been removed.
+
+The original user-supplied archive is preserved in `assets-source/prisma/Group.prisma`. Regenerate with `python3 scripts/generate-prisma-native.py` (Python dependencies: `numpy`, `msgpack`). The generator reads the original polygon triangulation, four skin influences and inverse-bind matrices. It converts handedness consistently, reconstructs local bind transforms from the source inverse-bind matrices, computes smooth normals and writes the twelve packed modules plus their checksum. Editable Prisma pose transforms do not replace the source bind pose.
+
+The original mesh silhouette is retained. Further body reshaping requires viewing this real native model first.
 
 ## Stable systems deliberately unchanged
 
@@ -43,11 +51,17 @@ This integration does not change player traversal, double jump, terrain collisio
 
 ## Verification
 
-Repository checks must remain green before merge. Device verification is still required because the important acceptance criteria are visual and animated:
+`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, actual production Ranger activation, movement clip retargeting, first-person visibility and failure fallback. Device acceptance remains outstanding; automated activation is not visual acceptance.
+
+Device verification is still required because the important acceptance criteria are visual and animated:
 
 1. the Prisma body replaces the Simple fallback after load on the production KayKit player;
 2. idle, walk, run, jump and double jump remain unchanged;
 3. shoulders, elbows, wrists, hips, knees, ankles and feet follow the correct side of the KayKit rig;
-4. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
-5. first-person body visibility behavior remains unchanged;
-6. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
+4. the torso reads as pelvis -> waist -> ribcage -> shoulders instead of a rectangular block;
+5. the neck visibly bridges the torso and head without changing head rotation behavior;
+6. arms and legs taper naturally while their animated endpoints stay attached;
+7. feet read lower and less boot-like while remaining aligned to the ankle/foot motion;
+8. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
+9. first-person body visibility behavior remains unchanged;
+10. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
