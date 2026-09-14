@@ -1,9 +1,14 @@
 import * as THREE from 'three';
 import { PrismaRiggedHumanoidPresentation } from './PrismaRiggedHumanoidPresentation.js';
 
-const CHEST_SCALE = Object.freeze({ x: 1.13, y: 1.015, z: 1.075 });
-const SHOULDER_SCALE = Object.freeze({ x: 1.11, y: 1, z: 1.055 });
-const WAIST_SCALE = Object.freeze({ x: 0.97, y: 1, z: 0.985 });
+const TORSO_SCULPT = Object.freeze({
+  chestWidth: 0.13,
+  chestDepth: 0.075,
+  shoulderWidth: 0.11,
+  shoulderDepth: 0.055,
+  waistWidth: -0.03,
+  waistDepth: -0.012
+});
 const SHOULDER_SPREAD = 0.04;
 const UPPER_ARM_SPREAD = 0.014;
 const ARM_FORWARD_OFFSET = 0.032;
@@ -11,22 +16,13 @@ const PALM_EXTENSION = 0.085;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
-function multiplyBindScale(bind, scale) {
-  if (!bind) return;
-  bind.localScale.set(
-    bind.localScale.x * scale.x,
-    bind.localScale.y * scale.y,
-    bind.localScale.z * scale.z
-  );
-}
-
 /**
  * Player-facing style profile layered on the proven Prisma retargeter.
  *
  * The base class remains the only animation/retarget authority. This class only
- * adjusts presentation bind positions/scales after the native rig has loaded so
- * device-driven silhouette changes cannot leak into movement, collision or the
- * KayKit animation source.
+ * sculpts bind geometry and adjusts bind positions after the native rig has
+ * loaded so device-driven silhouette changes cannot leak into movement,
+ * collision or the KayKit animation source.
  */
 export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPresentation {
   constructor(options) {
@@ -39,9 +35,7 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
   }
 
   #applyPresentationProfile() {
-    multiplyBindScale(this.prismaBind.get('chest'), CHEST_SCALE);
-    multiplyBindScale(this.prismaBind.get('shoulder'), SHOULDER_SCALE);
-    multiplyBindScale(this.prismaBind.get('waist'), WAIST_SCALE);
+    this.#sculptMasculineTorso();
 
     for (const side of ['left', 'right']) {
       const shoulderName = `${side}Shoulder`;
@@ -62,12 +56,11 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       }
     }
 
-    for (const targetName of ['waist', 'chest', 'shoulder', 'leftShoulder', 'leftUpperArm', 'rightShoulder', 'rightUpperArm']) {
+    for (const targetName of ['leftShoulder', 'leftUpperArm', 'rightShoulder', 'rightUpperArm']) {
       const bone = this.prismaBones.get(targetName);
       const bind = this.prismaBind.get(targetName);
       if (!bone || !bind) continue;
       bone.position.copy(bind.localPosition);
-      bone.scale.copy(bind.localScale);
     }
 
     this.prismaRoot?.updateMatrixWorld?.(true);
@@ -78,6 +71,66 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     this.visualRoot.userData.chestProfile = 'emphasized-pectoral-v1';
     this.visualRoot.userData.armSilhouette = 'relaxed-forward-shoulder-v2';
     this.visualRoot.userData.toolAnchor = 'visible-palm-center-v2';
+  }
+
+  #sculptMasculineTorso() {
+    const mesh = this.prismaMesh;
+    const sourceGeometry = mesh?.geometry;
+    const skeleton = mesh?.skeleton;
+    if (!sourceGeometry || !skeleton) return;
+
+    const geometry = sourceGeometry.clone();
+    mesh.geometry = geometry;
+    const position = geometry.attributes.position;
+    const skinIndex = geometry.attributes.skinIndex;
+    const skinWeight = geometry.attributes.skinWeight;
+    if (!position || !skinIndex || !skinWeight) return;
+
+    const boneIndex = name => skeleton.bones.indexOf(this.prismaBones.get(name));
+    const chestIndex = boneIndex('chest');
+    const shoulderIndex = boneIndex('shoulder');
+    const waistIndex = boneIndex('waist');
+    const leftShoulderIndex = boneIndex('leftShoulder');
+    const rightShoulderIndex = boneIndex('rightShoulder');
+    const shoulderIndices = new Set([shoulderIndex, leftShoulderIndex, rightShoulderIndex].filter(index => index >= 0));
+
+    let tunedVertices = 0;
+    for (let vertex = 0; vertex < position.count; vertex += 1) {
+      let chestWeight = 0;
+      let shoulderWeight = 0;
+      let waistWeight = 0;
+      const influenceOffset = vertex * skinIndex.itemSize;
+      for (let influence = 0; influence < skinIndex.itemSize; influence += 1) {
+        const index = skinIndex.array[influenceOffset + influence];
+        const weight = skinWeight.array[influenceOffset + influence] ?? 0;
+        if (index === chestIndex) chestWeight += weight;
+        if (shoulderIndices.has(index)) shoulderWeight += weight;
+        if (index === waistIndex) waistWeight += weight;
+      }
+
+      const widthFactor = 1
+        + chestWeight * TORSO_SCULPT.chestWidth
+        + shoulderWeight * TORSO_SCULPT.shoulderWidth
+        + waistWeight * TORSO_SCULPT.waistWidth;
+      const depthFactor = 1
+        + chestWeight * TORSO_SCULPT.chestDepth
+        + shoulderWeight * TORSO_SCULPT.shoulderDepth
+        + waistWeight * TORSO_SCULPT.waistDepth;
+      if (Math.abs(widthFactor - 1) < 1e-5 && Math.abs(depthFactor - 1) < 1e-5) continue;
+
+      const positionOffset = vertex * position.itemSize;
+      position.array[positionOffset] *= widthFactor;
+      position.array[positionOffset + 2] *= depthFactor;
+      tunedVertices += 1;
+    }
+
+    position.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    geometry.computeVertexNormals();
+    geometry.userData.masculineProfile = 'broad-chest-shoulder-v1';
+    geometry.userData.masculineVertexCount = tunedVertices;
+    geometry.userData.masculineSculpt = { ...TORSO_SCULPT };
   }
 
   #calibrateVisiblePalmMount() {
