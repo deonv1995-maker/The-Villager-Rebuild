@@ -31,10 +31,15 @@ function makePlayer() {
 
   makeBone(model, 'UpperLeg_L', -0.17, 0.9, 0);
   makeBone(model, 'LowerLeg_L', -0.17, 0.48, 0);
-  makeBone(model, 'Foot_L', -0.17, 0.08, 0.08);
+  const leftFoot = makeBone(model, 'Foot_L', -0.17, 0.08, 0.08);
   makeBone(model, 'UpperLeg_R', 0.17, 0.9, 0);
   makeBone(model, 'LowerLeg_R', 0.17, 0.48, 0);
-  makeBone(model, 'Foot_R', 0.17, 0.08, 0.08);
+  const rightFoot = makeBone(model, 'Foot_R', 0.17, 0.08, 0.08);
+
+  // Reproduce the strong KayKit ankle pitch that made simple box feet read as
+  // backwards-bent legs even though the ankle positions themselves were correct.
+  leftFoot.rotation.x = -0.95;
+  rightFoot.rotation.x = -0.95;
 
   return {
     root,
@@ -53,8 +58,9 @@ player.root.updateMatrixWorld(true);
 const presentation = new SimpleHumanoidPresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'strict side binding should keep the humanoid rig active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v1');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v2');
 assert.equal(presentation.visualRoot.userData.rigSideBinding, 'explicit-side-v1');
+assert.equal(presentation.visualRoot.userData.foundationAlignment, 'head-neck-flat-feet-v1');
 
 const expected = {
   left: {
@@ -105,6 +111,8 @@ const leftShin = presentation.visualRoot.getObjectByName('scout-left-shin');
 const rightShin = presentation.visualRoot.getObjectByName('scout-right-shin');
 const leftHand = presentation.visualRoot.getObjectByName('scout-left-hand');
 const rightHand = presentation.visualRoot.getObjectByName('scout-right-hand');
+const leftBoot = presentation.visualRoot.getObjectByName('scout-left-boot');
+const rightBoot = presentation.visualRoot.getObjectByName('scout-right-boot');
 
 assert.ok(leftUpperArm.position.x < -0.2 && rightUpperArm.position.x > 0.2, 'upper arms should remain on opposite sides');
 assert.ok(leftLowerArm.position.x < -0.3 && rightLowerArm.position.x > 0.3, 'lower arms should remain on opposite sides');
@@ -112,4 +120,18 @@ assert.ok(leftHand.position.x < -0.5 && rightHand.position.x > 0.5, 'hands shoul
 assert.ok(leftThigh.position.x < -0.1 && rightThigh.position.x > 0.1, 'thighs should remain on opposite sides');
 assert.ok(leftShin.position.x < -0.1 && rightShin.position.x > 0.1, 'shins should remain on opposite sides');
 
-console.log('Humanoid explicit left/right rig-binding regression checks passed.');
+const torsoTop = presentation.torso.position.y + (presentation.torso.geometry.parameters.height * presentation.torso.scale.y) / 2;
+const headBottom = presentation.headGroup.position.y - 0.255 * presentation.head.scale.y;
+assert.ok(
+  headBottom - torsoTop < 0.06,
+  `foundation head should meet the torso at the neck instead of floating (${headBottom - torsoTop})`
+);
+
+for (const boot of [leftBoot, rightBoot]) {
+  assert.ok(Math.abs(boot.quaternion.x) < 1e-6, 'foundation foot should not inherit KayKit ankle pitch around X');
+  assert.ok(Math.abs(boot.quaternion.z) < 1e-6, 'foundation foot should stay level around Z');
+  assert.ok(Math.abs(boot.quaternion.w - 1) < 1e-6, 'foundation foot should use player-root orientation');
+}
+assert.ok(leftBoot.position.x < 0 && rightBoot.position.x > 0, 'flat feet should remain on their correct sides');
+
+console.log('Humanoid side binding, head connection, and neutral foot-alignment regression checks passed.');

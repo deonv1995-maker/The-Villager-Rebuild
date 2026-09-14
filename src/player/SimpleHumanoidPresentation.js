@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v1';
+const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v2';
 const SIMPLE_HUMANOID_MESH_BUDGET = 16;
+const HEAD_NECK_CORRECTION = -0.28;
+const FOOT_GROUND_OFFSET_Y = -0.04;
+const FOOT_FORWARD_OFFSET_Z = 0.08;
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -121,6 +124,11 @@ function restoreLegacyFallback(presentation) {
   presentation.mode = 'legacy-ranger';
 }
 
+function boneLocalPosition(presentation, bone, target) {
+  bone.getWorldPosition(target);
+  return presentation.player.root.worldToLocal(target);
+}
+
 function applySimplePalette(presentation) {
   const mats = presentation.materials;
   if (!mats) return;
@@ -174,7 +182,7 @@ function simplifyBody(presentation) {
     replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.105, 0));
     replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.13, 0.145, 1, 6, 1));
     replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.1, 0.115, 1, 6, 1));
-    replaceGeometry(limb.boot, new THREE.BoxGeometry(0.22, 0.18, 0.34));
+    replaceGeometry(limb.boot, new THREE.BoxGeometry(0.2, 0.16, 0.28));
     limb.boot.scale.set(1, 1, 1);
   }
 
@@ -183,11 +191,13 @@ function simplifyBody(presentation) {
   root.userData.visualMeshBudget = SIMPLE_HUMANOID_MESH_BUDGET;
   root.userData.designTarget = 'simple-rig-readable-humanoid';
   root.userData.rigSideBinding = 'explicit-side-v1';
+  root.userData.foundationAlignment = 'head-neck-flat-feet-v1';
 }
 
 export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
   constructor(options) {
     super(options);
+    this.foundationTemp = new THREE.Vector3();
     if (!this.rigReady) return;
 
     const strictSides = resolveStrictSideBones(this.model);
@@ -205,5 +215,31 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
 
     applySimplePalette(this);
     simplifyBody(this);
+  }
+
+  update(dt) {
+    super.update(dt);
+    if (!this.rigReady || !Number.isFinite(dt) || dt <= 0) return;
+
+    // The Scout art layer intentionally floated the stylized head above the head
+    // joint. The foundation character removes that art offset so the head meets
+    // the torso at the neck and the skeleton can be judged without a fake gap.
+    this.headGroup.translateY(HEAD_NECK_CORRECTION);
+
+    // KayKit foot joints carry a strong ankle pitch that worked with the original
+    // skinned boots but made simple box feet look like the whole leg was bent
+    // backwards. Keep the animated ankle position, but present neutral flat feet
+    // at the player-root orientation while we validate the humanoid foundation.
+    for (const side of ['left', 'right']) {
+      const limb = this.limbs?.[side];
+      const footBone = this.bones?.[side]?.foot;
+      if (!limb?.boot || !footBone) continue;
+
+      boneLocalPosition(this, footBone, this.foundationTemp);
+      limb.boot.position.copy(this.foundationTemp);
+      limb.boot.position.y += FOOT_GROUND_OFFSET_Y;
+      limb.boot.position.z += FOOT_FORWARD_OFFSET_Z;
+      limb.boot.quaternion.identity();
+    }
   }
 }
