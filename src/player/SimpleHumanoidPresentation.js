@@ -3,7 +3,7 @@ import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
 const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v3';
 const SIMPLE_HUMANOID_MESH_BUDGET = 16;
-const HEAD_NECK_CORRECTION = -0.28;
+const HEAD_NECK_CORRECTION = -0.38;
 const HEAD_RADIUS = 0.215;
 const TORSO_MIN_LENGTH = 0.44;
 const TORSO_LENGTH_SCALE = 0.95;
@@ -233,8 +233,8 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
     if (!this.rigReady || !Number.isFinite(dt) || dt <= 0) return;
 
     // The Scout art layer intentionally floated the stylized head above the head
-    // joint. The foundation character removes that art offset so the head meets
-    // the torso at the neck and the skeleton can be judged without a fake gap.
+    // joint. The foundation character removes that art offset so the resized head
+    // seats directly on the compact torso while we validate the neutral mannequin.
     this.headGroup.translateY(HEAD_NECK_CORRECTION);
 
     // Preserve the true animated hip/chest anchors, but stop the temporary torso
