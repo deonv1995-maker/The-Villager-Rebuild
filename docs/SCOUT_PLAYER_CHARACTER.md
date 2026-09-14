@@ -25,7 +25,7 @@ The active presentation intentionally keeps only the essential humanoid pieces:
 
 There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems remain in repository history but are not part of the active player appearance while body and motion correctness are verified.
 
-The active visual revision is `simple-humanoid-v2`. The presentation keeps the strict 16-mesh budget so limb alignment and movement remain easy to inspect on mobile.
+The active visual revision is `simple-humanoid-v3`. The presentation keeps the strict 16-mesh budget so limb alignment and movement remain easy to inspect on mobile.
 
 `src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code and routes to `SimpleHumanoidPresentation`.
 
@@ -44,9 +44,23 @@ The next device pass showed two remaining presentation artifacts after left/righ
 - the simple head was still inheriting the old Scout art offset, leaving a visible gap above the torso;
 - the simple box feet inherited the KayKit ankle pitch intended for the original skinned boots, making the lower body read as if the legs were bending backwards.
 
-`simple-humanoid-v2` removes those art-specific assumptions at the active foundation boundary. The head is pulled back down onto the neck/torso connection, while each simple foot keeps the animated ankle position but uses the player-root orientation instead of the strongly pitched foot quaternion. This is intentionally a **foundation readability correction**, not a replacement animation system.
+The foundation removes those art-specific assumptions at the active presentation boundary. The head is pulled back down onto the neck/torso connection, while each simple foot keeps the animated ankle position but uses the player-root orientation instead of the strongly pitched foot quaternion. This is intentionally a **foundation readability correction**, not a replacement animation system.
 
 The thigh and shin segments still follow the actual animated upper-leg, lower-leg and foot joint positions, so walking, running, jumping and double-jump motion remain owned by the KayKit animation rig. Only the simple foot mesh orientation is neutralized while this milestone is being validated.
+
+## Wireframe-guided proportion reference
+
+A neutral rotating humanoid wireframe reference is now being used only for **structural proportion guidance**, not as final Scout art direction.
+
+`simple-humanoid-v3` applies the lessons from that reference without altering the skeleton:
+
+- the visible torso is shortened so it reads as a compact ribcage/body block rather than a long tunic that hides the upper legs;
+- the torso remains seated near the hip/upper-leg anchors so the body does not visually split apart;
+- the visible head is reduced and reseated on the torso to keep the body dominant while preserving the existing animated head joint;
+- the temporary hands, thighs and shins remain simple low-poly forms attached to their true animated joints;
+- the temporary feet are reduced in width/length while remaining level and anchored to the animated ankles.
+
+The important boundary is that **no leg joint is stretched, translated or retargeted to imitate the reference**. The reference helps judge the visible shell; the KayKit skeleton and animation clips remain authoritative for movement.
 
 ## Why the mock-up is paused
 
@@ -80,9 +94,9 @@ This foundation repair does **not** alter terrain generation, terrain collision,
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` continues to verify the simple humanoid compatibility boundary, the 16 essential visible meshes, production KayKit joint compatibility, first-person visibility, visible hand/foot joint following and existing double-jump tuning.
+`npm run verify:ranger-presentation` continues to verify the simple humanoid compatibility boundary, the 16 essential visible meshes, production KayKit joint compatibility, first-person visibility, visible hand/foot joint following, the wireframe-guided torso/head/foot proportions and existing double-jump tuning.
 
-`npm run verify:humanoid-side-binding` now covers three foundation failures directly: explicit left/right joint binding, the head/torso neck connection, and neutral simple-foot orientation despite a strongly pitched KayKit foot joint.
+`npm run verify:humanoid-side-binding` covers explicit left/right joint binding, the head/torso connection, compact torso-to-hip seating, reduced head/foot proportions and neutral simple-foot orientation despite a strongly pitched KayKit foot joint.
 
 Both checks are part of the full `npm run check` merge gate.
 
@@ -90,13 +104,14 @@ Device verification after deployment should confirm:
 
 1. both shoulders and elbows stay on their own side of the torso in idle and movement;
 2. neither arm stretches through the chest to reach the opposite hand;
-3. the head no longer floats above the torso;
-4. both thighs and shins remain separated instead of collapsing onto one side;
-5. knees bend in the expected direction through walk/run/jump animations;
-6. the simple feet sit level instead of reading as backwards-bent lower legs;
-7. both hands remain attached to the correct wrists;
-8. axe, hammer, pickaxe and spear still align with the visible right hand;
-9. first person hides the body as before;
-10. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
+3. the reduced head remains seated on the torso rather than floating;
+4. the shorter torso exposes enough upper leg to make the hips/thighs readable;
+5. both thighs and shins remain separated instead of collapsing onto one side;
+6. knees bend in the expected direction through walk/run/jump animations;
+7. the smaller simple feet sit level and remain attached to the ankles;
+8. both hands remain attached to the correct wrists;
+9. axe, hammer, pickaxe and spear still align with the visible right hand;
+10. first person hides the body as before;
+11. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
 
 Final clothing, hair, face, scarf, cape, satchel and boot styling should not resume until this foundation has been accepted on-device.
