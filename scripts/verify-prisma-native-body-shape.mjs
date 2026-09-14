@@ -163,9 +163,11 @@ const displayedGroundY = presentation.prismaRoot.position.y + nativeGroundY * pr
 assert.ok(Math.abs(displayedGroundY - nativeGroundY) < 1e-5, 'larger presentation scale must preserve the original foot/ground plane');
 assert.equal(presentation.prismaMesh.material.flatShading, true, 'native body should use faceted cartoon shading');
 assert.ok(presentation.prismaMesh.material.roughness >= 0.96, 'cartoon surface should remain matte instead of glossy');
-assert.ok(presentation.prismaBind.get('chest').localScale.x > 1.1, 'masculine profile should broaden the chest');
-assert.ok(presentation.prismaBind.get('shoulder').localScale.x > 1.08, 'masculine profile should broaden the shoulder line');
-assert.ok(presentation.prismaBind.get('waist').localScale.x < 1, 'masculine profile should preserve a subtle V taper through the waist');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineProfile, 'broad-chest-shoulder-v1');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineVertexCount > 0, 'masculine geometry sculpt must affect weighted torso vertices');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.chestWidth >= 0.13, 'masculine profile should retain the broader chest width');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.shoulderWidth >= 0.11, 'masculine profile should retain broader shoulders');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.waistWidth < 0, 'masculine profile should preserve a subtle V taper through the waist');
 
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(toolMount, 'active Prisma body should expose a visible right-hand tool mount');
@@ -225,4 +227,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, geometry-sculpted masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
