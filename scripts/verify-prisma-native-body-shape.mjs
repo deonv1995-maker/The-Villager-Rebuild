@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { constants as zlibConstants, gunzipSync } from 'node:zlib';
 import part01 from '../src/player/prisma-native/generated/part-01.js';
 import part02 from '../src/player/prisma-native/generated/part-02.js';
 import part03 from '../src/player/prisma-native/generated/part-03.js';
@@ -41,6 +42,23 @@ console.log(
     + ` padding=${(packedText.match(/=/g) ?? []).length}`
     + ` historical-part8-prefix-index=${packedText.indexOf(historicalPart8Prefix)}`
 );
+
+const relaxedCompressed = Buffer.from(packedText, 'base64');
+console.log(
+  `relaxed-decode: bytes=${relaxedCompressed.length}`
+    + ` first4=${relaxedCompressed.subarray(0, 4).toString('hex')}`
+    + ` last16=${relaxedCompressed.subarray(-16).toString('hex')}`
+);
+try {
+  const relaxedUnpacked = gunzipSync(relaxedCompressed, { finishFlush: zlibConstants.Z_SYNC_FLUSH });
+  console.log(
+    `relaxed-gunzip: bytes=${relaxedUnpacked.length}`
+      + ` first4=${relaxedUnpacked.subarray(0, 4).toString('ascii')}`
+      + ` last16=${relaxedUnpacked.subarray(-16).toString('hex')}`
+  );
+} catch (error) {
+  console.log(`relaxed-gunzip-error: ${error?.code ?? error?.name}: ${error?.message}`);
+}
 
 assert.notEqual(
   packedText.length % 4,
