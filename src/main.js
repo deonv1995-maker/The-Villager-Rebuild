@@ -12,7 +12,7 @@ import { SproutCompanionController } from './gameplay/SproutCompanionController.
 import { SproutVisualRuntimeController } from './gameplay/SproutVisualRuntimeController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
-import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
+import { VisibleHandTorchRuntimeController as TorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
