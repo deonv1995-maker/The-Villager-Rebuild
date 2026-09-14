@@ -19,7 +19,15 @@ export const ASSET_PATHS = Object.freeze({
     model: asset('kaykit/adventurers/Ranger.glb'),
     movementBasic: asset('kaykit/animations/Rig_Medium_MovementBasic.glb'),
     general: asset('kaykit/animations/Rig_Medium_General.glb'),
-    combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb')
+    combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb'),
+    prismaHumanoidParts: Object.freeze([
+      asset('player/humanoid/prisma-humanoid-v1.gz.part1.txt'),
+      asset('player/humanoid/prisma-humanoid-v1.gz.part2.txt'),
+      asset('player/humanoid/prisma-humanoid-v1.gz.part3.txt'),
+      asset('player/humanoid/prisma-humanoid-v1.gz.part4.txt'),
+      asset('player/humanoid/prisma-humanoid-v1.gz.part5.txt'),
+      asset('player/humanoid/prisma-humanoid-v1.gz.part6.txt')
+    ])
   }),
   forest: Object.freeze({
     treeBroad: asset('kaykit/forest/Tree_1_A_Color1.gltf'),
