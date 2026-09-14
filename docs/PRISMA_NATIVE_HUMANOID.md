@@ -45,23 +45,39 @@ The original user-supplied archive is preserved in `assets-source/prisma/Group.p
 
 The original mesh silhouette is retained. Further body reshaping requires viewing this real native model first.
 
+## Retargeting coordinate and bind-pose contract
+
+Device review after the native body became active exposed two separate retargeting faults: the body faced 180 degrees away from the established player forward direction, and its limbs remained biased toward the Prisma source bind pose while KayKit locomotion animated underneath it. This produced backward-looking running, knees that appeared to bend the wrong way, and arms that stayed raised while still moving.
+
+The retarget boundary now owns both conversions explicitly:
+
+- Prisma native forward is rotated by 180 degrees at the presentation root so the visible body faces the same direction as the established player/controller;
+- KayKit source motion is measured from the actual GLTF skeleton bind pose, never from whichever Idle/Walk/Run frame happens to be active when the presentation is constructed;
+- source animation deltas are conjugated through the Prisma-to-player basis before they are applied to the Prisma bind skeleton;
+- hip/root translation deltas are converted through the same basis so any animation-space translation remains aligned after the 180-degree visual correction;
+- the live KayKit pose is restored immediately after bind-pose capture, so the compatibility layer never resets or owns the gameplay animation state.
+
+This is `global-bind-delta-v2`. The controller, movement direction, collision capsule, camera, tool anchors and animation mixer remain untouched.
+
 ## Stable systems deliberately unchanged
 
 This integration does not change player traversal, double jump, terrain collision, player collision, camera behavior, KayKit clips, tool anchors, spear behavior, construction, world systems, UI, PWA/install behavior, or save data.
 
 ## Verification
 
-`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, actual production Ranger activation, movement clip retargeting, first-person visibility and failure fallback. Device acceptance remains outstanding; automated activation is not visual acceptance.
+`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, actual production Ranger activation, movement clip retargeting, first-person visibility and failure fallback. The retarget regression also constructs the presentation while a real production movement clip is already sampled, verifies that the true KayKit bind pose is still captured, verifies that the live animation pose is restored, verifies the 180-degree Prisma/player facing basis, and verifies that native upper-arm motion leaves the raised bind pose with the same rotation magnitude as its KayKit source driver.
 
 Device verification is still required because the important acceptance criteria are visual and animated:
 
 1. the Prisma body replaces the Simple fallback after load on the production KayKit player;
-2. idle, walk, run, jump and double jump remain unchanged;
-3. shoulders, elbows, wrists, hips, knees, ankles and feet follow the correct side of the KayKit rig;
-4. the torso reads as pelvis -> waist -> ribcage -> shoulders instead of a rectangular block;
-5. the neck visibly bridges the torso and head without changing head rotation behavior;
-6. arms and legs taper naturally while their animated endpoints stay attached;
-7. feet read lower and less boot-like while remaining aligned to the ankle/foot motion;
-8. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
-9. first-person body visibility behavior remains unchanged;
-10. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
+2. the visible body faces the same direction that the controller is moving;
+3. idle, walk, run, jump and double jump remain unchanged;
+4. arms lower into the locomotion pose instead of remaining raised in the native bind pose;
+5. shoulders, elbows, wrists, hips, knees, ankles and feet follow the correct side and bend in the expected anatomical direction;
+6. the torso reads as pelvis -> waist -> ribcage -> shoulders instead of a rectangular block;
+7. the neck visibly bridges the torso and head without changing head rotation behavior;
+8. arms and legs taper naturally while their animated endpoints stay attached;
+9. feet read lower and less boot-like while remaining aligned to the ankle/foot motion;
+10. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
+11. first-person body visibility behavior remains unchanged;
+12. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
