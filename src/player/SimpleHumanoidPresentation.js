@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v5';
+const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v6';
 const SIMPLE_HUMANOID_MESH_BUDGET = 17;
 const HEAD_RADIUS = 0.215;
 const HEAD_HALF_HEIGHT = HEAD_RADIUS * 1.03;
@@ -9,10 +9,17 @@ const MIN_VISIBLE_NECK_LENGTH = 0.065;
 const TORSO_HIP_DROP = 0.02;
 const TORSO_SHOULDER_RISE = 0.018;
 const TORSO_MIN_LENGTH = 0.52;
-const TORSO_DEPTH_SCALE = 0.52;
 const FOOT_GROUND_OFFSET_Y = -0.04;
 const FOOT_FORWARD_OFFSET_Z = 0.07;
 const UNIT_Y = new THREE.Vector3(0, 1, 0);
+
+const TORSO_PROFILE = Object.freeze([
+  Object.freeze({ y: -0.5, halfWidth: 0.27, halfDepth: 0.135, landmark: 'pelvis' }),
+  Object.freeze({ y: -0.24, halfWidth: 0.245, halfDepth: 0.125, landmark: 'waist' }),
+  Object.freeze({ y: 0.06, halfWidth: 0.285, halfDepth: 0.145, landmark: 'lower-ribcage' }),
+  Object.freeze({ y: 0.32, halfWidth: 0.325, halfDepth: 0.155, landmark: 'upper-ribcage' }),
+  Object.freeze({ y: 0.5, halfWidth: 0.34, halfDepth: 0.145, landmark: 'shoulders' })
+]);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -150,7 +157,7 @@ function applySimplePalette(presentation) {
 
 function makeNeck(presentation) {
   const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.085, 1, 6, 1),
+    new THREE.CylinderGeometry(0.07, 0.087, 1, 7, 1),
     presentation.materials.skin
   );
   neck.name = 'scout-neck';
@@ -160,22 +167,91 @@ function makeNeck(presentation) {
   return neck;
 }
 
-function makeFootGeometry() {
-  const geometry = new THREE.BoxGeometry(0.18, 0.12, 0.28);
+function makeTorsoGeometry() {
+  const radialSegments = 8;
+  const positions = [];
+  const indices = [];
+
+  for (const ring of TORSO_PROFILE) {
+    for (let segment = 0; segment < radialSegments; segment += 1) {
+      const angle = (segment / radialSegments) * Math.PI * 2;
+      positions.push(
+        Math.cos(angle) * ring.halfWidth,
+        ring.y,
+        Math.sin(angle) * ring.halfDepth
+      );
+    }
+  }
+
+  for (let ringIndex = 0; ringIndex < TORSO_PROFILE.length - 1; ringIndex += 1) {
+    const lowerStart = ringIndex * radialSegments;
+    const upperStart = (ringIndex + 1) * radialSegments;
+    for (let segment = 0; segment < radialSegments; segment += 1) {
+      const next = (segment + 1) % radialSegments;
+      const lower = lowerStart + segment;
+      const lowerNext = lowerStart + next;
+      const upper = upperStart + segment;
+      const upperNext = upperStart + next;
+      indices.push(lower, upperNext, lowerNext, lower, upper, upperNext);
+    }
+  }
+
+  const bottomCenter = positions.length / 3;
+  positions.push(0, TORSO_PROFILE[0].y, 0);
+  const topCenter = positions.length / 3;
+  positions.push(0, TORSO_PROFILE[TORSO_PROFILE.length - 1].y, 0);
+  const topStart = (TORSO_PROFILE.length - 1) * radialSegments;
+
+  for (let segment = 0; segment < radialSegments; segment += 1) {
+    const next = (segment + 1) % radialSegments;
+    indices.push(bottomCenter, segment, next);
+    indices.push(topCenter, topStart + next, topStart + segment);
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.userData.unitHeight = 1;
+  geometry.userData.profile = TORSO_PROFILE.map(ring => ({ ...ring }));
+  geometry.userData.reference = 'prisma3d-human-obj-v1';
+  return geometry;
+}
+
+function makeSegmentGeometry(distalRadius, proximalRadius, midScale = 1) {
+  const geometry = new THREE.CylinderGeometry(distalRadius, proximalRadius, 1, 6, 2);
   const positions = geometry.getAttribute('position');
 
-  // Keep the sole flat for stable ground readability, but taper the heel and
-  // broaden/lower the toe so the foundation foot reads as a foot rather than a cube.
   for (let index = 0; index < positions.count; index += 1) {
-    const z = positions.getZ(index);
-    const y = positions.getY(index);
-    const xScale = z > 0 ? 1.06 : 0.84;
-    positions.setX(index, positions.getX(index) * xScale);
-    if (y > 0) positions.setY(index, y + (z > 0 ? -0.012 : 0.008));
+    if (Math.abs(positions.getY(index)) > 1e-5) continue;
+    positions.setX(index, positions.getX(index) * midScale);
+    positions.setZ(index, positions.getZ(index) * midScale);
   }
 
   positions.needsUpdate = true;
   geometry.computeVertexNormals();
+  geometry.userData.midScale = midScale;
+  geometry.userData.reference = 'prisma3d-human-obj-v1';
+  return geometry;
+}
+
+function makeFootGeometry() {
+  const geometry = new THREE.BoxGeometry(0.17, 0.105, 0.29);
+  const positions = geometry.getAttribute('position');
+
+  // The Prisma reference has a compact heel, a broader forefoot and a low toe.
+  // Keep the sole flat so the proven grounding/collision behavior stays unchanged.
+  for (let index = 0; index < positions.count; index += 1) {
+    const z = positions.getZ(index);
+    const y = positions.getY(index);
+    const xScale = z > 0 ? 1.07 : 0.82;
+    positions.setX(index, positions.getX(index) * xScale);
+    if (y > 0) positions.setY(index, y + (z > 0 ? -0.018 : 0.01));
+  }
+
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.userData.reference = 'prisma3d-human-obj-v1';
   return geometry;
 }
 
@@ -199,13 +275,10 @@ function simplifyBody(presentation) {
     'scout-right-boot-cuff'
   ]);
 
-  // The turnaround reference reads as a broad shoulder/ribcage tapering into a
-  // narrower waist instead of a rectangular body block. Keep a single low-poly
-  // torso mesh and preserve the same shoulder/hip anchors used by v4.
-  replaceGeometry(
-    presentation.torso,
-    new THREE.CylinderGeometry(0.34, 0.255, 1, 6, 1, false, Math.PI / 6)
-  );
+  // The Prisma3D reference adds an abdomen/ribcage/pelvis profile that the v5
+  // straight shoulder-to-waist taper could not express. Keep one torso mesh and
+  // preserve the same shoulder/hip anchors; only the shell between them changes.
+  replaceGeometry(presentation.torso, makeTorsoGeometry());
   replaceGeometry(presentation.head, new THREE.DodecahedronGeometry(HEAD_RADIUS, 0));
   presentation.head.scale.set(1, 1.03, 0.96);
   presentation.neck = makeNeck(presentation);
@@ -222,11 +295,11 @@ function simplifyBody(presentation) {
     const limb = presentation.limbs?.[side];
     if (!limb) continue;
 
-    replaceGeometry(limb.upperArm, new THREE.CylinderGeometry(0.082, 0.105, 1, 6, 1));
-    replaceGeometry(limb.lowerArm, new THREE.CylinderGeometry(0.068, 0.088, 1, 6, 1));
-    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.09, 0));
-    replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.115, 0.15, 1, 6, 1));
-    replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.085, 0.115, 1, 6, 1));
+    replaceGeometry(limb.upperArm, makeSegmentGeometry(0.078, 0.105, 1.02));
+    replaceGeometry(limb.lowerArm, makeSegmentGeometry(0.062, 0.088, 1.08));
+    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.085, 0));
+    replaceGeometry(limb.thigh, makeSegmentGeometry(0.108, 0.15, 1.03));
+    replaceGeometry(limb.shin, makeSegmentGeometry(0.078, 0.112, 1.12));
     replaceGeometry(limb.boot, makeFootGeometry());
     limb.boot.scale.set(1, 1, 1);
   }
@@ -237,8 +310,9 @@ function simplifyBody(presentation) {
   root.userData.designTarget = 'simple-rig-readable-humanoid';
   root.userData.rigSideBinding = 'explicit-side-v1';
   root.userData.foundationAlignment = 'shoulder-neck-flat-feet-v2';
-  root.userData.foundationProportions = 'wireframe-reference-v3';
-  root.userData.foundationBodyShape = 'tapered-low-poly-v1';
+  root.userData.foundationProportions = 'prisma-human-reference-v1';
+  root.userData.foundationBodyShape = 'anatomical-low-poly-v2';
+  root.userData.foundationSource = 'prisma3d-human-obj-v1';
 }
 
 export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
@@ -290,8 +364,8 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
       .multiplyScalar(0.5);
 
     // Keep the v4 continuity fix: the real shoulder anchors define the visible
-    // upper body while the pelvis remains the lower authority. Only the shell
-    // proportions change in this pass; no joint or animation is retargeted.
+    // upper body while the pelvis remains the lower authority. The Prisma pass
+    // changes only the shell profile; no joint or animation is retargeted.
     this.foundationTorsoBottom.copy(this.foundationHips);
     this.foundationTorsoBottom.y -= TORSO_HIP_DROP;
     this.foundationTorsoTop.copy(this.foundationShoulderCenter);
@@ -304,9 +378,9 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
       .add(this.foundationTorsoTop)
       .multiplyScalar(0.5);
     this.torso.position.copy(this.foundationMid);
-    this.torso.scale.set(1, torsoLength, TORSO_DEPTH_SCALE);
+    this.torso.scale.set(1, torsoLength, 1);
 
-    // Continue following the real head joint, but use a shorter neutral neck gap
+    // Continue following the real head joint, but use a short neutral neck gap
     // so the head/neck/shoulder transition reads as one body rather than a head on
     // a post. The minimum only prevents the head from collapsing into the shoulders.
     const minimumHeadCenterY = this.foundationShoulderCenter.y + HEAD_HALF_HEIGHT + MIN_VISIBLE_NECK_LENGTH;
@@ -330,8 +404,8 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
     this.neck.scale.set(1, neckLength, 1);
 
     // Keep the animated ankle positions but present the low-poly feet level at the
-    // player-root orientation. Geometry now provides the foot silhouette; the rig
-    // and the existing stable ground/collision system remain untouched.
+    // player-root orientation. Geometry provides the foot silhouette; the rig and
+    // the existing stable ground/collision system remain untouched.
     for (const side of ['left', 'right']) {
       const limb = this.limbs?.[side];
       const footBone = this.bones?.[side]?.foot;
