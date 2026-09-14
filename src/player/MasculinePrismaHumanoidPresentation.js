@@ -3,25 +3,25 @@ import { PrismaRiggedHumanoidPresentation } from './PrismaRiggedHumanoidPresenta
 
 const TORSO_WIDTH_PROFILE = Object.freeze([
   [0.00, 1.00],
-  [0.24, 0.92],
-  [0.50, 1.08],
-  [0.72, 1.19],
-  [0.90, 1.26],
-  [1.00, 1.21]
+  [0.22, 0.95],
+  [0.46, 1.02],
+  [0.66, 1.10],
+  [0.84, 1.19],
+  [1.00, 1.13]
 ]);
 const TORSO_DEPTH_PROFILE = Object.freeze([
   [0.00, 0.99],
-  [0.24, 0.96],
-  [0.50, 1.08],
-  [0.72, 1.17],
-  [0.90, 1.16],
-  [1.00, 1.09]
+  [0.22, 0.97],
+  [0.46, 1.02],
+  [0.66, 1.08],
+  [0.84, 1.11],
+  [1.00, 1.05]
 ]);
 const MIN_TORSO_WEIGHT = 0.28;
 const MAX_LIMB_WEIGHT = 0.55;
-const SHOULDER_SPREAD = 0.065;
-const UPPER_ARM_SPREAD = 0.025;
-const ARM_FORWARD_OFFSET = 0.075;
+const SHOULDER_SPREAD = 0.04;
+const UPPER_ARM_SPREAD = 0.012;
+const ARM_FORWARD_OFFSET = 0.04;
 const PALM_EXTENSION = 0.11;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -62,27 +62,42 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
   #applyPresentationProfile() {
     this.#sculptReadableMasculineTorso();
 
+    const leftShoulder = this.prismaBind.get('leftShoulder');
+    const rightShoulder = this.prismaBind.get('rightShoulder');
+    const shoulderCenterX = leftShoulder && rightShoulder
+      ? (leftShoulder.globalPosition.x + rightShoulder.globalPosition.x) * 0.5
+      : 0;
+
     for (const side of ['left', 'right']) {
       const shoulderName = `${side}Shoulder`;
       const upperArmName = `${side}UpperArm`;
       const shoulderBind = this.prismaBind.get(shoulderName);
       const upperArmBind = this.prismaBind.get(upperArmName);
-      const lateralSign = Math.sign(
-        shoulderBind?.localPosition.x
-        || upperArmBind?.localPosition.x
-        || (side === 'left' ? -1 : 1)
-      );
+      const shoulderSign = Math.sign((shoulderBind?.globalPosition.x ?? 0) - shoulderCenterX)
+        || (side === 'left' ? -1 : 1);
+      const upperArmSign = Math.sign((upperArmBind?.globalPosition.x ?? 0) - shoulderCenterX)
+        || shoulderSign;
 
-      if (shoulderBind) {
-        shoulderBind.localPosition.x += lateralSign * SHOULDER_SPREAD;
-        // Prisma native forward is opposite the player-facing basis, so negative
-        // native Z moves the relaxed arm toward the player's visible front plane.
-        shoulderBind.localPosition.z -= ARM_FORWARD_OFFSET;
-      }
-      if (upperArmBind) {
-        upperArmBind.localPosition.x += lateralSign * UPPER_ARM_SPREAD;
-        upperArmBind.localPosition.z -= ARM_FORWARD_OFFSET * 0.45;
-      }
+      // Reconstruct each local bind position from the captured native global bind
+      // pose first. This deliberately discards the older local-axis relaxation,
+      // whose sign could be wrong when a shoulder parent's axes were rotated.
+      this.#restoreNativeBindLocalPosition(shoulderName, 'shoulder');
+      this.#restoreNativeBindLocalPosition(upperArmName, shoulderName);
+
+      // Apply the visual offsets in the native asset's global coordinate basis,
+      // then convert them into each bone parent's local basis. Left/right are
+      // therefore guaranteed to move outward symmetrically even when their local
+      // X axes do not point in opposite world directions.
+      this.#offsetBindInAssetSpace(
+        shoulderName,
+        'shoulder',
+        new THREE.Vector3(shoulderSign * SHOULDER_SPREAD, 0, -ARM_FORWARD_OFFSET)
+      );
+      this.#offsetBindInAssetSpace(
+        upperArmName,
+        shoulderName,
+        new THREE.Vector3(upperArmSign * UPPER_ARM_SPREAD, 0, -ARM_FORWARD_OFFSET * 0.35)
+      );
     }
 
     for (const targetName of ['leftShoulder', 'leftUpperArm', 'rightShoulder', 'rightUpperArm']) {
@@ -100,6 +115,31 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     this.visualRoot.userData.chestProfile = 'sculpted-pectoral-v2';
     this.visualRoot.userData.armSilhouette = 'relaxed-forward-shoulder-v3';
     this.visualRoot.userData.toolAnchor = 'visible-palm-center-v3';
+    this.visualRoot.userData.shoulderOffsetMode = 'asset-space-symmetric-v1';
+  }
+
+  #restoreNativeBindLocalPosition(targetName, parentName) {
+    const bind = this.prismaBind.get(targetName);
+    const parentBind = this.prismaBind.get(parentName);
+    if (!bind || !parentBind) return false;
+
+    bind.localPosition
+      .copy(bind.globalPosition)
+      .sub(parentBind.globalPosition)
+      .applyQuaternion(parentBind.globalQuaternion.clone().invert());
+    return true;
+  }
+
+  #offsetBindInAssetSpace(targetName, parentName, assetOffset) {
+    const bind = this.prismaBind.get(targetName);
+    const parentBind = this.prismaBind.get(parentName);
+    if (!bind || !parentBind) return false;
+
+    const localOffset = assetOffset
+      .clone()
+      .applyQuaternion(parentBind.globalQuaternion.clone().invert());
+    bind.localPosition.add(localOffset);
+    return true;
   }
 
   #sculptReadableMasculineTorso() {
@@ -135,6 +175,10 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     const candidates = [];
     let torsoMinY = Number.POSITIVE_INFINITY;
     let torsoMaxY = Number.NEGATIVE_INFINITY;
+    let torsoMinX = Number.POSITIVE_INFINITY;
+    let torsoMaxX = Number.NEGATIVE_INFINITY;
+    let torsoMinZ = Number.POSITIVE_INFINITY;
+    let torsoMaxZ = Number.NEGATIVE_INFINITY;
 
     for (let vertex = 0; vertex < position.count; vertex += 1) {
       let torsoWeight = 0;
@@ -148,15 +192,23 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       }
       if (torsoWeight < MIN_TORSO_WEIGHT || limbWeight > MAX_LIMB_WEIGHT) continue;
 
+      const x = position.getX(vertex);
       const y = position.getY(vertex);
+      const z = position.getZ(vertex);
       torsoMinY = Math.min(torsoMinY, y);
       torsoMaxY = Math.max(torsoMaxY, y);
+      torsoMinX = Math.min(torsoMinX, x);
+      torsoMaxX = Math.max(torsoMaxX, x);
+      torsoMinZ = Math.min(torsoMinZ, z);
+      torsoMaxZ = Math.max(torsoMaxZ, z);
       candidates.push({ vertex, torsoWeight, limbWeight });
     }
 
     const torsoHeight = torsoMaxY - torsoMinY;
     if (!Number.isFinite(torsoHeight) || torsoHeight <= 1e-5 || candidates.length === 0) return;
 
+    const torsoCenterX = (torsoMinX + torsoMaxX) * 0.5;
+    const torsoCenterZ = (torsoMinZ + torsoMaxZ) * 0.5;
     let tunedVertices = 0;
     let maximumAppliedWidthFactor = 1;
     let maximumAppliedDepthFactor = 1;
@@ -175,18 +227,20 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       const depthFactor = THREE.MathUtils.lerp(1, targetDepth, isolation);
       const originalX = position.getX(vertex);
       const originalZ = position.getZ(vertex);
-      const sculptedX = originalX * widthFactor;
-      const sculptedZ = originalZ * depthFactor;
+      const centeredX = originalX - torsoCenterX;
+      const centeredZ = originalZ - torsoCenterZ;
+      const sculptedX = torsoCenterX + centeredX * widthFactor;
+      const sculptedZ = torsoCenterZ + centeredZ * depthFactor;
 
       position.setX(vertex, sculptedX);
       position.setZ(vertex, sculptedZ);
       maximumAppliedWidthFactor = Math.max(maximumAppliedWidthFactor, widthFactor);
       maximumAppliedDepthFactor = Math.max(maximumAppliedDepthFactor, depthFactor);
       if (t >= 0.5) {
-        upperOriginalMaxAbsX = Math.max(upperOriginalMaxAbsX, Math.abs(originalX));
-        upperSculptedMaxAbsX = Math.max(upperSculptedMaxAbsX, Math.abs(sculptedX));
-        upperOriginalMaxAbsZ = Math.max(upperOriginalMaxAbsZ, Math.abs(originalZ));
-        upperSculptedMaxAbsZ = Math.max(upperSculptedMaxAbsZ, Math.abs(sculptedZ));
+        upperOriginalMaxAbsX = Math.max(upperOriginalMaxAbsX, Math.abs(centeredX));
+        upperSculptedMaxAbsX = Math.max(upperSculptedMaxAbsX, Math.abs(sculptedX - torsoCenterX));
+        upperOriginalMaxAbsZ = Math.max(upperOriginalMaxAbsZ, Math.abs(centeredZ));
+        upperSculptedMaxAbsZ = Math.max(upperSculptedMaxAbsZ, Math.abs(sculptedZ - torsoCenterZ));
       }
       tunedVertices += 1;
     }
@@ -198,6 +252,7 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     geometry.userData.masculineProfile = 'readable-chest-shoulder-v2';
     geometry.userData.masculineVertexCount = tunedVertices;
     geometry.userData.masculineTorsoSpan = { minY: torsoMinY, maxY: torsoMaxY };
+    geometry.userData.masculineTorsoCenter = { x: torsoCenterX, z: torsoCenterZ };
     geometry.userData.masculineMaxWidthFactor = maximumAppliedWidthFactor;
     geometry.userData.masculineMaxDepthFactor = maximumAppliedDepthFactor;
     geometry.userData.masculineUpperWidthGain = upperOriginalMaxAbsX > 0
