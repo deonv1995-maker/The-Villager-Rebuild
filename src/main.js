@@ -12,7 +12,7 @@ import { SproutCompanionController } from './gameplay/SproutCompanionController.
 import { SproutVisualRuntimeController } from './gameplay/SproutVisualRuntimeController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
-import { TorchRuntimeController } from './gameplay/TorchRuntimeController.js';
+import { VisibleHandTorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
@@ -63,7 +63,7 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
       player: game.player,
       terrain: game.island
     });
-    const torchRuntime = new TorchRuntimeController({ game });
+    const torchRuntime = new VisibleHandTorchRuntimeController({ game });
     game.toolbelt.fuel = torchRuntime;
     const worldTimeRuntime = new WorldTimeRuntime({
       worldTime,
