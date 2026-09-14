@@ -3,10 +3,12 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { loadPrismaHumanoidScene, PRISMA_HUMANOID_TRIANGLE_COUNT } from './PrismaHumanoidAsset.js';
 import { SimpleHumanoidPresentation } from './SimpleHumanoidPresentation.js';
 
-const PRISMA_VISUAL_REVISION = 'prisma-rigged-humanoid-v1';
+const PRISMA_VISUAL_REVISION = 'prisma-rigged-humanoid-v2';
 const PRISMA_SOURCE = 'prisma3d-native-project-v1';
 const PRISMA_RUNTIME_SOURCE = 'prisma3d-native-rig-v1';
 const PRISMA_REQUIRED_JOINT_COUNT = 31;
+const PRISMA_PLAYER_BASIS_YAW = Math.PI;
+const PLAYER_UP = new THREE.Vector3(0, 1, 0);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -79,6 +81,40 @@ function buildSourceDrivers(bones) {
     ['rightFoot', right.foot],
     ['rightFootToe', findToeBone(right.foot)]
   ]);
+}
+
+function collectSourceSkeletons(root, drivers) {
+  const sourceBones = new Set(drivers.values());
+  const skeletons = new Set();
+  root?.traverse?.(object => {
+    const skeleton = object?.isSkinnedMesh ? object.skeleton : null;
+    if (!skeleton?.bones?.some(bone => sourceBones.has(bone))) return;
+    skeletons.add(skeleton);
+  });
+  return skeletons;
+}
+
+function snapshotSkeletonPose(skeletons) {
+  const pose = new Map();
+  for (const skeleton of skeletons) {
+    for (const bone of skeleton.bones ?? []) {
+      if (pose.has(bone)) continue;
+      pose.set(bone, {
+        position: bone.position.clone(),
+        quaternion: bone.quaternion.clone(),
+        scale: bone.scale.clone()
+      });
+    }
+  }
+  return pose;
+}
+
+function restoreSkeletonPose(pose) {
+  for (const [bone, transform] of pose) {
+    bone.position.copy(transform.position);
+    bone.quaternion.copy(transform.quaternion);
+    bone.scale.copy(transform.scale);
+  }
 }
 
 const TARGET_PARENT = Object.freeze({
@@ -184,18 +220,21 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
     this.prismaAssetLoader = prismaAssetLoader;
     this.foundationChildren = [...this.visualRoot.children];
     this.retargetRootMotionScale = 1;
+    this.prismaBasis = new THREE.Quaternion().setFromAxisAngle(PLAYER_UP, PRISMA_PLAYER_BASIS_YAW);
+    this.prismaBasisInverse = this.prismaBasis.clone().invert();
 
     this.visualRoot.userData.targetVisualRevision = PRISMA_VISUAL_REVISION;
     this.visualRoot.userData.actualModelSource = PRISMA_SOURCE;
     this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
     this.visualRoot.userData.runtimeFallback = 'simple-humanoid-v6';
-    this.visualRoot.userData.retargetMode = 'global-bind-delta-v1';
+    this.visualRoot.userData.retargetMode = 'global-bind-delta-v2';
     this.visualRoot.userData.actualModelStatus = 'fallback';
 
     this.retargetRootWorldInverse = new THREE.Quaternion();
     this.retargetSourceWorldQuaternion = new THREE.Quaternion();
     this.retargetSourceQuaternion = new THREE.Quaternion();
     this.retargetDeltaQuaternion = new THREE.Quaternion();
+    this.retargetAssetDeltaQuaternion = new THREE.Quaternion();
     this.retargetDesiredQuaternion = new THREE.Quaternion();
     this.retargetParentQuaternion = new THREE.Quaternion();
     this.retargetSourcePosition = new THREE.Vector3();
@@ -219,8 +258,14 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
       this.#capturePrismaBindPose(root);
       this.#calibrateRootMotion();
 
+      // Prisma's native forward axis is opposite the established KayKit/player
+      // forward axis. Keep the source asset unchanged and adapt only at this
+      // presentation boundary so movement, collision and camera authority stay intact.
+      root.quaternion.copy(this.prismaBasis);
+      root.updateMatrixWorld(true);
       root.name = 'prisma-rigged-humanoid';
       root.userData.source = PRISMA_RUNTIME_SOURCE;
+      root.userData.playerBasisYaw = PRISMA_PLAYER_BASIS_YAW;
       root.traverse(object => {
         if (!object.isMesh) return;
         object.castShadow = true;
@@ -239,7 +284,7 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
       this.visualRoot.userData.developmentStage = 'humanoid-foundation';
       this.visualRoot.userData.visibleBody = 'native-skinned-mesh';
       this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
-      this.visualRoot.userData.retargeting = 'global-bind-delta-v1';
+      this.visualRoot.userData.retargeting = 'global-bind-delta-v2';
       this.visualRoot.userData.foundationSource = PRISMA_RUNTIME_SOURCE;
       this.visualRoot.userData.nativeRigJoints = PRISMA_REQUIRED_JOINT_COUNT;
       this.visualRoot.userData.nativeRigTriangles = PRISMA_HUMANOID_TRIANGLE_COUNT;
@@ -265,20 +310,42 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
       return false;
     }
 
-    this.sourceDrivers = drivers;
-    for (const [targetName, sourceBone] of drivers) {
-      const quaternion = new THREE.Quaternion();
-      const position = new THREE.Vector3();
-      playerLocalQuaternion(
-        this.player,
-        sourceBone,
-        quaternion,
-        this.retargetRootWorldInverse,
-        this.retargetSourceWorldQuaternion
-      );
-      playerLocalPosition(this.player, sourceBone, position);
-      this.sourceBind.set(targetName, { quaternion, position });
+    const skeletons = collectSourceSkeletons(this.model, drivers);
+    if (skeletons.size === 0) {
+      this.prismaLoadError = new Error('KayKit humanoid rig is missing a skinned skeleton for bind-pose retargeting');
+      return false;
     }
+
+    this.sourceDrivers = drivers;
+    const animatedPose = snapshotSkeletonPose(skeletons);
+
+    try {
+      // Construction can happen while Idle/Run/etc. is already sampled. The
+      // retarget reference must be the GLTF bind pose, not whichever animation
+      // happened to be active when the presentation was created.
+      for (const skeleton of skeletons) skeleton.pose();
+      this.player.root.updateMatrixWorld(true);
+      this.model?.updateMatrixWorld?.(true);
+
+      for (const [targetName, sourceBone] of drivers) {
+        const quaternion = new THREE.Quaternion();
+        const position = new THREE.Vector3();
+        playerLocalQuaternion(
+          this.player,
+          sourceBone,
+          quaternion,
+          this.retargetRootWorldInverse,
+          this.retargetSourceWorldQuaternion
+        );
+        playerLocalPosition(this.player, sourceBone, position);
+        this.sourceBind.set(targetName, { quaternion, position });
+      }
+    } finally {
+      restoreSkeletonPose(animatedPose);
+      this.player.root.updateMatrixWorld(true);
+      this.model?.updateMatrixWorld?.(true);
+    }
+
     return true;
   }
 
@@ -363,8 +430,18 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
           .copy(this.retargetSourceQuaternion)
           .multiply(this.retargetParentQuaternion.copy(sourceBind.quaternion).invert())
           .normalize();
+
+        // Source deltas are expressed in player-local axes. The native Prisma
+        // skeleton lives in its opposite-facing asset basis, so conjugate the
+        // delta into asset-local axes before applying it to the Prisma bind pose.
+        this.retargetAssetDeltaQuaternion
+          .copy(this.prismaBasisInverse)
+          .multiply(this.retargetDeltaQuaternion)
+          .multiply(this.prismaBasis)
+          .normalize();
+
         targetGlobalQuaternion = this.retargetDesiredQuaternion
-          .copy(this.retargetDeltaQuaternion)
+          .copy(this.retargetAssetDeltaQuaternion)
           .multiply(bind.globalQuaternion)
           .normalize()
           .clone();
@@ -396,7 +473,8 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
       this.retargetSourceDelta
         .copy(this.retargetSourcePosition)
         .sub(sourceHipBind.position)
-        .multiplyScalar(this.retargetRootMotionScale);
+        .multiplyScalar(this.retargetRootMotionScale)
+        .applyQuaternion(this.prismaBasisInverse);
       hip.position.copy(hipBind.localPosition).add(this.retargetSourceDelta);
     }
 
