@@ -15,8 +15,10 @@ const appearance = read('src/player/RangerAppearancePresentation.js');
 const sproutRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const main = read('src/main.js');
 
-assert.ok(masculine.includes('CHEST_SCALE') && masculine.includes('x: 1.13'), 'male profile must retain the broader chest tuning');
-assert.ok(masculine.includes('SHOULDER_SCALE') && masculine.includes('x: 1.11'), 'male profile must retain broader shoulders');
+assert.ok(masculine.includes('TORSO_SCULPT') && masculine.includes('chestWidth: 0.13'), 'male profile must retain the broader chest sculpt');
+assert.ok(masculine.includes('shoulderWidth: 0.11'), 'male profile must retain broader shoulder geometry');
+assert.ok(masculine.includes('waistWidth: -0.03'), 'male profile must retain the subtle waist taper');
+assert.ok(masculine.includes('geometry.userData.masculineVertexCount'), 'masculine sculpt must record affected geometry for regression diagnostics');
 assert.ok(masculine.includes("bodySilhouette = 'broad-masculine-v1'"), 'male silhouette metadata must stay explicit');
 assert.ok(masculine.includes("chestProfile = 'emphasized-pectoral-v1'"), 'emphasized chest profile must stay explicit');
 assert.ok(masculine.includes('PALM_EXTENSION = 0.085'), 'visible tool socket must advance from wrist into palm');
