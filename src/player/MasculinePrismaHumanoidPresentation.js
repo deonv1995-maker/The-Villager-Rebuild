@@ -44,20 +44,20 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     multiplyBindScale(this.prismaBind.get('waist'), WAIST_SCALE);
 
     for (const side of ['left', 'right']) {
-      const sign = side === 'left' ? -1 : 1;
       const shoulderName = `${side}Shoulder`;
       const upperArmName = `${side}UpperArm`;
       const shoulderBind = this.prismaBind.get(shoulderName);
       const upperArmBind = this.prismaBind.get(upperArmName);
+      const lateralSign = Math.sign(shoulderBind?.localPosition.x || upperArmBind?.localPosition.x || (side === 'left' ? -1 : 1));
 
       if (shoulderBind) {
-        shoulderBind.localPosition.x += sign * SHOULDER_SPREAD;
+        shoulderBind.localPosition.x += lateralSign * SHOULDER_SPREAD;
         // Prisma native forward is opposite the player-facing basis, so negative
         // native Z moves the relaxed arm slightly toward the player's front.
         shoulderBind.localPosition.z -= ARM_FORWARD_OFFSET;
       }
       if (upperArmBind) {
-        upperArmBind.localPosition.x += sign * UPPER_ARM_SPREAD;
+        upperArmBind.localPosition.x += lateralSign * UPPER_ARM_SPREAD;
         upperArmBind.localPosition.z -= ARM_FORWARD_OFFSET * 0.35;
       }
     }
