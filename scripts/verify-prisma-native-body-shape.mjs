@@ -7,6 +7,49 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadPrismaHumanoidScene, PRISMA_HUMANOID_PACKED_SHA256 } from '../src/player/PrismaHumanoidAsset.js';
 import { PrismaRiggedHumanoidPresentation } from '../src/player/PrismaRiggedHumanoidPresentation.js';
 
+const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function findLeftUpperArm(root) {
+  let found = null;
+  root.traverse(object => {
+    if (found || !object.isBone) return;
+    const name = normalize(object.name);
+    if (!name.includes('upperarm')) return;
+    if (name.includes('left') || name.endsWith('l')) found = object;
+  });
+  return found;
+}
+
+function findSkeletonForBone(root, bone) {
+  let found = null;
+  root.traverse(object => {
+    if (found || !object.isSkinnedMesh || !object.skeleton?.bones?.includes(bone)) return;
+    found = object.skeleton;
+  });
+  return found;
+}
+
+function snapshotSkeleton(skeleton) {
+  return new Map(skeleton.bones.map(bone => [bone, {
+    position: bone.position.clone(),
+    quaternion: bone.quaternion.clone(),
+    scale: bone.scale.clone()
+  }]));
+}
+
+function restoreSkeleton(snapshot) {
+  for (const [bone, transform] of snapshot) {
+    bone.position.copy(transform.position);
+    bone.quaternion.copy(transform.quaternion);
+    bone.scale.copy(transform.scale);
+  }
+}
+
+function playerLocalQuaternion(player, bone) {
+  const rootInverse = player.root.getWorldQuaternion(new THREE.Quaternion()).invert();
+  return rootInverse.multiply(bone.getWorldQuaternion(new THREE.Quaternion())).normalize();
+}
+
 const parts = await Promise.all(Array.from({ length: 12 }, (_, i) => import(`../src/player/prisma-native/generated/part-${String(i + 1).padStart(2, '0')}.js`)));
 const encoded = parts.map(part => part.default).join('');
 assert.match(encoded, /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/);
@@ -50,14 +93,77 @@ root.add(ranger.scene);
 let firstPerson = false;
 let cameraModeListener;
 const player = { root, model: ranger.scene, assetMode: 'kaykit', onCameraModeChange: listener => { cameraModeListener = listener; return () => {}; }, isFirstPerson: () => firstPerson, getPosition: target => target.copy(root.position) };
+
+// Reproduce the device lifecycle: the Ranger animation can already be sampled
+// before the presentation is constructed. The presentation must still derive
+// its reference from the real GLTF bind pose rather than freezing that sample.
+const sourceLeftUpperArm = findLeftUpperArm(ranger.scene);
+assert.ok(sourceLeftUpperArm, 'production Ranger must expose a left upper-arm bone');
+const sourceSkeleton = findSkeletonForBone(ranger.scene, sourceLeftUpperArm);
+assert.ok(sourceSkeleton, 'production Ranger must expose the arm through a skinned skeleton');
+const originalPose = snapshotSkeleton(sourceSkeleton);
+sourceSkeleton.pose();
+root.updateMatrixWorld(true);
+const sourceBindQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
+restoreSkeleton(originalPose);
+root.updateMatrixWorld(true);
+
+const mixer = new THREE.AnimationMixer(ranger.scene);
+let strongestSample = null;
+for (const clip of movement.animations) {
+  mixer.stopAllAction();
+  mixer.clipAction(clip).reset().play();
+  for (const fraction of [0.18, 0.33, 0.5, 0.67, 0.82]) {
+    mixer.setTime(clip.duration * fraction);
+    root.updateMatrixWorld(true);
+    const quaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
+    const angle = sourceBindQuaternion.angleTo(quaternion);
+    if (!strongestSample || angle > strongestSample.angle) {
+      strongestSample = { clip, time: clip.duration * fraction, angle };
+    }
+  }
+}
+assert.ok(strongestSample?.angle > 0.08, 'movement set must contain a meaningful upper-arm motion sample');
+mixer.stopAllAction();
+mixer.clipAction(strongestSample.clip).reset().play();
+mixer.setTime(strongestSample.time);
+root.updateMatrixWorld(true);
+const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
+
 const presentation = new PrismaRiggedHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
+assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
-const mixer = new THREE.AnimationMixer(ranger.scene);
+assert.ok(
+  presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(sourceBindQuaternion) < 1e-4,
+  'retarget reference must come from the Ranger bind pose even when animation is already active'
+);
+assert.ok(
+  playerLocalQuaternion(player, sourceLeftUpperArm).angleTo(animatedArmQuaternion) < 1e-4,
+  'bind-pose capture must restore the live Ranger animation pose'
+);
+const expectedBasis = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+assert.ok(
+  presentation.prismaRoot.quaternion.angleTo(expectedBasis) < 1e-5,
+  'Prisma native body must be rotated into the established player forward basis'
+);
+
+presentation.update(1 / 60);
+presentation.prismaRoot.updateMatrixWorld(true);
+const targetUpperArm = presentation.prismaBones.get('leftUpperArm');
+const rootWorldInverse = presentation.prismaRoot.getWorldQuaternion(new THREE.Quaternion()).invert();
+const targetAssetQuaternion = rootWorldInverse
+  .multiply(targetUpperArm.getWorldQuaternion(new THREE.Quaternion()))
+  .normalize();
+const sourceMotionAngle = presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(animatedArmQuaternion);
+const targetMotionAngle = presentation.prismaBind.get('leftUpperArm').globalQuaternion.angleTo(targetAssetQuaternion);
+assert.ok(targetMotionAngle > 0.05, 'native upper arm must leave its raised bind pose when the Ranger arm animates');
+assert.ok(Math.abs(targetMotionAngle - sourceMotionAngle) < 1e-3, 'retargeted arm must preserve source motion magnitude');
+
 for (const clip of movement.animations) {
   mixer.stopAllAction();
-  mixer.clipAction(clip).play();
+  mixer.clipAction(clip).reset().play();
   for (const fraction of [0, 0.25, 0.5, 0.75]) {
     mixer.setTime(clip.duration * fraction);
     presentation.update(1 / 60);
@@ -82,4 +188,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, bind pose, production activation, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, true bind-pose retargeting, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
