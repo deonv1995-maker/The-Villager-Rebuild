@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyPrismaNativeBodyShape } from './PrismaNativeBodyShape.js';
 import part01 from './prisma-native/generated/part-01.js';
 import part02 from './prisma-native/generated/part-02.js';
 import part03 from './prisma-native/generated/part-03.js';
@@ -214,6 +215,7 @@ export function buildPrismaHumanoidScene(sourceBytes) {
   root.add(mesh);
 
   root.updateMatrixWorld(true);
+  applyPrismaNativeBodyShape({ geometry, bones });
   const skeleton = new THREE.Skeleton(bones);
   skeleton.calculateInverses();
   mesh.bind(skeleton, new THREE.Matrix4());
