@@ -4,13 +4,14 @@ import { RangerAppearancePresentation } from './RangerAppearancePresentation.js'
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
 
 export class RangerToolPresentation {
-  constructor({ player }) {
+  constructor({ player, appearancePresentation = null }) {
     this.player = player;
-    this.appearancePresentation = new RangerAppearancePresentation({ player });
+    this.appearancePresentation = appearancePresentation ?? new RangerAppearancePresentation({ player });
     this.duration = 0.46;
     this.remaining = 0;
     this.currentToolId = null;
     this.skeletalActionActive = false;
+    this.presentationHandMounted = false;
     this.root = new THREE.Group();
     this.root.name = 'ranger-tool-presentation';
     this.root.visible = false;
@@ -26,12 +27,14 @@ export class RangerToolPresentation {
   setEquippedTool(toolId) {
     if (toolId === 'spear' || toolId === 'torch') toolId = null;
     if (toolId === this.currentToolId) {
+      this.#syncVisibleHandMount();
       this.#syncVisibility();
       return;
     }
     this.currentToolId = toolId;
     this.root.clear();
     if (toolId) this.root.add(this.#createTool(toolId));
+    this.#syncVisibleHandMount();
     this.#syncVisibility();
     this.skeletalActionActive = false;
     this.#applyRestPose();
@@ -44,6 +47,7 @@ export class RangerToolPresentation {
   playSwing(toolId = this.currentToolId) {
     if (this.isBusy() || !toolId || toolId === 'spear') return false;
     if (this.currentToolId !== toolId) this.setEquippedTool(toolId);
+    this.#syncVisibleHandMount();
     this.#syncVisibility();
 
     if (this.handMounted && SKELETAL_WORK_TOOLS.has(toolId)) {
@@ -66,6 +70,7 @@ export class RangerToolPresentation {
 
   update(dt) {
     this.appearancePresentation.update(dt);
+    this.#syncVisibleHandMount();
     if (this.remaining <= 0) return;
     this.remaining = Math.max(0, this.remaining - dt);
     const progress = 1 - this.remaining / this.duration;
@@ -83,6 +88,18 @@ export class RangerToolPresentation {
       this.skeletalActionActive = false;
       this.#applyRestPose();
     }
+  }
+
+  #syncVisibleHandMount() {
+    const visibleMount = this.appearancePresentation?.getRightHandToolMount?.();
+    if (!visibleMount) return false;
+    if (this.root.parent !== visibleMount) {
+      visibleMount.add(this.root);
+      this.presentationHandMounted = true;
+      this.handMounted = true;
+      this.#applyRestPose();
+    }
+    return true;
   }
 
   #syncVisibility() {
