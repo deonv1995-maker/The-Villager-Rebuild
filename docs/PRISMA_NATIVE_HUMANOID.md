@@ -10,7 +10,7 @@ The native Prisma mesh must not become a second movement, collision, tool, camer
 
 `RangerToolPresentation` continues to construct `RangerAppearancePresentation` after `RangerController.load()` completes.
 
-`src/player/RangerAppearancePresentation.js` is the compatibility seam used by stable code. It resolves the historical Ranger-facing name to `PrismaRiggedHumanoidPresentation`.
+`src/player/RangerAppearancePresentation.js` is the compatibility seam used by stable code. It resolves the historical Ranger-facing name to `MasculinePrismaHumanoidPresentation`, which extends the proven `PrismaRiggedHumanoidPresentation` retargeter with presentation-only proportions and hand-socket calibration.
 
 `PrismaRiggedHumanoidPresentation` extends `SimpleHumanoidPresentation`. The Simple humanoid therefore remains the safe fallback whenever the KayKit rig cannot be resolved or the native Prisma body cannot be loaded or validated.
 
@@ -18,7 +18,8 @@ The ownership model is:
 
 - `RangerController`: movement, grounding, collision, camera modes, KayKit animation mixer, tool actions, spear anchors and cinematics;
 - KayKit medium rig: animation authority;
-- `PrismaRiggedHumanoidPresentation`: retargets the native Prisma skeleton from KayKit joint motion and owns presentation-only scale/style/socket adaptation;
+- `PrismaRiggedHumanoidPresentation`: retargets the native Prisma skeleton from KayKit joint motion and owns scale/style/socket adaptation;
+- `MasculinePrismaHumanoidPresentation`: owns the device-driven broad-chest/shoulder silhouette, relaxed arm bind offsets and palm-center socket calibration only;
 - `RangerToolPresentation`: owns equipped work-tool visuals and transfers them to the visible Prisma right-hand socket when native activation succeeds;
 - `SimpleHumanoidPresentation`: fallback visible body and existing rig-binding safety net.
 
@@ -27,8 +28,6 @@ The ownership model is:
 The native body is stored as 12 generated packed chunks under `src/player/prisma-native/generated/`.
 
 `PrismaHumanoidAsset.js` imports those chunks directly into the application bundle. The runtime therefore does not depend on a parallel set of public text fragments or on 12 network fetches before the body can appear.
-
-The older single public `prisma-humanoid-v1.part8.txt` fragment was incomplete and has been removed so there is only one runtime asset source.
 
 The packed format remains guarded by the existing parser contract:
 
@@ -40,15 +39,11 @@ The packed format remains guarded by the existing parser contract:
 
 ## Source recovery and generation
 
-PR #274's packed payload was internally corrupted. Its screenshots showed the Simple fallback, so they did not establish native mesh or retargeting quality. The speculative `device-humanoid-v2` shape adjustment has been removed.
-
 The original user-supplied archive is preserved in `assets-source/prisma/Group.prisma`. Regenerate with `python3 scripts/generate-prisma-native.py` (Python dependencies: `numpy`, `msgpack`). The generator reads the original polygon triangulation, four skin influences and inverse-bind matrices. It converts handedness consistently, reconstructs local bind transforms from the source inverse-bind matrices, computes smooth normals and writes the twelve packed modules plus their checksum. Editable Prisma pose transforms do not replace the source bind pose.
 
-The packed source geometry remains unchanged by presentation polish. Scale, stylized shading, minor shoulder spacing and the tool socket are runtime presentation concerns so future source regeneration cannot silently bake gameplay-facing offsets into the native asset.
+The packed source geometry remains unchanged by presentation polish. Scale, stylized shading, silhouette tuning and the tool socket are runtime presentation concerns so future source regeneration cannot silently bake gameplay-facing offsets into the native asset.
 
 ## Retargeting coordinate and bind-pose contract
-
-Device review after the native body became active exposed two separate retargeting faults: the body faced 180 degrees away from the established player forward direction, and its limbs remained biased toward the Prisma source bind pose while KayKit locomotion animated underneath it. This produced backward-looking running, knees that appeared to bend the wrong way, and arms that stayed raised while still moving.
 
 The retarget boundary owns both conversions explicitly:
 
@@ -60,21 +55,28 @@ The retarget boundary owns both conversions explicitly:
 
 This remains `global-bind-delta-v2`. The controller, movement direction, collision capsule, camera and animation mixer remain unchanged.
 
-## Presentation scale and cartoon surface
+## Player-facing scale, surface and masculine silhouette
 
-Device review after the retarget fix showed that the native body was readable but slightly undersized and visually too smooth compared with the low-poly world.
+The player-facing Prisma root uses a presentation-only uniform scale of `1.12`. Grounding compensation is derived from the native mesh bounding-box minimum, so enlarging the rendered body does not move the accepted foot/terrain plane. Collision radius, traversal speed, camera height and world scale are unchanged.
 
-The player-facing Prisma root therefore uses a presentation-only uniform scale of `1.12`. The scale is applied above the native skeleton and the root receives a grounding compensation derived from the native mesh bounding-box minimum so the accepted foot/terrain plane does not move downward when the body becomes larger. Collision radius, traversal speed, camera height and world scale are not changed.
+The active native material remains matte and faceted (`faceted-cartoon-v1`): flat shading is enabled and roughness stays high. Packed geometry, skin weights and topology remain unchanged.
 
-The active native material is switched to a matte faceted surface (`faceted-cartoon-v1`) by enabling flat shading and retaining high roughness. This deliberately changes only the rendered surface; packed geometry, skin weights and topology stay untouched. A small lateral shoulder offset (`relaxed-shoulder-v1`) gives the hanging arms slightly more breathing room without creating a competing animation system or modifying KayKit clips.
+Device review then showed that the character still read too narrow through the upper body and that his relaxed hands sat too far behind his hips. `MasculinePrismaHumanoidPresentation` therefore applies a controlled runtime bind profile rather than reshaping the source asset:
 
-## Visible hand tool socket
+- chest X scale `1.13` with a small depth increase for a clearer male pectoral/ribcage read;
+- shoulder-line X scale `1.11` and additional lateral shoulder spacing for a broader silhouette;
+- a subtle waist taper so the torso reads as a V rather than a straight tube;
+- small forward/lateral shoulder and upper-arm offsets so the hanging hands sit beside the body instead of collecting behind the pelvis.
 
-Equipped work tools previously remained parented to the hidden KayKit source hand. Once the visible Prisma body became the active character, that architectural mismatch made the tools appear beside the hand instead of inside it, especially after presentation-scale changes.
+These values change presentation bind positions/scales only. KayKit clips, retarget deltas, movement and collision remain the authority.
 
-The native presentation now exposes one `prisma-right-hand-tool-mount` under the visible `rightHand` bone. The socket compensates for the character-only `1.12` scale so axes/hammer/pickaxe/shovel/sword keep their established world size. `RangerToolPresentation` retains temporary legacy mounting during load/fallback, then transfers its single tool root to this visible socket as soon as the Prisma body is active. Tool-action timing and KayKit skeletal actions remain owned by the existing controller.
+## Visible palm tool socket
 
-The spear path is deliberately unchanged in this pass because spear throwing has its own established controller-owned anchor/release system and was not the device regression being corrected.
+The visible prop socket remains parented under the Prisma `rightHand` bone, but it is no longer centered on the wrist origin. The masculine profile advances the socket along the forearm-to-hand direction into the visible palm and calibrates its bind orientation so prop local +Y is upright at rest. This gives axes, hammer, pickaxe, shovel and sword one stable palm-centered grip basis while preserving their established world scale through inverse presentation-scale compensation.
+
+`RangerToolPresentation` still owns work-tool visuals and action timing. During native load/fallback it can remain on the legacy KayKit hand, then its single tool root transfers to the active Prisma palm mount. No second tool action system is introduced.
+
+The spear path remains deliberately unchanged because spear throwing has its own established controller-owned anchor/release system.
 
 ## Stable systems deliberately unchanged
 
@@ -82,20 +84,19 @@ This integration does not change player traversal, double jump, terrain collisio
 
 ## Verification
 
-`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, actual production Ranger activation, movement clip retargeting, first-person visibility and failure fallback. The retarget regression constructs the presentation while a real production movement clip is already sampled, verifies that the true KayKit bind pose is still captured, verifies that the live animation pose is restored, verifies the 180-degree Prisma/player facing basis, and verifies that native upper-arm motion leaves the raised bind pose with the same rotation magnitude as its KayKit source driver.
+`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, production Ranger activation, true bind-pose capture, movement retargeting, the 180-degree facing basis, first-person visibility and failure fallback.
 
-The same verifier now also guards the `1.12` grounded presentation scale, matte flat-shaded material, visible right-hand socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand.
+The same verification now guards the `1.12` grounded presentation scale, matte faceted material, broad masculine chest/shoulder profile, subtle waist taper, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression also verifies the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
 
-Device verification is still required because the important acceptance criteria are visual and animated:
+## Device verification
 
-1. the Prisma body replaces the Simple fallback after load on the production KayKit player;
-2. the visible body faces the same direction that the controller is moving;
-3. idle, walk, run, jump and double jump remain unchanged;
-4. the larger body still stands on the same terrain plane and reads at a better scale against floors, wall panels, trees and Sprout;
-5. arms lower into locomotion, hang with a more relaxed shoulder silhouette and do not return to the raised native bind pose;
-6. shoulders, elbows, wrists, hips, knees, ankles and feet follow the correct side and bend in the expected anatomical direction;
-7. faceted shading reads as lightly cartoon/low-poly rather than smooth plastic, without becoming visually noisy at mobile distance;
-8. axe, hammer, pickaxe, shovel and sword sit through the visible right hand instead of floating beside the character and remain aligned during their actions;
-9. spear throwing remains unchanged because it still uses the controller-owned spear path;
-10. first-person body visibility behavior remains unchanged;
-11. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
+After merge/deploy, verify on a physical phone:
+
+1. the upper body reads broader, with a clearer male chest and shoulder line without looking bodybuilder-exaggerated;
+2. idle/walk/run/jump/double-jump remain anatomically correct and the hands hang beside the hips rather than behind the pelvis;
+3. axe, hammer, pickaxe, shovel and sword visibly pass through the right palm and follow the hand during their actions;
+4. the handheld torch sits upright through the visible palm and its light/flame still follow correctly;
+5. the faceted/cartoon surface still reads cleanly at normal mobile distance;
+6. the larger player remains correctly grounded and scaled against buildings, trees and the now slightly smaller Sprout;
+7. spear throwing and first-person visibility remain unchanged;
+8. failure to load the native body still leaves the Simple humanoid usable rather than breaking gameplay.
