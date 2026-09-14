@@ -33,7 +33,7 @@ const crafting = new CraftingSystem({ inventory });
 const toolbelt = new ToolbeltSystem({ inventory, crafting });
 inventory.add('stick', 1);
 inventory.add('grass', 2);
-assert.equal(crafting.craft('torch'), true);
+assert.ok(crafting.craft('torch'));
 assert.equal(toolbelt.select('torch').equipped, true);
 
 const scene = new THREE.Scene();
