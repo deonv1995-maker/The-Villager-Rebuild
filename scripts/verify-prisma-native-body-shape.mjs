@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadPrismaHumanoidScene, PRISMA_HUMANOID_PACKED_SHA256 } from '../src/player/PrismaHumanoidAsset.js';
 import { PrismaRiggedHumanoidPresentation } from '../src/player/PrismaRiggedHumanoidPresentation.js';
+import { RangerToolPresentation } from '../src/player/RangerToolPresentation.js';
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -133,7 +134,11 @@ const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
 const presentation = new PrismaRiggedHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v3');
 assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
+assert.equal(presentation.visualRoot.userData.surfaceStyle, 'faceted-cartoon-v1');
+assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-shoulder-v1');
+assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-right-hand-v1');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
 assert.ok(
   presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(sourceBindQuaternion) < 1e-4,
@@ -148,6 +153,31 @@ assert.ok(
   presentation.prismaRoot.quaternion.angleTo(expectedBasis) < 1e-5,
   'Prisma native body must be rotated into the established player forward basis'
 );
+assert.ok(Math.abs(presentation.prismaRoot.scale.x - 1.12) < 1e-6, 'native body should use the accepted larger presentation scale');
+assert.ok(Math.abs(presentation.prismaRoot.scale.y - 1.12) < 1e-6, 'native body should scale uniformly');
+assert.ok(Math.abs(presentation.prismaRoot.scale.z - 1.12) < 1e-6, 'native body should scale uniformly');
+const nativeGroundY = presentation.prismaMesh.geometry.boundingBox.min.y;
+const displayedGroundY = presentation.prismaRoot.position.y + nativeGroundY * presentation.prismaRoot.scale.y;
+assert.ok(Math.abs(displayedGroundY - nativeGroundY) < 1e-5, 'larger presentation scale must preserve the original foot/ground plane');
+assert.equal(presentation.prismaMesh.material.flatShading, true, 'native body should use faceted cartoon shading');
+assert.ok(presentation.prismaMesh.material.roughness >= 0.96, 'cartoon surface should remain matte instead of glossy');
+
+const toolMount = presentation.getRightHandToolMount();
+assert.ok(toolMount, 'active Prisma body should expose a visible right-hand tool mount');
+assert.equal(toolMount.parent, presentation.prismaBones.get('rightHand'), 'tool mount must live on the visible Prisma right hand');
+assert.ok(Math.abs(toolMount.scale.x - 1 / 1.12) < 1e-6, 'tool mount should cancel character-only presentation scaling');
+const toolPlayer = {
+  root,
+  isFirstPerson: () => false,
+  isToolActing: () => false,
+  onCameraModeChange: () => () => {}
+};
+const toolPresentation = new RangerToolPresentation({ player: toolPlayer, appearancePresentation: presentation });
+toolPresentation.setEquippedTool('axe');
+toolPresentation.update(1 / 60);
+assert.equal(toolPresentation.root.parent, toolMount, 'equipped tools must transfer from the legacy source hand to the visible Prisma hand');
+assert.equal(toolPresentation.presentationHandMounted, true, 'tool presentation should record visible-hand ownership after native activation');
+assert.ok(toolPresentation.root.position.length() < 1e-6, 'visible-hand tool grip should remain centered on the hand socket');
 
 presentation.update(1 / 60);
 presentation.prismaRoot.updateMatrixWorld(true);
@@ -188,4 +218,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, true bind-pose retargeting, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, true bind-pose retargeting, larger grounded scale, faceted surface, visible-hand tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
