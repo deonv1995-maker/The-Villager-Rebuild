@@ -61,13 +61,13 @@ The player-facing Prisma root uses a presentation-only uniform scale of `1.12`. 
 
 The active native material remains matte and faceted (`faceted-cartoon-v1`): flat shading is enabled and roughness stays high. Packed skin weights and topology remain unchanged.
 
-The first geometry-sculpt pass was technically valid but device feedback showed that it was visually too subtle at normal mobile camera distance. The current `readable-masculine-v2` profile therefore uses a full torso-height width/depth curve rather than multiplying only the contribution of a few individual torso bones.
+Device review established two distinct problems with the earlier masculine passes. The first pass was too subtle because weighted bone factors were attenuated across blended vertices. The second pass made the change visible but overcorrected the silhouette and exposed an asymmetry bug in the shoulder placement: it assumed each shoulder's local X axis pointed outward, which is not guaranteed on the imported native hierarchy.
 
-The runtime identifies torso-dominant vertices from the existing skin weights, excludes limb-dominant vertices, measures that torso span, and applies a smooth bind-space profile from hips through waist, ribcage and shoulder line. The waist narrows to about `0.92×`, the upper ribcage broadens progressively, and the shoulder region reaches about `1.26×` width with up to roughly `1.17×` chest depth. Because this happens on a cloned render geometry, the skeleton keeps neutral scale and the KayKit rotation deltas remain unchanged.
+The current `readable-masculine-v2` profile keeps a full torso-height sculpt, but scales every torso vertex around the measured torso centre rather than around the mesh origin. The waist now tapers to about `0.95×`, the ribcage broadens progressively, and the upper chest/shoulder region peaks around `1.19×` width and `1.11×` depth before easing back toward the neck. This keeps the requested broader male chest and shoulder line while avoiding the previous blocky/over-expanded look.
 
-The shoulder and upper-arm bind origins also receive larger position-only offsets than the first pass: the shoulder chain is moved farther outward and forward so the relaxed hands should read beside/slightly ahead of the hips instead of disappearing behind the pelvis. These offsets still do not change collision, movement or animation timing.
+Shoulder and upper-arm offsets now use the captured native global bind pose as their reference. Each local bind position is reconstructed from that untouched global pose, then a symmetric outward/forward offset is expressed in the Prisma asset coordinate basis and converted into the relevant parent-local basis. This removes the old dependence on local-axis signs and prevents one shoulder from being pushed in the wrong direction. The skeleton still keeps neutral scale, and KayKit rotation deltas remain the animation authority.
 
-Regression diagnostics now record both the requested profile factors and the actual upper-torso width/depth gain produced on the loaded native mesh. This prevents a future pass from technically touching vertices while remaining visually negligible.
+Regression diagnostics continue to record the requested profile factors and actual upper-torso width/depth gain. The polish verification additionally guards the centred sculpt and asset-space symmetric shoulder path so future tuning cannot silently reintroduce the local-axis assumption.
 
 ## Visible palm tool socket
 
@@ -87,14 +87,14 @@ This integration does not change player traversal, double jump, terrain collisio
 
 `npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, production Ranger activation, true bind-pose capture, movement retargeting, the 180-degree facing basis, first-person visibility and failure fallback.
 
-The same verification guards the `1.12` grounded presentation scale, matte faceted material, readable full-torso masculine profile, measurable upper-body width/depth gain, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression also verifies the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
+The same verification guards the `1.12` grounded presentation scale, matte faceted material, readable full-torso masculine profile, measurable upper-body width/depth gain, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression verifies the centred torso sculpt, asset-space symmetric shoulder correction, visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
 
 ## Device verification
 
 After merge/deploy, verify on a physical phone:
 
-1. the upper body is visibly broader than the previous build at normal gameplay zoom, with a clear chest/shoulder V without becoming exaggerated;
-2. idle/walk/run/jump/double-jump remain anatomically correct and the hands hang beside or slightly ahead of the hips rather than behind the pelvis;
+1. the upper body reads naturally broader with a masculine chest/shoulder V, without the previous one-sided shoulder bulge or blocky upper torso;
+2. idle/walk/run/jump/double-jump remain anatomically correct and both hands hang beside or slightly ahead of the hips rather than one shoulder/arm being displaced;
 3. axe, hammer, pickaxe, shovel and sword visibly pass through the right palm and follow the hand during their actions;
 4. the handheld torch sits upright through the visible palm and its light/flame still follow correctly;
 5. the faceted/cartoon surface still reads cleanly at normal mobile distance;
