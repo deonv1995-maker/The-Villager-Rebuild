@@ -1,4 +1,16 @@
 import assert from 'node:assert/strict';
+import part01 from '../src/player/prisma-native/generated/part-01.js';
+import part02 from '../src/player/prisma-native/generated/part-02.js';
+import part03 from '../src/player/prisma-native/generated/part-03.js';
+import part04 from '../src/player/prisma-native/generated/part-04.js';
+import part05 from '../src/player/prisma-native/generated/part-05.js';
+import part06 from '../src/player/prisma-native/generated/part-06.js';
+import part07 from '../src/player/prisma-native/generated/part-07.js';
+import part08 from '../src/player/prisma-native/generated/part-08.js';
+import part09 from '../src/player/prisma-native/generated/part-09.js';
+import part10 from '../src/player/prisma-native/generated/part-10.js';
+import part11 from '../src/player/prisma-native/generated/part-11.js';
+import part12 from '../src/player/prisma-native/generated/part-12.js';
 import {
   loadPrismaHumanoidScene,
   PRISMA_HUMANOID_INDEX_COUNT,
@@ -10,6 +22,31 @@ import {
   PRISMA_NATIVE_BODY_SHAPE_PROFILE,
   PRISMA_NATIVE_BODY_SHAPE_REVISION
 } from '../src/player/PrismaNativeBodyShape.js';
+
+const packedParts = [part01, part02, part03, part04, part05, part06, part07, part08, part09, part10, part11, part12];
+const packedText = packedParts.join('');
+const historicalPart8Prefix = 'NAosCy4LKwspCywLKwstCy8LLgssCy0L';
+
+console.log('Prisma packed part diagnostics:');
+packedParts.forEach((part, index) => {
+  const invalid = [...new Set(part.replace(/[A-Za-z0-9+/=]/g, ''))].join('');
+  console.log(
+    `part-${String(index + 1).padStart(2, '0')}: length=${part.length} mod4=${part.length % 4}`
+      + ` start=${part.slice(0, 12)} end=${part.slice(-12)} padding=${(part.match(/=/g) ?? []).length}`
+      + ` invalid=${JSON.stringify(invalid)}`
+  );
+});
+console.log(
+  `packed-total: length=${packedText.length} mod4=${packedText.length % 4}`
+    + ` padding=${(packedText.match(/=/g) ?? []).length}`
+    + ` historical-part8-prefix-index=${packedText.indexOf(historicalPart8Prefix)}`
+);
+
+assert.notEqual(
+  packedText.length % 4,
+  1,
+  'bundled Prisma base64 is structurally truncated; repair the generated chunks before native-body verification can proceed'
+);
 
 const { scene, mesh, bones } = await loadPrismaHumanoidScene();
 const geometry = mesh?.geometry;
