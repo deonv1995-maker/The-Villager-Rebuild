@@ -54,8 +54,13 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.visualRevision,
-  'simple-humanoid-v1',
-  'production presentation should use the simple humanoid foundation'
+  'simple-humanoid-v2',
+  'production presentation should use the current simple humanoid foundation'
+);
+assert.equal(
+  productionPresentation.visualRoot.userData.foundationAlignment,
+  'head-neck-flat-feet-v1',
+  'production presentation should retain the foundation alignment corrections'
 );
 
 const root = new THREE.Group();
@@ -125,9 +130,10 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger q
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should stay hidden');
 assert.equal(presentation.visualRoot.parent, root, 'humanoid presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing identity should remain Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v1');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v2');
 assert.equal(presentation.visualRoot.userData.developmentStage, 'humanoid-foundation');
 assert.equal(presentation.visualRoot.userData.visualMeshBudget, 16);
+assert.equal(presentation.visualRoot.userData.foundationAlignment, 'head-neck-flat-feet-v1');
 
 for (const name of [
   'scout-tunic',
