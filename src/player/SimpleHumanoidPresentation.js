@@ -1,11 +1,15 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v2';
+const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v3';
 const SIMPLE_HUMANOID_MESH_BUDGET = 16;
 const HEAD_NECK_CORRECTION = -0.28;
+const HEAD_RADIUS = 0.215;
+const TORSO_MIN_LENGTH = 0.44;
+const TORSO_LENGTH_SCALE = 0.95;
+const TORSO_CENTER_LERP = 0.58;
 const FOOT_GROUND_OFFSET_Y = -0.04;
-const FOOT_FORWARD_OFFSET_Z = 0.08;
+const FOOT_FORWARD_OFFSET_Z = 0.06;
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -161,16 +165,20 @@ function simplifyBody(presentation) {
     'scout-right-boot-cuff'
   ]);
 
-  replaceGeometry(presentation.torso, new THREE.BoxGeometry(0.5, 0.72, 0.3));
-  replaceGeometry(presentation.head, new THREE.DodecahedronGeometry(0.255, 0));
-  presentation.head.scale.set(1, 1.04, 0.96);
+  // The wireframe preparation reference uses a compact ribcage over a clearly
+  // readable pelvis/upper-leg break. Keep one simple torso mesh, but make it
+  // shorter so the actual animated thighs are visible instead of being hidden
+  // inside a long tunic-like block.
+  replaceGeometry(presentation.torso, new THREE.BoxGeometry(0.52, 0.72, 0.3));
+  replaceGeometry(presentation.head, new THREE.DodecahedronGeometry(HEAD_RADIUS, 0));
+  presentation.head.scale.set(1, 1.03, 0.96);
 
   const leftEye = root.getObjectByName('scout-eye-left');
   const rightEye = root.getObjectByName('scout-eye-right');
   for (const [eye, sign] of [[leftEye, -1], [rightEye, 1]]) {
     if (!eye) continue;
-    replaceGeometry(eye, new THREE.BoxGeometry(0.045, 0.06, 0.02));
-    eye.position.set(sign * 0.085, 0.015, 0.245);
+    replaceGeometry(eye, new THREE.BoxGeometry(0.04, 0.052, 0.018));
+    eye.position.set(sign * 0.07, 0.01, 0.205);
   }
 
   for (const side of ['left', 'right']) {
@@ -179,10 +187,10 @@ function simplifyBody(presentation) {
 
     replaceGeometry(limb.upperArm, new THREE.CylinderGeometry(0.095, 0.105, 1, 6, 1));
     replaceGeometry(limb.lowerArm, new THREE.CylinderGeometry(0.08, 0.09, 1, 6, 1));
-    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.105, 0));
-    replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.13, 0.145, 1, 6, 1));
-    replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.1, 0.115, 1, 6, 1));
-    replaceGeometry(limb.boot, new THREE.BoxGeometry(0.2, 0.16, 0.28));
+    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.1, 0));
+    replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.125, 0.14, 1, 6, 1));
+    replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.095, 0.11, 1, 6, 1));
+    replaceGeometry(limb.boot, new THREE.BoxGeometry(0.18, 0.13, 0.24));
     limb.boot.scale.set(1, 1, 1);
   }
 
@@ -192,12 +200,15 @@ function simplifyBody(presentation) {
   root.userData.designTarget = 'simple-rig-readable-humanoid';
   root.userData.rigSideBinding = 'explicit-side-v1';
   root.userData.foundationAlignment = 'head-neck-flat-feet-v1';
+  root.userData.foundationProportions = 'wireframe-reference-v1';
 }
 
 export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
   constructor(options) {
     super(options);
     this.foundationTemp = new THREE.Vector3();
+    this.foundationHips = new THREE.Vector3();
+    this.foundationChest = new THREE.Vector3();
     if (!this.rigReady) return;
 
     const strictSides = resolveStrictSideBones(this.model);
@@ -225,6 +236,19 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
     // joint. The foundation character removes that art offset so the head meets
     // the torso at the neck and the skeleton can be judged without a fake gap.
     this.headGroup.translateY(HEAD_NECK_CORRECTION);
+
+    // Preserve the true animated hip/chest anchors, but stop the temporary torso
+    // from visually swallowing the upper legs. The wireframe reference makes the
+    // hip break explicit; this shorter body block exposes the real thigh motion
+    // without moving or rescaling any skeleton joint.
+    boneLocalPosition(this, this.bones.hips, this.foundationHips);
+    boneLocalPosition(this, this.bones.chest, this.foundationChest);
+    const torsoLength = Math.max(
+      TORSO_MIN_LENGTH,
+      this.foundationHips.distanceTo(this.foundationChest) * TORSO_LENGTH_SCALE
+    );
+    this.torso.position.copy(this.foundationHips).lerp(this.foundationChest, TORSO_CENTER_LERP);
+    this.torso.scale.y = torsoLength / 0.72;
 
     // KayKit foot joints carry a strong ankle pitch that worked with the original
     // skinned boots but made simple box feet look like the whole leg was bent
