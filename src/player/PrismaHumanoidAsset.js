@@ -78,10 +78,24 @@ function readMagic(bytes) {
   return String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
 }
 
+function normalizeBase64(base64) {
+  let normalized = String(base64 ?? '')
+    .replace(/\s+/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const remainder = normalized.length % 4;
+  if (remainder === 1) throw new Error('Prisma humanoid packed base64 has an invalid length');
+  if (remainder > 0) normalized += '='.repeat(4 - remainder);
+  return normalized;
+}
+
 function base64ToBytes(base64) {
   const decode = globalThis.atob;
   if (typeof decode !== 'function') throw new Error('Base64 decoder is unavailable');
-  const binary = decode(base64.replace(/\s+/g, ''));
+  const normalized = normalizeBase64(base64);
+  const invalid = normalized.match(/[^A-Za-z0-9+/=]/);
+  if (invalid) throw new Error(`Prisma humanoid packed base64 contains invalid character ${JSON.stringify(invalid[0])}`);
+  const binary = decode(normalized);
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
   return bytes;
@@ -249,7 +263,7 @@ export async function loadPrismaHumanoidScene(partPaths = null, fetchImpl = glob
     parts = await Promise.all(responses.map(response => response.text()));
   }
 
-  const base64 = parts.join('').replace(/\s+/g, '');
+  const base64 = parts.join('');
   const packed = await gunzipBytes(base64ToBytes(base64));
   return buildPrismaHumanoidScene(packed);
 }
