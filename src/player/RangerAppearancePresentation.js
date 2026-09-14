@@ -1,3 +1,10 @@
-// Compatibility boundary: stable player/tool systems still import the historical Ranger name,
-// while the runtime presentation is intentionally reduced to a simple rig-readable humanoid.
-export { SimpleHumanoidPresentation as RangerAppearancePresentation } from './SimpleHumanoidPresentation.js';
+// Compatibility boundary: stable player/tool systems keep importing the historical Ranger name.
+// The Prisma presentation owns the player-facing native mesh while retaining SimpleHumanoidPresentation
+// internally as its safe rig-readable fallback.
+export {
+  PrismaRiggedHumanoidPresentation as RangerAppearancePresentation
+} from './PrismaRiggedHumanoidPresentation.js';
+
+export {
+  SimpleHumanoidPresentation as RangerAppearancePresentationFallback
+} from './SimpleHumanoidPresentation.js';
