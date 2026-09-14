@@ -3,11 +3,14 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { loadPrismaHumanoidScene, PRISMA_HUMANOID_TRIANGLE_COUNT } from './PrismaHumanoidAsset.js';
 import { SimpleHumanoidPresentation } from './SimpleHumanoidPresentation.js';
 
-const PRISMA_VISUAL_REVISION = 'prisma-rigged-humanoid-v2';
+const PRISMA_VISUAL_REVISION = 'prisma-rigged-humanoid-v3';
 const PRISMA_SOURCE = 'prisma3d-native-project-v1';
 const PRISMA_RUNTIME_SOURCE = 'prisma3d-native-rig-v1';
 const PRISMA_REQUIRED_JOINT_COUNT = 31;
 const PRISMA_PLAYER_BASIS_YAW = Math.PI;
+const PRISMA_PRESENTATION_SCALE = 1.12;
+const PRISMA_SHOULDER_RELAXATION = 0.025;
+const PRISMA_CARTOON_ROUGHNESS = 0.96;
 const PLAYER_UP = new THREE.Vector3(0, 1, 0);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -211,6 +214,7 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
     super({ player });
     this.prismaRoot = null;
     this.prismaMesh = null;
+    this.prismaToolMount = null;
     this.prismaBones = new Map();
     this.prismaBind = new Map();
     this.sourceDrivers = new Map();
@@ -256,27 +260,41 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
 
       const mesh = this.#resolvePrismaRig(root);
       this.#capturePrismaBindPose(root);
+      this.#applyCartoonBindTuning();
       this.#calibrateRootMotion();
 
       // Prisma's native forward axis is opposite the established KayKit/player
       // forward axis. Keep the source asset unchanged and adapt only at this
       // presentation boundary so movement, collision and camera authority stay intact.
       root.quaternion.copy(this.prismaBasis);
+      root.scale.setScalar(PRISMA_PRESENTATION_SCALE);
+      const nativeGroundY = mesh.geometry.boundingBox?.min.y ?? 0;
+      root.position.y = (1 - PRISMA_PRESENTATION_SCALE) * nativeGroundY;
       root.updateMatrixWorld(true);
       root.name = 'prisma-rigged-humanoid';
       root.userData.source = PRISMA_RUNTIME_SOURCE;
       root.userData.playerBasisYaw = PRISMA_PLAYER_BASIS_YAW;
+      root.userData.presentationScale = PRISMA_PRESENTATION_SCALE;
+      root.userData.groundingOffsetY = root.position.y;
       root.traverse(object => {
         if (!object.isMesh) return;
         object.castShadow = true;
         object.receiveShadow = true;
         object.frustumCulled = false;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        for (const material of materials) {
+          if (!material) continue;
+          material.flatShading = true;
+          if (Number.isFinite(material.roughness)) material.roughness = Math.max(material.roughness, PRISMA_CARTOON_ROUGHNESS);
+          material.needsUpdate = true;
+        }
       });
 
       for (const child of this.foundationChildren) child.visible = false;
       this.visualRoot.add(root);
       this.prismaRoot = root;
       this.prismaMesh = mesh;
+      this.prismaToolMount = this.#createRightHandToolMount();
       this.prismaReady = true;
       this.mode = 'prisma-rigged';
 
@@ -288,6 +306,10 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
       this.visualRoot.userData.foundationSource = PRISMA_RUNTIME_SOURCE;
       this.visualRoot.userData.nativeRigJoints = PRISMA_REQUIRED_JOINT_COUNT;
       this.visualRoot.userData.nativeRigTriangles = PRISMA_HUMANOID_TRIANGLE_COUNT;
+      this.visualRoot.userData.presentationScale = PRISMA_PRESENTATION_SCALE;
+      this.visualRoot.userData.surfaceStyle = 'faceted-cartoon-v1';
+      this.visualRoot.userData.armSilhouette = 'relaxed-shoulder-v1';
+      this.visualRoot.userData.toolAnchor = 'visible-right-hand-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
 
       this.#retargetPrismaBody();
@@ -388,6 +410,31 @@ export class PrismaRiggedHumanoidPresentation extends SimpleHumanoidPresentation
         globalPosition: bone.getWorldPosition(new THREE.Vector3())
       });
     }
+  }
+
+  #applyCartoonBindTuning() {
+    for (const targetName of ['leftShoulder', 'rightShoulder']) {
+      const bind = this.prismaBind.get(targetName);
+      if (!bind) continue;
+      const lateralSign = Math.sign(bind.localPosition.x);
+      if (lateralSign !== 0) bind.localPosition.x += lateralSign * PRISMA_SHOULDER_RELAXATION;
+    }
+  }
+
+  #createRightHandToolMount() {
+    const hand = this.prismaBones.get('rightHand');
+    if (!hand) return null;
+    const mount = new THREE.Group();
+    mount.name = 'prisma-right-hand-tool-mount';
+    mount.scale.setScalar(1 / PRISMA_PRESENTATION_SCALE);
+    mount.userData.source = 'prisma-visible-right-hand';
+    mount.userData.presentationScaleCompensation = 1 / PRISMA_PRESENTATION_SCALE;
+    hand.add(mount);
+    return mount;
+  }
+
+  getRightHandToolMount() {
+    return this.prismaReady ? this.prismaToolMount : null;
   }
 
   #calibrateRootMotion() {
