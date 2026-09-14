@@ -58,10 +58,11 @@ player.root.updateMatrixWorld(true);
 const presentation = new SimpleHumanoidPresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'strict side binding should keep the humanoid rig active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v4');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v5');
 assert.equal(presentation.visualRoot.userData.rigSideBinding, 'explicit-side-v1');
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'shoulder-neck-flat-feet-v2');
-assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v2');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v3');
+assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'tapered-low-poly-v1');
 
 const expected = {
   left: {
@@ -146,12 +147,17 @@ assert.ok(
   `foundation torso should remain seated close to the hip/upper-leg anchors (${torsoBottom - upperLegY})`
 );
 assert.ok(
-  presentation.headGroup.position.y - shoulderY > 0.28,
+  presentation.torso.geometry.parameters.radiusTop > presentation.torso.geometry.parameters.radiusBottom,
+  'foundation torso should taper from broad shoulders into a narrower waist'
+);
+assert.ok(presentation.torso.scale.z <= 0.55, 'foundation torso should stay flatter front-to-back than it is wide');
+assert.ok(
+  presentation.headGroup.position.y - shoulderY > 0.26,
   'foundation head center should remain clearly above the shoulder line'
 );
 assert.ok(
-  headBottom - shoulderY >= 0.07,
-  `foundation should preserve a visible neck gap above the shoulders (${headBottom - shoulderY})`
+  headBottom - shoulderY >= 0.055,
+  `foundation should preserve a short visible neck gap above the shoulders (${headBottom - shoulderY})`
 );
 assert.ok(
   neckBottom <= torsoTop + 0.02,
@@ -161,15 +167,42 @@ assert.ok(
   neckTop >= headBottom - 0.02,
   'neck should reach the bottom of the head instead of leaving a disconnected gap'
 );
+assert.ok(neck.geometry.parameters.radiusTop < 0.09, 'foundation neck should stay narrower than the previous thick neck');
 assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should use the reduced wireframe-guided radius');
+
+for (const arm of [leftUpperArm, rightUpperArm]) {
+  assert.ok(
+    arm.geometry.parameters.radiusTop < arm.geometry.parameters.radiusBottom,
+    'upper arm should taper from shoulder toward elbow'
+  );
+}
+for (const arm of [leftLowerArm, rightLowerArm]) {
+  assert.ok(
+    arm.geometry.parameters.radiusTop < arm.geometry.parameters.radiusBottom,
+    'forearm should taper from elbow toward wrist'
+  );
+}
+for (const thigh of [leftThigh, rightThigh]) {
+  assert.ok(
+    thigh.geometry.parameters.radiusTop < thigh.geometry.parameters.radiusBottom,
+    'thigh should taper from hip toward knee'
+  );
+}
+for (const shin of [leftShin, rightShin]) {
+  assert.ok(
+    shin.geometry.parameters.radiusTop < shin.geometry.parameters.radiusBottom,
+    'shin should taper from knee toward ankle'
+  );
+}
 
 for (const boot of [leftBoot, rightBoot]) {
   assert.ok(Math.abs(boot.quaternion.x) < 1e-6, 'foundation foot should not inherit KayKit ankle pitch around X');
   assert.ok(Math.abs(boot.quaternion.z) < 1e-6, 'foundation foot should stay level around Z');
   assert.ok(Math.abs(boot.quaternion.w - 1) < 1e-6, 'foundation foot should use player-root orientation');
   assert.ok(boot.geometry.parameters.width <= 0.18, 'foundation foot should stay compact in width');
-  assert.ok(boot.geometry.parameters.depth <= 0.24, 'foundation foot should stay compact in length');
+  assert.ok(boot.geometry.parameters.height <= 0.12, 'foundation foot should stay low rather than reading as a boot block');
+  assert.ok(boot.geometry.parameters.depth >= 0.26 && boot.geometry.parameters.depth <= 0.29, 'foundation foot should have a readable heel-to-toe length');
 }
 assert.ok(leftBoot.position.x < 0 && rightBoot.position.x > 0, 'flat feet should remain on their correct sides');
 
-console.log('Humanoid side binding, shoulder-height torso, explicit neck, head separation, and neutral feet verified.');
+console.log('Humanoid side binding, tapered body shape, head-neck continuity, limb taper, and neutral feet verified.');

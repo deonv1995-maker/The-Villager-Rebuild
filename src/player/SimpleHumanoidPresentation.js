@@ -1,16 +1,17 @@
 import * as THREE from 'three';
 import { ScoutCharacterPresentation } from './ScoutCharacterPresentation.js';
 
-const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v4';
+const SIMPLE_HUMANOID_REVISION = 'simple-humanoid-v5';
 const SIMPLE_HUMANOID_MESH_BUDGET = 17;
 const HEAD_RADIUS = 0.215;
 const HEAD_HALF_HEIGHT = HEAD_RADIUS * 1.03;
-const MIN_VISIBLE_NECK_LENGTH = 0.09;
-const TORSO_HIP_DROP = 0.03;
-const TORSO_SHOULDER_RISE = 0.025;
+const MIN_VISIBLE_NECK_LENGTH = 0.065;
+const TORSO_HIP_DROP = 0.02;
+const TORSO_SHOULDER_RISE = 0.018;
 const TORSO_MIN_LENGTH = 0.52;
+const TORSO_DEPTH_SCALE = 0.52;
 const FOOT_GROUND_OFFSET_Y = -0.04;
-const FOOT_FORWARD_OFFSET_Z = 0.06;
+const FOOT_FORWARD_OFFSET_Z = 0.07;
 const UNIT_Y = new THREE.Vector3(0, 1, 0);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -149,7 +150,7 @@ function applySimplePalette(presentation) {
 
 function makeNeck(presentation) {
   const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.095, 0.105, 1, 6, 1),
+    new THREE.CylinderGeometry(0.075, 0.085, 1, 6, 1),
     presentation.materials.skin
   );
   neck.name = 'scout-neck';
@@ -157,6 +158,25 @@ function makeNeck(presentation) {
   neck.receiveShadow = true;
   presentation.visualRoot.add(neck);
   return neck;
+}
+
+function makeFootGeometry() {
+  const geometry = new THREE.BoxGeometry(0.18, 0.12, 0.28);
+  const positions = geometry.getAttribute('position');
+
+  // Keep the sole flat for stable ground readability, but taper the heel and
+  // broaden/lower the toe so the foundation foot reads as a foot rather than a cube.
+  for (let index = 0; index < positions.count; index += 1) {
+    const z = positions.getZ(index);
+    const y = positions.getY(index);
+    const xScale = z > 0 ? 1.06 : 0.84;
+    positions.setX(index, positions.getX(index) * xScale);
+    if (y > 0) positions.setY(index, y + (z > 0 ? -0.012 : 0.008));
+  }
+
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 function simplifyBody(presentation) {
@@ -179,10 +199,13 @@ function simplifyBody(presentation) {
     'scout-right-boot-cuff'
   ]);
 
-  // The body shell is intentionally plain, but it must still read as a complete
-  // human structure. The torso now reaches the animated shoulder line and a
-  // dedicated neck bridges that shoulder line to the head.
-  replaceGeometry(presentation.torso, new THREE.BoxGeometry(0.56, 1, 0.32));
+  // The turnaround reference reads as a broad shoulder/ribcage tapering into a
+  // narrower waist instead of a rectangular body block. Keep a single low-poly
+  // torso mesh and preserve the same shoulder/hip anchors used by v4.
+  replaceGeometry(
+    presentation.torso,
+    new THREE.CylinderGeometry(0.34, 0.255, 1, 6, 1, false, Math.PI / 6)
+  );
   replaceGeometry(presentation.head, new THREE.DodecahedronGeometry(HEAD_RADIUS, 0));
   presentation.head.scale.set(1, 1.03, 0.96);
   presentation.neck = makeNeck(presentation);
@@ -199,12 +222,12 @@ function simplifyBody(presentation) {
     const limb = presentation.limbs?.[side];
     if (!limb) continue;
 
-    replaceGeometry(limb.upperArm, new THREE.CylinderGeometry(0.095, 0.105, 1, 6, 1));
-    replaceGeometry(limb.lowerArm, new THREE.CylinderGeometry(0.08, 0.09, 1, 6, 1));
-    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.1, 0));
-    replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.125, 0.14, 1, 6, 1));
-    replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.095, 0.11, 1, 6, 1));
-    replaceGeometry(limb.boot, new THREE.BoxGeometry(0.18, 0.13, 0.24));
+    replaceGeometry(limb.upperArm, new THREE.CylinderGeometry(0.082, 0.105, 1, 6, 1));
+    replaceGeometry(limb.lowerArm, new THREE.CylinderGeometry(0.068, 0.088, 1, 6, 1));
+    replaceGeometry(limb.hand, new THREE.DodecahedronGeometry(0.09, 0));
+    replaceGeometry(limb.thigh, new THREE.CylinderGeometry(0.115, 0.15, 1, 6, 1));
+    replaceGeometry(limb.shin, new THREE.CylinderGeometry(0.085, 0.115, 1, 6, 1));
+    replaceGeometry(limb.boot, makeFootGeometry());
     limb.boot.scale.set(1, 1, 1);
   }
 
@@ -214,7 +237,8 @@ function simplifyBody(presentation) {
   root.userData.designTarget = 'simple-rig-readable-humanoid';
   root.userData.rigSideBinding = 'explicit-side-v1';
   root.userData.foundationAlignment = 'shoulder-neck-flat-feet-v2';
-  root.userData.foundationProportions = 'wireframe-reference-v2';
+  root.userData.foundationProportions = 'wireframe-reference-v3';
+  root.userData.foundationBodyShape = 'tapered-low-poly-v1';
 }
 
 export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
@@ -265,11 +289,9 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
       .add(this.foundationRightShoulder)
       .multiplyScalar(0.5);
 
-    // The previous compact-torso pass used the spine/chest distance as the visible
-    // torso height. On the production KayKit rig that left the shoulder joints
-    // above the body shell, so the head visually sat between two detached arms.
-    // Drive the shell from the actual shoulder anchors instead: hips define the
-    // bottom and the midpoint of the two upper-arm joints defines the top.
+    // Keep the v4 continuity fix: the real shoulder anchors define the visible
+    // upper body while the pelvis remains the lower authority. Only the shell
+    // proportions change in this pass; no joint or animation is retargeted.
     this.foundationTorsoBottom.copy(this.foundationHips);
     this.foundationTorsoBottom.y -= TORSO_HIP_DROP;
     this.foundationTorsoTop.copy(this.foundationShoulderCenter);
@@ -282,25 +304,23 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
       .add(this.foundationTorsoTop)
       .multiplyScalar(0.5);
     this.torso.position.copy(this.foundationMid);
-    this.torso.scale.y = torsoLength;
+    this.torso.scale.set(1, torsoLength, TORSO_DEPTH_SCALE);
 
-    // Position the head from its real animated joint, but never allow it to sink
-    // into the shoulder line. This keeps head animation authority while enforcing
-    // a readable neck-sized separation from the shoulders.
+    // Continue following the real head joint, but use a shorter neutral neck gap
+    // so the head/neck/shoulder transition reads as one body rather than a head on
+    // a post. The minimum only prevents the head from collapsing into the shoulders.
     const minimumHeadCenterY = this.foundationShoulderCenter.y + HEAD_HALF_HEIGHT + MIN_VISIBLE_NECK_LENGTH;
     this.headGroup.position.copy(this.foundationHead);
     if (this.headGroup.position.y < minimumHeadCenterY) {
       this.headGroup.position.y = minimumHeadCenterY;
     }
 
-    // Bridge the shoulder line to the bottom of the head with one explicit neck
-    // mesh. This is structural foundation geometry, not final character styling.
     this.foundationNeckStart.copy(this.foundationShoulderCenter);
     this.foundationNeckStart.y += TORSO_SHOULDER_RISE * 0.5;
     this.foundationNeckEnd.copy(this.headGroup.position);
     this.foundationNeckEnd.y -= HEAD_HALF_HEIGHT;
     this.foundationDirection.copy(this.foundationNeckEnd).sub(this.foundationNeckStart);
-    const neckLength = Math.max(0.06, this.foundationDirection.length());
+    const neckLength = Math.max(0.055, this.foundationDirection.length());
     this.foundationMid
       .copy(this.foundationNeckStart)
       .add(this.foundationNeckEnd)
@@ -309,10 +329,9 @@ export class SimpleHumanoidPresentation extends ScoutCharacterPresentation {
     this.neck.quaternion.setFromUnitVectors(UNIT_Y, this.foundationDirection.normalize());
     this.neck.scale.set(1, neckLength, 1);
 
-    // KayKit foot joints carry a strong ankle pitch that worked with the original
-    // skinned boots but made simple box feet look like the whole leg was bent
-    // backwards. Keep the animated ankle position, but present neutral flat feet
-    // at the player-root orientation while we validate the humanoid foundation.
+    // Keep the animated ankle positions but present the low-poly feet level at the
+    // player-root orientation. Geometry now provides the foot silhouette; the rig
+    // and the existing stable ground/collision system remain untouched.
     for (const side of ['left', 'right']) {
       const limb = this.limbs?.[side];
       const footBone = this.bones?.[side]?.foot;

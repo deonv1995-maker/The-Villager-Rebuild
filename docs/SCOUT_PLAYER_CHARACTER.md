@@ -26,7 +26,7 @@ The active presentation intentionally keeps only the essential humanoid pieces:
 
 There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems remain in repository history but are not part of the active player appearance while body and motion correctness are verified.
 
-The active visual revision is `simple-humanoid-v4`. The presentation uses 17 simple meshes: the previous 16 foundation meshes plus one structural neck.
+The active visual revision is `simple-humanoid-v5`. The presentation still uses the same 17 foundation meshes introduced in v4; this pass changes body silhouette and proportions only.
 
 `src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code and routes to `SimpleHumanoidPresentation`.
 
@@ -38,31 +38,36 @@ Device testing exposed a real rig-resolution bug in the first humanoid foundatio
 
 If a complete explicit left/right set cannot be resolved, the simple presentation does not guess. It restores the legacy Ranger render as a safe fallback instead of showing a mangled humanoid.
 
-## Upper-body and neck correction
+## Upper-body and neck foundation
 
-The first wireframe-guided proportion pass shortened the visible torso according to the spine/chest distance. That looked reasonable in the synthetic regression rig, but device testing showed that the production KayKit shoulder joints could sit above the resulting body shell. The visible result was a waist/body block below the arms with the head appearing to sit directly between the shoulders.
+PR #271 established the structural continuity rule for the upper body:
 
-`simple-humanoid-v4` fixes the root cause at the presentation layer:
-
-- the visible torso now uses the **actual left/right upper-arm shoulder anchors** to define its upper boundary;
+- the visible torso uses the **actual left/right upper-arm shoulder anchors** to define its upper boundary;
 - the pelvis/hips remain the lower torso authority;
 - a dedicated low-poly neck bridges the shoulder line to the bottom of the head;
-- the head still follows the real animated head joint, but it is prevented from sinking into the shoulder line;
+- the head follows the real animated head joint and cannot collapse into the shoulders;
 - no skeleton joint, animation clip, movement value or tool anchor is retargeted to force the visible shell into place.
 
-This makes the neutral mannequin read as one continuous humanoid structure while keeping the KayKit rig authoritative.
+`simple-humanoid-v5` keeps that exact rig contract and improves only the body shape. The rectangular v4 torso is replaced by one six-sided tapered shell that is broad through the shoulders/ribcage, narrower at the waist and flatter front-to-back. The neck is slimmer and the required visible neck gap is shortened so the head, neck and shoulders read as one continuous neutral body instead of a head mounted on a post.
 
-## Lower-body alignment correction
+## Arms, legs and feet
 
-The simple box feet originally inherited the KayKit ankle pitch intended for the original skinned boots, making the lower body read as if the legs were bending backwards.
+The turnaround reference is now reflected in the primitive silhouettes without changing any limb endpoints:
 
-The foundation keeps the animated ankle position but uses player-root orientation for the temporary box feet. The thigh and shin segments continue to follow the actual animated upper-leg, lower-leg and foot joint positions, so walking, running, jumping and double-jump motion remain owned by the KayKit animation rig.
+- upper arms taper from shoulder to elbow;
+- forearms taper from elbow to wrist;
+- hands are slightly smaller relative to the forearms;
+- thighs taper from hip to knee;
+- shins taper from knee to ankle;
+- feet remain level at the animated ankle positions but use a lower, longer, tapered heel-to-toe shape instead of a plain rectangular boot block.
 
-## Wireframe-guided proportion reference
+The segment lengths still come entirely from the KayKit upper/lower limb and foot joints. Walking, running, jumping and double-jump motion therefore remain owned by the existing animation rig.
 
-The supplied neutral rotating humanoid wireframe is used only for **structural proportion guidance**, not as final Scout art direction.
+## Low-poly turnaround reference
 
-The reference is used to judge continuity between head, neck, shoulders, ribcage, pelvis and limbs. It is not used to stretch, translate or retarget the KayKit skeleton. The current goal is a readable neutral mannequin that can later accept Scout-specific clothing and styling without hiding rig problems underneath.
+The supplied neutral rotating low-poly humanoid turnaround is used only for **structural proportion and silhouette guidance**, not as final Scout art direction.
+
+The reference is used to judge continuity between head, neck, shoulders, ribcage, waist, pelvis and limbs. It is not used to stretch, translate or retarget the KayKit skeleton. The current target is a readable neutral mannequin that can later accept Scout-specific clothing and styling without hiding rig problems underneath.
 
 ## Why the mock-up is paused
 
@@ -72,7 +77,7 @@ The order remains:
 
 1. verify humanoid proportions and left/right limb movement;
 2. verify head, neck, shoulders and torso form one continuous upper body;
-3. verify readable lower-body alignment;
+3. verify readable arm, leg and foot silhouettes;
 4. verify hands and feet stay aligned through locomotion, jumping and tools;
 5. fix any remaining rig-following or body-proportion problems at the foundation layer;
 6. only then add clothing, hair, accessories and final Scout identity back in controlled increments.
@@ -91,29 +96,28 @@ The second jump resets upward velocity rather than adding to the current vertica
 
 ## Systems deliberately unchanged
 
-This foundation repair does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, tool anchors or the existing KayKit animation files.
+This foundation refinement does **not** alter terrain generation, terrain collision, platform collision, camera geometry, world streaming, construction, harvesting, survival, Sprout, wildlife, PWA/install architecture, asset paths, traversal tuning, tool anchors, the existing KayKit animation files, player collision, or control logic.
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` verifies the simple humanoid compatibility boundary, the 17 essential visible meshes, production KayKit joint compatibility, first-person visibility, shoulder-height torso coverage, explicit neck presence, visible hand/foot joint following and existing double-jump tuning.
+`npm run verify:ranger-presentation` verifies the simple humanoid compatibility boundary, the 17 essential visible meshes, production KayKit joint compatibility, first-person visibility, shoulder-height torso coverage, tapered torso/limb proportions, explicit neck presence, visible hand/foot joint following and existing double-jump tuning.
 
-`npm run verify:humanoid-side-binding` covers explicit left/right joint binding, torso coverage up to the shoulder line, a visible neck bridge from torso to head, head separation above the shoulders, compact feet and neutral simple-foot orientation despite a strongly pitched KayKit foot joint.
+`npm run verify:humanoid-side-binding` covers explicit left/right joint binding, torso coverage up to the shoulder line, the tapered shoulder-to-waist shell, a visible neck bridge from torso to head, tapered arm/leg geometry, compact hands, shaped level feet and neutral foot orientation despite a strongly pitched KayKit foot joint.
 
 Both checks are part of the full `npm run check` merge gate.
 
 Device verification after deployment should confirm:
 
 1. both shoulders and elbows stay on their own side of the torso in idle and movement;
-2. neither arm stretches through the chest to reach the opposite hand;
-3. the torso visibly reaches the shoulder line instead of ending at the waist;
-4. a neck is visible between torso and head;
-5. the head sits above the shoulders rather than between the upper arms;
-6. both thighs and shins remain separated instead of collapsing onto one side;
-7. knees bend in the expected direction through walk/run/jump animations;
-8. the simple feet sit level and remain attached to the ankles;
-9. both hands remain attached to the correct wrists;
-10. axe, hammer, pickaxe and spear still align with the visible right hand;
-11. first person hides the body as before;
-12. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
+2. the torso reads as broad shoulders/ribcage tapering into the waist rather than a rectangular block;
+3. the neck is visible but does not look excessively long or thick;
+4. the head sits naturally above the neck and shoulders;
+5. upper arms and forearms read as connected tapered limbs rather than tubes of equal thickness;
+6. thighs and shins read as tapered human legs while knees still bend in the expected direction;
+7. the simple feet sit level, stay attached to the ankles and read as low heel-to-toe feet rather than boot cubes;
+8. both hands remain attached to the correct wrists;
+9. axe, hammer, pickaxe and spear still align with the visible right hand;
+10. first person hides the body as before;
+11. one press jumps, a second airborne press double-jumps, and landing restores the second jump.
 
 Final clothing, hair, face, scarf, cape, satchel and boot styling should not resume until this foundation has been accepted on-device.

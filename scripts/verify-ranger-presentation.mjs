@@ -54,7 +54,7 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.visualRevision,
-  'simple-humanoid-v4',
+  'simple-humanoid-v5',
   'production presentation should use the current simple humanoid foundation'
 );
 assert.equal(
@@ -64,8 +64,13 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.foundationProportions,
-  'wireframe-reference-v2',
-  'production presentation should retain the neutral wireframe proportion target'
+  'wireframe-reference-v3',
+  'production presentation should retain the current neutral turnaround proportion target'
+);
+assert.equal(
+  productionPresentation.visualRoot.userData.foundationBodyShape,
+  'tapered-low-poly-v1',
+  'production presentation should retain the tapered low-poly body-shape contract'
 );
 
 const root = new THREE.Group();
@@ -135,11 +140,12 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger q
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should stay hidden');
 assert.equal(presentation.visualRoot.parent, root, 'humanoid presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing identity should remain Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v4');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v5');
 assert.equal(presentation.visualRoot.userData.developmentStage, 'humanoid-foundation');
 assert.equal(presentation.visualRoot.userData.visualMeshBudget, 17);
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'shoulder-neck-flat-feet-v2');
-assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v2');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v3');
+assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'tapered-low-poly-v1');
 
 for (const name of [
   'scout-tunic',
@@ -194,6 +200,10 @@ presentation.update(1 / 60);
 const visibleRightHand = presentation.visualRoot.getObjectByName('scout-right-hand');
 const visibleRightFoot = presentation.visualRoot.getObjectByName('scout-right-boot');
 const visibleNeck = presentation.visualRoot.getObjectByName('scout-neck');
+const visibleRightUpperArm = presentation.visualRoot.getObjectByName('scout-right-upper-arm');
+const visibleRightLowerArm = presentation.visualRoot.getObjectByName('scout-right-lower-arm');
+const visibleRightThigh = presentation.visualRoot.getObjectByName('scout-right-thigh');
+const visibleRightShin = presentation.visualRoot.getObjectByName('scout-right-shin');
 const handBefore = visibleRightHand.position.clone();
 const footBefore = visibleRightFoot.position.clone();
 const torsoVisibleHeight = presentation.torso.geometry.parameters.height * presentation.torso.scale.y;
@@ -207,10 +217,23 @@ const neckHeight = visibleNeck.geometry.parameters.height * visibleNeck.scale.y;
 
 assert.ok(torsoVisibleHeight >= 0.56, 'foundation torso should span the hips-to-shoulder structure instead of collapsing into a waist block');
 assert.ok(torsoTop >= shoulderY, 'foundation torso should reach the animated shoulder line');
-assert.ok(headBottom - shoulderY >= 0.07, 'foundation head should remain above the shoulders with visible neck space');
-assert.ok(neckHeight >= 0.06, 'foundation should include a visible structural neck');
+assert.ok(
+  presentation.torso.geometry.parameters.radiusTop > presentation.torso.geometry.parameters.radiusBottom,
+  'foundation torso should be broader at the shoulders than the waist'
+);
+assert.ok(presentation.torso.scale.z <= 0.55, 'foundation torso should be flatter front-to-back than it is wide');
+assert.ok(headBottom - shoulderY >= 0.055, 'foundation head should remain above the shoulders with a short visible neck');
+assert.ok(neckHeight >= 0.05, 'foundation should include a visible structural neck');
+assert.ok(visibleNeck.geometry.parameters.radiusTop < 0.09, 'foundation neck should stay slim relative to the head and shoulders');
 assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should stay subordinate to the body proportions');
-assert.ok(visibleRightFoot.geometry.parameters.width <= 0.18, 'foundation feet should stay compact instead of reading as oversized blocks');
+assert.ok(visibleRightHand.geometry.parameters.radius <= 0.095, 'foundation hand should stay compact relative to the forearm');
+assert.ok(visibleRightUpperArm.geometry.parameters.radiusTop < visibleRightUpperArm.geometry.parameters.radiusBottom, 'upper arm should taper toward the elbow');
+assert.ok(visibleRightLowerArm.geometry.parameters.radiusTop < visibleRightLowerArm.geometry.parameters.radiusBottom, 'forearm should taper toward the wrist');
+assert.ok(visibleRightThigh.geometry.parameters.radiusTop < visibleRightThigh.geometry.parameters.radiusBottom, 'thigh should taper toward the knee');
+assert.ok(visibleRightShin.geometry.parameters.radiusTop < visibleRightShin.geometry.parameters.radiusBottom, 'shin should taper toward the ankle');
+assert.ok(visibleRightFoot.geometry.parameters.width <= 0.18, 'foundation feet should stay compact in width');
+assert.ok(visibleRightFoot.geometry.parameters.height <= 0.12, 'foundation feet should stay low instead of reading as boot blocks');
+assert.ok(visibleRightFoot.geometry.parameters.depth >= 0.26 && visibleRightFoot.geometry.parameters.depth <= 0.29, 'foundation feet should retain readable heel-to-toe length');
 
 model.getObjectByName('Hand_R').position.x += 0.16;
 model.getObjectByName('Foot_R').position.z += 0.14;
@@ -285,4 +308,4 @@ assert.ok(
   'full repository check must retain humanoid presentation and traversal regression coverage'
 );
 
-console.log('Simple humanoid upper body, neck, rig, visibility, limb-following, and double-jump regression checks passed.');
+console.log('Simple humanoid tapered body shape, rig, visibility, limb-following, and double-jump regression checks passed.');
