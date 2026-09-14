@@ -54,13 +54,18 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.visualRevision,
-  'simple-humanoid-v2',
+  'simple-humanoid-v3',
   'production presentation should use the current simple humanoid foundation'
 );
 assert.equal(
   productionPresentation.visualRoot.userData.foundationAlignment,
   'head-neck-flat-feet-v1',
   'production presentation should retain the foundation alignment corrections'
+);
+assert.equal(
+  productionPresentation.visualRoot.userData.foundationProportions,
+  'wireframe-reference-v1',
+  'production presentation should retain the neutral wireframe proportion target'
 );
 
 const root = new THREE.Group();
@@ -130,10 +135,11 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger q
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should stay hidden');
 assert.equal(presentation.visualRoot.parent, root, 'humanoid presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing identity should remain Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v2');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v3');
 assert.equal(presentation.visualRoot.userData.developmentStage, 'humanoid-foundation');
 assert.equal(presentation.visualRoot.userData.visualMeshBudget, 16);
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'head-neck-flat-feet-v1');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v1');
 
 for (const name of [
   'scout-tunic',
@@ -188,6 +194,10 @@ const visibleRightHand = presentation.visualRoot.getObjectByName('scout-right-ha
 const visibleRightFoot = presentation.visualRoot.getObjectByName('scout-right-boot');
 const handBefore = visibleRightHand.position.clone();
 const footBefore = visibleRightFoot.position.clone();
+const torsoVisibleHeight = presentation.torso.geometry.parameters.height * presentation.torso.scale.y;
+assert.ok(torsoVisibleHeight < 0.55, 'foundation torso should stay compact enough to expose the animated upper legs');
+assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should stay subordinate to the body proportions');
+assert.ok(visibleRightFoot.geometry.parameters.width <= 0.18, 'foundation feet should stay compact instead of reading as oversized blocks');
 
 model.getObjectByName('Hand_R').position.x += 0.16;
 model.getObjectByName('Foot_R').position.z += 0.14;
@@ -262,4 +272,4 @@ assert.ok(
   'full repository check must retain humanoid presentation and traversal regression coverage'
 );
 
-console.log('Simple humanoid rig, visibility, limb-following, and double-jump regression checks passed.');
+console.log('Simple humanoid rig, proportions, visibility, limb-following, and double-jump regression checks passed.');

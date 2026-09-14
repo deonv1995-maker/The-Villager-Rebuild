@@ -58,9 +58,10 @@ player.root.updateMatrixWorld(true);
 const presentation = new SimpleHumanoidPresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'strict side binding should keep the humanoid rig active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v2');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v3');
 assert.equal(presentation.visualRoot.userData.rigSideBinding, 'explicit-side-v1');
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'head-neck-flat-feet-v1');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v1');
 
 const expected = {
   left: {
@@ -120,18 +121,30 @@ assert.ok(leftHand.position.x < -0.5 && rightHand.position.x > 0.5, 'hands shoul
 assert.ok(leftThigh.position.x < -0.1 && rightThigh.position.x > 0.1, 'thighs should remain on opposite sides');
 assert.ok(leftShin.position.x < -0.1 && rightShin.position.x > 0.1, 'shins should remain on opposite sides');
 
-const torsoTop = presentation.torso.position.y + (presentation.torso.geometry.parameters.height * presentation.torso.scale.y) / 2;
-const headBottom = presentation.headGroup.position.y - 0.255 * presentation.head.scale.y;
+const torsoHeight = presentation.torso.geometry.parameters.height * presentation.torso.scale.y;
+const torsoTop = presentation.torso.position.y + torsoHeight / 2;
+const torsoBottom = presentation.torso.position.y - torsoHeight / 2;
+const headBottom = presentation.headGroup.position.y - 0.215 * presentation.head.scale.y;
+const upperLegY = player.model.getObjectByName('UpperLeg_L').position.y;
+
+assert.ok(torsoHeight < 0.55, `foundation torso should stay compact (${torsoHeight})`);
 assert.ok(
-  headBottom - torsoTop < 0.06,
-  `foundation head should meet the torso at the neck instead of floating (${headBottom - torsoTop})`
+  headBottom - torsoTop < 0.04,
+  `foundation head should meet the compact torso instead of floating (${headBottom - torsoTop})`
 );
+assert.ok(
+  torsoBottom - upperLegY < 0.08,
+  `compact torso should remain seated close to the hip/upper-leg anchors (${torsoBottom - upperLegY})`
+);
+assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should use the reduced wireframe-guided radius');
 
 for (const boot of [leftBoot, rightBoot]) {
   assert.ok(Math.abs(boot.quaternion.x) < 1e-6, 'foundation foot should not inherit KayKit ankle pitch around X');
   assert.ok(Math.abs(boot.quaternion.z) < 1e-6, 'foundation foot should stay level around Z');
   assert.ok(Math.abs(boot.quaternion.w - 1) < 1e-6, 'foundation foot should use player-root orientation');
+  assert.ok(boot.geometry.parameters.width <= 0.18, 'foundation foot should stay compact in width');
+  assert.ok(boot.geometry.parameters.depth <= 0.24, 'foundation foot should stay compact in length');
 }
 assert.ok(leftBoot.position.x < 0 && rightBoot.position.x > 0, 'flat feet should remain on their correct sides');
 
-console.log('Humanoid side binding, head connection, and neutral foot-alignment regression checks passed.');
+console.log('Humanoid side binding, head connection, neutral foot alignment, and wireframe proportions verified.');
