@@ -8,6 +8,8 @@ import {
   updateSproutScannerVisual
 } from '../rendering/SproutScannerVisual.js';
 
+const SPROUT_RELATIVE_PLAYER_SCALE = 0.88;
+
 const disposeFallbackPresentation = root => {
   if (!root) return;
   const geometries = new Set();
@@ -20,6 +22,16 @@ const disposeFallbackPresentation = root => {
   for (const geometry of geometries) geometry.dispose?.();
   for (const material of materials) material.dispose?.();
   root.parent?.remove(root);
+};
+
+const applyRelativePlayerScale = root => {
+  if (!root?.userData?.sproutProductionVisual) return root;
+  const previousRatio = Number(root.userData.relativePlayerScale) || 1;
+  if (Math.abs(previousRatio - SPROUT_RELATIVE_PLAYER_SCALE) < 1e-6) return root;
+  root.scale.multiplyScalar(SPROUT_RELATIVE_PLAYER_SCALE / previousRatio);
+  root.userData.relativePlayerScale = SPROUT_RELATIVE_PLAYER_SCALE;
+  root.userData.effectivePresentationScale = (root.userData.presentationScale ?? 1) * SPROUT_RELATIVE_PLAYER_SCALE;
+  return root;
 };
 
 export class SproutVisualRuntimeController {
@@ -104,6 +116,7 @@ export class SproutVisualRuntimeController {
       const presentation = this.originalClaim();
       if (presentation?.userData?.sproutProductionVisual) {
         presentation.name = 'sprout-production-companion';
+        applyRelativePlayerScale(presentation);
         ensureSproutScannerVisual(presentation);
         this.visual = presentation;
       }
@@ -119,6 +132,7 @@ export class SproutVisualRuntimeController {
 
   #ensureInstalled() {
     if (this.visual?.userData?.sproutProductionVisual) {
+      applyRelativePlayerScale(this.visual);
       ensureSproutScannerVisual(this.visual);
       return this.visual;
     }
@@ -127,6 +141,7 @@ export class SproutVisualRuntimeController {
     if (!existing) {
       const claimed = this.arrival.companionPresentation;
       if (claimed?.userData?.sproutProductionVisual) {
+        applyRelativePlayerScale(claimed);
         ensureSproutScannerVisual(claimed);
         this.visual = claimed;
       }
@@ -134,6 +149,7 @@ export class SproutVisualRuntimeController {
     }
     if (existing.userData?.sproutProductionVisual) {
       existing.name = 'sprout-production-companion';
+      applyRelativePlayerScale(existing);
       ensureSproutScannerVisual(existing);
       this.visual = existing;
       this.crashSite.sproutEye = null;
@@ -149,6 +165,7 @@ export class SproutVisualRuntimeController {
     production.scale.copy(existing.scale).multiplyScalar(production.userData.presentationScale ?? 1);
     production.visible = existing.visible;
     production.renderOrder = existing.renderOrder;
+    applyRelativePlayerScale(production);
     ensureSproutScannerVisual(production);
     parent.add(production);
 
