@@ -1,4 +1,16 @@
 import * as THREE from 'three';
+import part01 from './prisma-native/generated/part-01.js';
+import part02 from './prisma-native/generated/part-02.js';
+import part03 from './prisma-native/generated/part-03.js';
+import part04 from './prisma-native/generated/part-04.js';
+import part05 from './prisma-native/generated/part-05.js';
+import part06 from './prisma-native/generated/part-06.js';
+import part07 from './prisma-native/generated/part-07.js';
+import part08 from './prisma-native/generated/part-08.js';
+import part09 from './prisma-native/generated/part-09.js';
+import part10 from './prisma-native/generated/part-10.js';
+import part11 from './prisma-native/generated/part-11.js';
+import part12 from './prisma-native/generated/part-12.js';
 
 export const PRISMA_HUMANOID_VERTEX_COUNT = 3779;
 export const PRISMA_HUMANOID_INDEX_COUNT = 22662;
@@ -36,6 +48,21 @@ export const PRISMA_HUMANOID_JOINT_NAMES = Object.freeze([
   'rightForearmTwist',
   'leftThighTwist',
   'rightThighTwist'
+]);
+
+const PRISMA_HUMANOID_PACKED_PARTS = Object.freeze([
+  part01,
+  part02,
+  part03,
+  part04,
+  part05,
+  part06,
+  part07,
+  part08,
+  part09,
+  part10,
+  part11,
+  part12
 ]);
 
 const MAGIC = 'PRH2';
@@ -204,21 +231,22 @@ async function gunzipBytes(compressed) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export async function loadPrismaHumanoidScene(partPaths, fetchImpl = globalThis.fetch) {
-  if (!Array.isArray(partPaths) || partPaths.length === 0) {
-    throw new Error('Prisma humanoid asset paths are missing');
-  }
-  if (typeof fetchImpl !== 'function') throw new Error('Prisma humanoid asset fetch is unavailable');
+export async function loadPrismaHumanoidScene(partPaths = null, fetchImpl = globalThis.fetch) {
+  let parts = PRISMA_HUMANOID_PACKED_PARTS;
 
-  const responses = await Promise.all(partPaths.map(path => fetchImpl(path)));
-  for (let index = 0; index < responses.length; index += 1) {
-    const response = responses[index];
-    if (!response || response.ok === false) {
-      throw new Error(`Failed to load Prisma humanoid asset part ${index + 1}`);
+  if (Array.isArray(partPaths) && partPaths.length > 0) {
+    if (typeof fetchImpl !== 'function') throw new Error('Prisma humanoid asset fetch is unavailable');
+
+    const responses = await Promise.all(partPaths.map(path => fetchImpl(path)));
+    for (let index = 0; index < responses.length; index += 1) {
+      const response = responses[index];
+      if (!response || response.ok === false) {
+        throw new Error(`Failed to load Prisma humanoid asset part ${index + 1}`);
+      }
     }
+    parts = await Promise.all(responses.map(response => response.text()));
   }
 
-  const parts = await Promise.all(responses.map(response => response.text()));
   const base64 = parts.join('').replace(/\s+/g, '');
   const packed = await gunzipBytes(base64ToBytes(base64));
   return buildPrismaHumanoidScene(packed);
