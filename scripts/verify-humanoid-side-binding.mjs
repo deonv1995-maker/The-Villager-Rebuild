@@ -58,11 +58,12 @@ player.root.updateMatrixWorld(true);
 const presentation = new SimpleHumanoidPresentation({ player });
 
 assert.equal(presentation.mode, 'scout-rigged', 'strict side binding should keep the humanoid rig active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v5');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v6');
 assert.equal(presentation.visualRoot.userData.rigSideBinding, 'explicit-side-v1');
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'shoulder-neck-flat-feet-v2');
-assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v3');
-assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'tapered-low-poly-v1');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'prisma-human-reference-v1');
+assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'anatomical-low-poly-v2');
+assert.equal(presentation.visualRoot.userData.foundationSource, 'prisma3d-human-obj-v1');
 
 const expected = {
   left: {
@@ -124,7 +125,8 @@ assert.ok(leftThigh.position.x < -0.1 && rightThigh.position.x > 0.1, 'thighs sh
 assert.ok(leftShin.position.x < -0.1 && rightShin.position.x > 0.1, 'shins should remain on opposite sides');
 assert.ok(neck, 'foundation character should include an explicit neck mesh');
 
-const torsoHeight = presentation.torso.geometry.parameters.height * presentation.torso.scale.y;
+const torsoProfile = presentation.torso.geometry.userData.profile;
+const torsoHeight = presentation.torso.geometry.userData.unitHeight * presentation.torso.scale.y;
 const torsoTop = presentation.torso.position.y + torsoHeight / 2;
 const torsoBottom = presentation.torso.position.y - torsoHeight / 2;
 const headBottom = presentation.headGroup.position.y - 0.215 * presentation.head.scale.y;
@@ -136,6 +138,7 @@ const upperLegY = player.model.getObjectByName('UpperLeg_L').position.y;
 const neckHeight = neck.geometry.parameters.height * neck.scale.y;
 const neckBottom = neck.position.y - neckHeight / 2;
 const neckTop = neck.position.y + neckHeight / 2;
+const torsoByLandmark = Object.fromEntries(torsoProfile.map(ring => [ring.landmark, ring]));
 
 assert.ok(torsoHeight >= 0.56, `foundation torso should reach from hips to shoulders (${torsoHeight})`);
 assert.ok(
@@ -146,11 +149,24 @@ assert.ok(
   torsoBottom - upperLegY < 0.08,
   `foundation torso should remain seated close to the hip/upper-leg anchors (${torsoBottom - upperLegY})`
 );
+assert.equal(torsoProfile.length, 5, 'Prisma-guided torso should keep the five structural silhouette rings');
 assert.ok(
-  presentation.torso.geometry.parameters.radiusTop > presentation.torso.geometry.parameters.radiusBottom,
-  'foundation torso should taper from broad shoulders into a narrower waist'
+  torsoByLandmark.shoulders.halfWidth > torsoByLandmark['upper-ribcage'].halfWidth,
+  'shoulder ring should remain the broadest upper-body landmark'
 );
-assert.ok(presentation.torso.scale.z <= 0.55, 'foundation torso should stay flatter front-to-back than it is wide');
+assert.ok(
+  torsoByLandmark['upper-ribcage'].halfWidth > torsoByLandmark.waist.halfWidth,
+  'ribcage should broaden naturally above the waist'
+);
+assert.ok(
+  torsoByLandmark.pelvis.halfWidth > torsoByLandmark.waist.halfWidth,
+  'pelvis should recover some width below the waist instead of ending in a cone point'
+);
+assert.ok(
+  torsoByLandmark['upper-ribcage'].halfDepth / torsoByLandmark['upper-ribcage'].halfWidth < 0.5,
+  'Prisma-guided torso should remain visibly flatter front-to-back than it is wide'
+);
+assert.equal(presentation.torso.geometry.userData.reference, 'prisma3d-human-obj-v1');
 assert.ok(
   presentation.headGroup.position.y - shoulderY > 0.26,
   'foundation head center should remain clearly above the shoulder line'
@@ -167,20 +183,23 @@ assert.ok(
   neckTop >= headBottom - 0.02,
   'neck should reach the bottom of the head instead of leaving a disconnected gap'
 );
-assert.ok(neck.geometry.parameters.radiusTop < 0.09, 'foundation neck should stay narrower than the previous thick neck');
-assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should use the reduced wireframe-guided radius');
+assert.ok(neck.geometry.parameters.radiusTop <= 0.07, 'foundation neck should stay slim below the head');
+assert.ok(neck.geometry.parameters.radiusBottom >= 0.085, 'foundation neck should flare gently into the shoulders');
+assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should preserve the accepted v5 scale while body shape is refined');
 
 for (const arm of [leftUpperArm, rightUpperArm]) {
   assert.ok(
     arm.geometry.parameters.radiusTop < arm.geometry.parameters.radiusBottom,
     'upper arm should taper from shoulder toward elbow'
   );
+  assert.ok(arm.geometry.userData.midScale >= 1, 'upper arm should keep a readable mid-segment silhouette');
 }
 for (const arm of [leftLowerArm, rightLowerArm]) {
   assert.ok(
     arm.geometry.parameters.radiusTop < arm.geometry.parameters.radiusBottom,
     'forearm should taper from elbow toward wrist'
   );
+  assert.ok(arm.geometry.userData.midScale > 1.05, 'forearm should retain a subtle mid-forearm fullness');
 }
 for (const thigh of [leftThigh, rightThigh]) {
   assert.ok(
@@ -193,16 +212,22 @@ for (const shin of [leftShin, rightShin]) {
     shin.geometry.parameters.radiusTop < shin.geometry.parameters.radiusBottom,
     'shin should taper from knee toward ankle'
   );
+  assert.ok(shin.geometry.userData.midScale >= 1.1, 'shin should include the Prisma-guided calf fullness without changing joint endpoints');
+}
+
+for (const hand of [leftHand, rightHand]) {
+  assert.ok(hand.geometry.parameters.radius <= 0.09, 'foundation hand should stay compact relative to the forearm');
 }
 
 for (const boot of [leftBoot, rightBoot]) {
   assert.ok(Math.abs(boot.quaternion.x) < 1e-6, 'foundation foot should not inherit KayKit ankle pitch around X');
   assert.ok(Math.abs(boot.quaternion.z) < 1e-6, 'foundation foot should stay level around Z');
   assert.ok(Math.abs(boot.quaternion.w - 1) < 1e-6, 'foundation foot should use player-root orientation');
-  assert.ok(boot.geometry.parameters.width <= 0.18, 'foundation foot should stay compact in width');
-  assert.ok(boot.geometry.parameters.height <= 0.12, 'foundation foot should stay low rather than reading as a boot block');
-  assert.ok(boot.geometry.parameters.depth >= 0.26 && boot.geometry.parameters.depth <= 0.29, 'foundation foot should have a readable heel-to-toe length');
+  assert.ok(boot.geometry.parameters.width <= 0.17, 'foundation foot should stay compact in width');
+  assert.ok(boot.geometry.parameters.height <= 0.105, 'foundation foot should stay low rather than reading as a boot block');
+  assert.ok(boot.geometry.parameters.depth >= 0.28 && boot.geometry.parameters.depth <= 0.3, 'foundation foot should retain a readable heel-to-toe length');
+  assert.equal(boot.geometry.userData.reference, 'prisma3d-human-obj-v1');
 }
 assert.ok(leftBoot.position.x < 0 && rightBoot.position.x > 0, 'flat feet should remain on their correct sides');
 
-console.log('Humanoid side binding, tapered body shape, head-neck continuity, limb taper, and neutral feet verified.');
+console.log('Humanoid side binding, Prisma-guided torso profile, limb shaping, head-neck continuity, and neutral feet verified.');

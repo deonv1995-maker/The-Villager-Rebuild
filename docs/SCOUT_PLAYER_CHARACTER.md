@@ -26,7 +26,7 @@ The active presentation intentionally keeps only the essential humanoid pieces:
 
 There is no runtime scarf, cape, satchel, belt treatment, hair treatment, glove treatment or layered boot styling at this stage. Those systems remain in repository history but are not part of the active player appearance while body and motion correctness are verified.
 
-The active visual revision is `simple-humanoid-v5`. The presentation still uses the same 17 foundation meshes introduced in v4; this pass changes body silhouette and proportions only.
+The active visual revision is `simple-humanoid-v6`. The presentation still uses the same 17 foundation meshes; this pass changes visible body shape only and does not introduce a second character or rig system.
 
 `src/player/RangerAppearancePresentation.js` remains the compatibility boundary used by stable player/tool code and routes to `SimpleHumanoidPresentation`.
 
@@ -48,26 +48,46 @@ PR #271 established the structural continuity rule for the upper body:
 - the head follows the real animated head joint and cannot collapse into the shoulders;
 - no skeleton joint, animation clip, movement value or tool anchor is retargeted to force the visible shell into place.
 
-`simple-humanoid-v5` keeps that exact rig contract and improves only the body shape. The rectangular v4 torso is replaced by one six-sided tapered shell that is broad through the shoulders/ribcage, narrower at the waist and flatter front-to-back. The neck is slimmer and the required visible neck gap is shortened so the head, neck and shoulders read as one continuous neutral body instead of a head mounted on a post.
+`simple-humanoid-v6` keeps that exact rig contract. The supplied Prisma3D `Human.obj` is used as a **shape reference**, not as a replacement runtime rig. The previous straight shoulder-to-waist taper is now one low-poly torso mesh with five silhouette landmarks: pelvis, waist, lower ribcage, upper ribcage and shoulders. This gives the torso a narrower waist, fuller ribcage and readable pelvis while the top still reaches the real shoulder anchors and the bottom still follows the hips.
+
+The neck remains a separate structural mesh. It is slim below the head and widens slightly toward the shoulders to read more like a natural neck-to-trapezius transition without moving the head joint or shoulder joints.
+
+## Prisma3D body reference
+
+The body-shape source for this pass is the user-supplied `Human.obj`, exported from **Prisma3D v3.3.5**. Inspection of the supplied file found approximately:
+
+- `15,106` vertices;
+- `7,554` faces;
+- overall bounds of about `1.540 x 1.790 x 0.287` model units in the export pose.
+
+The file contains useful body-part object/group names, including hip, waist, chest, neck, head, shoulders, upper/lower arms, hands, thighs, calves and feet. However, the OBJ is still a static mesh export: it does not contain the Prisma armature, skin weights or animation data needed to replace the established KayKit runtime skeleton safely.
+
+For that reason the OBJ is deliberately treated as **silhouette/proportion guidance only**. The game continues to use the proven KayKit animation rig, controller, hand/tool anchors and collision architecture. This avoids introducing a competing rig while still allowing the visible low-poly shell to move toward the Prisma model's human body shape.
+
+The runtime metadata records this contract as:
+
+- `foundationProportions = prisma-human-reference-v1`;
+- `foundationBodyShape = anatomical-low-poly-v2`;
+- `foundationSource = prisma3d-human-obj-v1`.
 
 ## Arms, legs and feet
 
-The turnaround reference is now reflected in the primitive silhouettes without changing any limb endpoints:
+The Prisma reference is reflected in the primitive silhouettes without changing any limb endpoints:
 
-- upper arms taper from shoulder to elbow;
-- forearms taper from elbow to wrist;
+- upper arms still taper from shoulder to elbow, with a small mid-segment fullness instead of a perfect straight cone;
+- forearms taper from elbow to wrist and retain subtle forearm volume through the middle;
 - hands are slightly smaller relative to the forearms;
-- thighs taper from hip to knee;
-- shins taper from knee to ankle;
-- feet remain level at the animated ankle positions but use a lower, longer, tapered heel-to-toe shape instead of a plain rectangular boot block.
+- thighs taper from hip to knee while retaining enough upper-leg mass to meet the pelvis cleanly;
+- shins taper toward the ankle but now include a small calf fullness through the middle;
+- feet remain level at the animated ankle positions but use a compact heel, broader forefoot and lower toe profile.
 
 The segment lengths still come entirely from the KayKit upper/lower limb and foot joints. Walking, running, jumping and double-jump motion therefore remain owned by the existing animation rig.
 
-## Low-poly turnaround reference
+## Reference hierarchy
 
-The supplied neutral rotating low-poly humanoid turnaround is used only for **structural proportion and silhouette guidance**, not as final Scout art direction.
+The earlier neutral low-poly turnaround remains useful for broad readability and low-poly styling, but the supplied Prisma3D model is now the more specific body-shape reference for this foundation pass.
 
-The reference is used to judge continuity between head, neck, shoulders, ribcage, waist, pelvis and limbs. It is not used to stretch, translate or retarget the KayKit skeleton. The current target is a readable neutral mannequin that can later accept Scout-specific clothing and styling without hiding rig problems underneath.
+Neither reference is used to stretch, translate or retarget the KayKit skeleton. The current target remains a readable neutral mannequin that can later accept Scout-specific clothing and styling without hiding rig problems underneath.
 
 ## Why the mock-up is paused
 
@@ -100,21 +120,21 @@ This foundation refinement does **not** alter terrain generation, terrain collis
 
 ## Verification contract
 
-`npm run verify:ranger-presentation` verifies the simple humanoid compatibility boundary, the 17 essential visible meshes, production KayKit joint compatibility, first-person visibility, shoulder-height torso coverage, tapered torso/limb proportions, explicit neck presence, visible hand/foot joint following and existing double-jump tuning.
+`npm run verify:ranger-presentation` verifies the simple humanoid compatibility boundary, the 17 essential visible meshes, production KayKit joint compatibility, first-person visibility, shoulder-height torso coverage, the Prisma-guided five-ring torso profile, shaped/tapered limb proportions, explicit neck presence, visible hand/foot joint following and existing double-jump tuning.
 
-`npm run verify:humanoid-side-binding` covers explicit left/right joint binding, torso coverage up to the shoulder line, the tapered shoulder-to-waist shell, a visible neck bridge from torso to head, tapered arm/leg geometry, compact hands, shaped level feet and neutral foot orientation despite a strongly pitched KayKit foot joint.
+`npm run verify:humanoid-side-binding` covers explicit left/right joint binding, torso coverage up to the shoulder line, pelvis/waist/ribcage/shoulder silhouette order, a visible neck bridge from torso to head, tapered arm/leg geometry, compact hands, subtle forearm/calf fullness, shaped level feet and neutral foot orientation despite a strongly pitched KayKit foot joint.
 
 Both checks are part of the full `npm run check` merge gate.
 
 Device verification after deployment should confirm:
 
 1. both shoulders and elbows stay on their own side of the torso in idle and movement;
-2. the torso reads as broad shoulders/ribcage tapering into the waist rather than a rectangular block;
-3. the neck is visible but does not look excessively long or thick;
+2. the torso reads as pelvis -> narrow waist -> broader ribcage -> shoulders instead of a single straight cone or rectangular block;
+3. the neck is visible, slim under the head and blends naturally into the shoulders;
 4. the head sits naturally above the neck and shoulders;
-5. upper arms and forearms read as connected tapered limbs rather than tubes of equal thickness;
-6. thighs and shins read as tapered human legs while knees still bend in the expected direction;
-7. the simple feet sit level, stay attached to the ankles and read as low heel-to-toe feet rather than boot cubes;
+5. upper arms and forearms read as connected human-like tapered limbs rather than equal-width tubes;
+6. thighs and shins read as tapered human legs, with a subtle calf shape, while knees still bend in the expected direction;
+7. the simple feet sit level, stay attached to the ankles and read as heel/forefoot/toe shapes rather than boot cubes;
 8. both hands remain attached to the correct wrists;
 9. axe, hammer, pickaxe and spear still align with the visible right hand;
 10. first person hides the body as before;
