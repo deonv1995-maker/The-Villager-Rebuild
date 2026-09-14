@@ -160,6 +160,11 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     let tunedVertices = 0;
     let maximumAppliedWidthFactor = 1;
     let maximumAppliedDepthFactor = 1;
+    let upperOriginalMaxAbsX = 0;
+    let upperSculptedMaxAbsX = 0;
+    let upperOriginalMaxAbsZ = 0;
+    let upperSculptedMaxAbsZ = 0;
+
     for (const { vertex, torsoWeight, limbWeight } of candidates) {
       const y = position.getY(vertex);
       const t = clamp01((y - torsoMinY) / torsoHeight);
@@ -168,11 +173,21 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       const targetDepth = sampleProfile(TORSO_DEPTH_PROFILE, t);
       const widthFactor = THREE.MathUtils.lerp(1, targetWidth, isolation);
       const depthFactor = THREE.MathUtils.lerp(1, targetDepth, isolation);
+      const originalX = position.getX(vertex);
+      const originalZ = position.getZ(vertex);
+      const sculptedX = originalX * widthFactor;
+      const sculptedZ = originalZ * depthFactor;
 
-      position.setX(vertex, position.getX(vertex) * widthFactor);
-      position.setZ(vertex, position.getZ(vertex) * depthFactor);
+      position.setX(vertex, sculptedX);
+      position.setZ(vertex, sculptedZ);
       maximumAppliedWidthFactor = Math.max(maximumAppliedWidthFactor, widthFactor);
       maximumAppliedDepthFactor = Math.max(maximumAppliedDepthFactor, depthFactor);
+      if (t >= 0.5) {
+        upperOriginalMaxAbsX = Math.max(upperOriginalMaxAbsX, Math.abs(originalX));
+        upperSculptedMaxAbsX = Math.max(upperSculptedMaxAbsX, Math.abs(sculptedX));
+        upperOriginalMaxAbsZ = Math.max(upperOriginalMaxAbsZ, Math.abs(originalZ));
+        upperSculptedMaxAbsZ = Math.max(upperSculptedMaxAbsZ, Math.abs(sculptedZ));
+      }
       tunedVertices += 1;
     }
 
@@ -185,6 +200,12 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     geometry.userData.masculineTorsoSpan = { minY: torsoMinY, maxY: torsoMaxY };
     geometry.userData.masculineMaxWidthFactor = maximumAppliedWidthFactor;
     geometry.userData.masculineMaxDepthFactor = maximumAppliedDepthFactor;
+    geometry.userData.masculineUpperWidthGain = upperOriginalMaxAbsX > 0
+      ? upperSculptedMaxAbsX / upperOriginalMaxAbsX
+      : 1;
+    geometry.userData.masculineUpperDepthGain = upperOriginalMaxAbsZ > 0
+      ? upperSculptedMaxAbsZ / upperOriginalMaxAbsZ
+      : 1;
     geometry.userData.masculineWidthProfile = TORSO_WIDTH_PROFILE.map(([t, factor]) => ({ t, factor }));
     geometry.userData.masculineDepthProfile = TORSO_DEPTH_PROFILE.map(([t, factor]) => ({ t, factor }));
   }
