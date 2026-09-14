@@ -1,9 +1,9 @@
 // Compatibility boundary: stable player/tool systems keep importing the historical Ranger name.
-// The Prisma presentation owns the player-facing native mesh while retaining SimpleHumanoidPresentation
-// internally as its safe rig-readable fallback.
+// The masculine profile is presentation-only and layers device-driven proportions/hand-socket
+// tuning on the proven Prisma retargeter without becoming a second gameplay or animation system.
 export {
-  PrismaRiggedHumanoidPresentation as RangerAppearancePresentation
-} from './PrismaRiggedHumanoidPresentation.js';
+  MasculinePrismaHumanoidPresentation as RangerAppearancePresentation
+} from './MasculinePrismaHumanoidPresentation.js';
 
 export {
   SimpleHumanoidPresentation as RangerAppearancePresentationFallback
