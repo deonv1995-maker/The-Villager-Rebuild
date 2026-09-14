@@ -5,7 +5,7 @@ import { gunzipSync } from 'node:zlib';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadPrismaHumanoidScene, PRISMA_HUMANOID_PACKED_SHA256 } from '../src/player/PrismaHumanoidAsset.js';
-import { PrismaRiggedHumanoidPresentation } from '../src/player/PrismaRiggedHumanoidPresentation.js';
+import { MasculinePrismaHumanoidPresentation } from '../src/player/MasculinePrismaHumanoidPresentation.js';
 import { RangerToolPresentation } from '../src/player/RangerToolPresentation.js';
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -131,14 +131,16 @@ mixer.setTime(strongestSample.time);
 root.updateMatrixWorld(true);
 const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
 
-const presentation = new PrismaRiggedHumanoidPresentation({ player });
+const presentation = new MasculinePrismaHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v3');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v4');
 assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
 assert.equal(presentation.visualRoot.userData.surfaceStyle, 'faceted-cartoon-v1');
-assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-shoulder-v1');
-assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-right-hand-v1');
+assert.equal(presentation.visualRoot.userData.bodySilhouette, 'broad-masculine-v1');
+assert.equal(presentation.visualRoot.userData.chestProfile, 'emphasized-pectoral-v1');
+assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-forward-shoulder-v2');
+assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-palm-center-v2');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
 assert.ok(
   presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(sourceBindQuaternion) < 1e-4,
@@ -161,11 +163,16 @@ const displayedGroundY = presentation.prismaRoot.position.y + nativeGroundY * pr
 assert.ok(Math.abs(displayedGroundY - nativeGroundY) < 1e-5, 'larger presentation scale must preserve the original foot/ground plane');
 assert.equal(presentation.prismaMesh.material.flatShading, true, 'native body should use faceted cartoon shading');
 assert.ok(presentation.prismaMesh.material.roughness >= 0.96, 'cartoon surface should remain matte instead of glossy');
+assert.ok(presentation.prismaBind.get('chest').localScale.x > 1.1, 'masculine profile should broaden the chest');
+assert.ok(presentation.prismaBind.get('shoulder').localScale.x > 1.08, 'masculine profile should broaden the shoulder line');
+assert.ok(presentation.prismaBind.get('waist').localScale.x < 1, 'masculine profile should preserve a subtle V taper through the waist');
 
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(toolMount, 'active Prisma body should expose a visible right-hand tool mount');
 assert.equal(toolMount.parent, presentation.prismaBones.get('rightHand'), 'tool mount must live on the visible Prisma right hand');
 assert.ok(Math.abs(toolMount.scale.x - 1 / 1.12) < 1e-6, 'tool mount should cancel character-only presentation scaling');
+assert.ok(toolMount.position.length() > 0.04, 'visible prop socket should advance from the wrist into the palm');
+assert.equal(toolMount.userData.gripProfile, 'upright-palm-center-v2');
 const toolPlayer = {
   root,
   isFirstPerson: () => false,
@@ -175,9 +182,9 @@ const toolPlayer = {
 const toolPresentation = new RangerToolPresentation({ player: toolPlayer, appearancePresentation: presentation });
 toolPresentation.setEquippedTool('axe');
 toolPresentation.update(1 / 60);
-assert.equal(toolPresentation.root.parent, toolMount, 'equipped tools must transfer from the legacy source hand to the visible Prisma hand');
+assert.equal(toolPresentation.root.parent, toolMount, 'equipped tools must transfer from the legacy source hand to the visible Prisma palm');
 assert.equal(toolPresentation.presentationHandMounted, true, 'tool presentation should record visible-hand ownership after native activation');
-assert.ok(toolPresentation.root.position.length() < 1e-6, 'visible-hand tool grip should remain centered on the hand socket');
+assert.ok(toolPresentation.root.position.length() < 1e-6, 'tool-local grip should remain centered on the calibrated palm socket');
 
 presentation.update(1 / 60);
 presentation.prismaRoot.updateMatrixWorld(true);
@@ -213,9 +220,9 @@ const expectedError = new Error('intentional verifier asset failure');
 const logError = console.error;
 console.error = () => {};
 try {
-  const fallback = new PrismaRiggedHumanoidPresentation({ player, prismaAssetLoader: async () => { throw expectedError; } });
+  const fallback = new MasculinePrismaHumanoidPresentation({ player, prismaAssetLoader: async () => { throw expectedError; } });
   assert.equal(await fallback.prismaLoadPromise, false);
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, true bind-pose retargeting, larger grounded scale, faceted surface, visible-hand tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
