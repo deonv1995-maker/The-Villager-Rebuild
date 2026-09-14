@@ -20,7 +20,6 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm run check
-      - run: node scripts/verify-prisma-native-body-shape.mjs
       - run: node scripts/verify-pages-deployment.mjs
       - name: Verify selected production asset integrity
         shell: bash

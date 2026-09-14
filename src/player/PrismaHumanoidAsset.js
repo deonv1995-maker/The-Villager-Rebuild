@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { applyPrismaNativeBodyShape } from './PrismaNativeBodyShape.js';
 import part01 from './prisma-native/generated/part-01.js';
 import part02 from './prisma-native/generated/part-02.js';
 import part03 from './prisma-native/generated/part-03.js';
@@ -16,7 +15,7 @@ import part12 from './prisma-native/generated/part-12.js';
 export const PRISMA_HUMANOID_VERTEX_COUNT = 3779;
 export const PRISMA_HUMANOID_INDEX_COUNT = 22662;
 export const PRISMA_HUMANOID_TRIANGLE_COUNT = PRISMA_HUMANOID_INDEX_COUNT / 3;
-export const PRISMA_HUMANOID_PACKED_SHA256 = 'bee4031cce3df315462e8ebf984b833a42f75de463adf2852e4795356c84d64c';
+export const PRISMA_HUMANOID_PACKED_SHA256 = '5437ac02efa01f893cdf887d7ff74da3535b892763dcff6eb3d5bd1c11acddc3';
 export const PRISMA_HUMANOID_JOINT_NAMES = Object.freeze([
   'hip',
   'waist',
@@ -229,7 +228,6 @@ export function buildPrismaHumanoidScene(sourceBytes) {
   root.add(mesh);
 
   root.updateMatrixWorld(true);
-  applyPrismaNativeBodyShape({ geometry, bones });
   const skeleton = new THREE.Skeleton(bones);
   skeleton.calculateInverses();
   mesh.bind(skeleton, new THREE.Matrix4());

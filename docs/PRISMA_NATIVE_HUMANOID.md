@@ -35,24 +35,15 @@ The packed format remains guarded by the existing parser contract:
 - vertices: `3779`;
 - indices: `22662`;
 - native joints: `31`;
-- packed SHA-256 metadata: `bee4031cce3df315462e8ebf984b833a42f75de463adf2852e4795356c84d64c`.
+- packed SHA-256 metadata: `5437ac02efa01f893cdf887d7ff74da3535b892763dcff6eb3d5bd1c11acddc3`.
 
-## Device-refined body shape
+## Source recovery and generation
 
-The first deployed native-body screenshots confirmed that retargeting was stable, but the neutral mesh still read too much like a block mannequin: the torso was rectangular, the neck/head transition was weak, the limbs lacked enough taper, and the feet read as tall blocks.
+PR #274's packed payload was internally corrupted. Its screenshots showed the Simple fallback, so they did not establish native mesh or retargeting quality. The speculative `device-humanoid-v2` shape adjustment has been removed.
 
-`src/player/PrismaNativeBodyShape.js` now owns a presentation-only neutral-body profile named `device-humanoid-v2`. It reshapes the bind-pose vertices before the native skeleton is bound. The important boundary is that it does **not** move or retarget the KayKit joints and it does **not** change Prisma joint endpoints.
+The original user-supplied archive is preserved in `assets-source/prisma/Group.prisma`. Regenerate with `python3 scripts/generate-prisma-native.py` (Python dependencies: `numpy`, `msgpack`). The generator reads the original polygon triangulation, four skin influences and inverse-bind matrices. It converts handedness consistently, reconstructs local bind transforms from the source inverse-bind matrices, computes smooth normals and writes the twelve packed modules plus their checksum. Editable Prisma pose transforms do not replace the source bind pose.
 
-The shaping pass is deliberately limited to silhouette and volume:
-
-- pelvis -> narrower waist -> fuller chest -> broader shoulder profile;
-- a wider/taller neck bridge without moving the head joint;
-- upper-arm and forearm taper with modest mid-forearm volume;
-- thigh taper and a more readable calf bulge while keeping hip/knee/ankle endpoints fixed;
-- smaller hands;
-- lower, narrower feet with slightly more heel-to-toe length.
-
-Because the transformation is blended through the existing skin weights, the model keeps one continuous skinned mesh instead of adding a competing body shell. Normals and bounds are recomputed after shaping, while vertex count, topology, skin indices, skin weights and native skeleton structure remain unchanged.
+The original mesh silhouette is retained. Further body reshaping requires viewing this real native model first.
 
 ## Stable systems deliberately unchanged
 
@@ -60,7 +51,7 @@ This integration does not change player traversal, double jump, terrain collisio
 
 ## Verification
 
-Repository checks must remain green before merge. `scripts/verify-prisma-native-body-shape.mjs` additionally loads the real bundled Prisma asset and verifies that the device-refined profile is applied without changing the native topology, skinning attributes or 31-joint skeleton.
+`npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, actual production Ranger activation, movement clip retargeting, first-person visibility and failure fallback. Device acceptance remains outstanding; automated activation is not visual acceptance.
 
 Device verification is still required because the important acceptance criteria are visual and animated:
 
