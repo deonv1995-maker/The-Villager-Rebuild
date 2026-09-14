@@ -37,17 +37,40 @@ The packed format remains guarded by the existing parser contract:
 - native joints: `31`;
 - packed SHA-256 metadata: `bee4031cce3df315462e8ebf984b833a42f75de463adf2852e4795356c84d64c`.
 
+## Device-refined body shape
+
+The first deployed native-body screenshots confirmed that retargeting was stable, but the neutral mesh still read too much like a block mannequin: the torso was rectangular, the neck/head transition was weak, the limbs lacked enough taper, and the feet read as tall blocks.
+
+`src/player/PrismaNativeBodyShape.js` now owns a presentation-only neutral-body profile named `device-humanoid-v2`. It reshapes the bind-pose vertices before the native skeleton is bound. The important boundary is that it does **not** move or retarget the KayKit joints and it does **not** change Prisma joint endpoints.
+
+The shaping pass is deliberately limited to silhouette and volume:
+
+- pelvis -> narrower waist -> fuller chest -> broader shoulder profile;
+- a wider/taller neck bridge without moving the head joint;
+- upper-arm and forearm taper with modest mid-forearm volume;
+- thigh taper and a more readable calf bulge while keeping hip/knee/ankle endpoints fixed;
+- smaller hands;
+- lower, narrower feet with slightly more heel-to-toe length.
+
+Because the transformation is blended through the existing skin weights, the model keeps one continuous skinned mesh instead of adding a competing body shell. Normals and bounds are recomputed after shaping, while vertex count, topology, skin indices, skin weights and native skeleton structure remain unchanged.
+
 ## Stable systems deliberately unchanged
 
 This integration does not change player traversal, double jump, terrain collision, player collision, camera behavior, KayKit clips, tool anchors, spear behavior, construction, world systems, UI, PWA/install behavior, or save data.
 
 ## Verification
 
-Repository checks must remain green before merge. Device verification is still required because the important acceptance criteria are visual and animated:
+Repository checks must remain green before merge. `scripts/verify-prisma-native-body-shape.mjs` additionally loads the real bundled Prisma asset and verifies that the device-refined profile is applied without changing the native topology, skinning attributes or 31-joint skeleton.
+
+Device verification is still required because the important acceptance criteria are visual and animated:
 
 1. the Prisma body replaces the Simple fallback after load on the production KayKit player;
 2. idle, walk, run, jump and double jump remain unchanged;
 3. shoulders, elbows, wrists, hips, knees, ankles and feet follow the correct side of the KayKit rig;
-4. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
-5. first-person body visibility behavior remains unchanged;
-6. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
+4. the torso reads as pelvis -> waist -> ribcage -> shoulders instead of a rectangular block;
+5. the neck visibly bridges the torso and head without changing head rotation behavior;
+6. arms and legs taper naturally while their animated endpoints stay attached;
+7. feet read lower and less boot-like while remaining aligned to the ankle/foot motion;
+8. axe, hammer, pickaxe and spear remain aligned to the right-hand tool authority;
+9. first-person body visibility behavior remains unchanged;
+10. failure to load or validate the native body leaves the Simple humanoid usable rather than breaking gameplay.
