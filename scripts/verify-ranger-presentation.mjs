@@ -54,7 +54,7 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.visualRevision,
-  'simple-humanoid-v5',
+  'simple-humanoid-v6',
   'production presentation should use the current simple humanoid foundation'
 );
 assert.equal(
@@ -64,13 +64,18 @@ assert.equal(
 );
 assert.equal(
   productionPresentation.visualRoot.userData.foundationProportions,
-  'wireframe-reference-v3',
-  'production presentation should retain the current neutral turnaround proportion target'
+  'prisma-human-reference-v1',
+  'production presentation should use the current Prisma3D proportion reference'
 );
 assert.equal(
   productionPresentation.visualRoot.userData.foundationBodyShape,
-  'tapered-low-poly-v1',
-  'production presentation should retain the tapered low-poly body-shape contract'
+  'anatomical-low-poly-v2',
+  'production presentation should retain the anatomical low-poly body-shape contract'
+);
+assert.equal(
+  productionPresentation.visualRoot.userData.foundationSource,
+  'prisma3d-human-obj-v1',
+  'production presentation should identify the supplied Prisma3D OBJ as its silhouette source'
 );
 
 const root = new THREE.Group();
@@ -140,12 +145,13 @@ assert.equal(model.getObjectByName('Ranger_Quiver'), undefined, 'legacy Ranger q
 assert.equal(sourceMesh.visible, false, 'legacy Ranger render mesh should stay hidden');
 assert.equal(presentation.visualRoot.parent, root, 'humanoid presentation should live at the stable player root');
 assert.equal(presentation.visualRoot.userData.characterIdentity, 'scout', 'player-facing identity should remain Scout');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v5');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'simple-humanoid-v6');
 assert.equal(presentation.visualRoot.userData.developmentStage, 'humanoid-foundation');
 assert.equal(presentation.visualRoot.userData.visualMeshBudget, 17);
 assert.equal(presentation.visualRoot.userData.foundationAlignment, 'shoulder-neck-flat-feet-v2');
-assert.equal(presentation.visualRoot.userData.foundationProportions, 'wireframe-reference-v3');
-assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'tapered-low-poly-v1');
+assert.equal(presentation.visualRoot.userData.foundationProportions, 'prisma-human-reference-v1');
+assert.equal(presentation.visualRoot.userData.foundationBodyShape, 'anatomical-low-poly-v2');
+assert.equal(presentation.visualRoot.userData.foundationSource, 'prisma3d-human-obj-v1');
 
 for (const name of [
   'scout-tunic',
@@ -206,7 +212,9 @@ const visibleRightThigh = presentation.visualRoot.getObjectByName('scout-right-t
 const visibleRightShin = presentation.visualRoot.getObjectByName('scout-right-shin');
 const handBefore = visibleRightHand.position.clone();
 const footBefore = visibleRightFoot.position.clone();
-const torsoVisibleHeight = presentation.torso.geometry.parameters.height * presentation.torso.scale.y;
+const torsoProfile = presentation.torso.geometry.userData.profile;
+const torsoByLandmark = Object.fromEntries(torsoProfile.map(ring => [ring.landmark, ring]));
+const torsoVisibleHeight = presentation.torso.geometry.userData.unitHeight * presentation.torso.scale.y;
 const shoulderY = (
   model.getObjectByName('UpperArm_L').position.y
   + model.getObjectByName('UpperArm_R').position.y
@@ -217,23 +225,31 @@ const neckHeight = visibleNeck.geometry.parameters.height * visibleNeck.scale.y;
 
 assert.ok(torsoVisibleHeight >= 0.56, 'foundation torso should span the hips-to-shoulder structure instead of collapsing into a waist block');
 assert.ok(torsoTop >= shoulderY, 'foundation torso should reach the animated shoulder line');
+assert.equal(torsoProfile.length, 5, 'foundation torso should preserve the Prisma-guided five-ring silhouette');
+assert.ok(torsoByLandmark.shoulders.halfWidth > torsoByLandmark.waist.halfWidth, 'foundation torso should broaden from waist to shoulders');
+assert.ok(torsoByLandmark.pelvis.halfWidth > torsoByLandmark.waist.halfWidth, 'foundation torso should retain a readable pelvis below the waist');
+assert.ok(torsoByLandmark['upper-ribcage'].halfWidth > torsoByLandmark['lower-ribcage'].halfWidth, 'upper ribcage should broaden toward the shoulders');
 assert.ok(
-  presentation.torso.geometry.parameters.radiusTop > presentation.torso.geometry.parameters.radiusBottom,
-  'foundation torso should be broader at the shoulders than the waist'
+  torsoByLandmark['upper-ribcage'].halfDepth / torsoByLandmark['upper-ribcage'].halfWidth < 0.5,
+  'foundation torso should remain flatter front-to-back than it is wide'
 );
-assert.ok(presentation.torso.scale.z <= 0.55, 'foundation torso should be flatter front-to-back than it is wide');
+assert.equal(presentation.torso.geometry.userData.reference, 'prisma3d-human-obj-v1');
 assert.ok(headBottom - shoulderY >= 0.055, 'foundation head should remain above the shoulders with a short visible neck');
 assert.ok(neckHeight >= 0.05, 'foundation should include a visible structural neck');
-assert.ok(visibleNeck.geometry.parameters.radiusTop < 0.09, 'foundation neck should stay slim relative to the head and shoulders');
-assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should stay subordinate to the body proportions');
-assert.ok(visibleRightHand.geometry.parameters.radius <= 0.095, 'foundation hand should stay compact relative to the forearm');
+assert.ok(visibleNeck.geometry.parameters.radiusTop <= 0.07, 'foundation neck should stay slim relative to the head and shoulders');
+assert.ok(visibleNeck.geometry.parameters.radiusBottom >= 0.085, 'foundation neck should flare gently into the shoulders');
+assert.ok(presentation.head.geometry.parameters.radius <= 0.22, 'foundation head should preserve the accepted scale while body shape is refined');
+assert.ok(visibleRightHand.geometry.parameters.radius <= 0.09, 'foundation hand should stay compact relative to the forearm');
 assert.ok(visibleRightUpperArm.geometry.parameters.radiusTop < visibleRightUpperArm.geometry.parameters.radiusBottom, 'upper arm should taper toward the elbow');
 assert.ok(visibleRightLowerArm.geometry.parameters.radiusTop < visibleRightLowerArm.geometry.parameters.radiusBottom, 'forearm should taper toward the wrist');
+assert.ok(visibleRightLowerArm.geometry.userData.midScale > 1.05, 'forearm should include subtle mid-segment fullness from the Prisma reference');
 assert.ok(visibleRightThigh.geometry.parameters.radiusTop < visibleRightThigh.geometry.parameters.radiusBottom, 'thigh should taper toward the knee');
 assert.ok(visibleRightShin.geometry.parameters.radiusTop < visibleRightShin.geometry.parameters.radiusBottom, 'shin should taper toward the ankle');
-assert.ok(visibleRightFoot.geometry.parameters.width <= 0.18, 'foundation feet should stay compact in width');
-assert.ok(visibleRightFoot.geometry.parameters.height <= 0.12, 'foundation feet should stay low instead of reading as boot blocks');
-assert.ok(visibleRightFoot.geometry.parameters.depth >= 0.26 && visibleRightFoot.geometry.parameters.depth <= 0.29, 'foundation feet should retain readable heel-to-toe length');
+assert.ok(visibleRightShin.geometry.userData.midScale >= 1.1, 'shin should include a readable calf silhouette without changing rig endpoints');
+assert.ok(visibleRightFoot.geometry.parameters.width <= 0.17, 'foundation feet should stay compact in width');
+assert.ok(visibleRightFoot.geometry.parameters.height <= 0.105, 'foundation feet should stay low instead of reading as boot blocks');
+assert.ok(visibleRightFoot.geometry.parameters.depth >= 0.28 && visibleRightFoot.geometry.parameters.depth <= 0.3, 'foundation feet should retain readable heel-to-toe length');
+assert.equal(visibleRightFoot.geometry.userData.reference, 'prisma3d-human-obj-v1');
 
 model.getObjectByName('Hand_R').position.x += 0.16;
 model.getObjectByName('Foot_R').position.z += 0.14;
@@ -259,8 +275,9 @@ assert.ok(
 const simpleModule = read('src/player/SimpleHumanoidPresentation.js');
 assert.ok(
   simpleModule.includes('extends ScoutCharacterPresentation')
-    && simpleModule.includes("developmentStage = 'humanoid-foundation'"),
-  'simple humanoid should remain layered on the proven rig-following presentation'
+    && simpleModule.includes("developmentStage = 'humanoid-foundation'")
+    && simpleModule.includes("foundationSource = 'prisma3d-human-obj-v1'"),
+  'simple humanoid should remain layered on the proven rig-following presentation and record its Prisma source'
 );
 
 const controller = read('src/player/RangerController.js');
@@ -308,4 +325,4 @@ assert.ok(
   'full repository check must retain humanoid presentation and traversal regression coverage'
 );
 
-console.log('Simple humanoid tapered body shape, rig, visibility, limb-following, and double-jump regression checks passed.');
+console.log('Simple humanoid Prisma-guided body shape, rig, visibility, limb-following, and double-jump regression checks passed.');
