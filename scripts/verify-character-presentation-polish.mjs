@@ -15,14 +15,16 @@ const appearance = read('src/player/RangerAppearancePresentation.js');
 const sproutRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const main = read('src/main.js');
 
-assert.ok(masculine.includes('TORSO_SCULPT') && masculine.includes('chestWidth: 0.13'), 'male profile must retain the broader chest sculpt');
-assert.ok(masculine.includes('shoulderWidth: 0.11'), 'male profile must retain broader shoulder geometry');
-assert.ok(masculine.includes('waistWidth: -0.03'), 'male profile must retain the subtle waist taper');
-assert.ok(masculine.includes('geometry.userData.masculineVertexCount'), 'masculine sculpt must record affected geometry for regression diagnostics');
-assert.ok(masculine.includes("bodySilhouette = 'broad-masculine-v1'"), 'male silhouette metadata must stay explicit');
-assert.ok(masculine.includes("chestProfile = 'emphasized-pectoral-v1'"), 'emphasized chest profile must stay explicit');
-assert.ok(masculine.includes('PALM_EXTENSION = 0.085'), 'visible tool socket must advance from wrist into palm');
-assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v2'"), 'visible hand mount must keep its calibrated grip profile');
+assert.ok(masculine.includes('TORSO_WIDTH_PROFILE'), 'male profile must use an explicit full-torso width curve rather than weak single-bone scaling');
+assert.ok(masculine.includes('[0.90, 1.26]'), 'upper chest and shoulder silhouette must retain a clearly readable width increase');
+assert.ok(masculine.includes('[0.24, 0.92]'), 'waist region must retain the deliberate V taper');
+assert.ok(masculine.includes('TORSO_DEPTH_PROFILE') && masculine.includes('[0.72, 1.17]'), 'male chest must retain readable front-to-back depth');
+assert.ok(masculine.includes('geometry.userData.masculineMaxWidthFactor'), 'masculine sculpt must record the actually applied width for regression diagnostics');
+assert.ok(masculine.includes("bodySilhouette = 'readable-masculine-v2'"), 'male silhouette metadata must stay explicit');
+assert.ok(masculine.includes("chestProfile = 'sculpted-pectoral-v2'"), 'sculpted chest profile must stay explicit');
+assert.ok(masculine.includes('ARM_FORWARD_OFFSET = 0.075'), 'relaxed hands must remain visibly forward of the previous behind-hip position');
+assert.ok(masculine.includes('PALM_EXTENSION = 0.11'), 'visible tool socket must reach the centre of the visible palm');
+assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v3'"), 'visible hand mount must keep its current calibrated grip profile');
 assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the masculine Prisma profile');
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
@@ -82,4 +84,4 @@ assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-torch-v2', 'to
 assert.ok(torch.visualRoot.position.y < 0, 'torch grip origin should pass through the palm instead of floating beside it');
 torch.dispose();
 
-console.log('Character silhouette, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
+console.log('Readable masculine silhouette, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');

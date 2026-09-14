@@ -1,28 +1,53 @@
 import * as THREE from 'three';
 import { PrismaRiggedHumanoidPresentation } from './PrismaRiggedHumanoidPresentation.js';
 
-const TORSO_SCULPT = Object.freeze({
-  chestWidth: 0.13,
-  chestDepth: 0.075,
-  shoulderWidth: 0.11,
-  shoulderDepth: 0.055,
-  waistWidth: -0.03,
-  waistDepth: -0.012
-});
-const SHOULDER_SPREAD = 0.04;
-const UPPER_ARM_SPREAD = 0.014;
-const ARM_FORWARD_OFFSET = 0.032;
-const PALM_EXTENSION = 0.085;
+const TORSO_WIDTH_PROFILE = Object.freeze([
+  [0.00, 1.00],
+  [0.24, 0.92],
+  [0.50, 1.08],
+  [0.72, 1.19],
+  [0.90, 1.26],
+  [1.00, 1.21]
+]);
+const TORSO_DEPTH_PROFILE = Object.freeze([
+  [0.00, 0.99],
+  [0.24, 0.96],
+  [0.50, 1.08],
+  [0.72, 1.17],
+  [0.90, 1.16],
+  [1.00, 1.09]
+]);
+const MIN_TORSO_WEIGHT = 0.28;
+const MAX_LIMB_WEIGHT = 0.55;
+const SHOULDER_SPREAD = 0.065;
+const UPPER_ARM_SPREAD = 0.025;
+const ARM_FORWARD_OFFSET = 0.075;
+const PALM_EXTENSION = 0.11;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
+const clamp01 = value => Math.min(1, Math.max(0, value));
+
+function sampleProfile(profile, t) {
+  const value = clamp01(t);
+  for (let index = 1; index < profile.length; index += 1) {
+    const [rightT, rightValue] = profile[index];
+    const [leftT, leftValue] = profile[index - 1];
+    if (value > rightT) continue;
+    const span = Math.max(1e-6, rightT - leftT);
+    const local = (value - leftT) / span;
+    return THREE.MathUtils.lerp(leftValue, rightValue, local);
+  }
+  return profile.at(-1)[1];
+}
 
 /**
  * Player-facing style profile layered on the proven Prisma retargeter.
  *
  * The base class remains the only animation/retarget authority. This class only
- * sculpts bind geometry and adjusts bind positions after the native rig has
- * loaded so device-driven silhouette changes cannot leak into movement,
- * collision or the KayKit animation source.
+ * sculpts the native bind geometry and adjusts presentation bind positions after
+ * the native rig has loaded. Movement, collision and KayKit animation authority
+ * therefore remain untouched.
  */
 export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPresentation {
   constructor(options) {
@@ -35,24 +60,28 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
   }
 
   #applyPresentationProfile() {
-    this.#sculptMasculineTorso();
+    this.#sculptReadableMasculineTorso();
 
     for (const side of ['left', 'right']) {
       const shoulderName = `${side}Shoulder`;
       const upperArmName = `${side}UpperArm`;
       const shoulderBind = this.prismaBind.get(shoulderName);
       const upperArmBind = this.prismaBind.get(upperArmName);
-      const lateralSign = Math.sign(shoulderBind?.localPosition.x || upperArmBind?.localPosition.x || (side === 'left' ? -1 : 1));
+      const lateralSign = Math.sign(
+        shoulderBind?.localPosition.x
+        || upperArmBind?.localPosition.x
+        || (side === 'left' ? -1 : 1)
+      );
 
       if (shoulderBind) {
         shoulderBind.localPosition.x += lateralSign * SHOULDER_SPREAD;
         // Prisma native forward is opposite the player-facing basis, so negative
-        // native Z moves the relaxed arm slightly toward the player's front.
+        // native Z moves the relaxed arm toward the player's visible front plane.
         shoulderBind.localPosition.z -= ARM_FORWARD_OFFSET;
       }
       if (upperArmBind) {
         upperArmBind.localPosition.x += lateralSign * UPPER_ARM_SPREAD;
-        upperArmBind.localPosition.z -= ARM_FORWARD_OFFSET * 0.35;
+        upperArmBind.localPosition.z -= ARM_FORWARD_OFFSET * 0.45;
       }
     }
 
@@ -66,14 +95,14 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     this.prismaRoot?.updateMatrixWorld?.(true);
     this.#calibrateVisiblePalmMount();
 
-    this.visualRoot.userData.visualRevision = 'prisma-rigged-humanoid-v4';
-    this.visualRoot.userData.bodySilhouette = 'broad-masculine-v1';
-    this.visualRoot.userData.chestProfile = 'emphasized-pectoral-v1';
-    this.visualRoot.userData.armSilhouette = 'relaxed-forward-shoulder-v2';
-    this.visualRoot.userData.toolAnchor = 'visible-palm-center-v2';
+    this.visualRoot.userData.visualRevision = 'prisma-rigged-humanoid-v5';
+    this.visualRoot.userData.bodySilhouette = 'readable-masculine-v2';
+    this.visualRoot.userData.chestProfile = 'sculpted-pectoral-v2';
+    this.visualRoot.userData.armSilhouette = 'relaxed-forward-shoulder-v3';
+    this.visualRoot.userData.toolAnchor = 'visible-palm-center-v3';
   }
 
-  #sculptMasculineTorso() {
+  #sculptReadableMasculineTorso() {
     const mesh = this.prismaMesh;
     const sourceGeometry = mesh?.geometry;
     const skeleton = mesh?.skeleton;
@@ -87,40 +116,78 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     if (!position || !skinIndex || !skinWeight) return;
 
     const boneIndex = name => skeleton.bones.indexOf(this.prismaBones.get(name));
-    const chestIndex = boneIndex('chest');
-    const shoulderIndex = boneIndex('shoulder');
-    const waistIndex = boneIndex('waist');
-    const leftShoulderIndex = boneIndex('leftShoulder');
-    const rightShoulderIndex = boneIndex('rightShoulder');
-    const shoulderIndices = new Set([shoulderIndex, leftShoulderIndex, rightShoulderIndex].filter(index => index >= 0));
+    const torsoIndices = new Set([
+      boneIndex('hip'),
+      boneIndex('waist'),
+      boneIndex('chest'),
+      boneIndex('shoulder'),
+      boneIndex('leftShoulder'),
+      boneIndex('rightShoulder')
+    ].filter(index => index >= 0));
+    const limbIndices = new Set([
+      'leftUpperArm', 'leftUpperArmTwist', 'leftForearm', 'leftForearmTwist', 'leftHand',
+      'rightUpperArm', 'rightUpperArmTwist', 'rightForearm', 'rightForearmTwist', 'rightHand',
+      'leftThigh', 'leftThighTwist', 'leftCalf', 'leftFoot', 'leftFootToe',
+      'rightThigh', 'rightThighTwist', 'rightCalf', 'rightFoot', 'rightFootToe',
+      'head'
+    ].map(boneIndex).filter(index => index >= 0));
 
-    let tunedVertices = 0;
+    const candidates = [];
+    let torsoMinY = Number.POSITIVE_INFINITY;
+    let torsoMaxY = Number.NEGATIVE_INFINITY;
+
     for (let vertex = 0; vertex < position.count; vertex += 1) {
-      let chestWeight = 0;
-      let shoulderWeight = 0;
-      let waistWeight = 0;
+      let torsoWeight = 0;
+      let limbWeight = 0;
       const influenceOffset = vertex * skinIndex.itemSize;
       for (let influence = 0; influence < skinIndex.itemSize; influence += 1) {
         const index = skinIndex.array[influenceOffset + influence];
         const weight = skinWeight.array[influenceOffset + influence] ?? 0;
-        if (index === chestIndex) chestWeight += weight;
-        if (shoulderIndices.has(index)) shoulderWeight += weight;
-        if (index === waistIndex) waistWeight += weight;
+        if (torsoIndices.has(index)) torsoWeight += weight;
+        if (limbIndices.has(index)) limbWeight += weight;
       }
+      if (torsoWeight < MIN_TORSO_WEIGHT || limbWeight > MAX_LIMB_WEIGHT) continue;
 
-      const widthFactor = 1
-        + chestWeight * TORSO_SCULPT.chestWidth
-        + shoulderWeight * TORSO_SCULPT.shoulderWidth
-        + waistWeight * TORSO_SCULPT.waistWidth;
-      const depthFactor = 1
-        + chestWeight * TORSO_SCULPT.chestDepth
-        + shoulderWeight * TORSO_SCULPT.shoulderDepth
-        + waistWeight * TORSO_SCULPT.waistDepth;
-      if (Math.abs(widthFactor - 1) < 1e-5 && Math.abs(depthFactor - 1) < 1e-5) continue;
+      const y = position.getY(vertex);
+      torsoMinY = Math.min(torsoMinY, y);
+      torsoMaxY = Math.max(torsoMaxY, y);
+      candidates.push({ vertex, torsoWeight, limbWeight });
+    }
 
-      const positionOffset = vertex * position.itemSize;
-      position.array[positionOffset] *= widthFactor;
-      position.array[positionOffset + 2] *= depthFactor;
+    const torsoHeight = torsoMaxY - torsoMinY;
+    if (!Number.isFinite(torsoHeight) || torsoHeight <= 1e-5 || candidates.length === 0) return;
+
+    let tunedVertices = 0;
+    let maximumAppliedWidthFactor = 1;
+    let maximumAppliedDepthFactor = 1;
+    let upperOriginalMaxAbsX = 0;
+    let upperSculptedMaxAbsX = 0;
+    let upperOriginalMaxAbsZ = 0;
+    let upperSculptedMaxAbsZ = 0;
+
+    for (const { vertex, torsoWeight, limbWeight } of candidates) {
+      const y = position.getY(vertex);
+      const t = clamp01((y - torsoMinY) / torsoHeight);
+      const isolation = clamp01((torsoWeight - limbWeight * 0.35) / Math.max(torsoWeight, 1e-6));
+      const targetWidth = sampleProfile(TORSO_WIDTH_PROFILE, t);
+      const targetDepth = sampleProfile(TORSO_DEPTH_PROFILE, t);
+      const widthFactor = THREE.MathUtils.lerp(1, targetWidth, isolation);
+      const depthFactor = THREE.MathUtils.lerp(1, targetDepth, isolation);
+      const originalX = position.getX(vertex);
+      const originalZ = position.getZ(vertex);
+      const sculptedX = originalX * widthFactor;
+      const sculptedZ = originalZ * depthFactor;
+
+      position.setX(vertex, sculptedX);
+      position.setZ(vertex, sculptedZ);
+      maximumAppliedWidthFactor = Math.max(maximumAppliedWidthFactor, widthFactor);
+      maximumAppliedDepthFactor = Math.max(maximumAppliedDepthFactor, depthFactor);
+      if (t >= 0.5) {
+        upperOriginalMaxAbsX = Math.max(upperOriginalMaxAbsX, Math.abs(originalX));
+        upperSculptedMaxAbsX = Math.max(upperSculptedMaxAbsX, Math.abs(sculptedX));
+        upperOriginalMaxAbsZ = Math.max(upperOriginalMaxAbsZ, Math.abs(originalZ));
+        upperSculptedMaxAbsZ = Math.max(upperSculptedMaxAbsZ, Math.abs(sculptedZ));
+      }
       tunedVertices += 1;
     }
 
@@ -128,9 +195,19 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     geometry.computeVertexNormals();
-    geometry.userData.masculineProfile = 'broad-chest-shoulder-v1';
+    geometry.userData.masculineProfile = 'readable-chest-shoulder-v2';
     geometry.userData.masculineVertexCount = tunedVertices;
-    geometry.userData.masculineSculpt = { ...TORSO_SCULPT };
+    geometry.userData.masculineTorsoSpan = { minY: torsoMinY, maxY: torsoMaxY };
+    geometry.userData.masculineMaxWidthFactor = maximumAppliedWidthFactor;
+    geometry.userData.masculineMaxDepthFactor = maximumAppliedDepthFactor;
+    geometry.userData.masculineUpperWidthGain = upperOriginalMaxAbsX > 0
+      ? upperSculptedMaxAbsX / upperOriginalMaxAbsX
+      : 1;
+    geometry.userData.masculineUpperDepthGain = upperOriginalMaxAbsZ > 0
+      ? upperSculptedMaxAbsZ / upperOriginalMaxAbsZ
+      : 1;
+    geometry.userData.masculineWidthProfile = TORSO_WIDTH_PROFILE.map(([t, factor]) => ({ t, factor }));
+    geometry.userData.masculineDepthProfile = TORSO_DEPTH_PROFILE.map(([t, factor]) => ({ t, factor }));
   }
 
   #calibrateVisiblePalmMount() {
@@ -151,7 +228,7 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     }
 
     mount.userData.source = 'prisma-visible-palm';
-    mount.userData.gripProfile = 'upright-palm-center-v2';
+    mount.userData.gripProfile = 'upright-palm-center-v3';
     mount.userData.palmExtension = PALM_EXTENSION;
     mount.updateMatrixWorld(true);
   }

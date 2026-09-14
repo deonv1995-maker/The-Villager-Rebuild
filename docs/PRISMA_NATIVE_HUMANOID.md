@@ -19,7 +19,7 @@ The ownership model is:
 - `RangerController`: movement, grounding, collision, camera modes, KayKit animation mixer, tool actions, spear anchors and cinematics;
 - KayKit medium rig: animation authority;
 - `PrismaRiggedHumanoidPresentation`: retargets the native Prisma skeleton from KayKit joint motion and owns scale/style/socket adaptation;
-- `MasculinePrismaHumanoidPresentation`: owns the device-driven broad-chest/shoulder geometry sculpt, relaxed arm bind offsets and palm-center socket calibration only;
+- `MasculinePrismaHumanoidPresentation`: owns the device-driven torso geometry sculpt, relaxed arm bind offsets and palm-center socket calibration only;
 - `RangerToolPresentation`: owns equipped work-tool visuals and transfers them to the visible Prisma right-hand socket when native activation succeeds;
 - `SimpleHumanoidPresentation`: fallback visible body and existing rig-binding safety net.
 
@@ -61,15 +61,17 @@ The player-facing Prisma root uses a presentation-only uniform scale of `1.12`. 
 
 The active native material remains matte and faceted (`faceted-cartoon-v1`): flat shading is enabled and roughness stays high. Packed skin weights and topology remain unchanged.
 
-Device review then showed that the character still read too narrow through the upper body and that his relaxed hands sat too far behind his hips. `MasculinePrismaHumanoidPresentation` therefore clones the runtime geometry and performs one bind-space, skin-weight-aware torso sculpt instead of applying non-uniform scales to animated bones. Chest-weighted vertices gain about 13% width and 7.5% depth, shoulder-weighted vertices gain about 11% width and 5.5% depth, and waist-weighted vertices taper slightly. This creates the stronger male chest/shoulder V silhouette without introducing scale shear into the animated skeleton.
+The first geometry-sculpt pass was technically valid but device feedback showed that it was visually too subtle at normal mobile camera distance. The current `readable-masculine-v2` profile therefore uses a full torso-height width/depth curve rather than multiplying only the contribution of a few individual torso bones.
 
-The shoulder and upper-arm bind origins also receive small lateral and forward offsets so the hanging hands sit beside the body instead of collecting behind the pelvis. These are position-only presentation offsets; bone scale remains neutral and KayKit rotation deltas remain unchanged.
+The runtime identifies torso-dominant vertices from the existing skin weights, excludes limb-dominant vertices, measures that torso span, and applies a smooth bind-space profile from hips through waist, ribcage and shoulder line. The waist narrows to about `0.92×`, the upper ribcage broadens progressively, and the shoulder region reaches about `1.26×` width with up to roughly `1.17×` chest depth. Because this happens on a cloned render geometry, the skeleton keeps neutral scale and the KayKit rotation deltas remain unchanged.
 
-This separation is important: the first experimental implementation used non-uniform animated bone scales, and regression testing correctly showed that hierarchical scale shear altered measured arm rotation. The geometry-sculpt approach preserves the original retarget rotation magnitude while delivering the broader silhouette.
+The shoulder and upper-arm bind origins also receive larger position-only offsets than the first pass: the shoulder chain is moved farther outward and forward so the relaxed hands should read beside/slightly ahead of the hips instead of disappearing behind the pelvis. These offsets still do not change collision, movement or animation timing.
+
+Regression diagnostics now record both the requested profile factors and the actual upper-torso width/depth gain produced on the loaded native mesh. This prevents a future pass from technically touching vertices while remaining visually negligible.
 
 ## Visible palm tool socket
 
-The visible prop socket remains parented under the Prisma `rightHand` bone, but it is no longer centered on the wrist origin. The masculine profile advances the socket along the forearm-to-hand direction into the visible palm and calibrates its bind orientation so prop local +Y is upright at rest. This gives axes, hammer, pickaxe, shovel and sword one stable palm-centered grip basis while preserving their established world scale through inverse presentation-scale compensation.
+The visible prop socket remains parented under the Prisma `rightHand` bone, but it is no longer centered on the wrist origin. The current profile advances the socket farther along the forearm-to-hand direction into the visible palm and calibrates its bind orientation so prop local +Y is upright at rest. This gives axes, hammer, pickaxe, shovel and sword one stable palm-centered grip basis while preserving their established world scale through inverse presentation-scale compensation.
 
 `RangerToolPresentation` still owns work-tool visuals and action timing. During native load/fallback it can remain on the legacy KayKit hand, then its single tool root transfers to the active Prisma palm mount. No second tool action system is introduced.
 
@@ -85,17 +87,17 @@ This integration does not change player traversal, double jump, terrain collisio
 
 `npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, production Ranger activation, true bind-pose capture, movement retargeting, the 180-degree facing basis, first-person visibility and failure fallback.
 
-The same verification now guards the `1.12` grounded presentation scale, matte faceted material, geometry-sculpted broad masculine chest/shoulder profile, subtle waist taper, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression also verifies the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
+The same verification guards the `1.12` grounded presentation scale, matte faceted material, readable full-torso masculine profile, measurable upper-body width/depth gain, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression also verifies the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
 
 ## Device verification
 
 After merge/deploy, verify on a physical phone:
 
-1. the upper body reads broader, with a clearer male chest and shoulder line without looking bodybuilder-exaggerated;
-2. idle/walk/run/jump/double-jump remain anatomically correct and the hands hang beside the hips rather than behind the pelvis;
+1. the upper body is visibly broader than the previous build at normal gameplay zoom, with a clear chest/shoulder V without becoming exaggerated;
+2. idle/walk/run/jump/double-jump remain anatomically correct and the hands hang beside or slightly ahead of the hips rather than behind the pelvis;
 3. axe, hammer, pickaxe, shovel and sword visibly pass through the right palm and follow the hand during their actions;
 4. the handheld torch sits upright through the visible palm and its light/flame still follow correctly;
 5. the faceted/cartoon surface still reads cleanly at normal mobile distance;
-6. the larger player remains correctly grounded and scaled against buildings, trees and the now slightly smaller Sprout;
+6. the larger player remains correctly grounded and scaled against buildings, trees and Sprout;
 7. spear throwing and first-person visibility remain unchanged;
 8. failure to load the native body still leaves the Simple humanoid usable rather than breaking gameplay.

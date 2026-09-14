@@ -134,13 +134,13 @@ const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
 const presentation = new MasculinePrismaHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v4');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v5');
 assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
 assert.equal(presentation.visualRoot.userData.surfaceStyle, 'faceted-cartoon-v1');
-assert.equal(presentation.visualRoot.userData.bodySilhouette, 'broad-masculine-v1');
-assert.equal(presentation.visualRoot.userData.chestProfile, 'emphasized-pectoral-v1');
-assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-forward-shoulder-v2');
-assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-palm-center-v2');
+assert.equal(presentation.visualRoot.userData.bodySilhouette, 'readable-masculine-v2');
+assert.equal(presentation.visualRoot.userData.chestProfile, 'sculpted-pectoral-v2');
+assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-forward-shoulder-v3');
+assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-palm-center-v3');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
 assert.ok(
   presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(sourceBindQuaternion) < 1e-4,
@@ -163,18 +163,19 @@ const displayedGroundY = presentation.prismaRoot.position.y + nativeGroundY * pr
 assert.ok(Math.abs(displayedGroundY - nativeGroundY) < 1e-5, 'larger presentation scale must preserve the original foot/ground plane');
 assert.equal(presentation.prismaMesh.material.flatShading, true, 'native body should use faceted cartoon shading');
 assert.ok(presentation.prismaMesh.material.roughness >= 0.96, 'cartoon surface should remain matte instead of glossy');
-assert.equal(presentation.prismaMesh.geometry.userData.masculineProfile, 'broad-chest-shoulder-v1');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineProfile, 'readable-chest-shoulder-v2');
 assert.ok(presentation.prismaMesh.geometry.userData.masculineVertexCount > 0, 'masculine geometry sculpt must affect weighted torso vertices');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.chestWidth >= 0.13, 'masculine profile should retain the broader chest width');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.shoulderWidth >= 0.11, 'masculine profile should retain broader shoulders');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineSculpt.waistWidth < 0, 'masculine profile should preserve a subtle V taper through the waist');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxWidthFactor >= 1.18, 'upper torso sculpt must contain a clearly readable width expansion');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxDepthFactor >= 1.1, 'upper torso sculpt must contain a clearly readable chest-depth expansion');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperWidthGain > 1.04, 'actual upper-torso geometry must become measurably wider');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperDepthGain > 1.03, 'actual upper-torso geometry must become measurably deeper');
 
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(toolMount, 'active Prisma body should expose a visible right-hand tool mount');
 assert.equal(toolMount.parent, presentation.prismaBones.get('rightHand'), 'tool mount must live on the visible Prisma right hand');
 assert.ok(Math.abs(toolMount.scale.x - 1 / 1.12) < 1e-6, 'tool mount should cancel character-only presentation scaling');
-assert.ok(toolMount.position.length() > 0.04, 'visible prop socket should advance from the wrist into the palm');
-assert.equal(toolMount.userData.gripProfile, 'upright-palm-center-v2');
+assert.ok(toolMount.position.length() > 0.08, 'visible prop socket should advance from the wrist into the palm centre');
+assert.equal(toolMount.userData.gripProfile, 'upright-palm-center-v3');
 const toolPlayer = {
   root,
   isFirstPerson: () => false,
@@ -227,4 +228,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, geometry-sculpted masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, visibly sculpted masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
