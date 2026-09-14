@@ -26,7 +26,7 @@ Sprout is implemented as a custom lightweight Three.js model in `src/rendering/S
 
 The model factory owns presentation only. It does not know about inventory, harvesting, story progression, collision, resource legality or save state.
 
-`SproutVisualRuntimeController` installs the production model over the crash-site fallback presentation as soon as that presentation exists, preserves the existing position/orientation/visibility, applies the authored production presentation scale, and guarantees the same production root is transferred into post-allegiance companion ownership. This preserves the established rule that the crash-site Sprout and following Sprout are the same actor rather than duplicated presentations.
+`SproutVisualRuntimeController` installs the production model over the crash-site fallback presentation as soon as that presentation exists, preserves the existing position/orientation/visibility, applies the authored production presentation scale plus the centralized relative-player scale, and guarantees the same production root is transferred into post-allegiance companion ownership. This preserves the established rule that the crash-site Sprout and following Sprout are the same actor rather than duplicated presentations.
 
 ## Animation/readability
 
@@ -87,4 +87,12 @@ The v4 pass increases motion readability after device feedback showed that the v
 - The top fins use a wider swing and a small pitch variation so the upper silhouette also contributes to Sprout's living mechanical feel.
 - All motion remains deterministic and smooth; no per-frame randomness was introduced, preventing jitter and keeping the mobile rendering cost effectively unchanged.
 
-This pass changes presentation only. Sprout's scale, follow distances, resource collection, collision, navigation, story state, inventory and save behavior are unchanged.
+This pass changes presentation only. Sprout's authored asset scale, follow distances, resource collection, collision, navigation, story state, inventory and save behavior are unchanged.
+
+## Relative player-scale pass
+
+Later device review with the larger Prisma player showed that Sprout still competed too strongly with the human silhouette. `SproutVisualRuntimeController` now applies one additional **0.88 relative-player presentation factor** after the authored `0.75` asset scale. The effective production presentation scale is therefore `0.66` relative to the old fallback transform.
+
+This ratio is intentionally a runtime relationship value rather than a rewrite of Sprout's authored asset proportions. The controller records both `relativePlayerScale` and `effectivePresentationScale` on the production root and applies the ratio idempotently so crash-site ownership and companion transfer cannot shrink Sprout twice.
+
+Follow offsets, scanner range, collection range, collision, story state and navigation remain unchanged. The only goal is to make Sprout read as a smaller companion beside the broadened player character.
