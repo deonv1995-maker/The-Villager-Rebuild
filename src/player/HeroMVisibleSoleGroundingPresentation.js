@@ -8,6 +8,7 @@ const SOLE_BIND_KEYS = Object.freeze({
 const MIN_SOLE_VERTEX_WEIGHT = 0.34;
 const SOLE_SAMPLE_BAND = 0.075;
 const MAX_SOLE_SAMPLES_PER_SIDE = 12;
+const SOLE_CONTACT_QUANTILE = 0.5;
 const SOLE_CONTACT_TOLERANCE = 0.008;
 const SOLE_VISUAL_SETTLE = 0.012;
 const MAX_SOLE_VISUAL_DROP = 0.68;
@@ -43,6 +44,34 @@ export function heroMSoleSupportHeight(sampleSupport, centerSupport, fallbackSup
   return sample;
 }
 
+export function heroMRepresentativeSoleClearance(samples, {
+  quantile = SOLE_CONTACT_QUANTILE
+} = {}) {
+  if (!Array.isArray(samples) || samples.length === 0) return null;
+
+  const bySide = new Map();
+  for (const sample of samples) {
+    const clearance = typeof sample === 'number' ? sample : sample?.clearance;
+    if (!Number.isFinite(clearance)) continue;
+    const side = typeof sample === 'number' ? 'combined' : (sample?.side ?? 'combined');
+    if (!bySide.has(side)) bySide.set(side, []);
+    bySide.get(side).push(clearance);
+  }
+  if (bySide.size === 0) return null;
+
+  const q = THREE.MathUtils.clamp(Number.isFinite(quantile) ? quantile : SOLE_CONTACT_QUANTILE, 0, 1);
+  let representative = null;
+  for (const values of bySide.values()) {
+    values.sort((a, b) => a - b);
+    const index = Math.floor((values.length - 1) * q);
+    const sideClearance = values[index];
+    representative = representative === null
+      ? sideClearance
+      : Math.min(representative, sideClearance);
+  }
+  return representative;
+}
+
 /**
  * Final Hero M visual-grounding seam.
  *
@@ -73,8 +102,9 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         return false;
       }
 
-      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v3';
-      this.visualRoot.userData.soleGrounding = 'weighted-boot-vertex-calibration-v2';
+      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v4';
+      this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v3';
+      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-v1';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
     });
@@ -129,10 +159,21 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
       const minimumY = candidates[0]?.bindWorldY;
       if (!Number.isFinite(minimumY)) continue;
 
-      const selected = candidates
-        .filter(candidate => candidate.bindWorldY <= minimumY + SOLE_SAMPLE_BAND)
-        .slice(0, MAX_SOLE_SAMPLES_PER_SIDE);
-      this.heroMSoleSamples.push(...selected);
+      // Do not take only the absolute lowest vertices. Device review showed that a
+      // tiny low toe/internal vertex can be at terrain height while the visible boot
+      // mass is still clearly suspended. Keep the calibrated bottom band, then spread
+      // the bounded samples through that band so one geometric outlier cannot become
+      // the sole visual-grounding authority.
+      const band = candidates.filter(candidate => candidate.bindWorldY <= minimumY + SOLE_SAMPLE_BAND);
+      const count = Math.min(MAX_SOLE_SAMPLES_PER_SIDE, band.length);
+      if (count === 1) {
+        this.heroMSoleSamples.push(band[0]);
+        continue;
+      }
+      for (let index = 0; index < count; index += 1) {
+        const sourceIndex = Math.round(index * (band.length - 1) / (count - 1));
+        this.heroMSoleSamples.push(band[sourceIndex]);
+      }
     }
   }
 
@@ -157,11 +198,11 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     return heroMSoleSupportHeight(sampleSupport, centerSupport, rootY);
   }
 
-  #measureLowestVisibleSoleClearance() {
+  #measureVisibleSoleClearance() {
     if (!this.heroMSoleGroundingReady || !this.heroMSoleSamples.length) return null;
     this.heroMBody?.updateMatrixWorld?.(true);
 
-    let minimumClearance = Number.POSITIVE_INFINITY;
+    const clearances = [];
     for (const sample of this.heroMSoleSamples) {
       const position = sample.mesh.geometry?.getAttribute?.('position');
       if (!position) continue;
@@ -175,13 +216,13 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
       );
       if (!Number.isFinite(supportY)) continue;
 
-      minimumClearance = Math.min(
-        minimumClearance,
-        this.heroMSoleWorldPosition.y - supportY
-      );
+      clearances.push({
+        side: sample.side,
+        clearance: this.heroMSoleWorldPosition.y - supportY
+      });
     }
 
-    return Number.isFinite(minimumClearance) ? minimumClearance : null;
+    return heroMRepresentativeSoleClearance(clearances);
   }
 
   #canRecalibrateSoleCorrection() {
@@ -195,7 +236,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     if (!motionRoot || !this.heroMSoleGroundingReady) return;
 
     if (this.#canRecalibrateSoleCorrection()) {
-      const clearance = this.#measureLowestVisibleSoleClearance();
+      const clearance = this.#measureVisibleSoleClearance();
       if (clearance !== null) {
         const target = heroMSoleCorrectionForClearance(clearance);
         if (!this.heroMSoleCorrectionInitialized) {
