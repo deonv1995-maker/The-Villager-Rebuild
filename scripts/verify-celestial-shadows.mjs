@@ -103,6 +103,18 @@ const terrain = {
   }
 };
 
+let footContactsEnabled = true;
+const leftContact = { side: 'left', active: true, position: new THREE.Vector3() };
+const rightContact = { side: 'right', active: true, position: new THREE.Vector3() };
+const contactProvider = {
+  getGroundContactPoints() {
+    if (!footContactsEnabled) return [];
+    leftContact.position.set(rangerRoot.position.x - 0.22, 1.4, rangerRoot.position.z + 0.04);
+    rightContact.position.set(rangerRoot.position.x + 0.22, 1.4, rangerRoot.position.z + 0.04);
+    return [leftContact, rightContact];
+  }
+};
+
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 const skyFill = new THREE.DirectionalLight(0xffffff, 0.4);
 scene.add(sun, sun.target, skyFill);
@@ -130,6 +142,7 @@ const shadows = new CelestialShadowSystem({
   sceneSystem,
   player,
   terrain,
+  contactProvider,
   now: () => nowMs
 });
 assert.equal(renderer.shadowMap.enabled, true, 'Celestial shadows must enable the renderer shadow path');
@@ -160,11 +173,24 @@ assert.equal(rangerMesh.castShadow, false, 'Animated Ranger geometry must not ca
 assert.equal(rangerMesh.receiveShadow, true, 'Ranger materials must still receive environment shadows and lighting');
 
 const contactShadow = scene.getObjectByName('ranger-contact-shadow');
-assert.ok(contactShadow, 'Ranger must receive a lightweight contact shadow');
+const fallbackShadow = scene.getObjectByName('ranger-contact-shadow-fallback');
+const leftFootShadow = scene.getObjectByName('ranger-contact-shadow-left');
+const rightFootShadow = scene.getObjectByName('ranger-contact-shadow-right');
+const leftFootInner = scene.getObjectByName('ranger-contact-shadow-left-inner');
+assert.ok(contactShadow, 'Ranger must receive a lightweight contact-shadow root');
+assert.ok(fallbackShadow, 'Ranger contact cue must retain a centered fallback for non-Hero presentations');
+assert.ok(leftFootShadow && rightFootShadow, 'Ranger contact cue must expose independent visible-foot shadows');
 assert.equal(contactShadow.visible, true);
 assert.equal(contactShadow.position.x, rangerRoot.position.x);
 assert.equal(contactShadow.position.z, rangerRoot.position.z);
-assert.ok(contactShadow.position.y > 1.4, 'Contact shadow must sit just above the current walkable surface');
+assert.ok(contactShadow.position.y > 1.4, 'Contact shadow root must sit just above the current walkable surface');
+assert.equal(contactShadow.userData.contactMode, 'visible-feet', 'Hero foot anchors must replace the broad centered cue when available');
+assert.equal(fallbackShadow.visible, false, 'Centered fallback must hide while two real foot contacts are available');
+assert.equal(leftFootShadow.visible, true);
+assert.equal(rightFootShadow.visible, true);
+assert.ok(Math.abs(leftFootShadow.position.x + 0.22) < 1e-9, 'Left contact cue must follow the actual visible left foot anchor');
+assert.ok(Math.abs(rightFootShadow.position.x - 0.22) < 1e-9, 'Right contact cue must follow the actual visible right foot anchor');
+assert.ok(leftFootInner.material.opacity >= 0.25, 'Visible-foot contact occlusion must remain readable on dark mobile terrain');
 
 shadows.apply({ minuteOfDay: 12 * 60 });
 renderer.shadowMap.needsUpdate = false;
@@ -174,9 +200,19 @@ rangerRoot.position.set(7, 6.2, 2);
 shadows.apply({ minuteOfDay: 12 * 60 });
 assert.equal(renderer.shadowMap.needsUpdate, false, 'Shadow map must not refresh faster than the configured cap');
 assert.equal(sun.shadow.needsUpdate, false, 'Celestial light must stay clean until its own refresh interval elapses');
-assert.equal(contactShadow.position.x, 7, 'Contact shadow must follow Ranger movement every presentation frame');
-assert.equal(contactShadow.position.z, 2, 'Contact shadow must follow Ranger movement without waiting for a map refresh');
-assert.ok(contactShadow.position.y < rangerRoot.position.y, 'Jumping Ranger contact shadow must remain on the ground');
+assert.equal(contactShadow.position.x, 7, 'Contact shadow root must follow Ranger movement every presentation frame');
+assert.equal(contactShadow.position.z, 2, 'Contact shadow root must follow Ranger movement without waiting for a map refresh');
+assert.ok(contactShadow.position.y < rangerRoot.position.y, 'Jumping Ranger contact cue must remain on the ground');
+assert.ok(Math.abs(leftFootShadow.position.x + 0.22) < 1e-9, 'Animated left-foot contact cue must continue to resolve relative to the moving Ranger');
+
+footContactsEnabled = false;
+shadows.apply({ minuteOfDay: 12 * 60 });
+assert.equal(contactShadow.userData.contactMode, 'fallback-center', 'Missing presentation anchors must restore the safe centered contact cue');
+assert.equal(fallbackShadow.visible, true);
+assert.equal(leftFootShadow.visible, false);
+assert.equal(rightFootShadow.visible, false);
+footContactsEnabled = true;
+shadows.apply({ minuteOfDay: 12 * 60 });
 
 firstPerson = true;
 shadows.apply({ minuteOfDay: 12 * 60 });
@@ -217,15 +253,19 @@ assert.ok(
 const main = read('src/main.js');
 const sceneSource = read('src/rendering/SceneSystem.js');
 const shadowSource = read('src/rendering/CelestialShadowSystem.js');
+const heroGroundingSource = read('src/player/HeroMVisibleSoleGroundingPresentation.js');
 const worldChunkSource = read('src/world/WorldChunkSystem.js');
 const packageJson = JSON.parse(read('package.json'));
 const checks = [
   [
-    'gameplay boot gives the celestial shadow system Ranger and terrain context',
+    'gameplay boot gives the celestial shadow system Ranger terrain and visible-foot presentation context',
     main.includes('new CelestialShadowSystem({') &&
       main.includes('player: game.player') &&
-      main.includes('terrain: game.island')
+      main.includes('terrain: game.island') &&
+      main.includes('contactProvider: game.toolPresentation?.appearancePresentation')
   ],
+  ['Hero M exposes presentation-only ground contacts from the authored foot bones', heroGroundingSource.includes('getGroundContactPoints()') && heroGroundingSource.includes("left: 'leftFoot'") && heroGroundingSource.includes("right: 'rightFoot'")],
+  ['contact rendering prefers paired visible-foot anchors and retains a centered fallback', shadowSource.includes("contactMode = useFootContacts ? 'visible-feet' : 'fallback-center'") && shadowSource.includes('validContacts >= 2')],
   ['world time fans into shadows after lighting and visible celestial bodies', main.includes('presentations: [dayNightLighting, celestialBodies, celestialShadows]')],
   ['day/night lighting receives Ranger focus for a local shadow camera', main.includes('focusProvider: lightFocus')],
   ['SceneSystem owns the directional-light target rather than the shadow feature creating another light', sceneSource.includes("sun.target.name = 'celestial-key-target'") && sceneSource.includes('this.scene.add(sun, sun.target)')],
@@ -254,4 +294,4 @@ shadows.dispose();
 assert.equal(contactShadow.parent, null, 'Contact shadow resources must release cleanly');
 
 if (failed > 0) process.exitCode = 1;
-else console.log(`Low-cost celestial shadow regression checks passed (${checks.length} integration contracts).`);
+else console.log(`Low-cost celestial and visible-foot contact-shadow regression checks passed (${checks.length} integration contracts).`);
