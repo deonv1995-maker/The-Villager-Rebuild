@@ -71,6 +71,10 @@ for (let i = 0; i < 3779; i++) {
   mesh.skeleton.update();
   assert.ok(mesh.applyBoneTransform(i, original.clone()).distanceTo(original) < 1e-5, 'bind pose must not distort the source mesh');
 }
+mesh.geometry.computeBoundingBox();
+mesh.geometry.computeBoundingSphere();
+const nativeBoundsSize = mesh.geometry.boundingBox.getSize(new THREE.Vector3());
+const nativeBoundsRadius = mesh.geometry.boundingSphere.radius;
 
 // Load production geometry, skeleton and animation bytes; only omit textures in Node.
 globalThis.ProgressEvent ??= class ProgressEvent { constructor(type, init) { Object.assign(this, { type }, init); } };
@@ -134,12 +138,12 @@ const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
 const presentation = new MasculinePrismaHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v6');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v7');
 assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
 assert.equal(presentation.visualRoot.userData.surfaceStyle, 'faceted-cartoon-v1');
 assert.equal(presentation.visualRoot.userData.bodySilhouette, 'integrated-masculine-v3');
 assert.equal(presentation.visualRoot.userData.chestProfile, 'natural-pectoral-v3');
-assert.equal(presentation.visualRoot.userData.armSilhouette, 'native-joint-integrated-v4');
+assert.equal(presentation.visualRoot.userData.armSilhouette, 'native-authored-continuity-v5');
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-palm-center-v3');
 assert.equal(presentation.visualRoot.userData.shoulderOffsetMode, 'native-bind-continuity-v2');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
@@ -170,11 +174,47 @@ assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxWidthFactor >= 1
 assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxDepthFactor >= 1.06, 'upper torso sculpt must retain controlled chest depth');
 assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperWidthGain > 1.03, 'actual upper-torso geometry must become measurably wider');
 assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperDepthGain > 1.02, 'actual upper-torso geometry must become measurably deeper');
-assert.equal(presentation.prismaMesh.geometry.userData.masculineArmProfile, 'skin-weighted-limb-volume-v1');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineArmVertexCount > 0, 'arm sculpt must affect weighted limb vertices');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxArmRadiusFactor > 1.03, 'arm sculpt must add measurable limb volume');
-assert.equal(presentation.prismaMesh.geometry.userData.masculineArmSides, 2, 'arm sculpt must cover both sides symmetrically');
-assert.ok([...presentation.prismaMesh.geometry.attributes.position.array].every(Number.isFinite), 'integrated body sculpt must keep all positions finite');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineArmProfile, 'native-authored-limbs-v2');
+assert.ok([...presentation.prismaMesh.geometry.attributes.position.array].every(Number.isFinite), 'integrated torso sculpt must keep all positions finite');
+
+// Device regression guard: PR #281 sculpted arm vertices around reconstructed
+// skeleton anchors from a different bind space, producing enormous stretched
+// triangles. Strongly arm-weighted vertices must remain byte-for-byte equivalent
+// in position to the packed Prisma mesh; only torso-dominant vertices may move.
+const sourcePosition = mesh.geometry.attributes.position;
+const sourceSkinIndex = mesh.geometry.attributes.skinIndex;
+const sourceSkinWeight = mesh.geometry.attributes.skinWeight;
+const presentedPosition = presentation.prismaMesh.geometry.attributes.position;
+const sourceBoneIndex = name => mesh.skeleton.bones.findIndex(bone => normalize(bone.name) === normalize(name));
+const armIndices = new Set([
+  'leftUpperArm', 'leftUpperArmTwist', 'leftForearm', 'leftForearmTwist', 'leftHand',
+  'rightUpperArm', 'rightUpperArmTwist', 'rightForearm', 'rightForearmTwist', 'rightHand'
+].map(sourceBoneIndex));
+assert.ok(!armIndices.has(-1), 'native rig must expose every arm bone used by the regression guard');
+let guardedArmVertices = 0;
+let maxGuardedArmDisplacement = 0;
+for (let vertex = 0; vertex < sourcePosition.count; vertex += 1) {
+  let armWeight = 0;
+  const influenceOffset = vertex * sourceSkinIndex.itemSize;
+  for (let influence = 0; influence < sourceSkinIndex.itemSize; influence += 1) {
+    const index = sourceSkinIndex.array[influenceOffset + influence];
+    const weight = sourceSkinWeight.array[influenceOffset + influence] ?? 0;
+    if (armIndices.has(index)) armWeight += weight;
+  }
+  if (armWeight < 0.7) continue;
+  const sourceVertex = new THREE.Vector3().fromBufferAttribute(sourcePosition, vertex);
+  const presentedVertex = new THREE.Vector3().fromBufferAttribute(presentedPosition, vertex);
+  maxGuardedArmDisplacement = Math.max(maxGuardedArmDisplacement, sourceVertex.distanceTo(presentedVertex));
+  guardedArmVertices += 1;
+}
+assert.ok(guardedArmVertices > 0, 'regression guard must cover strongly arm-weighted vertices');
+assert.ok(maxGuardedArmDisplacement < 1e-7, 'strongly arm-weighted vertices must stay in their authored native positions');
+const presentedBoundsSize = presentation.prismaMesh.geometry.boundingBox.getSize(new THREE.Vector3());
+const presentedBoundsRadius = presentation.prismaMesh.geometry.boundingSphere.radius;
+assert.ok(presentedBoundsSize.x <= nativeBoundsSize.x * 1.2, 'presentation geometry must not stretch catastrophically on X');
+assert.ok(presentedBoundsSize.y <= nativeBoundsSize.y * 1.2, 'presentation geometry must not stretch catastrophically on Y');
+assert.ok(presentedBoundsSize.z <= nativeBoundsSize.z * 1.2, 'presentation geometry must not stretch catastrophically on Z');
+assert.ok(presentedBoundsRadius <= nativeBoundsRadius * 1.2, 'presentation bounding radius must remain close to the authored body');
 
 for (const [targetName, parentName] of [
   ['leftShoulder', 'shoulder'],
@@ -252,4 +292,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, integrated masculine torso/arms, native shoulder continuity, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, bounded torso sculpt/native arm geometry, native shoulder continuity, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
