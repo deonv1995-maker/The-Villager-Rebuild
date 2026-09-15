@@ -36,6 +36,70 @@ async function loadHeroBody() {
   return parseHeroMGlb(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength));
 }
 
+function quantile(sorted, q) {
+  if (!sorted.length) return null;
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * q)));
+  return sorted[index];
+}
+
+function inspectLowerGeometry(presentation, side) {
+  const foot = presentation.heroMBind.get(`${side}Foot`)?.bone;
+  const calf = presentation.heroMBind.get(`${side}CalfB`)?.bone;
+  const result = [];
+  const temp = new THREE.Vector3();
+  const world = new THREE.Vector3();
+  presentation.heroMBody.updateMatrixWorld(true);
+
+  presentation.heroMBody.traverse(mesh => {
+    if (!mesh.isSkinnedMesh || !mesh.skeleton) return;
+    const footIndex = mesh.skeleton.bones.indexOf(foot);
+    const calfIndex = mesh.skeleton.bones.indexOf(calf);
+    const position = mesh.geometry?.getAttribute('position');
+    const skinIndex = mesh.geometry?.getAttribute('skinIndex');
+    const skinWeight = mesh.geometry?.getAttribute('skinWeight');
+    if (!position || !skinIndex || !skinWeight) return;
+
+    const ys = [];
+    const footYs = [];
+    for (let vertexIndex = 0; vertexIndex < position.count; vertexIndex += 1) {
+      let lowerWeight = 0;
+      let footWeight = 0;
+      for (let component = 0; component < 4; component += 1) {
+        const index = skinIndex.getComponent(vertexIndex, component);
+        const weight = skinWeight.getComponent(vertexIndex, component);
+        if (index === footIndex) footWeight += weight;
+        if (index === footIndex || index === calfIndex) lowerWeight += weight;
+      }
+      if (lowerWeight < 0.34) continue;
+      temp.fromBufferAttribute(position, vertexIndex);
+      mesh.applyBoneTransform(vertexIndex, temp);
+      mesh.localToWorld(world.copy(temp));
+      ys.push(world.y);
+      if (footWeight >= 0.34) footYs.push(world.y);
+    }
+    if (!ys.length) return;
+    ys.sort((a, b) => a - b);
+    footYs.sort((a, b) => a - b);
+    result.push({
+      mesh: mesh.name,
+      count: ys.length,
+      min: ys[0],
+      q05: quantile(ys, 0.05),
+      q10: quantile(ys, 0.10),
+      q20: quantile(ys, 0.20),
+      q30: quantile(ys, 0.30),
+      median: quantile(ys, 0.50),
+      max: ys.at(-1),
+      footCount: footYs.length,
+      footMin: footYs[0] ?? null,
+      footQ10: quantile(footYs, 0.10),
+      footQ20: quantile(footYs, 0.20),
+      footMedian: quantile(footYs, 0.50)
+    });
+  });
+  return result;
+}
+
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
@@ -71,6 +135,12 @@ assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadEr
 assert.equal(await presentation.heroMSoleLoadPromise, true, 'visible boot grounding calibration must initialize against the production Hero M asset');
 await presentation.prismaLoadPromise;
 
+console.log('Hero M lower geometry bind inspection:', JSON.stringify({
+  left: inspectLowerGeometry(presentation, 'left'),
+  right: inspectLowerGeometry(presentation, 'right'),
+  calibratedSamples: presentation.heroMSoleSamples.map(sample => ({ side: sample.side, mesh: sample.mesh.name, bindWorldY: sample.bindWorldY }))
+}));
+
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
 const idleClip = allClips.find(clip => normalize(clip.name) === 'idlea');
@@ -91,7 +161,9 @@ for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
     clearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
     correction: presentation.heroMMotionRoot.userData.visibleSoleCorrectionY,
     minY: bounds.min.y,
-    maxY: bounds.max.y
+    maxY: bounds.max.y,
+    left: inspectLowerGeometry(presentation, 'left'),
+    right: inspectLowerGeometry(presentation, 'right')
   });
 }
 
