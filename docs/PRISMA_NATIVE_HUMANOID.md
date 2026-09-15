@@ -19,7 +19,7 @@ The ownership model is:
 - `RangerController`: movement, grounding, collision, camera modes, KayKit animation mixer, tool actions, spear anchors and cinematics;
 - KayKit medium rig: animation authority;
 - `PrismaRiggedHumanoidPresentation`: retargets the native Prisma skeleton from KayKit joint motion and owns scale/style/socket adaptation;
-- `MasculinePrismaHumanoidPresentation`: owns the device-driven torso/arm geometry sculpt, native shoulder-centre restoration and palm-center socket calibration only;
+- `MasculinePrismaHumanoidPresentation`: owns the device-driven torso geometry sculpt, native shoulder-centre restoration and palm-center socket calibration only; arm-dominant geometry remains authored by the native Prisma asset;
 - `RangerToolPresentation`: owns equipped work-tool visuals and transfers them to the visible Prisma right-hand socket when native activation succeeds;
 - `SimpleHumanoidPresentation`: fallback visible body and existing rig-binding safety net.
 
@@ -61,15 +61,15 @@ The player-facing Prisma root uses a presentation-only uniform scale of `1.12`. 
 
 The active native material remains matte and faceted (`faceted-cartoon-v1`): flat shading is enabled and roughness stays high. Packed skin weights and topology remain unchanged.
 
-Device review across the earlier masculine passes exposed two separate failure modes. A weak bone-weight-only sculpt barely changed the phone-distance silhouette. A stronger pass widened the torso enough to read, but translated shoulder joints away from their authored centres; even after the left/right symmetry correction this made the arms look like separate pieces attached to the body rather than one continuous skinned figure.
+Device review across the earlier masculine passes exposed three separate failure modes. A weak bone-weight-only sculpt barely changed the phone-distance silhouette. A stronger pass widened the torso enough to read, but translated shoulder joints away from their authored centres; even after the left/right symmetry correction this made the arms look like separate pieces attached to the body rather than one continuous skinned figure. The next pass kept native joint centres but attempted to inflate arm vertices around reconstructed bind-space segments; on-device screenshots showed that this crossed coordinate spaces and produced catastrophic stretched triangles extending far away from the body.
 
-The current `integrated-masculine-v3` profile therefore keeps all shoulder and upper-arm joint centres on the captured native bind pose. It reconstructs the untouched local bind positions from the original global bind transforms and deliberately removes both the base shoulder relaxation and the later outward/forward joint translation. KayKit still supplies the same rotation deltas, but those rotations now happen around the original authored shoulder centres.
+The current `integrated-masculine-v3` torso profile therefore keeps all shoulder and upper-arm joint centres on the captured native bind pose and keeps arm-dominant vertices exactly in their authored Prisma positions. It reconstructs the untouched local shoulder/upper-arm bind positions from the original global bind transforms and deliberately removes both the base shoulder relaxation and the later outward/forward joint translation. KayKit still supplies the same rotation deltas, but those rotations now happen around the original authored shoulder centres.
 
-Body proportion changes now happen in the cloned runtime geometry instead of by moving joints. The torso is scaled around its measured centre with a milder profile: the waist is roughly `0.97×`, the ribcage grows progressively, the upper chest peaks around `1.13×` width and `1.08×` depth, and the profile eases back toward the neck. This keeps a readable masculine V without the previous blocky upper body.
+Body proportion changes are limited to torso-dominant cloned runtime geometry. The torso is scaled around its measured centre with a mild profile: the waist is roughly `0.97×`, the ribcage grows progressively, the upper chest peaks around `1.13×` width and `1.08×` depth, and the profile eases back toward the neck. This keeps a readable masculine V without modifying limb bind geometry.
 
-The arms are part of the same skin-weight-aware sculpt. Vertices influenced by each shoulder/upper-arm chain, forearm chain and hand are expanded radially around their authored bind segments rather than translated away from the skeleton. Upper arms receive the most volume (`1.12×` target radius), forearms remain slightly slimmer (`1.08×`), and hands only receive a minimal continuity adjustment (`1.03×`). The amount is blended by actual skin influence so shoulder-transition vertices receive a gradual change instead of a hard seam.
+The arm safety boundary is now explicit: `native-authored-limbs-v2`. Upper arm, forearm and hand vertices are not radially rescaled or translated at runtime. Arm proportions must either come from the authored Prisma source mesh or from a future asset-space edit whose coordinate contract is proven before deployment. Presentation code may not reconstruct an arm centreline from captured world/bind positions and then move skinned vertices around it.
 
-Runtime diagnostics record torso width/depth gains, affected arm vertices, maximum arm-radius gain, both processed sides and the explicit `native-bind-continuity-v2` shoulder mode. This lets regression checks distinguish a genuinely integrated body pass from another joint-offset workaround.
+Runtime diagnostics retain torso width/depth gains plus the explicit `native-bind-continuity-v2` shoulder mode and `native-authored-limbs-v2` arm profile. The verifier additionally checks that strongly arm-weighted vertices remain unchanged from the packed source and that the final geometry bounds stay close to the native body. This directly guards against a return of the long arm/triangle spikes seen on device.
 
 ## Visible palm tool socket
 
@@ -89,15 +89,15 @@ This integration does not change player traversal, double jump, terrain collisio
 
 `npm run check` includes `verify:prisma-native`. It verifies the real bundled gzip and checksum, topology, finite attributes, normalized weights, neutral skin deformation, production Ranger activation, true bind-pose capture, movement retargeting, the 180-degree facing basis, first-person visibility and failure fallback.
 
-The same verification guards the `1.12` grounded presentation scale, matte faceted material, centred torso profile, measurable upper-body gains, skin-weighted arm volume, native shoulder-centre restoration, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. A companion polish regression verifies that shoulder/arm continuity remains geometry-driven rather than reintroducing translated joints, while also preserving the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
+The same verification guards the `1.12` grounded presentation scale, matte faceted material, centred torso profile, measurable upper-body gains, native shoulder-centre restoration, neutral animation-scale contract, palm-centered visible tool socket, inverse scale compensation and transfer of an equipped axe root from the legacy/fallback location to the active Prisma hand. It now also proves that strongly arm-weighted vertices remain at their authored native positions and caps post-sculpt geometry extents/radius relative to the original mesh, so a bind-space mismatch cannot silently produce huge stretched limbs again. A companion polish regression prevents reintroducing runtime arm-volume sculpting or translated shoulder joints while preserving the visible-palm handheld torch adapter and Sprout's reduced relative presentation scale.
 
 ## Device verification
 
 After merge/deploy, verify on a physical phone:
 
-1. the torso reads like one natural body: mild waist taper, broader upper chest, no blocky shoulder shelf;
-2. both shoulders visually flow into the upper arms rather than appearing as detached pieces during idle/walk/run/jump/double-jump;
-3. upper arms have enough mass to match the chest while forearms remain slightly slimmer and both sides stay symmetrical;
+1. no arm, hand or shoulder triangles stretch away from the player in idle, walk, run, jump, double-jump or first-person camera transitions;
+2. the torso reads like one natural body: mild waist taper, broader upper chest, no blocky shoulder shelf;
+3. both shoulders visually flow into the native upper arms rather than appearing detached, while the arms keep their authored length and volume;
 4. the hands remain naturally positioned without either shoulder being pushed sideways or forward away from its authored joint centre;
 5. axe, hammer, pickaxe, shovel and sword visibly pass through the right palm and follow the hand during their actions;
 6. the handheld torch sits upright through the visible palm and its light/flame still follow correctly;
