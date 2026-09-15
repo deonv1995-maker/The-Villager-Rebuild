@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { SPROUT_ARRIVAL } from '../data/SproutArrivalDefinitions.js';
+import { createFallingStarTrailVisual } from '../rendering/FallingStarTrailVisual.js';
 import { createPhysicalLogVisual } from './PhysicalLogVisual.js';
 
 const BLUE = 0x56bfff;
@@ -64,6 +65,8 @@ export class SproutCrashSiteSystem {
     this.incomingCore = null;
     this.incomingHalo = null;
     this.incomingTrail = null;
+    this.incomingInnerTrail = null;
+    this.incomingTrailVisual = null;
     this.incomingLight = null;
     this.impactShockwave = null;
     this.smoke = null;
@@ -177,10 +180,11 @@ export class SproutCrashSiteSystem {
     this.incomingCore.scale.set(0.72 + t * 0.32, 0.82 + t * 0.88, 0.72 + t * 0.32);
     this.incomingHalo.scale.setScalar((1.32 + t * 1.7) * pulse);
     this.incomingHalo.material.opacity = 0.2 + t * 0.56;
-    if (this.incomingTrail) {
-      this.incomingTrail.scale.set(1 + t * 0.32, 0.82 + t * 1.05, 1 + t * 0.32);
-      this.incomingTrail.material.opacity = 0.25 + t * 0.38;
-    }
+    this.incomingTrailVisual?.update({
+      elapsed: this.elapsed,
+      progress: t,
+      intensity: 0.82 + t * 0.18
+    });
     this.incomingLight.intensity = 5.2 + t * 12.5 + Math.max(0, Math.sin(this.elapsed * 26)) * 2.8;
 
     if (this.impactTreeVisual) {
@@ -334,6 +338,9 @@ export class SproutCrashSiteSystem {
     this.incomingLight?.parent?.remove(this.incomingLight);
     this.root = null;
     this.incoming = null;
+    this.incomingTrail = null;
+    this.incomingInnerTrail = null;
+    this.incomingTrailVisual = null;
     this.impactTreeAnchor = null;
     this.impactTreeVisual = null;
     this.incomingLight = null;
@@ -476,13 +483,16 @@ export class SproutCrashSiteSystem {
     }
 
     const scourMaterial = new THREE.MeshStandardMaterial({ color: 0x272421, roughness: 1 });
-    const scourYaw = Math.atan2(-direction.y, direction.x);
+    // The impact scar belongs on the incoming side of the crater. The pod travels
+    // along +direction, so the visible ground gouges must extend back along -direction.
+    const approachScarDirection = direction.clone().multiplyScalar(-1);
+    const perpendicular = new THREE.Vector2(-approachScarDirection.y, approachScarDirection.x);
+    const scourYaw = Math.atan2(-approachScarDirection.y, approachScarDirection.x);
     for (let index = 0; index < 4; index += 1) {
       const lateral = (index - 1.5) * 0.72;
-      const forward = 4.2 + index * 0.6;
-      const perpendicular = new THREE.Vector2(-direction.y, direction.x);
-      const centerX = direction.x * forward + perpendicular.x * lateral;
-      const centerZ = direction.y * forward + perpendicular.y * lateral;
+      const distanceBack = 4.2 + index * 0.6;
+      const centerX = approachScarDirection.x * distanceBack + perpendicular.x * lateral;
+      const centerZ = approachScarDirection.y * distanceBack + perpendicular.y * lateral;
       const streak = new THREE.Mesh(new THREE.BoxGeometry(2.8 + index * 0.35, 0.025, 0.28 + (index % 2) * 0.12), scourMaterial);
       streak.name = `sprout-impact-ejecta-scour-${index}`;
       streak.position.set(centerX, 0.055, centerZ);
@@ -844,7 +854,7 @@ export class SproutCrashSiteSystem {
 
     this.incomingCore = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.44, 1),
-      new THREE.MeshBasicMaterial({ color: 0xbbeeff })
+      new THREE.MeshBasicMaterial({ color: 0xd8fbff })
     );
     this.incomingCore.name = 'sprout-incoming-core';
     this.incoming.add(this.incomingCore);
@@ -868,20 +878,24 @@ export class SproutCrashSiteSystem {
     flightFrame.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), travel);
     this.incoming.add(flightFrame);
 
-    this.incomingTrail = new THREE.Mesh(
-      new THREE.ConeGeometry(0.72, 6.4, 10, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: BLUE,
-        transparent: true,
-        opacity: 0.28,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending
-      })
-    );
-    this.incomingTrail.name = 'sprout-gameplay-plasma-tail';
-    this.incomingTrail.position.y = -3.2;
-    flightFrame.add(this.incomingTrail);
+    this.incomingTrailVisual = createFallingStarTrailVisual({
+      namePrefix: 'sprout-gameplay',
+      outerName: 'sprout-gameplay-plasma-tail',
+      innerName: 'sprout-gameplay-inner-plasma-tail',
+      outerLength: 8.4,
+      outerRadius: 0.74,
+      innerLength: 6.2,
+      innerRadius: 0.34,
+      innerColor: 0xa9efff,
+      accentColor: 0x8c79ff,
+      sparkColor: 0x6fe2ff,
+      sparkCount: 28,
+      fog: true,
+      seed: 0x5a2b7
+    });
+    this.incomingTrail = this.incomingTrailVisual.outerTail;
+    this.incomingInnerTrail = this.incomingTrailVisual.innerTail;
+    flightFrame.add(this.incomingTrailVisual.root);
 
     this.incomingLight = new THREE.PointLight(BLUE, 0, 28, 2);
     this.incomingLight.name = 'sprout-impact-blue-light';

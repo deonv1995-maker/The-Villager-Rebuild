@@ -9,20 +9,23 @@ The Sprout crash site is the first gameplay handoff from the voyage opening into
 1. After the Ranger finishes the beach-recovery introduction, the blue incoming object descends toward a deterministic collision-safe inland site.
 2. The title shooting star and gameplay descent use the same centrally authored X/Z approach direction from `SproutArrivalDefinitions`. The title scene remains an unresolved sighting; gameplay continues the same travel direction rather than reversing it.
 3. A standing tree is presented from the same forest tree asset family used by the island environment.
-4. The incoming pod accelerates hard through the final descent, carries a cyan plasma tail, and strikes through the tree. The standing tree presentation disappears at impact and the result is a broken stump plus four standard RawLog presentations piled over Sprout.
-5. Impact contact produces a short cyan flash/shockwave. The final site contains a visibly bowl-shaped scorched crater, raised irregular rim, directional scours/ejecta, detached scout-pod debris and a ruptured multi-part wreck.
-6. The crash footprint suppresses grass, ferns and static ground-cover presentation inside the crater. This is a visual exclusion only; authoritative terrain height and collision are unchanged.
-7. The damaged scout pod retains its cream shell, green armor and orange safety language, but now includes a charred hull breach, exposed cyan core, cracked canopy, bent plates, a damaged engine/thruster and detached debris so it cannot read as an intact parked craft.
-8. The impact-log pile is the rescue obstruction. The Ranger uses the existing FREE action/cinematic interaction to move the individual logs away from Sprout.
-9. Sprout reboots and the existing dialogue completes. The final line explicitly cues Sprout to demonstrate what he can do with the cleared logs.
-10. When allegiance becomes active, the cleared log positions are handed to `GatherableSystem` as ordinary loose Log pickups. The crash-site-only rescue presentations are hidden.
-11. The existing `SproutCompanionController` sees those legitimate loose Logs, approaches them and performs the normal visible compression/reservation/commit transaction into the single shared `InventorySystem`.
+4. The incoming pod accelerates hard through the final descent. The title sighting and gameplay continuation share the same procedural falling-star trail presentation: a compact cyan-white head, broad luminous blue/cyan plume that tapers away behind the head, narrow cyan/violet light streaks and sparse glowing particles. The reference image is visual direction only; no external or watermarked artwork is shipped as a runtime asset.
+5. The pod strikes through the tree. The standing tree presentation disappears at impact and the result is a broken stump plus four standard RawLog presentations piled over Sprout.
+6. Impact contact produces a short cyan flash/shockwave. The final site contains a visibly bowl-shaped scorched crater, raised irregular rim, directional scours/ejecta, detached scout-pod debris and a ruptured multi-part wreck.
+7. The crash footprint suppresses grass, ferns and static ground-cover presentation inside the crater. This is a visual exclusion only; authoritative terrain height and collision are unchanged.
+8. The damaged scout pod retains its cream shell, green armor and orange safety language, but now includes a charred hull breach, exposed cyan core, cracked canopy, bent plates, a damaged engine/thruster and detached debris so it cannot read as an intact parked craft.
+9. The impact-log pile is the rescue obstruction. The Ranger uses the existing FREE action/cinematic interaction to move the individual logs away from Sprout.
+10. Sprout reboots and the existing dialogue completes. The final line explicitly cues Sprout to demonstrate what he can do with the cleared logs.
+11. When allegiance becomes active, the cleared log positions are handed to `GatherableSystem` as ordinary loose Log pickups. The crash-site-only rescue presentations are hidden.
+12. The existing `SproutCompanionController` sees those legitimate loose Logs, approaches them and performs the normal visible compression/reservation/commit transaction into the single shared `InventorySystem`.
 
 ## Impact visual reference
 
 The crater presentation follows broad features visible in fresh impact-crater references rather than copying one real crater literally. NASA/JPL fresh-crater imagery shows a simple bowl/depression with a raised rim, a continuous disturbed zone near the crater and progressively more discontinuous ejecta farther away. NASA examples also show that low/oblique impacts can leave asymmetric rays, gaps and directional ejecta patterns. Barringer/Meteor Crater imagery is useful for the readable combination of a steep bowl, raised rim and jumbled blocks.
 
-For Sprout, the incoming object is a spacecraft rather than a natural meteor and the scale is deliberately compressed for gameplay readability. The scene therefore uses an elliptical visual bowl, irregular rim clods, forward-biased ejecta/scours and detached mechanical debris. These features are presentation cues, not a physical simulation of a meteor strike.
+For Sprout, the incoming object is a spacecraft rather than a natural meteor and the scale is deliberately compressed for gameplay readability. The scene therefore uses an elliptical visual bowl, irregular rim clods, forward-biased ejecta and detached mechanical debris. The ground scours are a separate approach-path cue: because the pod moves into the crater along the authored approach vector, those scar streaks extend backward from the crater along the inverse of that vector. This keeps the crater scar visually aligned with the direction the falling star actually came from instead of pointing to the opposite side. These features are presentation cues, not a physical simulation of a meteor strike.
+
+`FallingStarTrailVisual` is the single presentation helper for both the title sighting and gameplay descent. It owns the tapered additive plume, secondary light streaks and spark particles, while the title and gameplay systems continue to own their own positions, timing, lights and impact-specific effects. This keeps the visual language consistent without creating a second trajectory authority.
 
 ## Authority boundaries
 
