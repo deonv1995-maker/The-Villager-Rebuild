@@ -98,12 +98,17 @@ const skinned = [];
 heroScene.traverse(object => { if (object.isSkinnedMesh) skinned.push(object); });
 assert.ok(skinned.length > 0, 'Hero M must contain skinned presentation geometry');
 
-const skeletonBoneNameSets = skinned.map(mesh => new Set(mesh.skeleton.bones.map(bone => bone.name)));
+// GLTFLoader sanitizes punctuation such as the Blender `.001` suffix out of
+// Object3D names. Match the verifier to the production presentation's normalized
+// lookup contract rather than requiring the raw glTF spelling after load.
+const skeletonBoneNameSets = skinned.map(mesh => new Set(mesh.skeleton.bones.map(bone => normalize(bone.name))));
 for (const names of skeletonBoneNameSets) {
   assert.equal(names.size, 16, 'every Hero M skinned primitive must use the compact 16-joint deform rig');
-  for (const boneName of REQUIRED_BONES) assert.ok(names.has(boneName), `Hero M is missing required joint ${boneName}`);
+  for (const boneName of REQUIRED_BONES) {
+    assert.ok(names.has(normalize(boneName)), `Hero M is missing required joint ${boneName}`);
+  }
 }
-assert.equal(new Set(skeletonBoneNameSets.map(names => [...names].sort().join('|'))).size, 1, 'Hero M skinned primitives must agree on one 16-joint bone layout');
+assert.equal(new Set(skeletonBoneNameSets.map(names => [...names].sort().join('|'))).size, 1, 'Hero M skinned primitives must agree on one normalized 16-joint bone layout');
 
 heroScene.updateMatrixWorld(true);
 const authoredBounds = new THREE.Box3().setFromObject(heroScene);
