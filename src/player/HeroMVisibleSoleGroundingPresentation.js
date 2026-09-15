@@ -8,7 +8,7 @@ const SOLE_BIND_KEYS = Object.freeze({
 const MIN_SOLE_VERTEX_WEIGHT = 0.34;
 const SOLE_SAMPLE_BAND = 0.075;
 const MAX_SOLE_SAMPLES_PER_SIDE = 12;
-const SOLE_CONTACT_QUANTILE = 0.35;
+const SOLE_CONTACT_QUANTILE = 0.5;
 const SOLE_CONTACT_TOLERANCE = 0.008;
 const SOLE_VISUAL_SETTLE = 0.012;
 const MAX_SOLE_VISUAL_DROP = 0.68;
@@ -104,7 +104,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
 
       this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v4';
       this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v3';
-      this.visualRoot.userData.soleClearancePolicy = 'per-foot-lower-third-v1';
+      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-v1';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
     });
