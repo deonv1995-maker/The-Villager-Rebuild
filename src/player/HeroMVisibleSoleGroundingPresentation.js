@@ -10,9 +10,9 @@ const SOLE_SAMPLE_BAND = 0.075;
 const MAX_SOLE_SAMPLES_PER_SIDE = 12;
 const SOLE_CONTACT_TOLERANCE = 0.008;
 const SOLE_VISUAL_SETTLE = 0.012;
-const MAX_SOLE_VISUAL_DROP = 0.42;
+const MAX_SOLE_VISUAL_DROP = 0.68;
 const SOLE_GROUNDING_RESPONSE = 18;
-const MAX_SUPPORT_DROP_FROM_PLAYER = 0.68;
+const MAX_SUPPORT_DROP_FROM_CENTER = 0.68;
 
 export function heroMSoleCorrectionForClearance(clearance, {
   tolerance = SOLE_CONTACT_TOLERANCE,
@@ -21,6 +21,26 @@ export function heroMSoleCorrectionForClearance(clearance, {
 } = {}) {
   if (!Number.isFinite(clearance) || clearance <= tolerance) return 0;
   return -Math.min(Math.max(0, maxDrop), clearance + Math.max(0, settle));
+}
+
+export function heroMSoleSupportHeight(sampleSupport, centerSupport, fallbackSupport, {
+  maxDropFromCenter = MAX_SUPPORT_DROP_FROM_CENTER
+} = {}) {
+  const sample = Number.isFinite(sampleSupport) ? sampleSupport : null;
+  const center = Number.isFinite(centerSupport) ? centerSupport : null;
+  const fallback = Number.isFinite(fallbackSupport) ? fallbackSupport : null;
+
+  if (sample === null) return center ?? fallback;
+  if (center === null) return sample;
+
+  // The gameplay controller deliberately stands on the highest point in its whole
+  // footprint. That root can be substantially above the walkable surface at the
+  // character center on a steep slope, so it is not a valid lower-bound for visual
+  // boot contact. Use the center walkable surface as the edge guard instead. This
+  // still rejects a foot sample that briefly projects far beyond a raised floor.
+  const boundedDrop = Math.max(0, maxDropFromCenter);
+  if (sample < center - boundedDrop) return center;
+  return sample;
 }
 
 /**
@@ -53,8 +73,8 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         return false;
       }
 
-      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v2';
-      this.visualRoot.userData.soleGrounding = 'weighted-boot-vertex-calibration-v1';
+      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v3';
+      this.visualRoot.userData.soleGrounding = 'weighted-boot-vertex-calibration-v2';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
     });
@@ -116,22 +136,25 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     }
   }
 
-  #supportHeightAt(x, z) {
+  #rawSupportHeightAt(x, z) {
     const terrain = this.player?.terrain;
-    const rootY = this.player?.root?.position?.y;
-    if (!terrain) return Number.isFinite(rootY) ? rootY : null;
+    if (!terrain) return null;
 
-    let support = null;
-    if (typeof terrain.walkableHeightAt === 'function') support = terrain.walkableHeightAt(x, z);
-    else if (typeof terrain.constructionHeightAt === 'function') support = terrain.constructionHeightAt(x, z);
-    else if (typeof terrain.heightAt === 'function') support = terrain.heightAt(x, z);
+    if (typeof terrain.walkableHeightAt === 'function') return terrain.walkableHeightAt(x, z);
+    if (typeof terrain.constructionHeightAt === 'function') return terrain.constructionHeightAt(x, z);
+    if (typeof terrain.heightAt === 'function') return terrain.heightAt(x, z);
+    return null;
+  }
 
-    if (!Number.isFinite(support)) return Number.isFinite(rootY) ? rootY : null;
+  #supportHeightAt(x, z) {
+    const rootPosition = this.player?.root?.position;
+    const rootY = rootPosition?.y;
+    const sampleSupport = this.#rawSupportHeightAt(x, z);
+    const centerSupport = Number.isFinite(rootPosition?.x) && Number.isFinite(rootPosition?.z)
+      ? this.#rawSupportHeightAt(rootPosition.x, rootPosition.z)
+      : null;
 
-    // A sole can briefly project beyond the edge of a raised floor. Never pull the
-    // presentation down toward terrain far below the controller's current support.
-    if (Number.isFinite(rootY) && support < rootY - MAX_SUPPORT_DROP_FROM_PLAYER) return rootY;
-    return support;
+    return heroMSoleSupportHeight(sampleSupport, centerSupport, rootY);
   }
 
   #measureLowestVisibleSoleClearance() {
