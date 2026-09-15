@@ -176,13 +176,14 @@ assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button n
 
 assert.doesNotMatch(mobileHudSource, /data-role="joystick"/, 'The visible fixed walking thumb grip must be removed');
 assert.doesNotMatch(mobileHudSource, /<button class="hud-button sprint"/, 'Sprint must not remain a permanent standalone button');
-assert.match(mobileHudSource, /data-role="sprint-target"[^>]*hidden/, 'Sprint target must be hidden until a movement touch begins');
+assert.doesNotMatch(mobileHudSource, /data-role="sprint-target"/, 'Movement must not render a contextual RUN target');
+assert.doesNotMatch(mobileHudSource, />RUN</, 'Movement must not render RUN text');
 assert.match(mobileHudSource, /const MOVE_SIDE_RATIO = 0\.5;/, 'Mobile controls must split the screen evenly between movement and look');
 assert.match(mobileHudSource, /#bindMovement\(\)/, 'Movement must use the hidden touch-surface controller');
 assert.match(mobileHudSource, /event\.clientX >= window\.innerWidth \* MOVE_SIDE_RATIO/, 'Left half of the canvas must own movement touches');
-assert.match(mobileHudSource, /SPRINT_TARGET_OFFSET_PX = 145/, 'Sprint target needs deliberate separation above the movement thumb');
-assert.match(mobileHudSource, /sprintDistance <= SPRINT_TARGET_RADIUS_PX/, 'Sliding the movement thumb into the contextual target must activate sprint');
-assert.match(mobileHudSource, /this\.player\.setSprint\(sprinting\)/, 'Contextual sprint gesture must route through the existing sprint state');
+assert.match(mobileHudSource, /SPRINT_TARGET_OFFSET_PX = 145/, 'Hidden sprint activation must stay deliberately separated above the movement thumb');
+assert.match(mobileHudSource, /sprintDistance <= SPRINT_TARGET_RADIUS_PX/, 'Sliding the movement thumb into the hidden sprint zone must activate sprint');
+assert.match(mobileHudSource, /this\.player\.setSprint\(sprinting\)/, 'Hidden sprint gesture must route through the existing sprint state');
 assert.match(mobileHudSource, /this\.player\.beginCameraLook\?\.\(\)/, 'Right-side look must explicitly suspend automatic camera recentering');
 assert.match(mobileHudSource, /this\.player\.endCameraLook\?\.\(\)/, 'Releasing right-side look must request smooth automatic recentering');
 
@@ -200,4 +201,4 @@ assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 0\.5/, 'Manual ca
 assert.match(rangerControllerSource, /CAMERA_PITCH_RESPONSE = 0\.7/, 'Manual camera pitch recovery must remain relaxed rather than snapping back');
 assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, cosy icon-grid building, hidden all-speed movement, contextual sprint gesture and relaxed follow camera verified');
+console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, cosy icon-grid building, hidden all-speed movement, hidden sprint gesture and relaxed follow camera verified');
