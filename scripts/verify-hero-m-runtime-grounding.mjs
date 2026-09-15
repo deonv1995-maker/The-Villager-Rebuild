@@ -38,6 +38,7 @@ async function loadHeroBody() {
 
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
+const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
 const root = new THREE.Group();
 root.add(ranger.scene);
 root.position.set(0, 0, 0);
@@ -70,8 +71,10 @@ assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadEr
 assert.equal(await presentation.heroMSoleLoadPromise, true, 'visible boot grounding calibration must initialize against the production Hero M asset');
 await presentation.prismaLoadPromise;
 
-const idleClip = movement.animations.find(clip => String(clip.name).toLowerCase().replace(/[^a-z0-9]/g, '') === 'idlea');
-assert.ok(idleClip, 'production movement asset must expose Idle_A');
+const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
+const idleClip = allClips.find(clip => normalize(clip.name) === 'idlea');
+assert.ok(idleClip, `production Ranger clip set must expose Idle_A; found: ${allClips.map(clip => clip.name).join(', ')}`);
 const mixer = new THREE.AnimationMixer(ranger.scene);
 const idle = mixer.clipAction(idleClip).reset().play();
 idle.setLoop(THREE.LoopRepeat, Infinity);
