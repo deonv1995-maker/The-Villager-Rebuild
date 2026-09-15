@@ -36,6 +36,11 @@ async function loadHeroBody() {
   return parseHeroMGlb(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength));
 }
 
+function rootLocalPosition(root, object, target) {
+  object.getWorldPosition(target);
+  return root.worldToLocal(target);
+}
+
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
@@ -70,6 +75,15 @@ const presentation = new HeroMVisibleSoleGroundingPresentation({
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 assert.equal(await presentation.heroMSoleLoadPromise, true, 'visible boot grounding calibration must initialize against the production Hero M asset');
 await presentation.prismaLoadPromise;
+assert.equal(
+  presentation.heroMRoot.userData.pelvisMotionProfile,
+  'kaykit-scaled-hip-translation-v1',
+  'Hero M must retain KayKit hip translation so the body follows the feet during locomotion and idle motion'
+);
+assert.ok(
+  presentation.heroMPelvisMotionScale >= 0.75 && presentation.heroMPelvisMotionScale <= 1.35,
+  'Hero M pelvis translation scaling must stay within the proven retarget bounds'
+);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
@@ -78,6 +92,15 @@ assert.ok(idleClip, `production Ranger clip set must expose Idle_A; found: ${all
 const mixer = new THREE.AnimationMixer(ranger.scene);
 const idle = mixer.clipAction(idleClip).reset().play();
 idle.setLoop(THREE.LoopRepeat, Infinity);
+
+const sourceHip = presentation.sourceDrivers.get('hip');
+const sourceHipBind = presentation.sourceBind.get('hip');
+const targetPelvis = presentation.heroMBind.get('pelvis');
+assert.ok(sourceHip && sourceHipBind && targetPelvis?.bone, 'runtime pelvis-motion regression requires both KayKit hip and Hero M pelvis joints');
+const sourceHipPosition = new THREE.Vector3();
+const sourceHipDelta = new THREE.Vector3();
+const targetPelvisDelta = new THREE.Vector3();
+const expectedPelvisDelta = new THREE.Vector3();
 
 const frames = [];
 for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
@@ -92,19 +115,38 @@ for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
   const contactSeparation = contacts[0].position.distanceTo(contacts[1].position);
   assert.ok(contactSeparation > 0.2, 'left and right visible-foot anchors must remain spatially distinct');
 
+  rootLocalPosition(root, sourceHip, sourceHipPosition);
+  sourceHipDelta.copy(sourceHipPosition).sub(sourceHipBind.position);
+  targetPelvisDelta.copy(targetPelvis.bone.position).sub(targetPelvis.localPosition);
+  expectedPelvisDelta.copy(sourceHipDelta).multiplyScalar(presentation.heroMPelvisMotionScale);
+  assert.ok(
+    targetPelvisDelta.distanceTo(expectedPelvisDelta) < 1e-6,
+    `Hero M pelvis must follow the KayKit hip translation at Idle_A frame ${fraction}`
+  );
+
   frames.push({
     fraction,
     clearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
     correction: presentation.heroMMotionRoot.userData.visibleSoleCorrectionY,
     minY: bounds.min.y,
     maxY: bounds.max.y,
-    contactSeparation
+    contactSeparation,
+    sourceHipDeltaY: sourceHipDelta.y,
+    targetPelvisDeltaY: targetPelvisDelta.y
   });
 }
 
 assert.ok(presentation.heroMSoleCorrectionInitialized, 'grounded Idle_A must initialize the presentation-only visible-sole correction');
 assert.ok(frames.every(frame => Number.isFinite(frame.clearance)), 'every sampled idle pose must produce a finite visible-sole clearance');
 assert.ok(frames.every(frame => Number.isFinite(frame.correction)), 'every sampled idle pose must retain a finite visible-sole correction');
+assert.ok(
+  Math.max(...frames.map(frame => frame.sourceHipDeltaY)) - Math.min(...frames.map(frame => frame.sourceHipDeltaY)) > 0.001,
+  `production Idle_A must contain measurable vertical hip motion for the visible body to follow: ${JSON.stringify(frames)}`
+);
+assert.ok(
+  Math.max(...frames.map(frame => frame.targetPelvisDeltaY)) - Math.min(...frames.map(frame => frame.targetPelvisDeltaY)) > 0.001,
+  `Hero M body must retain visible vertical pelvis motion across Idle_A instead of animating only the feet: ${JSON.stringify(frames)}`
+);
 assert.ok(
   frames.every(frame => frame.minY < 0.04),
   `production Idle_A must not leave the rendered Hero M body physically hovering above flat terrain: ${JSON.stringify(frames)}`
@@ -114,4 +156,4 @@ assert.ok(
   `production Idle_A grounding must not sink Hero M deeply into flat terrain: ${JSON.stringify(frames)}`
 );
 
-console.log('Hero M production Idle_A physical planting and animated visible-foot contact anchors verified against the actual Ranger animation and Hero M asset.');
+console.log('Hero M production Idle_A pelvis translation, physical planting and animated visible-foot contact anchors verified against the actual Ranger animation and Hero M asset.');
