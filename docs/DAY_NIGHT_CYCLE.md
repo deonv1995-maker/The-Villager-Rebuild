@@ -10,7 +10,7 @@ This preserves the architecture rule that player and NPC systems share one world
 
 The current tuning is intentionally simple and centralized in `src/data/WorldTimeDefinitions.js`:
 
-- a new shipwreck game begins on **Day 1 at 22:00**, preserving the night established by the title voyage and making Sprout's blue crash glow readable against the dark island;
+- a new shipwreck game begins on **Day 1 at 04:30**, preserving the dark crash-arrival atmosphere while placing the player in the final stretch of night immediately before dawn rather than at the start of a full night cycle;
 - legacy saves created before world-time persistence that have no clock state still fall back to **Day 1 at 08:00** for compatibility;
 - one full game day lasts **24 real minutes**;
 - one real second therefore advances one in-game minute;
@@ -19,7 +19,7 @@ The current tuning is intentionally simple and centralized in `src/data/WorldTim
 - dusk begins at **17:30**;
 - night begins at **20:00**.
 
-The beach-arrival cinematic does not consume the Day 1 survival clock. The gameplay world's lighting is synchronized to the 22:00 narrative start before the title transition is released, but the clock itself begins advancing only when normal gameplay begins after the beach-arrival cinematic. These values are configuration, not hard-coded rules in gameplay systems, so later device/playtesting can tune pacing without replacing the architecture.
+The beach-arrival cinematic does not consume the Day 1 survival clock. The gameplay world's lighting is synchronized to the 04:30 pre-dawn narrative start before the title transition is released, but the clock itself begins advancing only when normal gameplay begins after the beach-arrival cinematic. This leaves roughly 30 real seconds of full night before the dawn phase begins, with the visible sunrise still occurring around 06:00. These values are configuration, not hard-coded rules in gameplay systems, so later device/playtesting can tune pacing without replacing the architecture.
 
 ## System boundaries
 
@@ -27,14 +27,14 @@ The beach-arrival cinematic does not consume the Day 1 survival clock. The gamep
 - `WorldTimeSystem` owns Day / time-of-day state, phase classification, progression, persistence state, and transition subscriptions.
 - `WorldTimeRuntime` advances the clock using a small requestAnimationFrame lifecycle and fans each authoritative snapshot into registered time-driven presentation systems. It clamps resume/background deltas so minimizing the PWA does not skip hours of game time.
 - `DayNightLightingSystem` is presentation only. It interpolates the existing `SceneSystem` sky, fog, hemisphere light, shared celestial key light, sky fill, ambient fill, and tone-mapping exposure.
-- `CelestialBodySystem` is presentation only. It renders the visible sun and moon from the same world-time snapshot without owning time or gameplay rules.
+- `CelestialBodySystem` is presentation only. It renders the visible sun and moon from the same world-time snapshot without owning time or gameplay rules. The moon surface treatment and sun-ray motion are visual-only children of these bodies and do not create another clock or light source.
 - `CelestialOrbit` is the shared orbital calculation used by the visible sun/moon and the directional key light, preventing competing notions of where the sun or moon is.
 - `CelestialShadowSystem` owns the baseline mobile shadow budget, caster/receiver policy, and the Ranger's lightweight contact shadow. It reuses the existing celestial directional light rather than creating a second celestial shadow-casting light.
 - `TorchRuntimeController` owns the optional handheld fire point light and its tightly bounded local shadow map while a torch is active. It reuses the renderer shadow pipeline and existing centralized caster enrollment instead of creating a competing world-shadow system.
-- `CelestialDefinitions` centralizes orbital distance, sky-path orientation, disc size, halo values, and horizon fading.
+- `CelestialDefinitions` centralizes orbital distance, sky-path orientation, disc size, halo values, moon surface markings, sun-ray geometry, and ray-motion tuning.
 - `CelestialShadowDefinitions` centralizes shadow-map resolution, local coverage, refresh rate, camera range, and bias tuning.
 - `SceneSystem` still owns the actual Three.js scene, camera, and lighting objects.
-- `SaveGameController` captures/restores world time alongside the existing shared save state. A valid saved clock always wins on Continue; compatible saves created before world-time persistence explicitly use the 08:00 legacy fallback instead of inheriting the new 22:00 story start.
+- `SaveGameController` captures/restores world time alongside the existing shared save state. A valid saved clock always wins on Continue; compatible saves created before world-time persistence explicitly use the 08:00 legacy fallback instead of inheriting the new 04:30 story start.
 
 ## Sun and moon sky clock
 
@@ -50,6 +50,8 @@ The celestial bodies provide a readable environmental clock without adding a HUD
 The sky path is intentionally stable and predictable. Seasonal sun-angle changes, moon phases, eclipses, astronomical simulation, and calendar latitude are not part of the current survival-loop requirement.
 
 The bodies are positioned relative to the moving camera at a fixed sky distance so they do not drift toward the island as the Ranger travels. Their direction remains world-consistent, so the sun crosses the same side of the sky every day. Low bodies keep depth testing enabled, allowing mountains, terrain, trees, and structures to occlude them naturally near the horizon.
+
+The sun and moon are intentionally oversized relative to a physically accurate sky so they remain readable on a small mobile display. The moon uses a pale neutral disc with several low-opacity procedural surface markings so it reads as a moon rather than a plain glowing sphere. The sun uses a low-cost ring of additive triangular beams around its disc. Those beams rotate slowly and breathe slightly from the authoritative world-time snapshot, so their motion remains deterministic and does not require an independent animation loop.
 
 ## Celestial light and shadows
 
@@ -80,7 +82,7 @@ Forest trees are a bounded exception to the generic instanced-vegetation exclusi
 
 Lighting transitions continuously through night, dawn, day, and dusk. Night remains dark enough to read as night but retains cool hemisphere/sky fill so mobile gameplay is not reduced to a black screen.
 
-The sun and moon use small procedural Three.js sphere meshes and lightweight basic materials. They require no downloaded textures, volumetric atmosphere, post-processing, or additional animation loop. Their glow is a low-cost transparent halo and they reuse the existing world-time runtime frame.
+The sun and moon use small procedural Three.js sphere meshes and lightweight basic materials. They require no downloaded textures, volumetric atmosphere, post-processing, or additional animation loop. Their glow remains a low-cost transparent halo. The moon surface marks use a handful of tiny basic-material circles, while the sun beams use one small procedural triangle buffer; both reuse the existing world-time runtime frame and stay outside the shadow pass.
 
 Baseline dynamic shadows remain bounded by `CelestialShadowSystem`: the renderer does not continuously redraw a full-island shadow map. The Ranger's contact shadow is two tiny transparent discs and does not require a shadow-map redraw, so ordinary movement stays visually smooth while the expensive celestial map remains capped at 10 Hz.
 
@@ -98,18 +100,20 @@ The current cycle deliberately does **not** change animal behavior, villager beh
 
 ## Planned Day 1 continuation
 
-The existing design still calls for the first night to unlock sleeping near a valid active campfire and advance to morning. That sleep interaction should use this shared clock when implemented rather than adding a separate Day 1 timer.
+The opening pre-dawn period is intentionally the end of the existing night rather than a full first-night survival gate. When sleeping is implemented later, it should use the shared clock and valid campfire rules to advance appropriate later nights toward morning instead of adding a separate Day 1 timer.
 
 ## Verification
 
 `scripts/verify-day-night-cycle.mjs` protects:
 
-- the Day 1 22:00 narrative start, explicit 08:00 legacy-save fallback, and 24-minute baseline;
+- the Day 1 04:30 pre-dawn narrative start, explicit 08:00 legacy-save fallback, and 24-minute baseline;
+- the natural transition from the opening night into the 05:00 dawn phase;
 - phase boundaries and day rollover;
 - observable phase transitions;
 - save/restore and backward-compatible missing-time behavior;
 - visibly darker but playable night lighting;
 - sun horizon positions, midday height, moon midnight height, and sun/moon opposition;
+- enlarged celestial presentation, procedural moon surface markings, and gently animated sun rays;
 - shared orbit authority between visible celestial bodies and directional lighting;
 - camera-relative fixed sky distance and horizon occlusion policy;
 - runtime fan-out without a second clock or frame loop;
