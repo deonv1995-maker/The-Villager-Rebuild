@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { parseHeroMGlb } from '../src/player/HeroMAsset.js';
 import { HeroMVisibleSoleGroundingPresentation } from '../src/player/HeroMVisibleSoleGroundingPresentation.js';
+import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
+import { rangerGroundHeightAt } from '../src/player/RangerGrounding.js';
 
 globalThis.ProgressEvent ??= class ProgressEvent {
   constructor(type, init) { Object.assign(this, { type }, init); }
@@ -100,6 +102,57 @@ function inspectLowerGeometry(presentation, side) {
   return result;
 }
 
+function inspectRenderedTerrain() {
+  const group = new THREE.Group();
+  const terrain = new ExpandedIslandTerrainSystem(group);
+  terrain.create();
+  group.updateMatrixWorld(true);
+  const meshes = [];
+  group.traverse(object => {
+    if (object.isMesh && object.name.startsWith('terrain-chunk-')) meshes.push(object);
+  });
+  const raycaster = new THREE.Raycaster();
+  const origin = new THREE.Vector3();
+  const down = new THREE.Vector3(0, -1, 0);
+  const renderedHeightAt = (x, z) => {
+    origin.set(x, 100, z);
+    raycaster.set(origin, down);
+    const hit = raycaster.intersectObjects(meshes, false)[0];
+    return hit?.point?.y ?? null;
+  };
+
+  const spawn = terrain.getSpawnPoint();
+  const samples = [];
+  let worst = null;
+  for (let z = 30; z <= 96; z += 2) {
+    for (let x = -12; x <= 12; x += 2) {
+      const logical = terrain.heightAt(x, z);
+      const rendered = renderedHeightAt(x, z);
+      if (!Number.isFinite(rendered)) continue;
+      const delta = logical - rendered;
+      const sample = { x, z, logical, rendered, delta };
+      samples.push(sample);
+      if (!worst || delta > worst.delta) worst = sample;
+    }
+  }
+  const spawnRendered = renderedHeightAt(spawn.x, spawn.z);
+  return {
+    spawn: {
+      ...spawn,
+      logical: terrain.heightAt(spawn.x, spawn.z),
+      rendered: spawnRendered,
+      delta: terrain.heightAt(spawn.x, spawn.z) - spawnRendered,
+      gameplayFootprint: rangerGroundHeightAt(terrain, spawn.x, spawn.z)
+    },
+    worst,
+    over5cm: samples.filter(sample => sample.delta > 0.05).length,
+    over10cm: samples.filter(sample => sample.delta > 0.1).length,
+    count: samples.length
+  };
+}
+
+console.log('Hero M terrain render-support inspection:', JSON.stringify(inspectRenderedTerrain()));
+
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
@@ -161,9 +214,7 @@ for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
     clearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
     correction: presentation.heroMMotionRoot.userData.visibleSoleCorrectionY,
     minY: bounds.min.y,
-    maxY: bounds.max.y,
-    left: inspectLowerGeometry(presentation, 'left'),
-    right: inspectLowerGeometry(presentation, 'right')
+    maxY: bounds.max.y
   });
 }
 
