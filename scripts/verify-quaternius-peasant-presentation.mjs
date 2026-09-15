@@ -74,7 +74,7 @@ for (const [name, asset] of Object.entries(EXPECTED)) {
   const skeletons = [...new Set(skinned.map(mesh => mesh.skeleton))];
   assert.equal(skeletons.length, 1, `${name} must use one shared authored skeleton`);
   assert.equal(skeletons[0].bones.length, 65, `${name} must keep the Quaternius universal 65-joint rig`);
-  for (const boneName of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'upperarm_l', 'lowerarm_l', 'hand_l', 'clavicle_r', 'upperarm_r', 'lowerarm_r', 'hand_r', 'thigh_l', 'calf_l', 'foot_l', 'ball_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_r']) {
+  for (const boneName of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'upperarm_l', 'lowerarm_l', 'hand_l', 'clavicle_r', 'upperarm_r', 'lowerarm_r', 'hand_r', 'middle_01_r', 'thigh_l', 'calf_l', 'foot_l', 'ball_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_r']) {
     assert.ok(findBone(gltf.scene, boneName), `${name} is missing required universal-rig joint ${boneName}`);
   }
 }
@@ -116,12 +116,17 @@ assert.equal(presentation.quaterniusReady, true);
 assert.equal(presentation.visualRoot.userData.actualModelSource, 'quaternius-cc0-peasant-v1');
 assert.equal(presentation.visualRoot.userData.visibleBody, 'quaternius-modular-peasant');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
-assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-quaternius-v1');
+assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-quaternius-v2');
+assert.equal(presentation.visualRoot.userData.toolAnchor, 'quaternius-palm-center-forearm-axis-v2');
 assert.ok(presentation.quaterniusRoot?.visible, 'candidate root must be visible after activation');
 assert.equal(presentation.prismaRoot?.visible, false, 'Prisma must remain available but hidden after candidate activation');
 assert.equal(presentation.quaterniusParts.size, 3, 'body, head and hair must all participate in the candidate');
 assert.ok(Math.abs(presentation.quaterniusRoot.position.y) < 0.02, 'candidate grounding correction should stay close to the authored ground plane');
-assert.ok(presentation.quaterniusRoot.userData.nativeHeight > 1.8 && presentation.quaterniusRoot.userData.nativeHeight < 1.9, 'assembled authored candidate should remain human-scaled');
+assert.equal(presentation.quaterniusRoot.userData.presentationScale, 1.08, 'phone-sized Quaternius presentation should use the calibrated modest scale increase');
+assert.ok(presentation.quaterniusRoot.userData.nativeHeight > 1.8 && presentation.quaterniusRoot.userData.nativeHeight < 1.9, 'authored candidate height metadata must remain unscaled and human-sized');
+assert.ok(presentation.quaterniusRoot.userData.presentationHeight > 1.95 && presentation.quaterniusRoot.userData.presentationHeight < 2.05, 'visible candidate height should reflect the modest scale increase');
+assert.equal(presentation.quaterniusRoot.userData.motionProfile, 'expressive-retarget-gain-v1');
+assert.equal(presentation.quaterniusRoot.userData.relaxedArmProfile, 'inward-elbow-v1');
 
 for (const [partName, part] of presentation.quaterniusParts) {
   assert.equal(part.bind.size, 22, `${partName} must capture every mapped gameplay-facing joint`);
@@ -131,12 +136,25 @@ for (const [partName, part] of presentation.quaterniusParts) {
   }
 }
 
+const bodyRig = presentation.quaterniusParts.get('body');
+const relaxedRightForearm = bodyRig.bind.get('rightForearm');
+const relaxedRightForearmCurrent = rootLocalQuaternion(bodyRig.root, relaxedRightForearm.bone);
+const relaxedForearmOffset = relaxedRightForearm.globalQuaternion.angleTo(relaxedRightForearmCurrent);
+assert.ok(relaxedForearmOffset > 0.06 && relaxedForearmOffset < 0.12, 'bind-space arm presentation should add only a subtle relaxed elbow bend');
+
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(toolMount, 'candidate must expose a visible right-palm tool mount');
 assert.equal(toolMount.name, 'quaternius-right-hand-tool-mount');
-assert.equal(toolMount.parent, presentation.quaterniusParts.get('body').bind.get('rightHand').bone, 'candidate tool mount must live on authored hand_r');
-assert.equal(toolMount.userData.gripProfile, 'quaternius-upright-palm-v1');
-assert.ok(toolMount.position.length() > 0.05 && toolMount.position.length() < 0.12, 'candidate tool socket must sit inside the hand rather than at the wrist');
+assert.equal(toolMount.parent, bodyRig.bind.get('rightHand').bone, 'candidate tool mount must live on authored hand_r');
+assert.equal(toolMount.userData.gripProfile, 'quaternius-palm-center-forearm-axis-v2');
+assert.ok(toolMount.position.length() > 0.015 && toolMount.position.length() < 0.14, 'candidate tool socket must sit inside the authored palm rather than float beyond the hand');
+
+bodyRig.root.updateMatrixWorld(true);
+const forearmWorld = bodyRig.bind.get('rightForearm').bone.getWorldPosition(new THREE.Vector3());
+const handWorld = bodyRig.bind.get('rightHand').bone.getWorldPosition(new THREE.Vector3());
+const expectedToolAxis = handWorld.clone().sub(forearmWorld).normalize();
+const actualToolAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(toolMount.getWorldQuaternion(new THREE.Quaternion())).normalize();
+assert.ok(actualToolAxis.dot(expectedToolAxis) > 0.97, 'visible tool shaft must follow the current forearm/hand axis instead of inheriting wrist twist');
 
 const toolPresentation = new RangerToolPresentation({ player, appearancePresentation: presentation });
 toolPresentation.setEquippedTool('axe');
@@ -167,12 +185,11 @@ mixer.setTime(strongest.time);
 root.updateMatrixWorld(true);
 presentation.update(1 / 60);
 
-const bodyRig = presentation.quaterniusParts.get('body');
 const targetArm = bodyRig.bind.get('leftUpperArm');
 const targetCurrent = rootLocalQuaternion(bodyRig.root, targetArm.bone);
 const targetMotion = targetArm.globalQuaternion.angleTo(targetCurrent);
-assert.ok(targetMotion > 0.05, 'Quaternius upper arm must leave its authored bind pose when the Ranger arm animates');
-assert.ok(Math.abs(targetMotion - strongest.angle) < 0.02, 'candidate bind-delta retargeting must preserve source arm motion magnitude');
+assert.ok(targetMotion > strongest.angle * 1.06, 'Quaternius upper-arm retargeting should add a modest expressive gain over the Ranger source motion');
+assert.ok(targetMotion < strongest.angle * 1.14, 'Quaternius upper-arm expressive gain must remain tightly bounded');
 
 for (const clip of movement.animations) {
   mixer.stopAllAction();
@@ -184,7 +201,7 @@ for (const clip of movement.animations) {
     const bounds = new THREE.Box3().setFromObject(presentation.quaterniusRoot);
     const size = bounds.getSize(new THREE.Vector3());
     assert.ok([size.x, size.y, size.z].every(Number.isFinite), 'animated candidate bounds must stay finite');
-    assert.ok(Math.max(size.x, size.y, size.z) < 2.8, 'animated candidate must never produce giant stretched geometry');
+    assert.ok(Math.max(size.x, size.y, size.z) < 3.05, 'animated candidate must never produce giant stretched geometry');
     for (const part of presentation.quaterniusParts.values()) {
       for (const bind of part.bind.values()) assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite));
     }
@@ -216,4 +233,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Quaternius Peasant_Male candidate assets, 65-joint rigs, KayKit bind-delta retargeting, palm tool transfer, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Quaternius Peasant_Male candidate assets, 65-joint rigs, scaled presentation, expressive KayKit bind-delta retargeting, relaxed elbows, palm-centered forearm-aligned tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
