@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import {
   heroMRepresentativeSoleClearance,
   heroMSoleCorrectionForClearance,
-  heroMSoleCorrectionTarget,
   heroMSoleSupportHeight
 } from '../src/player/HeroMVisibleSoleGroundingPresentation.js';
 
@@ -19,32 +18,9 @@ assert.equal(
   -0.68,
   'sole correction must stay bounded while covering the residual gap left by steep footprint grounding'
 );
-
-assert.equal(
-  heroMSoleCorrectionTarget(0, Number.NaN),
-  0,
-  'invalid residual clearance must preserve the current correction'
-);
 assert.ok(
-  Math.abs(heroMSoleCorrectionTarget(0, 0.12) + 0.132) < 1e-9,
-  'the first residual pass must lower the presentation by the measured gap plus settle'
-);
-assert.ok(
-  Math.abs(heroMSoleCorrectionTarget(-0.1, 0.12) + 0.232) < 1e-9,
-  'a residual 12 cm gap measured after a prior 10 cm correction must accumulate to a 23.2 cm absolute correction rather than replacing it'
-);
-assert.ok(
-  Math.abs(heroMSoleCorrectionTarget(-0.232, -0.012) + 0.232) < 1e-9,
-  'a planted sole at the visual-settle depth must retain its established correction'
-);
-assert.ok(
-  Math.abs(heroMSoleCorrectionTarget(-0.26, -0.04) + 0.232) < 1e-9,
-  'an over-settled sole must be allowed to recover upward toward the contact band without raising above the uncorrected presentation'
-);
-assert.equal(
-  heroMSoleCorrectionTarget(-0.6, 0.2),
-  -0.68,
-  'residual accumulation must remain bounded by the presentation-only maximum drop'
+  Math.abs(heroMSoleCorrectionForClearance(0.12) - heroMSoleCorrectionForClearance(0.12)) < 1e-12,
+  'the same freshly posed clearance must always resolve to the same absolute correction instead of accumulating frame history'
 );
 
 assert.equal(
@@ -94,11 +70,7 @@ assert.equal(
 );
 assert.ok(
   Math.abs(heroMSoleCorrectionForClearance(screenshotClearance) + 0.236) < 1e-9,
-  'the reproduced phone gap must produce a real downward presentation correction instead of zero correction'
-);
-assert.ok(
-  Math.abs(heroMSoleCorrectionTarget(-0.11, screenshotClearance) + 0.346) < 1e-9,
-  'the reproduced phone gap must accumulate beneath an already-applied correction instead of converging at roughly half the required drop'
+  'the reproduced phone gap must produce one bounded absolute downward presentation correction'
 );
 assert.equal(
   heroMRepresentativeSoleClearance([
@@ -142,8 +114,13 @@ assert.match(
 );
 assert.match(
   groundingSource,
-  /heroMSoleCorrectionTarget\(this\.heroMSoleCorrectionY, clearance\)/,
-  'production grounding must convert the measured residual clearance into an accumulated absolute correction'
+  /const target = heroMSoleCorrectionForClearance\(clearance\)/,
+  'production grounding must resolve one absolute correction from the freshly rebuilt pose each frame'
+);
+assert.doesNotMatch(
+  groundingSource,
+  /heroMSoleCorrectionTarget|current\s*-\s*clearance/,
+  'production grounding must never accumulate the prior frame correction into a fresh-pose clearance'
 );
 assert.match(
   groundingSource,
@@ -166,4 +143,4 @@ assert.doesNotMatch(groundingSource, /jumpVelocity\s*[+\-=]/, 'visible sole grou
 
 await import('./verify-hero-m-runtime-grounding.mjs');
 
-console.log('Hero M robust posed visible-sole grounding, residual-error accumulation, grounded locomotion contact, slope support, outlier rejection, production Idle_A runtime contact and presentation-only production seam verified.');
+console.log('Hero M robust posed visible-sole grounding, absolute fresh-pose correction, grounded locomotion contact, slope support, outlier rejection, production runtime contact and presentation-only seam verified.');
