@@ -84,12 +84,15 @@ const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_Movem
 const root = new THREE.Group();
 root.add(ranger.scene);
 let firstPerson = false;
-let cameraModeListener = null;
+const cameraModeListeners = new Set();
 const player = {
   root,
   model: ranger.scene,
   assetMode: 'kaykit',
-  onCameraModeChange(listener) { cameraModeListener = listener; return () => {}; },
+  onCameraModeChange(listener) {
+    cameraModeListeners.add(listener);
+    return () => cameraModeListeners.delete(listener);
+  },
   isFirstPerson: () => firstPerson,
   getPosition: target => target.copy(root.position),
   mountRightHandObject: () => true,
@@ -189,10 +192,10 @@ for (const clip of movement.animations) {
 }
 
 firstPerson = true;
-cameraModeListener?.();
+for (const listener of cameraModeListeners) listener();
 assert.equal(presentation.visualRoot.visible, false, 'existing first-person body visibility contract must hide the candidate');
 firstPerson = false;
-cameraModeListener?.();
+for (const listener of cameraModeListeners) listener();
 assert.equal(presentation.visualRoot.visible, true, 'candidate must return in third person');
 
 const expectedError = new Error('intentional Quaternius candidate failure');
