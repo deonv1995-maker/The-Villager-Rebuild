@@ -1,0 +1,39 @@
+name: Fix Quaternius verifier seam
+
+on:
+  push:
+    branches:
+      - feat/quaternius-peasant-presentation
+    paths:
+      - .github/workflows/fix-quaternius-verifier.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/quaternius-peasant-presentation
+      - name: Update compatibility regression and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          path = Path('scripts/verify-ranger-presentation.mjs')
+          text = path.read_text()
+          old = """assert.ok(\n  compatibilityModule.includes('SimpleHumanoidPresentation as RangerAppearancePresentation')\n    && compatibilityModule.includes(\"'./SimpleHumanoidPresentation.js'\"),\n  'historical Ranger imports should route through the simple humanoid compatibility boundary'\n);"""
+          new = """assert.ok(\n  compatibilityModule.includes('QuaterniusPeasantPresentation as RangerAppearancePresentation')\n    && compatibilityModule.includes(\"'./QuaterniusPeasantPresentation.js'\")\n    && compatibilityModule.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'),\n  'historical Ranger imports should route through the Quaternius trial seam with Prisma fallback'\n);"""
+          if old not in text:
+              raise SystemExit('Ranger compatibility assertion did not match expected source')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git rm .github/workflows/fix-quaternius-verifier.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/verify-ranger-presentation.mjs
+          git commit -m "Update Ranger presentation compatibility regression"
+          git push origin HEAD:feat/quaternius-peasant-presentation
