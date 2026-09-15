@@ -19,7 +19,12 @@ export const ASSET_PATHS = Object.freeze({
     model: asset('kaykit/adventurers/Ranger.glb'),
     movementBasic: asset('kaykit/animations/Rig_Medium_MovementBasic.glb'),
     general: asset('kaykit/animations/Rig_Medium_General.glb'),
-    combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb')
+    combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb'),
+    quaterniusPeasant: Object.freeze({
+      body: asset('quaternius/player/male_peasant.glb'),
+      head: asset('quaternius/player/male_head.glb'),
+      hair: asset('quaternius/player/hair_simpleparted.glb')
+    })
   }),
   forest: Object.freeze({
     treeBroad: asset('kaykit/forest/Tree_1_A_Color1.gltf'),

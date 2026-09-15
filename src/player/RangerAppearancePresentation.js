@@ -1,11 +1,10 @@
 // Compatibility boundary: stable player/tool systems keep importing the historical Ranger name.
-// The pre-native seam was `SimpleHumanoidPresentation as RangerAppearancePresentation`; that
-// foundation remains the fallback lineage under Prisma, while the masculine profile now owns
-// presentation-only device tuning without becoming a second gameplay or animation system.
+// The Quaternius peasant is a presentation-only candidate layered over the proven Prisma fallback;
+// KayKit remains the sole gameplay and animation authority throughout the trial.
 export {
-  MasculinePrismaHumanoidPresentation as RangerAppearancePresentation
-} from './MasculinePrismaHumanoidPresentation.js';
+  QuaterniusPeasantPresentation as RangerAppearancePresentation
+} from './QuaterniusPeasantPresentation.js';
 
 export {
-  SimpleHumanoidPresentation as RangerAppearancePresentationFallback
-} from './SimpleHumanoidPresentation.js';
+  MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback
+} from './MasculinePrismaHumanoidPresentation.js';

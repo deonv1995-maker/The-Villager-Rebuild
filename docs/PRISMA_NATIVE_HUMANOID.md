@@ -2,7 +2,7 @@
 
 ## Status
 
-The Prisma3D humanoid is a player-facing presentation layer only. The established KayKit Ranger controller and medium rig remain the animation and gameplay authority.
+The Prisma3D humanoid is now the proven fallback presentation behind the Quaternius Peasant visible-body trial. The established KayKit Ranger controller and medium rig remain the animation and gameplay authority in both paths.
 
 The native Prisma mesh must not become a second movement, collision, tool, camera, or animation system.
 
@@ -10,7 +10,7 @@ The native Prisma mesh must not become a second movement, collision, tool, camer
 
 `RangerToolPresentation` continues to construct `RangerAppearancePresentation` after `RangerController.load()` completes.
 
-`src/player/RangerAppearancePresentation.js` is the compatibility seam used by stable code. It resolves the historical Ranger-facing name to `MasculinePrismaHumanoidPresentation`, which extends the proven `PrismaRiggedHumanoidPresentation` retargeter with presentation-only proportions and hand-socket calibration.
+`src/player/RangerAppearancePresentation.js` remains the compatibility seam used by stable code. During the Quaternius trial it resolves the historical Ranger-facing name to `QuaterniusPeasantPresentation`, which layers an authored Quaternius body/head/hair over the same KayKit animation authority. `MasculinePrismaHumanoidPresentation` remains immediately underneath as the fallback if candidate loading or validation fails.
 
 `PrismaRiggedHumanoidPresentation` extends `SimpleHumanoidPresentation`. The Simple humanoid therefore remains the safe fallback whenever the KayKit rig cannot be resolved or the native Prisma body cannot be loaded or validated.
 
@@ -18,6 +18,7 @@ The ownership model is:
 
 - `RangerController`: movement, grounding, collision, camera modes, KayKit animation mixer, tool actions, spear anchors and cinematics;
 - KayKit medium rig: animation authority;
+- `QuaterniusPeasantPresentation`: current visible-body trial; owns only authored Quaternius rendering, KayKit-to-Quaternius bind-delta retargeting, grounding and the visible right-palm socket;
 - `PrismaRiggedHumanoidPresentation`: retargets the native Prisma skeleton from KayKit joint motion and owns scale/style/socket adaptation;
 - `MasculinePrismaHumanoidPresentation`: owns the device-driven torso geometry sculpt, native shoulder-centre restoration and palm-center socket calibration only; arm-dominant geometry remains authored by the native Prisma asset;
 - `RangerToolPresentation`: owns equipped work-tool visuals and transfers them to the visible Prisma right-hand socket when native activation succeeds;

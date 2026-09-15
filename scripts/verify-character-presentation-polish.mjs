@@ -12,6 +12,7 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 
 const masculine = read('src/player/MasculinePrismaHumanoidPresentation.js');
 const appearance = read('src/player/RangerAppearancePresentation.js');
+const candidate = read('src/player/QuaterniusPeasantPresentation.js');
 const sproutRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const main = read('src/main.js');
 
@@ -35,7 +36,10 @@ assert.ok(masculine.includes("chestProfile = 'natural-pectoral-v3'"), 'natural c
 assert.ok(masculine.includes("armSilhouette = 'native-authored-continuity-v5'"), 'native arm profile must stay explicit');
 assert.ok(masculine.includes('PALM_EXTENSION = 0.11'), 'visible tool socket must reach the centre of the visible palm');
 assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v3'"), 'visible hand mount must keep its current calibrated grip profile');
-assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the masculine Prisma profile');
+assert.ok(appearance.includes('QuaterniusPeasantPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the Quaternius trial presentation');
+assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'), 'proven Prisma body must remain the presentation fallback during the trial');
+assert.ok(candidate.includes("animationAuthority = 'kaykit-medium-rig'"), 'Quaternius candidate must preserve KayKit animation authority');
+assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"), 'Quaternius candidate must keep explicit Prisma fallback ownership');
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
 assert.ok(main.includes("VisibleHandTorchRuntimeController as TorchRuntimeController"), 'game boot must use the visible-hand torch adapter without changing the stable runtime name');
@@ -87,11 +91,11 @@ const game = {
 };
 
 const torch = new VisibleHandTorchRuntimeController({ game, now: () => 1000 });
-assert.equal(torch.visualRoot.parent, visiblePalm, 'handheld torch must transfer from hidden KayKit hand to visible Prisma palm');
+assert.equal(torch.visualRoot.parent, visiblePalm, 'handheld torch must transfer from hidden KayKit hand to visible presentation palm');
 assert.equal(torch.visibleHandMounted, true, 'torch runtime must record visible-hand ownership');
 assert.equal(torch.handMounted, true, 'torch remains hand-mounted for the base presentation contract');
 assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-torch-v2', 'torch must use the dedicated upright visible-palm grip');
 assert.ok(torch.visualRoot.position.y < 0, 'torch grip origin should pass through the palm instead of floating beside it');
 torch.dispose();
 
-console.log('Integrated masculine torso, native arm geometry/shoulder continuity, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
+console.log('Quaternius trial seam, Prisma fallback, native fallback arm geometry, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
