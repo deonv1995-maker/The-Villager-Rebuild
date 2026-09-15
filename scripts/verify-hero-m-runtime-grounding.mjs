@@ -41,6 +41,32 @@ function rootLocalPosition(root, object, target) {
   return root.worldToLocal(target);
 }
 
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) * 0.5)];
+}
+
+function visibleSoleClearances(presentation) {
+  presentation.heroMBody?.updateMatrixWorld?.(true);
+  const bySide = { left: [], right: [] };
+  const local = new THREE.Vector3();
+  const world = new THREE.Vector3();
+  for (const sample of presentation.heroMSoleSamples ?? []) {
+    const position = sample.mesh.geometry?.getAttribute?.('position');
+    if (!position || !bySide[sample.side]) continue;
+    local.fromBufferAttribute(position, sample.vertexIndex);
+    sample.mesh.applyBoneTransform(sample.vertexIndex, local);
+    sample.mesh.localToWorld(world.copy(local));
+    bySide[sample.side].push(world.y);
+  }
+  return Object.fromEntries(Object.entries(bySide).map(([side, values]) => [side, {
+    median: median(values),
+    min: values.length ? Math.min(...values) : null,
+    max: values.length ? Math.max(...values) : null
+  }]));
+}
+
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
@@ -155,5 +181,42 @@ assert.ok(
   frames.every(frame => frame.minY > -0.18),
   `production Idle_A grounding must not sink Hero M deeply into flat terrain: ${JSON.stringify(frames)}`
 );
+
+const diagnosticFractions = [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95];
+const stanceDiagnostics = {};
+for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
+  const clip = allClips.find(candidate => normalize(candidate.name) === normalize(state));
+  assert.ok(clip, `production Ranger clip set must expose ${state}`);
+  mixer.stopAllAction();
+  mixer.clipAction(clip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
+  player.animationState = state;
+  stanceDiagnostics[state] = [];
+  for (const fraction of diagnosticFractions) {
+    mixer.setTime(clip.duration * fraction);
+    root.updateMatrixWorld(true);
+    presentation.update(1 / 60);
+    presentation.visualRoot.updateMatrixWorld(true);
+    const soles = visibleSoleClearances(presentation);
+    const sourceFeet = {};
+    const targetFeet = {};
+    for (const side of ['left', 'right']) {
+      const sourceFoot = presentation.sourceDrivers.get(`${side}Foot`);
+      const targetFoot = presentation.heroMBind.get(`${side}Foot`)?.bone;
+      const sourcePosition = sourceFoot ? rootLocalPosition(root, sourceFoot, new THREE.Vector3()) : null;
+      const targetPosition = targetFoot?.getWorldPosition?.(new THREE.Vector3()) ?? null;
+      sourceFeet[side] = sourcePosition?.y ?? null;
+      targetFeet[side] = targetPosition?.y ?? null;
+    }
+    stanceDiagnostics[state].push({
+      fraction,
+      correction: presentation.heroMSoleCorrectionY,
+      measuredClearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
+      soles,
+      sourceFeet,
+      targetFeet
+    });
+  }
+}
+console.log('[HERO M STANCE DIAGNOSTICS]', JSON.stringify(stanceDiagnostics));
 
 console.log('Hero M production Idle_A pelvis translation, physical planting and animated visible-foot contact anchors verified against the actual Ranger animation and Hero M asset.');
