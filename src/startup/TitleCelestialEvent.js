@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SPROUT_ARRIVAL } from '../data/SproutArrivalDefinitions.js';
+import { createFallingStarTrailVisual } from '../rendering/FallingStarTrailVisual.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 
 const NIGHT_SKY = new THREE.Color(0x071729);
@@ -145,37 +146,24 @@ export class TitleCelestialEvent {
     this.velocityFrame.quaternion.copy(this.flightQuaternion);
     this.shootingStar.add(this.velocityFrame);
 
-    this.outerPlasmaTail = new THREE.Mesh(
-      new THREE.ConeGeometry(1.25, 17, 12, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0x1aa8ff,
-        transparent: true,
-        opacity: 0.16,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        fog: false
-      })
-    );
-    this.outerPlasmaTail.name = 'title-sprout-outer-plasma-tail';
-    this.outerPlasmaTail.position.y = -8.5;
-    this.velocityFrame.add(this.outerPlasmaTail);
-
-    this.innerPlasmaTail = new THREE.Mesh(
-      new THREE.ConeGeometry(0.58, 12.5, 12, 1, true),
-      new THREE.MeshBasicMaterial({
-        color: 0x87eaff,
-        transparent: true,
-        opacity: 0.5,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        blending: THREE.AdditiveBlending,
-        fog: false
-      })
-    );
-    this.innerPlasmaTail.name = 'title-sprout-inner-plasma-tail';
-    this.innerPlasmaTail.position.y = -6.25;
-    this.velocityFrame.add(this.innerPlasmaTail);
+    this.shootingStarTrailVisual = createFallingStarTrailVisual({
+      namePrefix: 'title-sprout',
+      outerName: 'title-sprout-outer-plasma-tail',
+      innerName: 'title-sprout-inner-plasma-tail',
+      outerLength: 17,
+      outerRadius: 1.25,
+      innerLength: 12.5,
+      innerRadius: 0.58,
+      innerColor: 0xa9efff,
+      accentColor: 0x8c79ff,
+      sparkColor: 0x6fe2ff,
+      sparkCount: 44,
+      fog: false,
+      seed: 0x51f00d
+    });
+    this.outerPlasmaTail = this.shootingStarTrailVisual.outerTail;
+    this.innerPlasmaTail = this.shootingStarTrailVisual.innerTail;
+    this.velocityFrame.add(this.shootingStarTrailVisual.root);
 
     this.heatBubble = new THREE.Mesh(
       new THREE.SphereGeometry(1.15, 16, 10),
@@ -214,7 +202,7 @@ export class TitleCelestialEvent {
     const trailGeometry = new THREE.BufferGeometry();
     trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
     const trailMaterial = new THREE.LineBasicMaterial({
-      color: 0x9aebff,
+      color: 0xc5f7ff,
       transparent: true,
       opacity: 0.9,
       depthWrite: false,
@@ -277,8 +265,7 @@ export class TitleCelestialEvent {
     const plasmaFlicker = 1 + Math.sin(this.elapsed * 24) * 0.08;
     const heatPulse = 1 + Math.sin(this.elapsed * 18 + 0.6) * 0.06;
     this.shootingStarGlow.scale.setScalar(plasmaFlicker);
-    this.outerPlasmaTail.scale.set(plasmaFlicker, 0.92 + progress * 0.22, plasmaFlicker);
-    this.innerPlasmaTail.scale.set(heatPulse, 0.95 + progress * 0.3, heatPulse);
+    this.shootingStarTrailVisual.update({ elapsed: this.elapsed, progress, intensity: 1 });
     this.heatBubble.scale.set(1.05 * heatPulse, 1.5 * heatPulse, 1.05 * heatPulse);
     this.heatRim.scale.set(1.18 * heatPulse, 0.9 * heatPulse, heatPulse);
     this.heatRim.material.opacity = 0.45 + Math.sin(this.elapsed * 20) * 0.08;
