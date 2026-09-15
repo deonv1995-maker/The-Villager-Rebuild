@@ -9,6 +9,7 @@ const GROUND_CONTACT_BIND_KEYS = Object.freeze({
   left: 'leftFoot',
   right: 'rightFoot'
 });
+const GROUNDED_CONTACT_STATES = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 const EMPTY_GROUND_CONTACTS = Object.freeze([]);
 const MIN_SOLE_VERTEX_WEIGHT = 0.34;
 const SOLE_SAMPLE_BAND = 0.075;
@@ -27,6 +28,37 @@ export function heroMSoleCorrectionForClearance(clearance, {
 } = {}) {
   if (!Number.isFinite(clearance) || clearance <= tolerance) return 0;
   return -Math.min(Math.max(0, maxDrop), clearance + Math.max(0, settle));
+}
+
+/**
+ * Resolve an absolute presentation correction from the currently applied correction
+ * plus the newly measured residual sole clearance. The clearance is measured after
+ * the previous correction has already moved Hero M, so treating it as a fresh
+ * absolute offset makes the loop pull upward again and converge with a visible gap.
+ */
+export function heroMSoleCorrectionTarget(currentCorrection, clearance, {
+  tolerance = SOLE_CONTACT_TOLERANCE,
+  settle = SOLE_VISUAL_SETTLE,
+  maxDrop = MAX_SOLE_VISUAL_DROP
+} = {}) {
+  const boundedMaxDrop = Math.max(0, Number.isFinite(maxDrop) ? maxDrop : MAX_SOLE_VISUAL_DROP);
+  const current = THREE.MathUtils.clamp(
+    Number.isFinite(currentCorrection) ? currentCorrection : 0,
+    -boundedMaxDrop,
+    0
+  );
+  if (!Number.isFinite(clearance)) return current;
+
+  const contactTolerance = Math.max(0, Number.isFinite(tolerance) ? tolerance : SOLE_CONTACT_TOLERANCE);
+  const visualSettle = Math.max(0, Number.isFinite(settle) ? settle : SOLE_VISUAL_SETTLE);
+  const lowerBound = -(visualSettle + contactTolerance);
+  if (clearance <= contactTolerance && clearance >= lowerBound) return current;
+
+  return THREE.MathUtils.clamp(
+    current - clearance - visualSettle,
+    -boundedMaxDrop,
+    0
+  );
 }
 
 export function heroMSoleSupportHeight(sampleSupport, centerSupport, fallbackSupport, {
@@ -113,9 +145,9 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         return false;
       }
 
-      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v5';
-      this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v3';
-      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-v1';
+      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v6';
+      this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v4';
+      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-residual-error-v1';
       this.visualRoot.userData.groundContactAnchors = 'visible-foot-bones-v1';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
@@ -240,7 +272,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   #canRecalibrateSoleCorrection() {
     if (!this.player?.grounded) return false;
     const animationState = this.player?.animationState;
-    return !animationState || animationState === 'Idle_A';
+    return !animationState || GROUNDED_CONTACT_STATES.has(animationState);
   }
 
   #applyVisibleSoleGrounding(dt) {
@@ -250,7 +282,10 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     if (this.#canRecalibrateSoleCorrection()) {
       const clearance = this.#measureVisibleSoleClearance();
       if (clearance !== null) {
-        const target = heroMSoleCorrectionForClearance(clearance);
+        // `clearance` is the residual gap after the previous correction is already
+        // applied. Convert that residual into the next absolute correction rather
+        // than replacing the current correction with the residual itself.
+        const target = heroMSoleCorrectionTarget(this.heroMSoleCorrectionY, clearance);
         if (!this.heroMSoleCorrectionInitialized) {
           this.heroMSoleCorrectionY = target;
           this.heroMSoleCorrectionInitialized = true;
@@ -263,6 +298,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
           );
         }
         motionRoot.userData.visibleSoleClearanceY = clearance;
+        motionRoot.userData.visibleSoleTargetCorrectionY = target;
       }
     }
 
