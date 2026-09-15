@@ -68,6 +68,11 @@ function rootLocalQuaternion(root, object, target, rootInverse, worldQuaternion)
   return target.copy(rootInverse).multiply(worldQuaternion).normalize();
 }
 
+function rootLocalPosition(root, object, target) {
+  object.getWorldPosition(target);
+  return root.worldToLocal(target);
+}
+
 function scaleQuaternionAngle(quaternion, gain, target, axis) {
   target.copy(quaternion).normalize();
   if (!Number.isFinite(gain) || Math.abs(gain - 1) < 1e-5) return target;
@@ -110,6 +115,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     this.heroMToolMount = null;
     this.heroMHalfHeight = 0;
     this.heroMVisualGroundOffsetY = 0;
+    this.heroMPelvisMotionScale = 1;
     this.heroMFlipActive = false;
     this.heroMFlipElapsed = 0;
     this.heroMLastJumpStage = this.player?.jumpStage ?? 0;
@@ -123,6 +129,8 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     this.heroMDesiredQuaternion = new THREE.Quaternion();
     this.heroMParentInverse = new THREE.Quaternion();
     this.heroMMotionAxis = new THREE.Vector3();
+    this.heroMSourcePosition = new THREE.Vector3();
+    this.heroMSourceDelta = new THREE.Vector3();
     this.heroMTempPosition = new THREE.Vector3();
     this.heroMTempWorld = new THREE.Vector3();
     this.heroMHandWorld = new THREE.Vector3();
@@ -178,6 +186,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       if (skinnedMeshCount < 1) throw new Error('Hero M must contain skinned presentation geometry');
 
       this.heroMBind = this.#captureBind(body);
+      this.#calibratePelvisMotion();
       this.visualRoot.add(candidateRoot);
       this.heroMRoot = candidateRoot;
       this.heroMBody = body;
@@ -218,6 +227,8 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       candidateRoot.userData.groundingOffsetY = groundingOffsetY;
       candidateRoot.userData.groundSettleY = HERO_M_GROUND_SETTLE;
       candidateRoot.userData.retargetMode = 'kaykit-bind-delta-hero-m-v2';
+      candidateRoot.userData.pelvisMotionProfile = 'kaykit-scaled-hip-translation-v1';
+      candidateRoot.userData.pelvisMotionScale = this.heroMPelvisMotionScale;
       candidateRoot.userData.motionProfile = 'playful-grounded-arms-v2';
       candidateRoot.userData.styleProfile = 'playful-low-poly-hero-v1';
       motionRoot.userData.frontFlipProfile = 'second-jump-tuck-forward-360-v2';
@@ -238,6 +249,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.visualRoot.userData.visibleBody = 'hero-m-playful-low-poly';
       this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
       this.visualRoot.userData.retargeting = 'kaykit-bind-delta-hero-m-v2';
+      this.visualRoot.userData.pelvisMotion = 'kaykit-scaled-hip-translation-v1';
       this.visualRoot.userData.presentationFallback = 'prisma-rigged-humanoid';
       this.visualRoot.userData.toolAnchor = 'hero-m-outer-hand-grip-v1';
       this.visualRoot.userData.grounding = 'center-support-visual-compensation-v1';
@@ -256,6 +268,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     root.updateMatrixWorld(true);
     const bind = new Map();
     const rootInverse = root.getWorldQuaternion(new THREE.Quaternion()).invert();
+    const rootOrigin = root.getWorldPosition(new THREE.Vector3());
 
     for (const entry of TARGETS) {
       const bone = findNamedBone(root, entry.target);
@@ -264,6 +277,9 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
         .clone()
         .multiply(bone.getWorldQuaternion(new THREE.Quaternion()))
         .normalize();
+      const globalPosition = bone.getWorldPosition(new THREE.Vector3())
+        .sub(rootOrigin)
+        .applyQuaternion(rootInverse);
       const parentGlobalQuaternion = bone.parent?.isBone
         ? rootInverse.clone().multiply(bone.parent.getWorldQuaternion(new THREE.Quaternion())).normalize()
         : new THREE.Quaternion();
@@ -273,6 +289,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
         localPosition: bone.position.clone(),
         localQuaternion: bone.quaternion.clone(),
         localScale: bone.scale.clone(),
+        globalPosition,
         globalQuaternion,
         parentGlobalQuaternion,
         restGlobalQuaternion: null
@@ -280,6 +297,18 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     }
 
     return bind;
+  }
+
+  #calibratePelvisMotion() {
+    const sourceHip = this.sourceBind.get('hip')?.position;
+    const sourceHead = this.sourceBind.get('head')?.position;
+    const targetPelvis = this.heroMBind.get('pelvis')?.globalPosition;
+    const targetHead = this.heroMBind.get('head')?.globalPosition;
+    if (!sourceHip || !sourceHead || !targetPelvis || !targetHead) return;
+
+    const sourceHeight = Math.max(0.001, sourceHead.distanceTo(sourceHip));
+    const targetHeight = Math.max(0.001, targetHead.distanceTo(targetPelvis));
+    this.heroMPelvisMotionScale = THREE.MathUtils.clamp(targetHeight / sourceHeight, 0.75, 1.35);
   }
 
   #collectArmPoints(body, handBone) {
@@ -536,6 +565,18 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       }
       targetBind.bone.position.copy(targetBind.localPosition);
       targetBind.bone.scale.copy(targetBind.localScale);
+    }
+
+    const pelvisBind = this.heroMBind.get('pelvis');
+    const sourceHip = this.sourceDrivers.get('hip');
+    const sourceHipBind = this.sourceBind.get('hip');
+    if (pelvisBind?.bone && sourceHip && sourceHipBind) {
+      rootLocalPosition(this.player.root, sourceHip, this.heroMSourcePosition);
+      this.heroMSourceDelta
+        .copy(this.heroMSourcePosition)
+        .sub(sourceHipBind.position)
+        .multiplyScalar(this.heroMPelvisMotionScale);
+      pelvisBind.bone.position.copy(pelvisBind.localPosition).add(this.heroMSourceDelta);
     }
 
     this.heroMBody?.updateMatrixWorld?.(true);
