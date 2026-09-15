@@ -1,0 +1,65 @@
+name: Ingest Quaternius player candidate
+
+on:
+  push:
+    branches:
+      - feat/quaternius-peasant-presentation
+    paths:
+      - .github/workflows/ingest-quaternius-player-candidate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/quaternius-peasant-presentation
+      - name: Fetch vetted CC0 candidate assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/quaternius/player
+          base=https://raw.githubusercontent.com/Genesara/genesara-web/90c166baa14682eedf1358c6c0a6e40e91765495/public/models/characters
+          curl --fail --location --retry 3 "$base/male_peasant.glb" -o public/assets/quaternius/player/male_peasant.glb
+          curl --fail --location --retry 3 "$base/male_head.glb" -o public/assets/quaternius/player/male_head.glb
+          curl --fail --location --retry 3 "$base/hair_simpleparted.glb" -o public/assets/quaternius/player/hair_simpleparted.glb
+          sha256sum public/assets/quaternius/player/*.glb > public/assets/quaternius/player/SHA256SUMS
+          test $(stat -c%s public/assets/quaternius/player/male_peasant.glb) -eq 653892
+          test $(stat -c%s public/assets/quaternius/player/male_head.glb) -eq 232884
+          test $(stat -c%s public/assets/quaternius/player/hair_simpleparted.glb) -eq 71444
+      - name: Record provenance
+        shell: bash
+        run: |
+          mkdir -p licenses
+          cat > licenses/quaternius-player-candidate.md <<'EOF'
+          # Quaternius player candidate assets
+
+          Runtime candidate files:
+          - `public/assets/quaternius/player/male_peasant.glb`
+          - `public/assets/quaternius/player/male_head.glb`
+          - `public/assets/quaternius/player/hair_simpleparted.glb`
+
+          Original asset authorship: Quaternius.
+          Source packs: Modular Character Outfits - Fantasy and Universal Base Characters.
+          License: Creative Commons Zero v1.0 Universal (CC0-1.0).
+
+          These runtime GLBs are optimized web derivatives produced from the same CC0 Quaternius packs by the public Genesara character prep pipeline. They are pinned here to Genesara commit `90c166baa14682eedf1358c6c0a6e40e91765495`; the original Quaternius packs remain the authoritative art source and license source.
+
+          Official sources:
+          - https://quaternius.com/packs/modularcharacteroutfitsfantasy.html
+          - https://quaternius.itch.io/modular-character-outfits-fantasy
+          - https://quaternius.itch.io/universal-base-characters
+          EOF
+      - name: Commit candidate assets to branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add public/assets/quaternius/player licenses/quaternius-player-candidate.md
+          git diff --cached --quiet && exit 0
+          git commit -m "Ingest Quaternius peasant player candidate"
+          git push origin HEAD:feat/quaternius-peasant-presentation
