@@ -6,6 +6,8 @@ The current player-facing trial replaces runtime-generated body sculpting with a
 
 `RangerAppearancePresentation` now resolves to `QuaterniusPeasantPresentation`. The existing masculine Prisma implementation remains loaded beneath it as the immediate visual fallback; the Simple humanoid remains the fallback below Prisma.
 
+Physical-phone review of the first authored-body pass confirmed that the integrated body/head/hair reads substantially better than the runtime-sculpted version, but also showed three presentation-level issues: the authored character read slightly small against the established game scale, the existing work-tool root was not centered cleanly in the Quaternius palm, and direct one-to-one KayKit rotation deltas made the new body read a little stiff. The v2 presentation calibration addresses only those three points.
+
 ## Why this trial exists
 
 The Prisma passes proved the retargeting boundary and visible-palm tool seam, but repeated runtime proportion edits created an avoidable failure mode: moving or reconstructing skinned geometry outside its authored bind-space contract could make shoulders, arms or triangles stretch apart on device.
@@ -29,7 +31,7 @@ Repository-side inspection before integration confirmed:
 - `male_peasant.glb` contains five skinned meshes on one 65-joint universal skeleton;
 - `male_head.glb` contains three skinned meshes on one 65-joint universal skeleton;
 - `hair_simpleparted.glb` contains one skinned mesh on one 65-joint universal skeleton;
-- the required pelvis/spine/neck/head, clavicle/arm/hand and thigh/calf/foot/toe joints are present on all three parts;
+- the required pelvis/spine/neck/head, clavicle/arm/hand, finger, and thigh/calf/foot/toe joints are present on all three parts;
 - the assembled authored character remains human-scaled at roughly 1.84 m before game-world presentation transforms.
 
 The raw one-off inspection output and ingest workflow are deliberately not production files; the durable contract is captured here and in `scripts/verify-quaternius-peasant-presentation.mjs`. Temporary ingestion or repair workflows are removed before review, so the merge gate remains the repository's established CI and Pages workflows.
@@ -44,18 +46,20 @@ For each mapped Quaternius joint, runtime code:
 
 1. reads the current KayKit joint rotation in player-local space;
 2. calculates the delta from the captured KayKit bind rotation;
-3. applies that delta to the authored Quaternius bind rotation;
-4. restores authored Quaternius local positions and scales unchanged.
+3. applies a small, bounded presentation gain to selected torso/arm/leg deltas so the authored body does not damp the established movement visually;
+4. applies that calibrated delta to the authored Quaternius bind rotation;
+5. adds a five-degree inward lower-arm relaxation so idle arms do not read as locked straight;
+6. restores authored Quaternius local positions and scales unchanged.
 
-The mapped chain covers pelvis, spine, neck/head, both clavicle/arm/hand chains and both thigh/calf/foot/toe chains. The three modular parts are retargeted from the same KayKit pose each frame and keep their own authored skins.
+The mapped chain covers pelvis, spine, neck/head, both clavicle/arm/hand chains and both thigh/calf/foot/toe chains. The three modular parts are retargeted from the same KayKit pose each frame and keep their own authored skins. The strongest gain is deliberately limited to 1.10 on the upper arms; this is a retarget calibration, not a second procedural animation system.
 
-## Grounding and tools
+## Scale, grounding and tools
 
-The composed candidate is grounded from its authored bounding-box minimum. Player collision and terrain grounding are unchanged.
+The authored candidate uses a uniform presentation scale of `1.08`, taking the visible character from roughly 1.84 m authored height to roughly 1.99 m presentation height. This changes rendering only: player collision, controller dimensions, terrain grounding and traversal remain unchanged. Grounding is still derived from the scaled authored bounding-box minimum.
 
-A presentation-only right-hand socket is parented to authored `hand_r`. Its bind orientation makes existing work-tool local +Y upright and advances the origin into the visible palm. `RangerToolPresentation` remains the sole owner of axe/hammer/pickaxe/shovel/sword visuals and action timing; it simply transfers its existing root to the active visible hand.
+The right-hand work-tool socket remains presentation-only, but it no longer relies on a fixed wrist extension. The socket is centered inside the authored palm by interpolating from `hand_r` toward `middle_01_r`, then its local orientation is refreshed from the current forearm-to-hand axis. That keeps the existing axe/hammer/pickaxe/shovel/sword shaft passing through the hand instead of inheriting an unsuitable Quaternius wrist twist. The socket applies inverse presentation scale so the existing tool models retain their established world size.
 
-This pass does not replace the current tool models. Matching Quaternius props can be evaluated only after the player body itself passes device review. Spear throwing retains the established controller-owned path.
+`RangerToolPresentation` remains the sole owner of axe/hammer/pickaxe/shovel/sword visuals and action timing; it simply transfers its existing root to the active visible palm. This pass does not replace the current tool models. Matching Quaternius props can still be evaluated later, after the body, grip and motion calibration pass device review. Spear throwing retains the established controller-owned path.
 
 ## Failure behavior
 
@@ -67,8 +71,8 @@ This trial does not modify traversal, walk/run speed, jump/double-jump, collisio
 
 ## Automated verification
 
-`npm run check` includes `scripts/verify-quaternius-peasant-presentation.mjs`. It verifies exact asset byte sizes and SHA-256 values, the 65-joint authored skeletons, required joint names, composed human-scale bounds, activation metadata, first-person visibility, existing tool-root transfer to the authored palm, meaningful retargeted arm motion across the production KayKit movement library, finite/bounded animated geometry and Prisma fallback behavior.
+`npm run check` includes `scripts/verify-quaternius-peasant-presentation.mjs`. It verifies exact asset byte sizes and SHA-256 values, the 65-joint authored skeletons and palm finger joint, unscaled and presentation-scaled height metadata, first-person visibility, the five-degree relaxed forearm offset, bounded upper-arm motion gain against the production KayKit movement library, palm-centered work-tool transfer, forearm-aligned tool orientation, finite/bounded animated geometry and Prisma fallback behavior.
 
 ## Device verification required after deployment
 
-On a physical phone, verify the character at normal gameplay camera distance in idle, walk, run, jump and double-jump. Check front, side and rear views for shoulder/arm continuity, natural hand placement, head/neck attachment, foot grounding and any modular seams. Verify axe, hammer, pickaxe, shovel and sword stay inside the right palm during actions; verify torch and spear behavior remain unchanged; verify first-person hides the third-person body correctly; and confirm the overall art style still fits the island, buildings and Sprout before promoting the Quaternius presentation beyond trial status.
+On a physical phone, verify the character at normal gameplay camera distance in idle, walk, run, jump and double-jump. Check front, side and rear views for overall scale, shoulder/arm continuity, relaxed elbow posture, natural hand placement, head/neck attachment, foot grounding and any modular seams. Verify axe, hammer, pickaxe, shovel and sword now pass through the right palm and follow the arm naturally during actions; verify torch and spear behavior remain unchanged; verify first-person hides the third-person body correctly; and confirm the slightly larger character still fits doors, floors and Sprout visually without changing traversal or collision.
