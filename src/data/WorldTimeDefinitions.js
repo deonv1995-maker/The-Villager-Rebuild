@@ -2,7 +2,7 @@ export const WORLD_DAY_MINUTES = 24 * 60;
 
 export const WORLD_TIME = Object.freeze({
   startDay: 1,
-  startMinuteOfDay: 22 * 60,
+  startMinuteOfDay: 4 * 60 + 30,
   legacySaveFallbackMinuteOfDay: 8 * 60,
   realSecondsPerDay: 24 * 60,
   maxFrameDeltaSeconds: 1 / 4,
