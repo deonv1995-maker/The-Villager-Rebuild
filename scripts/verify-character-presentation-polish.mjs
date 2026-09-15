@@ -12,7 +12,7 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 
 const masculine = read('src/player/MasculinePrismaHumanoidPresentation.js');
 const appearance = read('src/player/RangerAppearancePresentation.js');
-const candidate = read('src/player/QuaterniusPeasantPresentation.js');
+const candidate = read('src/player/HeroMPresentation.js');
 const sproutRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const main = read('src/main.js');
 
@@ -36,12 +36,13 @@ assert.ok(masculine.includes("chestProfile = 'natural-pectoral-v3'"), 'natural c
 assert.ok(masculine.includes("armSilhouette = 'native-authored-continuity-v5'"), 'native arm profile must stay explicit');
 assert.ok(masculine.includes('PALM_EXTENSION = 0.11'), 'visible tool socket must reach the centre of the visible palm');
 assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v3'"), 'visible hand mount must keep its current calibrated grip profile');
-assert.ok(appearance.includes('QuaterniusPeasantPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the Quaternius trial presentation');
-assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'), 'proven Prisma body must remain the presentation fallback during the trial');
-assert.ok(candidate.includes("animationAuthority = 'kaykit-medium-rig'"), 'Quaternius candidate must preserve KayKit animation authority');
-assert.ok(candidate.includes("actualModelSource = 'quaternius-cc0-ranger-v1'"), 'authored comparison must expose the male ranger candidate explicitly');
-assert.ok(candidate.includes("hairMode = 'hood-owned-no-separate-hair-v1'"), 'hooded ranger trial must not layer the separate hair mesh into the hood');
-assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"), 'Quaternius candidate must keep explicit Prisma fallback ownership');
+assert.ok(appearance.includes('HeroMPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the selected Hero M presentation');
+assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'), 'proven Prisma body must remain the presentation fallback');
+assert.ok(candidate.includes("animationAuthority = 'kaykit-medium-rig'"), 'Hero M must preserve KayKit animation authority');
+assert.ok(candidate.includes("actualModelSource = 'user-supplied-hero-m-v1'"), 'selected Hero M source metadata must stay explicit');
+assert.ok(candidate.includes("styleProfile = 'playful-low-poly-hero-v1'"), 'Hero M playful visual style must stay explicit');
+assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"), 'Hero M must keep explicit Prisma fallback ownership');
+assert.ok(candidate.includes("toolAnchor = 'hero-m-outer-hand-grip-v1'"), 'Hero M must retain its geometry-calibrated visible-hand tool seam');
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
 assert.ok(main.includes("VisibleHandTorchRuntimeController as TorchRuntimeController"), 'game boot must use the visible-hand torch adapter without changing the stable runtime name');
@@ -100,4 +101,4 @@ assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-torch-v2', 'to
 assert.ok(torch.visualRoot.position.y < 0, 'torch grip origin should pass through the palm instead of floating beside it');
 torch.dispose();
 
-console.log('Quaternius trial seam, Prisma fallback, native fallback arm geometry, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
+console.log('Hero M selected presentation seam, Prisma fallback, visible-hand tool/torch grip, and reduced Sprout relative scale verified.');
