@@ -3,25 +3,26 @@ import { PrismaRiggedHumanoidPresentation } from './PrismaRiggedHumanoidPresenta
 
 const TORSO_WIDTH_PROFILE = Object.freeze([
   [0.00, 1.00],
-  [0.22, 0.95],
-  [0.46, 1.02],
-  [0.66, 1.10],
-  [0.84, 1.19],
-  [1.00, 1.13]
+  [0.20, 0.97],
+  [0.43, 1.00],
+  [0.64, 1.06],
+  [0.82, 1.13],
+  [1.00, 1.07]
 ]);
 const TORSO_DEPTH_PROFILE = Object.freeze([
   [0.00, 0.99],
-  [0.22, 0.97],
-  [0.46, 1.02],
-  [0.66, 1.08],
-  [0.84, 1.11],
-  [1.00, 1.05]
+  [0.20, 0.98],
+  [0.43, 1.00],
+  [0.64, 1.05],
+  [0.82, 1.08],
+  [1.00, 1.03]
 ]);
 const MIN_TORSO_WEIGHT = 0.28;
 const MAX_LIMB_WEIGHT = 0.55;
-const SHOULDER_SPREAD = 0.04;
-const UPPER_ARM_SPREAD = 0.012;
-const ARM_FORWARD_OFFSET = 0.04;
+const MIN_ARM_WEIGHT = 0.28;
+const UPPER_ARM_RADIUS_FACTOR = 1.12;
+const FOREARM_RADIUS_FACTOR = 1.08;
+const HAND_RADIUS_FACTOR = 1.03;
 const PALM_EXTENSION = 0.11;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -41,13 +42,22 @@ function sampleProfile(profile, t) {
   return profile.at(-1)[1];
 }
 
+function closestPointOnSegment(point, start, end, target, segmentScratch, pointScratch) {
+  segmentScratch.copy(end).sub(start);
+  const lengthSq = segmentScratch.lengthSq();
+  if (lengthSq <= 1e-10) return target.copy(start);
+
+  const t = clamp01(pointScratch.copy(point).sub(start).dot(segmentScratch) / lengthSq);
+  return target.copy(start).addScaledVector(segmentScratch, t);
+}
+
 /**
  * Player-facing style profile layered on the proven Prisma retargeter.
  *
  * The base class remains the only animation/retarget authority. This class only
- * sculpts the native bind geometry and adjusts presentation bind positions after
- * the native rig has loaded. Movement, collision and KayKit animation authority
- * therefore remain untouched.
+ * sculpts the native bind geometry, restores the native shoulder joint centres
+ * and calibrates the presentation hand socket after the native rig has loaded.
+ * Movement, collision and KayKit animation authority therefore remain untouched.
  */
 export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPresentation {
   constructor(options) {
@@ -62,42 +72,16 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
   #applyPresentationProfile() {
     this.#sculptReadableMasculineTorso();
 
-    const leftShoulder = this.prismaBind.get('leftShoulder');
-    const rightShoulder = this.prismaBind.get('rightShoulder');
-    const shoulderCenterX = leftShoulder && rightShoulder
-      ? (leftShoulder.globalPosition.x + rightShoulder.globalPosition.x) * 0.5
-      : 0;
-
     for (const side of ['left', 'right']) {
       const shoulderName = `${side}Shoulder`;
       const upperArmName = `${side}UpperArm`;
-      const shoulderBind = this.prismaBind.get(shoulderName);
-      const upperArmBind = this.prismaBind.get(upperArmName);
-      const shoulderSign = Math.sign((shoulderBind?.globalPosition.x ?? 0) - shoulderCenterX)
-        || (side === 'left' ? -1 : 1);
-      const upperArmSign = Math.sign((upperArmBind?.globalPosition.x ?? 0) - shoulderCenterX)
-        || shoulderSign;
 
-      // Reconstruct each local bind position from the captured native global bind
-      // pose first. This deliberately discards the older local-axis relaxation,
-      // whose sign could be wrong when a shoulder parent's axes were rotated.
+      // The base presentation applies a small shoulder relaxation. Device review
+      // showed that translating skinned shoulder joints away from their authored
+      // centres makes the arm read like a separate moving piece. Reconstruct the
+      // untouched local bind position from the captured global bind pose instead.
       this.#restoreNativeBindLocalPosition(shoulderName, 'shoulder');
       this.#restoreNativeBindLocalPosition(upperArmName, shoulderName);
-
-      // Apply the visual offsets in the native asset's global coordinate basis,
-      // then convert them into each bone parent's local basis. Left/right are
-      // therefore guaranteed to move outward symmetrically even when their local
-      // X axes do not point in opposite world directions.
-      this.#offsetBindInAssetSpace(
-        shoulderName,
-        'shoulder',
-        new THREE.Vector3(shoulderSign * SHOULDER_SPREAD, 0, -ARM_FORWARD_OFFSET)
-      );
-      this.#offsetBindInAssetSpace(
-        upperArmName,
-        shoulderName,
-        new THREE.Vector3(upperArmSign * UPPER_ARM_SPREAD, 0, -ARM_FORWARD_OFFSET * 0.35)
-      );
     }
 
     for (const targetName of ['leftShoulder', 'leftUpperArm', 'rightShoulder', 'rightUpperArm']) {
@@ -110,12 +94,12 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
     this.prismaRoot?.updateMatrixWorld?.(true);
     this.#calibrateVisiblePalmMount();
 
-    this.visualRoot.userData.visualRevision = 'prisma-rigged-humanoid-v5';
-    this.visualRoot.userData.bodySilhouette = 'readable-masculine-v2';
-    this.visualRoot.userData.chestProfile = 'sculpted-pectoral-v2';
-    this.visualRoot.userData.armSilhouette = 'relaxed-forward-shoulder-v3';
+    this.visualRoot.userData.visualRevision = 'prisma-rigged-humanoid-v6';
+    this.visualRoot.userData.bodySilhouette = 'integrated-masculine-v3';
+    this.visualRoot.userData.chestProfile = 'natural-pectoral-v3';
+    this.visualRoot.userData.armSilhouette = 'native-joint-integrated-v4';
     this.visualRoot.userData.toolAnchor = 'visible-palm-center-v3';
-    this.visualRoot.userData.shoulderOffsetMode = 'asset-space-symmetric-v1';
+    this.visualRoot.userData.shoulderOffsetMode = 'native-bind-continuity-v2';
   }
 
   #restoreNativeBindLocalPosition(targetName, parentName) {
@@ -127,18 +111,6 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       .copy(bind.globalPosition)
       .sub(parentBind.globalPosition)
       .applyQuaternion(parentBind.globalQuaternion.clone().invert());
-    return true;
-  }
-
-  #offsetBindInAssetSpace(targetName, parentName, assetOffset) {
-    const bind = this.prismaBind.get(targetName);
-    const parentBind = this.prismaBind.get(parentName);
-    if (!bind || !parentBind) return false;
-
-    const localOffset = assetOffset
-      .clone()
-      .applyQuaternion(parentBind.globalQuaternion.clone().invert());
-    bind.localPosition.add(localOffset);
     return true;
   }
 
@@ -245,11 +217,20 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       tunedVertices += 1;
     }
 
+    const armDiagnostics = this.#sculptIntegratedArms({
+      mesh,
+      position,
+      skinIndex,
+      skinWeight,
+      skeleton,
+      boneIndex
+    });
+
     position.needsUpdate = true;
     geometry.computeBoundingBox();
     geometry.computeBoundingSphere();
     geometry.computeVertexNormals();
-    geometry.userData.masculineProfile = 'readable-chest-shoulder-v2';
+    geometry.userData.masculineProfile = 'integrated-chest-shoulder-v3';
     geometry.userData.masculineVertexCount = tunedVertices;
     geometry.userData.masculineTorsoSpan = { minY: torsoMinY, maxY: torsoMaxY };
     geometry.userData.masculineTorsoCenter = { x: torsoCenterX, z: torsoCenterZ };
@@ -263,6 +244,93 @@ export class MasculinePrismaHumanoidPresentation extends PrismaRiggedHumanoidPre
       : 1;
     geometry.userData.masculineWidthProfile = TORSO_WIDTH_PROFILE.map(([t, factor]) => ({ t, factor }));
     geometry.userData.masculineDepthProfile = TORSO_DEPTH_PROFILE.map(([t, factor]) => ({ t, factor }));
+    geometry.userData.masculineArmProfile = 'skin-weighted-limb-volume-v1';
+    geometry.userData.masculineArmVertexCount = armDiagnostics.vertexCount;
+    geometry.userData.masculineMaxArmRadiusFactor = armDiagnostics.maxRadiusFactor;
+    geometry.userData.masculineArmSides = armDiagnostics.sides;
+  }
+
+  #sculptIntegratedArms({ mesh, position, skinIndex, skinWeight, skeleton, boneIndex }) {
+    const bindPointInMeshSpace = name => {
+      const bind = this.prismaBind.get(name);
+      if (!bind) return null;
+      return bind.globalPosition.clone().applyMatrix4(mesh.bindMatrixInverse);
+    };
+
+    let vertexCount = 0;
+    let maxRadiusFactor = 1;
+    let sides = 0;
+    const point = new THREE.Vector3();
+    const anchor = new THREE.Vector3();
+    const segmentScratch = new THREE.Vector3();
+    const pointScratch = new THREE.Vector3();
+    const radial = new THREE.Vector3();
+
+    for (const side of ['left', 'right']) {
+      const upperArm = bindPointInMeshSpace(`${side}UpperArm`);
+      const forearm = bindPointInMeshSpace(`${side}Forearm`);
+      const hand = bindPointInMeshSpace(`${side}Hand`);
+      if (!upperArm || !forearm || !hand) continue;
+
+      const upperIndices = new Set([
+        boneIndex(`${side}Shoulder`),
+        boneIndex(`${side}UpperArm`),
+        boneIndex(`${side}UpperArmTwist`)
+      ].filter(index => index >= 0));
+      const forearmIndices = new Set([
+        boneIndex(`${side}Forearm`),
+        boneIndex(`${side}ForearmTwist`)
+      ].filter(index => index >= 0));
+      const handIndex = boneIndex(`${side}Hand`);
+      sides += 1;
+
+      for (let vertex = 0; vertex < position.count; vertex += 1) {
+        let upperWeight = 0;
+        let forearmWeight = 0;
+        let handWeight = 0;
+        const influenceOffset = vertex * skinIndex.itemSize;
+
+        for (let influence = 0; influence < skinIndex.itemSize; influence += 1) {
+          const index = skinIndex.array[influenceOffset + influence];
+          const weight = skinWeight.array[influenceOffset + influence] ?? 0;
+          if (upperIndices.has(index)) upperWeight += weight;
+          if (forearmIndices.has(index)) forearmWeight += weight;
+          if (index === handIndex) handWeight += weight;
+        }
+
+        const armWeight = upperWeight + forearmWeight + handWeight;
+        if (armWeight < MIN_ARM_WEIGHT) continue;
+
+        point.fromBufferAttribute(position, vertex);
+        const normalizedUpper = upperWeight / armWeight;
+        const normalizedForearm = forearmWeight / armWeight;
+        const normalizedHand = handWeight / armWeight;
+        const targetRadiusFactor = (
+          normalizedUpper * UPPER_ARM_RADIUS_FACTOR
+          + normalizedForearm * FOREARM_RADIUS_FACTOR
+          + normalizedHand * HAND_RADIUS_FACTOR
+        );
+        const isolation = clamp01((armWeight - MIN_ARM_WEIGHT) / Math.max(1e-6, 1 - MIN_ARM_WEIGHT));
+        const radiusFactor = THREE.MathUtils.lerp(1, targetRadiusFactor, 0.45 + isolation * 0.55);
+
+        if (normalizedHand >= 0.6) {
+          anchor.copy(hand);
+        } else if (normalizedUpper >= normalizedForearm) {
+          closestPointOnSegment(point, upperArm, forearm, anchor, segmentScratch, pointScratch);
+        } else {
+          closestPointOnSegment(point, forearm, hand, anchor, segmentScratch, pointScratch);
+        }
+
+        radial.copy(point).sub(anchor);
+        if (radial.lengthSq() <= 1e-10) continue;
+        point.copy(anchor).addScaledVector(radial, radiusFactor);
+        position.setXYZ(vertex, point.x, point.y, point.z);
+        vertexCount += 1;
+        maxRadiusFactor = Math.max(maxRadiusFactor, radiusFactor);
+      }
+    }
+
+    return { vertexCount, maxRadiusFactor, sides };
   }
 
   #calibrateVisiblePalmMount() {

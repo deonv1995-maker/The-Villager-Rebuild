@@ -134,13 +134,14 @@ const animatedArmQuaternion = playerLocalQuaternion(player, sourceLeftUpperArm);
 const presentation = new MasculinePrismaHumanoidPresentation({ player });
 assert.equal(await presentation.prismaLoadPromise, true, presentation.prismaLoadError?.stack);
 assert.equal(presentation.visualRoot.userData.actualModelStatus, 'active');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v5');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'prisma-rigged-humanoid-v6');
 assert.equal(presentation.visualRoot.userData.retargeting, 'global-bind-delta-v2');
 assert.equal(presentation.visualRoot.userData.surfaceStyle, 'faceted-cartoon-v1');
-assert.equal(presentation.visualRoot.userData.bodySilhouette, 'readable-masculine-v2');
-assert.equal(presentation.visualRoot.userData.chestProfile, 'sculpted-pectoral-v2');
-assert.equal(presentation.visualRoot.userData.armSilhouette, 'relaxed-forward-shoulder-v3');
+assert.equal(presentation.visualRoot.userData.bodySilhouette, 'integrated-masculine-v3');
+assert.equal(presentation.visualRoot.userData.chestProfile, 'natural-pectoral-v3');
+assert.equal(presentation.visualRoot.userData.armSilhouette, 'native-joint-integrated-v4');
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'visible-palm-center-v3');
+assert.equal(presentation.visualRoot.userData.shoulderOffsetMode, 'native-bind-continuity-v2');
 assert.ok(presentation.foundationChildren.every(child => !child.visible));
 assert.ok(
   presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(sourceBindQuaternion) < 1e-4,
@@ -163,12 +164,35 @@ const displayedGroundY = presentation.prismaRoot.position.y + nativeGroundY * pr
 assert.ok(Math.abs(displayedGroundY - nativeGroundY) < 1e-5, 'larger presentation scale must preserve the original foot/ground plane');
 assert.equal(presentation.prismaMesh.material.flatShading, true, 'native body should use faceted cartoon shading');
 assert.ok(presentation.prismaMesh.material.roughness >= 0.96, 'cartoon surface should remain matte instead of glossy');
-assert.equal(presentation.prismaMesh.geometry.userData.masculineProfile, 'readable-chest-shoulder-v2');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineProfile, 'integrated-chest-shoulder-v3');
 assert.ok(presentation.prismaMesh.geometry.userData.masculineVertexCount > 0, 'masculine geometry sculpt must affect weighted torso vertices');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxWidthFactor >= 1.18, 'upper torso sculpt must contain a clearly readable width expansion');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxDepthFactor >= 1.1, 'upper torso sculpt must contain a clearly readable chest-depth expansion');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperWidthGain > 1.04, 'actual upper-torso geometry must become measurably wider');
-assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperDepthGain > 1.03, 'actual upper-torso geometry must become measurably deeper');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxWidthFactor >= 1.1, 'upper torso sculpt must retain a readable width expansion');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxDepthFactor >= 1.06, 'upper torso sculpt must retain controlled chest depth');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperWidthGain > 1.03, 'actual upper-torso geometry must become measurably wider');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineUpperDepthGain > 1.02, 'actual upper-torso geometry must become measurably deeper');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineArmProfile, 'skin-weighted-limb-volume-v1');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineArmVertexCount > 0, 'arm sculpt must affect weighted limb vertices');
+assert.ok(presentation.prismaMesh.geometry.userData.masculineMaxArmRadiusFactor > 1.03, 'arm sculpt must add measurable limb volume');
+assert.equal(presentation.prismaMesh.geometry.userData.masculineArmSides, 2, 'arm sculpt must cover both sides symmetrically');
+assert.ok([...presentation.prismaMesh.geometry.attributes.position.array].every(Number.isFinite), 'integrated body sculpt must keep all positions finite');
+
+for (const [targetName, parentName] of [
+  ['leftShoulder', 'shoulder'],
+  ['leftUpperArm', 'leftShoulder'],
+  ['rightShoulder', 'shoulder'],
+  ['rightUpperArm', 'rightShoulder']
+]) {
+  const bind = presentation.prismaBind.get(targetName);
+  const parentBind = presentation.prismaBind.get(parentName);
+  const expectedLocal = bind.globalPosition
+    .clone()
+    .sub(parentBind.globalPosition)
+    .applyQuaternion(parentBind.globalQuaternion.clone().invert());
+  assert.ok(
+    bind.localPosition.distanceTo(expectedLocal) < 1e-6,
+    `${targetName} must remain on its authored native joint centre instead of being translated away from the mesh`
+  );
+}
 
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(toolMount, 'active Prisma body should expose a visible right-hand tool mount');
@@ -198,7 +222,7 @@ const targetAssetQuaternion = rootWorldInverse
   .normalize();
 const sourceMotionAngle = presentation.sourceBind.get('leftUpperArm').quaternion.angleTo(animatedArmQuaternion);
 const targetMotionAngle = presentation.prismaBind.get('leftUpperArm').globalQuaternion.angleTo(targetAssetQuaternion);
-assert.ok(targetMotionAngle > 0.05, 'native upper arm must leave its raised bind pose when the Ranger arm animates');
+assert.ok(targetMotionAngle > 0.05, 'native upper arm must leave its bind pose when the Ranger arm animates');
 assert.ok(Math.abs(targetMotionAngle - sourceMotionAngle) < 1e-3, 'retargeted arm must preserve source motion magnitude');
 
 for (const clip of movement.animations) {
@@ -228,4 +252,4 @@ try {
   assert.equal(fallback.prismaLoadError, expectedError);
   assert.ok(fallback.foundationChildren.some(child => child.visible));
 } finally { console.error = logError; }
-console.log(`Prisma native payload, visibly sculpted masculine silhouette, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
+console.log(`Prisma native payload, integrated masculine torso/arms, native shoulder continuity, true bind-pose retargeting, grounded scale, faceted surface, palm-centered tool mount, facing basis, ${movement.animations.length} movement clips, visibility and fallback verified.`);
