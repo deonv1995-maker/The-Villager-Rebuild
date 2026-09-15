@@ -15,7 +15,7 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const nearlyEqual = (left, right, epsilon = 0.000001) => Math.abs(left - right) <= epsilon;
 
 assert.equal(WORLD_TIME.startDay, 1, 'New games must begin on Day 1');
-assert.equal(WORLD_TIME.startMinuteOfDay, 22 * 60, 'New games must begin at 22:00 after the shipwreck');
+assert.equal(WORLD_TIME.startMinuteOfDay, 4 * 60 + 30, 'New games must begin at 04:30 in the final dark stretch before dawn');
 assert.equal(WORLD_TIME.legacySaveFallbackMinuteOfDay, 8 * 60, 'Legacy saves without world time must retain the 08:00 fallback');
 assert.equal(WORLD_TIME.realSecondsPerDay, 24 * 60, 'A complete game day must take 24 real minutes');
 assert.equal(worldTimePhaseAt(4 * 60 + 59), 'night');
@@ -23,14 +23,19 @@ assert.equal(worldTimePhaseAt(5 * 60), 'dawn');
 assert.equal(worldTimePhaseAt(7 * 60), 'day');
 assert.equal(worldTimePhaseAt(17 * 60 + 30), 'dusk');
 assert.equal(worldTimePhaseAt(20 * 60), 'night');
+assert.ok(CELESTIAL_PRESENTATION.sun.radius >= 15, 'Sun presentation must remain visibly enlarged');
+assert.ok(CELESTIAL_PRESENTATION.moon.radius >= 12, 'Moon presentation must remain visibly enlarged');
+assert.ok(CELESTIAL_PRESENTATION.sun.rays?.count >= 8, 'Sun must retain a readable low-cost ray treatment');
+assert.ok(CELESTIAL_PRESENTATION.moon.surfaceMarks?.length >= 4, 'Moon must retain procedural surface markings');
 
 const time = new WorldTimeSystem();
 assert.deepEqual(
   { day: time.getSnapshot().day, time: time.getSnapshot().displayTime, phase: time.getSnapshot().phase },
-  { day: 1, time: '22:00', phase: 'night' }
+  { day: 1, time: '04:30', phase: 'night' }
 );
 time.update(60);
-assert.equal(time.getSnapshot().displayTime, '23:00', 'One real minute must advance one in-game hour at the baseline scale');
+assert.equal(time.getSnapshot().displayTime, '05:30', 'One real minute must advance one in-game hour at the baseline scale');
+assert.equal(time.getSnapshot().phase, 'dawn', 'The opening night must naturally progress into dawn shortly after gameplay begins');
 
 const transitions = [];
 const unsubscribe = time.subscribe(event => transitions.push(event));
@@ -51,7 +56,7 @@ assert.equal(restored.getSnapshot().day, 2);
 assert.equal(restored.getSnapshot().displayTime, '00:01');
 const fallback = new WorldTimeSystem();
 assert.equal(fallback.restoreState(null), false, 'Missing world-time state must not fabricate a restored clock');
-assert.equal(fallback.getSnapshot().displayTime, '22:00', 'The world-time default must remain the new-game narrative start');
+assert.equal(fallback.getSnapshot().displayTime, '04:30', 'The world-time default must remain the new-game pre-dawn narrative start');
 
 const sunrise = celestialDirectionAt(6 * 60);
 const noon = celestialDirectionAt(12 * 60);
@@ -110,7 +115,7 @@ assert.ok(
 
 const celestialScene = makeSceneSystem();
 const celestialBodies = new CelestialBodySystem({ sceneSystem: celestialScene });
-celestialBodies.apply({ minuteOfDay: 12 * 60 });
+celestialBodies.apply({ day: 1, minuteOfDay: 12 * 60 });
 assert.equal(celestialBodies.sun.root.visible, true, 'Sun must be visible at midday');
 assert.equal(celestialBodies.moon.root.visible, false, 'Moon must be below the horizon at midday');
 assert.ok(
@@ -119,13 +124,25 @@ assert.ok(
 );
 assert.equal(celestialBodies.sun.bodyMaterial.fog, false, 'Sun must not disappear into world fog');
 assert.equal(celestialBodies.sun.bodyMaterial.depthTest, true, 'Terrain and mountains must be able to occlude the low sun');
+assert.ok(celestialBodies.sun.rays, 'Sun visual must expose its procedural rays');
+const initialRayRotation = celestialBodies.sun.rays.mesh.rotation.z;
+const initialRayOpacity = celestialBodies.sun.rays.material.opacity;
+celestialBodies.apply({ day: 1, minuteOfDay: 12 * 60 + 30 });
+assert.notEqual(celestialBodies.sun.rays.mesh.rotation.z, initialRayRotation, 'Sun rays must rotate gently as shared world time advances');
+assert.notEqual(celestialBodies.sun.rays.material.opacity, initialRayOpacity, 'Sun rays must breathe subtly without a separate animation loop');
 
-celestialBodies.apply({ minuteOfDay: 0 });
+celestialBodies.apply({ day: 1, minuteOfDay: 0 });
 assert.equal(celestialBodies.sun.root.visible, false, 'Sun must be below the horizon at midnight');
 assert.equal(celestialBodies.moon.root.visible, true, 'Moon must be visible at midnight');
 assert.ok(celestialBodies.moon.bodyMaterial.opacity > 0.99, 'Moon must be fully readable when high in the night sky');
+assert.equal(
+  celestialBodies.moon.surfaceMarks?.group.children.length,
+  CELESTIAL_PRESENTATION.moon.surfaceMarks.length,
+  'Moon visual must render its configured crater-like surface markings'
+);
+assert.ok(celestialBodies.moon.surfaceMarks.material.opacity > 0, 'Moon markings must remain readable when the moon is visible');
 
-celestialBodies.apply({ minuteOfDay: 6 * 60 });
+celestialBodies.apply({ day: 1, minuteOfDay: 6 * 60 });
 assert.equal(celestialBodies.sun.root.visible, true, 'Sun must fade through the horizon at sunrise');
 assert.equal(celestialBodies.moon.root.visible, true, 'Moon must fade through the opposite horizon at sunrise');
 assert.ok(
