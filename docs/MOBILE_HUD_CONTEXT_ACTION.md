@@ -12,7 +12,7 @@ This pass keeps gameplay handlers authoritative while simplifying the mobile int
 - Jump remains a dedicated movement control.
 - The old fixed joystick and permanent Sprint button are removed from the HUD.
 - The left half of unobstructed gameplay canvas is the hidden movement surface. Touch origin becomes the temporary analog center and thumb distance controls movement speed continuously.
-- A contextual RUN target appears above the active movement thumb. It is intentionally separated from the normal walking radius; sliding the same thumb into that target enables Sprint through the existing Ranger sprint state.
+- Sprint remains a hidden continuation gesture. Sliding the same movement thumb upward into a deliberately separated sprint zone enables Sprint through the existing Ranger sprint state without showing a RUN target on screen.
 - The right half of unobstructed gameplay canvas owns manual camera look.
 - Normal world interactions, combat and tool actions share one fixed-position Action button.
 - Crafted world placement is confirmed from the crafting control rather than borrowing the Action button.
@@ -21,11 +21,9 @@ This pass keeps gameplay handlers authoritative while simplifying the mobile int
 
 `MobileHud` owns touch-region routing only. `RangerController` remains the authority for actual locomotion and camera state.
 
-Normal mobile movement scales from slow walking to a fast run-like pace according to analog thumb distance. The contextual RUN target is a separate deliberate gesture for full Sprint, so ordinary forward walking does not require a second finger and does not accidentally sprint.
+Normal mobile movement scales from slow walking to a fast run-like pace according to analog thumb distance. Full Sprint remains a separate deliberate upward gesture beyond the normal walking radius, but its activation zone is intentionally invisible so ordinary movement keeps the HUD clean. Keyboard movement keeps its existing desktop behavior, including Shift sprint.
 
 The camera normally settles behind the Ranger using damped angular follow rather than snapping to every heading change. Manual right-side look temporarily suspends that follow. Releasing the look touch keeps the viewed angle briefly, then smoothly returns yaw and pitch toward the Ranger's forward view. Camera position uses its own damping so heading and translation remain visually soft on mobile.
-
-Keyboard movement keeps its existing desktop behavior, including Shift sprint.
 
 ## Context action ownership
 
@@ -70,6 +68,6 @@ Craftable placeable structures should instead extend the crafting recipe/runtime
 
 ## Regression coverage
 
-`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, explicit campfire exclusion from Action, crafting-owned placement state, roof-thatch registration, removal of the legacy interaction buttons, the collapsible two-column icon build grid, direct Roof/Drop visibility, dedicated build icon assets, left-side inventory, removal of the fixed joystick/permanent Sprint button, the 50/50 movement/look split, contextual sprint target spacing, analog speed scaling and damped camera follow/recenter contracts.
+`scripts/verify-mobile-context-action.mjs` verifies action priority, tool-specific routing, carried-log validity, explicit campfire exclusion from Action, crafting-owned placement state, roof-thatch registration, removal of the legacy interaction buttons, the collapsible two-column icon build grid, direct Roof/Drop visibility, dedicated build icon assets, left-side inventory, removal of the fixed joystick/permanent Sprint button, the 50/50 movement/look split, removal of the contextual RUN visual, hidden sprint-zone spacing, analog speed scaling and damped camera follow/recenter contracts.
 
 `scripts/verify-campfire.mjs` verifies the shared Campfire recipe, no inventory-output crafting, preview-before-consumption, crafting-control confirmation, world collision and Hammer demolition contracts.
