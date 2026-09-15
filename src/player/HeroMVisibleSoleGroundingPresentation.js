@@ -5,6 +5,11 @@ const SOLE_BIND_KEYS = Object.freeze({
   left: Object.freeze(['leftCalfB', 'leftFoot']),
   right: Object.freeze(['rightCalfB', 'rightFoot'])
 });
+const GROUND_CONTACT_BIND_KEYS = Object.freeze({
+  left: 'leftFoot',
+  right: 'rightFoot'
+});
+const EMPTY_GROUND_CONTACTS = Object.freeze([]);
 const MIN_SOLE_VERTEX_WEIGHT = 0.34;
 const SOLE_SAMPLE_BAND = 0.075;
 const MAX_SOLE_SAMPLES_PER_SIDE = 12;
@@ -91,6 +96,12 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     this.heroMSoleCorrectionInitialized = false;
     this.heroMSoleTempPosition = new THREE.Vector3();
     this.heroMSoleWorldPosition = new THREE.Vector3();
+    this.heroMGroundContacts = Object.entries(GROUND_CONTACT_BIND_KEYS).map(([side, bindKey]) => ({
+      side,
+      bindKey,
+      active: false,
+      position: new THREE.Vector3()
+    }));
 
     const heroLoadPromise = this.heroMLoadPromise;
     this.heroMSoleLoadPromise = heroLoadPromise.then(active => {
@@ -102,9 +113,10 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         return false;
       }
 
-      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v4';
+      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v5';
       this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v3';
       this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-v1';
+      this.visualRoot.userData.groundContactAnchors = 'visible-foot-bones-v1';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
     });
@@ -260,6 +272,34 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     motionRoot.userData.visibleSoleCorrectionY = this.heroMSoleCorrectionY;
     motionRoot.userData.visibleSoleGrounding = 'active';
     motionRoot.updateMatrixWorld(true);
+  }
+
+  /**
+   * Presentation-only ground-contact anchors for lightweight foot-local ambient
+   * occlusion. The X/Z positions come from Hero M's actual animated foot bones while
+   * Y is resolved through the same walkable-support seam used by visible-sole
+   * grounding. Consumers may use these points for rendering cues only; gameplay
+   * collision and controller grounding remain authoritative elsewhere.
+   */
+  getGroundContactPoints() {
+    if (!this.heroMReady || !this.heroMSoleGroundingReady) return EMPTY_GROUND_CONTACTS;
+    this.heroMBody?.updateMatrixWorld?.(true);
+
+    let activeCount = 0;
+    for (const contact of this.heroMGroundContacts) {
+      contact.active = false;
+      const bone = this.heroMBind.get(contact.bindKey)?.bone;
+      if (!bone) continue;
+
+      bone.getWorldPosition(contact.position);
+      const supportY = this.#supportHeightAt(contact.position.x, contact.position.z);
+      if (!Number.isFinite(supportY)) continue;
+      contact.position.y = supportY;
+      contact.active = true;
+      activeCount += 1;
+    }
+
+    return activeCount > 0 ? this.heroMGroundContacts : EMPTY_GROUND_CONTACTS;
   }
 
   update(dt) {
