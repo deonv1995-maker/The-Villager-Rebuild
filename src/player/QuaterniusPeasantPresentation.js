@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { MasculinePrismaHumanoidPresentation } from './MasculinePrismaHumanoidPresentation.js';
-import { loadQuaterniusPeasantParts } from './QuaterniusPeasantAsset.js';
+import { loadQuaterniusRangerParts } from './QuaterniusPeasantAsset.js';
 
 const QUATERNIUS_PRESENTATION_SCALE = 1.08;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
@@ -91,16 +91,21 @@ function scaleQuaternionAngle(quaternion, gain, target, axis) {
 }
 
 /**
- * Trial presentation for the Quaternius CC0 Peasant_Male character.
+ * Current authored-character comparison trial: Quaternius CC0 Male_Ranger body
+ * plus the shared male head. The ranger outfit already contains its hood, so the
+ * separate hair module is intentionally omitted.
  *
- * KayKit remains the only gameplay/animation authority. The Quaternius body,
- * head and hair retain their authored 65-joint skins and receive only bind-delta
+ * KayKit remains the only gameplay/animation authority. The Quaternius body and
+ * head retain their authored 65-joint skins and receive only calibrated bind-delta
  * rotations from the already-running Ranger rig. The proven Prisma presentation
  * remains alive as a hidden fallback during this trial and becomes visible again
  * automatically if candidate loading or validation fails.
+ *
+ * The historical class/file name is retained during the visual comparison so
+ * stable gameplay/tool imports do not churn just because the candidate artwork does.
  */
 export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresentation {
-  constructor({ quaterniusAssetLoader = loadQuaterniusPeasantParts, ...options }) {
+  constructor({ quaterniusAssetLoader = loadQuaterniusRangerParts, ...options }) {
     super(options);
     this.quaterniusAssetLoader = quaterniusAssetLoader;
     this.quaterniusRoot = null;
@@ -145,14 +150,14 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
 
       const loaded = await this.quaterniusAssetLoader();
       const candidateRoot = new THREE.Group();
-      candidateRoot.name = 'quaternius-peasant-player-candidate';
+      candidateRoot.name = 'quaternius-ranger-player-candidate';
       candidateRoot.scale.setScalar(QUATERNIUS_PRESENTATION_SCALE);
       candidateRoot.visible = false;
 
-      for (const partName of ['body', 'head', 'hair']) {
+      for (const partName of ['body', 'head']) {
         const root = loaded?.[partName];
         if (!root) throw new Error(`Missing Quaternius ${partName} scene`);
-        root.name = `quaternius-peasant-${partName}`;
+        root.name = `quaternius-ranger-${partName}`;
         root.traverse(object => {
           if (!object.isMesh) return;
           object.castShadow = true;
@@ -189,7 +194,7 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
       const nativeGroundY = bounds.min.y;
       candidateRoot.position.y = -nativeGroundY;
       candidateRoot.userData.source = 'quaternius-cc0-universal-rig-v1';
-      candidateRoot.userData.parts = ['male_peasant', 'male_head', 'hair_simpleparted'];
+      candidateRoot.userData.parts = ['male_ranger', 'male_head'];
       candidateRoot.userData.nativeJointCount = 65;
       candidateRoot.userData.presentationScale = QUATERNIUS_PRESENTATION_SCALE;
       candidateRoot.userData.nativeHeight = authoredHeight;
@@ -198,6 +203,7 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
       candidateRoot.userData.retargetMode = 'kaykit-bind-delta-quaternius-v2';
       candidateRoot.userData.motionProfile = 'expressive-retarget-gain-v1';
       candidateRoot.userData.relaxedArmProfile = 'inward-elbow-v1';
+      candidateRoot.userData.hairMode = 'hood-owned-no-separate-hair-v1';
 
       this.visualRoot.add(candidateRoot);
       this.quaterniusRoot = candidateRoot;
@@ -206,10 +212,10 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
       this.#syncFallbackVisibility();
       candidateRoot.visible = true;
 
-      this.visualRoot.userData.visualRevision = 'quaternius-peasant-candidate-v2';
-      this.visualRoot.userData.actualModelSource = 'quaternius-cc0-peasant-v1';
+      this.visualRoot.userData.visualRevision = 'quaternius-ranger-candidate-v1';
+      this.visualRoot.userData.actualModelSource = 'quaternius-cc0-ranger-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
-      this.visualRoot.userData.visibleBody = 'quaternius-modular-peasant';
+      this.visualRoot.userData.visibleBody = 'quaternius-modular-ranger';
       this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
       this.visualRoot.userData.retargeting = 'kaykit-bind-delta-quaternius-v2';
       this.visualRoot.userData.presentationFallback = 'prisma-rigged-humanoid';
@@ -218,7 +224,7 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
     } catch (error) {
       this.quaterniusLoadError = error;
       this.visualRoot.userData.quaterniusCandidateStatus = 'fallback';
-      console.error('[QUATERNIUS PEASANT FALLBACK]', error);
+      console.error('[QUATERNIUS RANGER FALLBACK]', error);
       return false;
     }
   }

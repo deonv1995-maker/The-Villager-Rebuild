@@ -21,7 +21,9 @@ export const ASSET_PATHS = Object.freeze({
     general: asset('kaykit/animations/Rig_Medium_General.glb'),
     combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb'),
     quaterniusPeasant: Object.freeze({
-      body: asset('quaternius/player/male_peasant.glb'),
+      // Historical key retained during the authored-character comparison trial so
+      // stable runtime/test wiring does not move with each visual candidate.
+      body: asset('quaternius/player/male_ranger.glb'),
       head: asset('quaternius/player/male_head.glb'),
       hair: asset('quaternius/player/hair_simpleparted.glb')
     })

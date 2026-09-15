@@ -39,6 +39,8 @@ assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v3'"), 'visible
 assert.ok(appearance.includes('QuaterniusPeasantPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the Quaternius trial presentation');
 assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'), 'proven Prisma body must remain the presentation fallback during the trial');
 assert.ok(candidate.includes("animationAuthority = 'kaykit-medium-rig'"), 'Quaternius candidate must preserve KayKit animation authority');
+assert.ok(candidate.includes("actualModelSource = 'quaternius-cc0-ranger-v1'"), 'authored comparison must expose the male ranger candidate explicitly');
+assert.ok(candidate.includes("hairMode = 'hood-owned-no-separate-hair-v1'"), 'hooded ranger trial must not layer the separate hair mesh into the hood');
 assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"), 'Quaternius candidate must keep explicit Prisma fallback ownership');
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
