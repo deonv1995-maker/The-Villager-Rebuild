@@ -30,37 +30,6 @@ export function heroMSoleCorrectionForClearance(clearance, {
   return -Math.min(Math.max(0, maxDrop), clearance + Math.max(0, settle));
 }
 
-/**
- * Resolve an absolute presentation correction from the currently applied correction
- * plus the newly measured residual sole clearance. The clearance is measured after
- * the previous correction has already moved Hero M, so treating it as a fresh
- * absolute offset makes the loop pull upward again and converge with a visible gap.
- */
-export function heroMSoleCorrectionTarget(currentCorrection, clearance, {
-  tolerance = SOLE_CONTACT_TOLERANCE,
-  settle = SOLE_VISUAL_SETTLE,
-  maxDrop = MAX_SOLE_VISUAL_DROP
-} = {}) {
-  const boundedMaxDrop = Math.max(0, Number.isFinite(maxDrop) ? maxDrop : MAX_SOLE_VISUAL_DROP);
-  const current = THREE.MathUtils.clamp(
-    Number.isFinite(currentCorrection) ? currentCorrection : 0,
-    -boundedMaxDrop,
-    0
-  );
-  if (!Number.isFinite(clearance)) return current;
-
-  const contactTolerance = Math.max(0, Number.isFinite(tolerance) ? tolerance : SOLE_CONTACT_TOLERANCE);
-  const visualSettle = Math.max(0, Number.isFinite(settle) ? settle : SOLE_VISUAL_SETTLE);
-  const lowerBound = -(visualSettle + contactTolerance);
-  if (clearance <= contactTolerance && clearance >= lowerBound) return current;
-
-  return THREE.MathUtils.clamp(
-    current - clearance - visualSettle,
-    -boundedMaxDrop,
-    0
-  );
-}
-
 export function heroMSoleSupportHeight(sampleSupport, centerSupport, fallbackSupport, {
   maxDropFromCenter = MAX_SUPPORT_DROP_FROM_CENTER
 } = {}) {
@@ -145,9 +114,9 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         return false;
       }
 
-      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v6';
+      this.visualRoot.userData.grounding = 'posed-visible-sole-contact-v7';
       this.visualRoot.userData.soleGrounding = 'distributed-boot-contact-calibration-v4';
-      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-residual-error-v1';
+      this.visualRoot.userData.soleClearancePolicy = 'per-foot-median-absolute-pose-v2';
       this.visualRoot.userData.groundContactAnchors = 'visible-foot-bones-v1';
       this.visualRoot.userData.soleSampleCount = this.heroMSoleSamples.length;
       return true;
@@ -282,10 +251,11 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     if (this.#canRecalibrateSoleCorrection()) {
       const clearance = this.#measureVisibleSoleClearance();
       if (clearance !== null) {
-        // `clearance` is the residual gap after the previous correction is already
-        // applied. Convert that residual into the next absolute correction rather
-        // than replacing the current correction with the residual itself.
-        const target = heroMSoleCorrectionTarget(this.heroMSoleCorrectionY, clearance);
+        // HeroMPresentation rebuilds the authoritative motion-root position before
+        // this pass on every frame. The measured clearance therefore comes from the
+        // freshly posed, uncorrected Hero M body. Resolve one absolute sole target
+        // from that pose; never feed the previous correction back into the target.
+        const target = heroMSoleCorrectionForClearance(clearance);
         if (!this.heroMSoleCorrectionInitialized) {
           this.heroMSoleCorrectionY = target;
           this.heroMSoleCorrectionInitialized = true;
@@ -303,7 +273,8 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     }
 
     // HeroMPresentation resets this pivot to its authoritative center-support value
-    // every frame. Add the boot correction after that update, so this cannot drift.
+    // every frame. Add exactly one absolute boot correction after that update so
+    // locomotion cannot accumulate a frame-over-frame vertical drift.
     motionRoot.position.y += this.heroMSoleCorrectionY;
     motionRoot.userData.visibleSoleCorrectionY = this.heroMSoleCorrectionY;
     motionRoot.userData.visibleSoleGrounding = 'active';
