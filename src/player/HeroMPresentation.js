@@ -8,6 +8,8 @@ const HERO_M_MAX_VISUAL_GROUND_DROP = 0.3;
 const HERO_M_GROUNDING_RESPONSE = 18;
 const HERO_M_FRONT_FLIP_DURATION = 0.58;
 const HERO_M_FRONT_FLIP_RADIANS = Math.PI * 2;
+const HERO_M_FRONT_FLIP_TUCK_HORIZONTAL_SCALE = 0.84;
+const HERO_M_FRONT_FLIP_TUCK_VERTICAL_SCALE = 0.62;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const GRIP_OUTER_FRACTION = 0.24;
 const MIN_GRIP_WEIGHT = 0.5;
@@ -201,6 +203,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.visualRoot.add(motionRoot);
       this.heroMMotionRoot = motionRoot;
       this.#updateVisualGrounding(0, true);
+      this.#applyFrontFlipTuck(0);
       this.visualRoot.updateMatrixWorld(true);
 
       this.#calibrateArmRest(body, 'leftArm');
@@ -217,8 +220,11 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       candidateRoot.userData.retargetMode = 'kaykit-bind-delta-hero-m-v2';
       candidateRoot.userData.motionProfile = 'playful-grounded-arms-v2';
       candidateRoot.userData.styleProfile = 'playful-low-poly-hero-v1';
-      motionRoot.userData.frontFlipProfile = 'second-jump-forward-360-v1';
+      motionRoot.userData.frontFlipProfile = 'second-jump-tuck-forward-360-v2';
       motionRoot.userData.frontFlipDuration = HERO_M_FRONT_FLIP_DURATION;
+      motionRoot.userData.frontFlipTuckProfile = 'mid-rotation-ball-silhouette-v1';
+      motionRoot.userData.frontFlipTuckHorizontalScale = HERO_M_FRONT_FLIP_TUCK_HORIZONTAL_SCALE;
+      motionRoot.userData.frontFlipTuckVerticalScale = HERO_M_FRONT_FLIP_TUCK_VERTICAL_SCALE;
       motionRoot.userData.visualGroundOffsetY = this.heroMVisualGroundOffsetY;
 
       this.heroMReady = true;
@@ -226,7 +232,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.#syncFallbackVisibility();
       candidateRoot.visible = true;
 
-      this.visualRoot.userData.visualRevision = 'hero-m-player-v2';
+      this.visualRoot.userData.visualRevision = 'hero-m-player-v3';
       this.visualRoot.userData.actualModelSource = 'user-supplied-hero-m-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
       this.visualRoot.userData.visibleBody = 'hero-m-playful-low-poly';
@@ -236,7 +242,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.visualRoot.userData.toolAnchor = 'hero-m-outer-hand-grip-v1';
       this.visualRoot.userData.grounding = 'center-support-visual-compensation-v1';
       this.visualRoot.userData.armPose = 'geometry-calibrated-rest-swing-v1';
-      this.visualRoot.userData.doubleJumpPresentation = 'forward-flip-360-v1';
+      this.visualRoot.userData.doubleJumpPresentation = 'tucked-forward-flip-360-v2';
       return true;
     } catch (error) {
       this.heroMLoadError = error;
@@ -425,6 +431,16 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     this.heroMMotionRoot.userData.visualGroundOffsetY = this.heroMVisualGroundOffsetY;
   }
 
+  #applyFrontFlipTuck(amount) {
+    if (!this.heroMMotionRoot) return;
+    const tuck = THREE.MathUtils.clamp(Number.isFinite(amount) ? amount : 0, 0, 1);
+    const horizontalScale = THREE.MathUtils.lerp(1, HERO_M_FRONT_FLIP_TUCK_HORIZONTAL_SCALE, tuck);
+    const verticalScale = THREE.MathUtils.lerp(1, HERO_M_FRONT_FLIP_TUCK_VERTICAL_SCALE, tuck);
+    this.heroMMotionRoot.scale.set(horizontalScale, verticalScale, horizontalScale);
+    this.heroMMotionRoot.userData.frontFlipTuckAmount = tuck;
+    this.heroMMotionRoot.userData.frontFlipTuckScale = [horizontalScale, verticalScale, horizontalScale];
+  }
+
   #updateFrontFlip(dt) {
     if (!this.heroMMotionRoot) return;
     const jumpStage = this.player?.jumpStage ?? 0;
@@ -434,24 +450,34 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     }
     this.heroMLastJumpStage = jumpStage;
 
+    if (jumpStage === 0 || this.player?.grounded) {
+      this.heroMFlipActive = false;
+      this.heroMFlipElapsed = 0;
+      this.heroMMotionRoot.rotation.x = 0;
+      this.#applyFrontFlipTuck(0);
+      this.heroMMotionRoot.userData.frontFlipProgress = 0;
+      return;
+    }
+
     if (this.heroMFlipActive) {
       this.heroMFlipElapsed = Math.min(HERO_M_FRONT_FLIP_DURATION, this.heroMFlipElapsed + dt);
       const progress = THREE.MathUtils.clamp(this.heroMFlipElapsed / HERO_M_FRONT_FLIP_DURATION, 0, 1);
       const eased = THREE.MathUtils.smoothstep(progress, 0, 1);
+      const tuckAmount = Math.sin(Math.PI * progress) ** 2;
       this.heroMMotionRoot.rotation.x = eased * HERO_M_FRONT_FLIP_RADIANS;
+      this.#applyFrontFlipTuck(tuckAmount);
       this.heroMMotionRoot.userData.frontFlipProgress = progress;
       if (progress >= 1) {
         this.heroMFlipActive = false;
         this.heroMMotionRoot.rotation.x = 0;
+        this.#applyFrontFlipTuck(0);
         this.heroMMotionRoot.userData.frontFlipProgress = 1;
       }
       return;
     }
 
-    if (jumpStage === 0 || this.player?.grounded) {
-      this.heroMMotionRoot.rotation.x = 0;
-      this.heroMMotionRoot.userData.frontFlipProgress = 0;
-    }
+    this.heroMMotionRoot.rotation.x = 0;
+    this.#applyFrontFlipTuck(0);
   }
 
   #retargetHeroM() {
