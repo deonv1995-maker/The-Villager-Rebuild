@@ -29,7 +29,7 @@ For each pack, record license/provenance, category, formats, art style, intended
 
 ## Day 1 vertical-slice coverage
 
-- main Ranger — **covered** by KayKit Adventurers 2.0;
+- main Ranger gameplay/animation rig — **covered** by KayKit Adventurers 2.0; current visible-body trial uses the authored Quaternius male peasant/head/hair while KayKit remains the authority;
 - locomotion/job/combat animations — **strongly covered** by KayKit Character Animations 1.1;
 - bulk forest — **covered** by KayKit Forest Nature and now rendered in dense instanced batches;
 - fine interactive grass — **custom lightweight segmented-blade system** using the archived-game interaction concept;
@@ -70,6 +70,7 @@ For each pack, record license/provenance, category, formats, art style, intended
 | KayKit Dungeon Pack 1.1 FREE | CC0 | Ruins/dungeons/props | Strong when curated | Excellent | Supporting — exploration |
 | KayKit Forest Nature Pack 1.0 FREE | CC0 | Trees/bushes/rocks | Excellent with instancing | Excellent | Primary — bulk forest |
 | KayKit Adventurers Character Pack 2.0 FREE | CC0 | Ranger/player/shared medium rig | Strong | Excellent | Primary — player/rig |
+| Quaternius Modular Character Outfits - Fantasy + Universal Base Characters | CC0 | Authored male player presentation body/head/hair on universal 65-joint rig | Strong; ~0.96 MB for the three optimized GLBs | Retargeted from existing KayKit animation authority; Prisma remains fallback | **Current visible-body trial** |
 | KayKit Skeletons Character Pack 1.1 FREE | CC0 | Initial hostile skeletons | Strong in small groups | Excellent | Primary — enemy family |
 | KayKit Medieval Hexagon Pack 1.0 FREE | CC0 | Homes/workplaces/flags | Strong when curated | Excellent; hex terrain not used | Primary — prefab settlement |
 | Farm Animals Animated by Quaternius | Source page identifies CC0; archive lacked embedded license file | Farm animals | Likely strong after conversion | Plausible | Primary candidate — farm animals |
@@ -90,7 +91,8 @@ For each pack, record license/provenance, category, formats, art style, intended
 
 ## Current strongest foundation
 
-- player/character rig — KayKit Adventurers 2.0;
+- player gameplay/animation rig — KayKit Adventurers 2.0;
+- visible player body — Quaternius Peasant_Male/head/hair trial with Prisma as the proven fallback;
 - canonical humanoid animations — KayKit Character Animations 1.1;
 - initial enemies — KayKit Skeletons 1.1;
 - bulk forest — KayKit Forest Nature Pack;

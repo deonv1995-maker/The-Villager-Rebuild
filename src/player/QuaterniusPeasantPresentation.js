@@ -82,8 +82,10 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
     this.quaterniusParentInverse = new THREE.Quaternion();
 
     const prismaFallbackPromise = this.prismaLoadPromise;
-    this.quaterniusLoadPromise = this.#loadCandidate();
-    prismaFallbackPromise.finally(() => this.#syncFallbackVisibility());
+    // Make activation deterministic: the proven Prisma path finishes resolving first,
+    // then the Quaternius candidate becomes the visible presentation. This prevents a
+    // late Prisma load from overwriting candidate metadata or briefly reappearing.
+    this.quaterniusLoadPromise = prismaFallbackPromise.then(() => this.#loadCandidate());
   }
 
   async #loadCandidate() {
