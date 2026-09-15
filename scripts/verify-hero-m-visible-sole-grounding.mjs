@@ -45,23 +45,28 @@ assert.equal(
   'missing terrain support must retain the controller root as a last-resort fallback only'
 );
 
+const screenshotClearance = heroMRepresentativeSoleClearance([
+  { side: 'left', clearance: 0.002 },
+  { side: 'left', clearance: 0.006 },
+  { side: 'left', clearance: 0.224 },
+  { side: 'left', clearance: 0.231 },
+  { side: 'left', clearance: 0.238 },
+  { side: 'left', clearance: 0.244 },
+  { side: 'right', clearance: 0.004 },
+  { side: 'right', clearance: 0.229 },
+  { side: 'right', clearance: 0.235 },
+  { side: 'right', clearance: 0.241 },
+  { side: 'right', clearance: 0.247 },
+  { side: 'right', clearance: 0.252 }
+]);
 assert.equal(
-  heroMRepresentativeSoleClearance([
-    { side: 'left', clearance: 0.002 },
-    { side: 'left', clearance: 0.006 },
-    { side: 'left', clearance: 0.224 },
-    { side: 'left', clearance: 0.231 },
-    { side: 'left', clearance: 0.238 },
-    { side: 'left', clearance: 0.244 },
-    { side: 'right', clearance: 0.004 },
-    { side: 'right', clearance: 0.229 },
-    { side: 'right', clearance: 0.235 },
-    { side: 'right', clearance: 0.241 },
-    { side: 'right', clearance: 0.247 },
-    { side: 'right', clearance: 0.252 }
-  ]),
+  screenshotClearance,
   0.224,
   'one or two abnormally low sole vertices must not mask the large visible boot gap reproduced by the phone screenshot'
+);
+assert.ok(
+  Math.abs(heroMSoleCorrectionForClearance(screenshotClearance) + 0.236) < 1e-9,
+  'the reproduced phone gap must produce a real downward presentation correction instead of zero correction'
 );
 assert.equal(
   heroMRepresentativeSoleClearance([
@@ -72,7 +77,7 @@ assert.equal(
     { side: 'right', clearance: 0.29 },
     { side: 'right', clearance: 0.3 }
   ]),
-  0.16,
+  0.17,
   'the nearer boot must remain the presentation contact authority so uneven terrain does not force the higher boot through the surface'
 );
 assert.equal(heroMRepresentativeSoleClearance([]), null, 'missing sole samples must not fabricate a visual correction');
