@@ -122,4 +122,6 @@ assert.match(groundingSource, /motionRoot\.position\.y \+= this\.heroMSoleCorrec
 assert.doesNotMatch(groundingSource, /player\.root\.position\.y\s*[+\-=]/, 'visible sole grounding must never mutate gameplay root height');
 assert.doesNotMatch(groundingSource, /jumpVelocity\s*[+\-=]/, 'visible sole grounding must never change jump physics');
 
-console.log('Hero M robust posed visible-sole grounding, slope support, outlier rejection and presentation-only production seam verified.');
+await import('./verify-hero-m-runtime-grounding.mjs');
+
+console.log('Hero M robust posed visible-sole grounding, slope support, outlier rejection, production Idle_A runtime contact and presentation-only production seam verified.');
