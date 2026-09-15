@@ -32,7 +32,7 @@ Repository-side inspection before integration confirmed:
 - the required pelvis/spine/neck/head, clavicle/arm/hand and thigh/calf/foot/toe joints are present on all three parts;
 - the assembled authored character remains human-scaled at roughly 1.84 m before game-world presentation transforms.
 
-The raw one-off inspection output and ingest workflow are deliberately not production files; the durable contract is captured here and in `scripts/verify-quaternius-peasant-presentation.mjs`.
+The raw one-off inspection output and ingest workflow are deliberately not production files; the durable contract is captured here and in `scripts/verify-quaternius-peasant-presentation.mjs`. Temporary ingestion or repair workflows are removed before review, so the merge gate remains the repository's established CI and Pages workflows.
 
 ## Animation boundary
 
