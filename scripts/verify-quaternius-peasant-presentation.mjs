@@ -7,9 +7,8 @@ import { QuaterniusPeasantPresentation } from '../src/player/QuaterniusPeasantPr
 import { RangerToolPresentation } from '../src/player/RangerToolPresentation.js';
 
 const EXPECTED = Object.freeze({
-  body: Object.freeze({ path: 'public/assets/quaternius/player/male_peasant.glb', size: 653892, sha256: 'cc12edb13e556cdaf6ce9fb869bf0b081ae8538e4ab6d030ae207fe63f24ab8a' }),
-  head: Object.freeze({ path: 'public/assets/quaternius/player/male_head.glb', size: 232884, sha256: '576e31b92bc2fab0b8ca6265d880d546370c3a4b80d797858cda121958c09569' }),
-  hair: Object.freeze({ path: 'public/assets/quaternius/player/hair_simpleparted.glb', size: 71444, sha256: '41675f7fce412f50d8ebd7fe4749eae3201e2a52414fdec3104b888434f2e73c' })
+  body: Object.freeze({ path: 'public/assets/quaternius/player/male_ranger.glb', size: 1617696, sha256: '513203b0eadc4849aeba0e24effd5dc85b0b072ddc0d0b14b6242c0ba1847eea' }),
+  head: Object.freeze({ path: 'public/assets/quaternius/player/male_head.glb', size: 232884, sha256: '576e31b92bc2fab0b8ca6265d880d546370c3a4b80d797858cda121958c09569' })
 });
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -74,6 +73,12 @@ for (const [name, asset] of Object.entries(EXPECTED)) {
   const skeletons = [...new Set(skinned.map(mesh => mesh.skeleton))];
   assert.equal(skeletons.length, 1, `${name} must use one shared authored skeleton`);
   assert.equal(skeletons[0].bones.length, 65, `${name} must keep the Quaternius universal 65-joint rig`);
+  if (name === 'body') {
+    const meshNames = [];
+    gltf.scene.traverse(object => { if (object.isMesh) meshNames.push(object.name); });
+    assert.ok(meshNames.includes('Male_Ranger_Head_Hood'), 'ranger trial body must retain its authored hood mesh');
+    assert.ok(meshNames.includes('Male_Ranger_Arms_Bracer'), 'ranger trial body must retain its authored bracer silhouette');
+  }
   for (const boneName of ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'neck_01', 'Head', 'clavicle_l', 'upperarm_l', 'lowerarm_l', 'hand_l', 'clavicle_r', 'upperarm_r', 'lowerarm_r', 'hand_r', 'middle_01_r', 'thigh_l', 'calf_l', 'foot_l', 'ball_l', 'thigh_r', 'calf_r', 'foot_r', 'ball_r']) {
     assert.ok(findBone(gltf.scene, boneName), `${name} is missing required universal-rig joint ${boneName}`);
   }
@@ -101,26 +106,26 @@ const player = {
 };
 
 const candidateLoader = async () => {
-  const [body, head, hair] = await Promise.all([
+  const [body, head] = await Promise.all([
     loadGlb(EXPECTED.body.path),
-    loadGlb(EXPECTED.head.path),
-    loadGlb(EXPECTED.hair.path)
+    loadGlb(EXPECTED.head.path)
   ]);
-  return { body: body.scene, head: head.scene, hair: hair.scene };
+  return { body: body.scene, head: head.scene };
 };
 
 const presentation = new QuaterniusPeasantPresentation({ player, quaterniusAssetLoader: candidateLoader });
 assert.equal(await presentation.quaterniusLoadPromise, true, presentation.quaterniusLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.quaterniusReady, true);
-assert.equal(presentation.visualRoot.userData.actualModelSource, 'quaternius-cc0-peasant-v1');
-assert.equal(presentation.visualRoot.userData.visibleBody, 'quaternius-modular-peasant');
+assert.equal(presentation.visualRoot.userData.actualModelSource, 'quaternius-cc0-ranger-v1');
+assert.equal(presentation.visualRoot.userData.visibleBody, 'quaternius-modular-ranger');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
 assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-quaternius-v2');
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'quaternius-palm-center-forearm-axis-v2');
 assert.ok(presentation.quaterniusRoot?.visible, 'candidate root must be visible after activation');
 assert.equal(presentation.prismaRoot?.visible, false, 'Prisma must remain available but hidden after candidate activation');
-assert.equal(presentation.quaterniusParts.size, 3, 'body, head and hair must all participate in the candidate');
+assert.equal(presentation.quaterniusParts.size, 2, 'ranger body and shared head must participate without a separate hair module');
+assert.equal(presentation.quaterniusRoot.userData.hairMode, 'hood-owned-no-separate-hair-v1');
 assert.ok(Math.abs(presentation.quaterniusRoot.position.y) < 0.02, 'candidate grounding correction should stay close to the authored ground plane');
 assert.equal(presentation.quaterniusRoot.userData.presentationScale, 1.08, 'phone-sized Quaternius presentation should use the calibrated modest scale increase');
 assert.ok(presentation.quaterniusRoot.userData.nativeHeight > 1.8 && presentation.quaterniusRoot.userData.nativeHeight < 1.9, 'authored candidate height metadata must remain unscaled and human-sized');
@@ -233,4 +238,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Quaternius Peasant_Male candidate assets, 65-joint rigs, scaled presentation, expressive KayKit bind-delta retargeting, relaxed elbows, palm-centered forearm-aligned tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Quaternius Male_Ranger comparison candidate, shared male head, 65-joint rigs, hood-owned hair policy, scaled presentation, expressive KayKit bind-delta retargeting, relaxed elbows, palm-centered forearm-aligned tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
