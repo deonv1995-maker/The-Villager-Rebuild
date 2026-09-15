@@ -61,7 +61,8 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     const celestialShadows = new CelestialShadowSystem({
       sceneSystem: game.sceneSystem,
       player: game.player,
-      terrain: game.island
+      terrain: game.island,
+      contactProvider: game.toolPresentation?.appearancePresentation
     });
     const torchRuntime = new TorchRuntimeController({ game });
     game.toolbelt.fuel = torchRuntime;
