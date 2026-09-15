@@ -21,17 +21,18 @@ assert.ok(masculine.includes('[0.20, 0.97]'), 'waist region must retain a mild n
 assert.ok(masculine.includes('TORSO_DEPTH_PROFILE') && masculine.includes('[0.82, 1.08]'), 'male chest must retain controlled front-to-back depth');
 assert.ok(masculine.includes('torsoCenterX') && masculine.includes('torsoCenterZ'), 'torso sculpt must scale around its measured center instead of the mesh origin');
 assert.ok(masculine.includes('geometry.userData.masculineTorsoCenter'), 'centered sculpt diagnostics must be recorded');
-assert.ok(masculine.includes('sculptIntegratedArms'), 'arm volume must be sculpted through the skinned geometry instead of translated joints');
-assert.ok(masculine.includes('UPPER_ARM_RADIUS_FACTOR = 1.12'), 'upper arms must retain enough volume to connect visually into the shoulder');
-assert.ok(masculine.includes('FOREARM_RADIUS_FACTOR = 1.08'), 'forearms must remain proportionate to the upper arms');
-assert.ok(masculine.includes("masculineArmProfile = 'skin-weighted-limb-volume-v1'"), 'arm-volume diagnostics must stay explicit');
+assert.ok(!masculine.includes('sculptIntegratedArms'), 'arm geometry must stay in its authored native bind space');
+assert.ok(!masculine.includes('UPPER_ARM_RADIUS_FACTOR'), 'presentation tuning must not inflate upper arms around reconstructed bind anchors');
+assert.ok(!masculine.includes('FOREARM_RADIUS_FACTOR'), 'presentation tuning must not inflate forearms around reconstructed bind anchors');
+assert.ok(masculine.includes("masculineArmProfile = 'native-authored-limbs-v2'"), 'native arm-geometry ownership must stay explicit');
 assert.ok(masculine.includes('restoreNativeBindLocalPosition'), 'shoulder tuning must reconstruct the captured native bind');
 assert.ok(!masculine.includes('SHOULDER_SPREAD'), 'shoulder joints must not be translated laterally away from the authored mesh');
 assert.ok(!masculine.includes('ARM_FORWARD_OFFSET'), 'arm continuity pass must not translate shoulder joints forward');
 assert.ok(masculine.includes("shoulderOffsetMode = 'native-bind-continuity-v2'"), 'native shoulder-centre continuity must remain explicit');
+assert.ok(masculine.includes("visualRevision = 'prisma-rigged-humanoid-v7'"), 'arm-stretch regression fix must expose its visual revision');
 assert.ok(masculine.includes("bodySilhouette = 'integrated-masculine-v3'"), 'male silhouette metadata must stay explicit');
 assert.ok(masculine.includes("chestProfile = 'natural-pectoral-v3'"), 'natural chest profile must stay explicit');
-assert.ok(masculine.includes("armSilhouette = 'native-joint-integrated-v4'"), 'integrated arm profile must stay explicit');
+assert.ok(masculine.includes("armSilhouette = 'native-authored-continuity-v5'"), 'native arm profile must stay explicit');
 assert.ok(masculine.includes('PALM_EXTENSION = 0.11'), 'visible tool socket must reach the centre of the visible palm');
 assert.ok(masculine.includes("gripProfile = 'upright-palm-center-v3'"), 'visible hand mount must keep its current calibrated grip profile');
 assert.ok(appearance.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentation'), 'stable Ranger appearance seam must resolve to the masculine Prisma profile');
@@ -93,4 +94,4 @@ assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-torch-v2', 'to
 assert.ok(torch.visualRoot.position.y < 0, 'torch grip origin should pass through the palm instead of floating beside it');
 torch.dispose();
 
-console.log('Integrated masculine torso/arm proportions, native shoulder continuity, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
+console.log('Integrated masculine torso, native arm geometry/shoulder continuity, visible-palm tool/torch grip, and reduced Sprout relative scale verified.');
