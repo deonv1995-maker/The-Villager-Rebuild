@@ -1,12 +1,15 @@
 // Compatibility boundary: stable player/tool systems keep importing the historical Ranger name.
-// The current Quaternius male-ranger body is a presentation-only candidate layered over the
-// proven Prisma fallback; KayKit remains the sole gameplay and animation authority throughout
-// the authored-character comparison. The historical class name is deliberately retained until
-// one candidate is accepted so gameplay-facing imports do not churn during visual trials.
+// Hero M is the selected playful player-facing presentation. KayKit remains the sole gameplay
+// and animation authority, while the proven Prisma body remains the immediate visual fallback.
+// Previous Quaternius comparison assets stay available through an explicit rollback/audit alias.
 export {
-  QuaterniusPeasantPresentation as RangerAppearancePresentation
-} from './QuaterniusPeasantPresentation.js';
+  HeroMPresentation as RangerAppearancePresentation
+} from './HeroMPresentation.js';
 
 export {
   MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback
 } from './MasculinePrismaHumanoidPresentation.js';
+
+export {
+  QuaterniusPeasantPresentation as RangerAppearancePresentationLegacyComparison
+} from './QuaterniusPeasantPresentation.js';

@@ -20,9 +20,17 @@ export const ASSET_PATHS = Object.freeze({
     movementBasic: asset('kaykit/animations/Rig_Medium_MovementBasic.glb'),
     general: asset('kaykit/animations/Rig_Medium_General.glb'),
     combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb'),
+    heroM: Object.freeze({
+      parts: Object.freeze([
+        asset('player/hero_m.glb.gz.part0.b64'),
+        asset('player/hero_m.glb.gz.part1.b64'),
+        asset('player/hero_m.glb.gz.part2.b64')
+      ])
+    }),
     quaterniusPeasant: Object.freeze({
-      // Historical key retained during the authored-character comparison trial so
-      // stable runtime/test wiring does not move with each visual candidate.
+      // Historical key retained with the authored-character rollback assets so
+      // previous comparison builds can still be reproduced without disturbing
+      // the selected Hero M runtime presentation.
       body: asset('quaternius/player/male_ranger.glb'),
       head: asset('quaternius/player/male_head.glb'),
       hair: asset('quaternius/player/hair_simpleparted.glb')

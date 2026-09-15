@@ -1,52 +1,31 @@
-# Quaternius Player Presentation Trial
+# Quaternius Player Presentation Trial — Archived
 
 ## Status
 
-The current phone-facing comparison uses the authored Quaternius `Male_Ranger` outfit with the shared Quaternius male head. The preceding `Male_Peasant` pass proved the authored-body approach, but device screenshots still read more like a generic villager than the game's stranded survival lead. The ranger is therefore the next controlled visual candidate.
+The Quaternius authored-character comparison is complete and is no longer the active player presentation. The project owner selected the more playful user-supplied Hero M character on 2026-09-15. The current player presentation decision and architecture are documented in `docs/HERO_M_PLAYER_PRESENTATION.md`.
 
-This remains a presentation change only. The established KayKit Ranger controller, collision, grounding, camera, movement state, animation mixer and gameplay systems remain authoritative. `RangerAppearancePresentation` still resolves through the historical `QuaterniusPeasantPresentation` class name during the comparison so gameplay-facing imports do not churn every time candidate artwork changes. The masculine Prisma implementation remains the immediate visual fallback.
+The Quaternius work remains valuable rollback/audit material. It proved that an authored skinned body can sit behind the stable `RangerAppearancePresentation` seam while KayKit continues to own gameplay and animation.
 
-## Why the male ranger is the next candidate
+## Final Quaternius comparison state
 
-The inspected `male_ranger.glb` is from the same CC0 Quaternius modular-character family and uses the same universal 65-joint skeleton as the peasant candidate. It therefore lets the project compare a substantially different authored silhouette without changing the retargeting architecture.
+The last active Quaternius candidate was the authored `Male_Ranger` outfit with the shared male head. It used the same universal 65-joint skeleton as the earlier peasant pass and retained the established KayKit bind-delta retargeting, modest presentation scale and visible-hand tool seam.
 
-Repository-side inspection confirmed ten skinned meshes on one 65-joint skeleton, including authored ranger bracers, belts, boots, pauldron and a hood. The required pelvis/spine/neck/head, clavicle/arm/hand/finger and thigh/calf/foot/toe joints are all present. Authored bounds are approximately 1.869 m tall before the existing presentation scale.
-
-The ranger body already owns `Male_Ranger_Head_Hood`, so the separate `hair_simpleparted` module is intentionally not rendered in this comparison. The shared male face/head remains a separate authored module underneath the hood. This avoids a new hair-versus-hood clipping seam and keeps the comparison focused on the outfit/body choice.
-
-## Runtime assets and provenance
-
-Active comparison assets under `public/assets/quaternius/player/` are:
+The retained runtime assets under `public/assets/quaternius/player/` include:
 
 - `male_ranger.glb` — 1,617,696 bytes — SHA-256 `513203b0eadc4849aeba0e24effd5dc85b0b072ddc0d0b14b6242c0ba1847eea`;
-- `male_head.glb` — 232,884 bytes — SHA-256 `576e31b92bc2fab0b8ca6265d880d546370c3a4b80d797858cda121958c09569`.
+- `male_head.glb` — 232,884 bytes — SHA-256 `576e31b92bc2fab0b8ca6265d880d546370c3a4b80d797858cda121958c09569`;
+- the earlier `male_peasant.glb` and `hair_simpleparted.glb` comparison/rollback files.
 
-The previous `male_peasant.glb` and `hair_simpleparted.glb` remain in the repository temporarily as comparison/rollback assets until one authored character is accepted on device. All are CC0 Quaternius derivatives from Modular Character Outfits - Fantasy and Universal Base Characters, with provenance pinned in `licenses/quaternius-player-candidate.md`.
+Their CC0 Quaternius provenance remains recorded in `licenses/quaternius-player-candidate.md`.
 
-## Animation boundary
+## Architecture preserved by the trial
 
-No second character controller or animation mixer exists. For each mapped Quaternius joint, the presentation reads the current KayKit joint rotation, calculates the delta from the captured KayKit bind rotation, applies the existing small bounded presentation gain, applies that delta to the authored Quaternius bind rotation, preserves the existing five-degree lower-arm relaxation, then restores authored local positions and scales unchanged.
+The Quaternius comparison did not introduce a second character controller or animation mixer. KayKit remained the only movement/gameplay/animation authority; the candidate body received presentation-only bind-delta rotations and exposed one visible right-hand tool mount. The masculine Prisma character remained the fallback.
 
-The ranger candidate deliberately keeps the same `1.08` presentation scale, retarget gains and palm/tool socket calibration as the peasant comparison. Holding those values constant means the next device test is primarily judging the character artwork and silhouette instead of mixing a body swap with another scale/animation experiment.
+Those boundaries are retained by the selected Hero M implementation. The active art asset has changed, but stable gameplay imports, collision, traversal, camera behavior, construction, world systems, tools, save/PWA behavior and fallback ownership remain separated from the visible character artwork.
 
-## Scale, grounding and tools
+## Why it was superseded
 
-The `Male_Ranger` authored bounds are roughly 1.869 m tall. At the unchanged uniform presentation scale of `1.08`, the rendered candidate is roughly 2.02 m tall. This remains visual only: player collision, controller dimensions, terrain grounding and traversal are unchanged. Grounding is derived from the scaled authored bounding-box minimum.
+Device review moved the desired art direction toward a simpler, more playful low-poly protagonist rather than the more rugged survival-ranger silhouette. Hero M was therefore selected as the next player-facing presentation without discarding the proven architecture established during the Quaternius passes.
 
-The right-hand work-tool socket remains the existing palm-centered, forearm-aligned presentation mount. The current screenshots also show that the temporary generated work-tool models themselves are still oversized/roughly proportioned, especially the hammer. That prop-shape issue is intentionally not solved in this character-comparison pass; fitting or replacing tool props should happen after the player body is chosen so tool calibration is not repeated for discarded candidates.
-
-## Failure behavior
-
-If the ranger body or shared head fails to load, lacks required joints, produces invalid bounds or otherwise fails validation, the presentation leaves the proven Prisma character visible. The Simple humanoid fallback remains below Prisma.
-
-## Stable systems deliberately unchanged
-
-This comparison does not modify traversal, walk/run speed, jump/double-jump, collision, terrain, camera modes, KayKit locomotion/tool clips, tool timing, spear behavior, harvesting, construction, ecology, world generation, day/night, UI, save data or PWA/install behavior.
-
-## Automated verification
-
-`npm run check` still includes `scripts/verify-quaternius-peasant-presentation.mjs` under its historical filename. The verification now pins the exact ranger-body bytes/hash, confirms the ranger hood and bracer meshes, validates the 65-joint universal skeleton on both active modules, confirms no separate hair module is attached, checks scale/grounding, bounded motion gain, relaxed forearms, palm-centered work-tool transfer, first-person visibility, finite animation bounds and Prisma fallback behavior.
-
-## Device verification required after deployment
-
-On a physical phone, compare the ranger candidate against the screenshots from the male-peasant pass at the same normal gameplay distance. Check front, side and rear idle plus walk/run. In particular judge overall silhouette, shoulders/arms, hood/head fit, face readability, boots/legs, door scale and how well the outfit belongs beside Sprout and the cabin. Do not use the current hammer head as the deciding factor for the character; its prop proportions are a separate presentation task. If this ranger reads better, the next pass can promote/rename the generic Quaternius seam and then calibrate the work-tool models once against the chosen body.
+The Quaternius files and regression verifier remain checked in for rollback and historical reproducibility until a later cleanup milestone explicitly removes them.
