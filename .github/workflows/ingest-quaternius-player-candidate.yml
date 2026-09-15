@@ -17,6 +17,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: feat/quaternius-peasant-presentation
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
       - name: Fetch vetted CC0 candidate assets
         shell: bash
         run: |
@@ -30,6 +36,58 @@ jobs:
           test $(stat -c%s public/assets/quaternius/player/male_peasant.glb) -eq 653892
           test $(stat -c%s public/assets/quaternius/player/male_head.glb) -eq 232884
           test $(stat -c%s public/assets/quaternius/player/hair_simpleparted.glb) -eq 71444
+      - name: Inspect candidate rigs
+        shell: bash
+        run: |
+          mkdir -p docs
+          node --input-type=module <<'NODE' > docs/QUATERNIUS_CANDIDATE_INSPECTION.txt
+          import { readFileSync } from 'node:fs';
+          import * as THREE from 'three';
+          import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+          globalThis.ProgressEvent ??= class ProgressEvent { constructor(type, init) { Object.assign(this, { type }, init); } };
+
+          async function loadGlb(path) {
+            const bytes = readFileSync(path);
+            const jsonLength = bytes.readUInt32LE(12);
+            const json = JSON.parse(bytes.toString('utf8', 20, 20 + jsonLength));
+            const binOffset = 20 + jsonLength;
+            const binLength = bytes.readUInt32LE(binOffset);
+            json.buffers[0].uri = `data:application/octet-stream;base64,${bytes.subarray(binOffset + 8, binOffset + 8 + binLength).toString('base64')}`;
+            delete json.images;
+            delete json.textures;
+            delete json.materials;
+            for (const mesh of json.meshes ?? []) for (const primitive of mesh.primitives) delete primitive.material;
+            return new GLTFLoader().parseAsync(JSON.stringify(json), '');
+          }
+
+          for (const name of ['male_peasant', 'male_head', 'hair_simpleparted']) {
+            const gltf = await loadGlb(`public/assets/quaternius/player/${name}.glb`);
+            const root = gltf.scene;
+            root.updateMatrixWorld(true);
+            const boneNames = [];
+            const skinned = [];
+            const meshes = [];
+            root.traverse(o => {
+              if (o.isBone) boneNames.push(o.name);
+              if (o.isSkinnedMesh) skinned.push(o);
+              if (o.isMesh) meshes.push(o);
+            });
+            const uniqueSkeletons = [...new Set(skinned.map(m => m.skeleton))];
+            const bounds = new THREE.Box3().setFromObject(root);
+            console.log(`=== ${name} ===`);
+            console.log(`meshes=${meshes.length} skinnedMeshes=${skinned.length} skeletons=${uniqueSkeletons.length}`);
+            console.log(`skeletonJointCounts=${uniqueSkeletons.map(s => s.bones.length).join(',')}`);
+            console.log(`boundsMin=${bounds.min.toArray().map(v => v.toFixed(6)).join(',')}`);
+            console.log(`boundsMax=${bounds.max.toArray().map(v => v.toFixed(6)).join(',')}`);
+            console.log(`bones=${[...new Set(boneNames)].join(',')}`);
+            for (const wanted of ['pelvis','spine_01','spine_02','spine_03','neck_01','head','clavicle_l','upperarm_l','lowerarm_l','hand_l','clavicle_r','upperarm_r','lowerarm_r','hand_r','thigh_l','calf_l','foot_l','ball_l','thigh_r','calf_r','foot_r','ball_r']) {
+              const bone = root.getObjectByName(wanted);
+              console.log(`${wanted}: ${bone ? `parent=${bone.parent?.name ?? 'none'} pos=${bone.position.toArray().map(v => v.toFixed(6)).join(',')}` : 'MISSING'}`);
+            }
+            console.log('meshNames=' + meshes.map(m => m.name).join(','));
+            console.log();
+          }
+          NODE
       - name: Record provenance
         shell: bash
         run: |
@@ -53,13 +111,13 @@ jobs:
           - https://quaternius.itch.io/modular-character-outfits-fantasy
           - https://quaternius.itch.io/universal-base-characters
           EOF
-      - name: Commit candidate assets to branch
+      - name: Commit candidate assets and inspection to branch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add public/assets/quaternius/player licenses/quaternius-player-candidate.md
+          git add public/assets/quaternius/player licenses/quaternius-player-candidate.md docs/QUATERNIUS_CANDIDATE_INSPECTION.txt
           git diff --cached --quiet && exit 0
-          git commit -m "Ingest Quaternius peasant player candidate"
+          git commit -m "Inspect Quaternius peasant candidate rig"
           git push origin HEAD:feat/quaternius-peasant-presentation
