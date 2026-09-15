@@ -34,7 +34,9 @@ Gameplay grounding deliberately uses the highest support sampled under the playe
 
 ## Double-jump presentation
 
-The first jump remains unchanged. When the existing controller enters jump stage 2, Hero M performs one presentation-only 360-degree forward flip over 0.58 seconds. The flip is applied around a centered Hero M motion pivot, so it does not alter the gameplay root, jump velocity, collision, camera or landing logic. After one full rotation the presentation returns to its normal upright basis while the existing second-jump physics continue normally.
+The first jump remains unchanged. When the existing controller enters jump stage 2, Hero M performs one presentation-only 360-degree forward flip over 0.58 seconds. During the flip, a smooth tuck envelope pulls the complete Hero M presentation into a compact ball-like silhouette: the tuck builds from zero at takeoff, reaches maximum compression at the middle of the rotation, then releases back to the normal silhouette before the flip completes. At maximum tuck the centered motion pivot scales to `0.84` horizontally/depth-wise and `0.62` vertically.
+
+The flip and tuck are both applied above the authored rig on the centered Hero M motion pivot. They do not modify the gameplay root, jump velocity, collision, camera, landing logic, KayKit animation ownership or Hero M's calibrated base scale. If the character lands or jump stage resets early, the flip and tuck are immediately cleared so the grounded silhouette cannot remain compressed.
 
 ## Tool grip
 
@@ -52,8 +54,8 @@ This presentation polish does not change movement speed, jump or double-jump phy
 
 ## Automated verification
 
-`npm run check` includes the Hero M verification through `verify:prisma-native`. The regression gate pins the segmented compressed and decompressed runtime bytes, validates the 16-joint rig and calibrated scale, verifies center-support visual grounding, confirms a relaxed idle arm direction and meaningful running arm swing, verifies the stage-2 front flip and centered motion pivot, exercises KayKit movement retargeting, checks finite animated bounds, confirms visible-hand tool transfer, checks first-person visibility, and proves that an intentional Hero M load failure falls back to Prisma.
+`npm run check` includes the Hero M verification through `verify:prisma-native`. The regression gate pins the segmented compressed and decompressed runtime bytes, validates the 16-joint rig and calibrated scale, verifies center-support visual grounding, confirms a relaxed idle arm direction and meaningful running arm swing, verifies that the first jump remains untucked, verifies the stage-2 360-degree front flip reaches its full compact tuck at mid-rotation and returns to normal scale afterward, exercises KayKit movement retargeting, checks finite animated bounds, confirms visible-hand tool transfer, checks first-person visibility, and proves that an intentional Hero M load failure falls back to Prisma.
 
 ## Device verification required after deployment
 
-On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. Confirm boots visually meet flat and sloped terrain; idle hands rest naturally; walk/run arms swing rather than staying raised; the first jump stays normal; the second jump performs a forward flip; tools remain aligned to the visible right hand; first-person still hides the body correctly; and no existing gameplay interaction changed because of the presentation polish.
+On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. Confirm boots visually meet flat and sloped terrain; idle hands rest naturally; walk/run arms swing rather than staying raised; the first jump stays normal; the second jump visibly tucks into a compact ball through the forward flip and opens cleanly before landing; tools remain aligned to the visible right hand; first-person still hides the body correctly; and no existing gameplay interaction changed because of the presentation polish.
