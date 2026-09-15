@@ -41,6 +41,33 @@ function rootLocalPosition(root, object, target) {
   return root.worldToLocal(target);
 }
 
+function median(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) * 0.5)];
+}
+
+function visibleSoleHeights(presentation) {
+  presentation.heroMBody?.updateMatrixWorld?.(true);
+  const bySide = { left: [], right: [] };
+  const local = new THREE.Vector3();
+  const world = new THREE.Vector3();
+  for (const sample of presentation.heroMSoleSamples ?? []) {
+    const position = sample.mesh.geometry?.getAttribute?.('position');
+    if (!position || !bySide[sample.side]) continue;
+    local.fromBufferAttribute(position, sample.vertexIndex);
+    sample.mesh.applyBoneTransform(sample.vertexIndex, local);
+    sample.mesh.localToWorld(world.copy(local));
+    bySide[sample.side].push(world.y);
+  }
+  return Object.fromEntries(Object.entries(bySide).map(([side, values]) => [side, {
+    median: median(values),
+    min: values.length ? Math.min(...values) : null,
+    max: values.length ? Math.max(...values) : null
+  }]));
+}
+
+const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
@@ -84,8 +111,12 @@ assert.ok(
   presentation.heroMPelvisMotionScale >= 0.75 && presentation.heroMPelvisMotionScale <= 1.35,
   'Hero M pelvis translation scaling must stay within the proven retarget bounds'
 );
+assert.equal(
+  presentation.visualRoot.userData.soleClearancePolicy,
+  'per-foot-median-absolute-pose-v2',
+  'Hero M must resolve sole correction from each freshly rebuilt pose without frame-history accumulation'
+);
 
-const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
 const idleClip = allClips.find(clip => normalize(clip.name) === 'idlea');
 assert.ok(idleClip, `production Ranger clip set must expose Idle_A; found: ${allClips.map(clip => clip.name).join(', ')}`);
@@ -102,7 +133,7 @@ const sourceHipDelta = new THREE.Vector3();
 const targetPelvisDelta = new THREE.Vector3();
 const expectedPelvisDelta = new THREE.Vector3();
 
-const frames = [];
+const idleFrames = [];
 for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
   mixer.setTime(idleClip.duration * fraction);
   root.updateMatrixWorld(true);
@@ -124,7 +155,7 @@ for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
     `Hero M pelvis must follow the KayKit hip translation at Idle_A frame ${fraction}`
   );
 
-  frames.push({
+  idleFrames.push({
     fraction,
     clearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
     correction: presentation.heroMMotionRoot.userData.visibleSoleCorrectionY,
@@ -137,23 +168,85 @@ for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
 }
 
 assert.ok(presentation.heroMSoleCorrectionInitialized, 'grounded Idle_A must initialize the presentation-only visible-sole correction');
-assert.ok(frames.every(frame => Number.isFinite(frame.clearance)), 'every sampled idle pose must produce a finite visible-sole clearance');
-assert.ok(frames.every(frame => Number.isFinite(frame.correction)), 'every sampled idle pose must retain a finite visible-sole correction');
+assert.ok(idleFrames.every(frame => Number.isFinite(frame.clearance)), 'every sampled idle pose must produce a finite visible-sole clearance');
+assert.ok(idleFrames.every(frame => Number.isFinite(frame.correction)), 'every sampled idle pose must retain a finite visible-sole correction');
 assert.ok(
-  Math.max(...frames.map(frame => frame.sourceHipDeltaY)) - Math.min(...frames.map(frame => frame.sourceHipDeltaY)) > 0.001,
-  `production Idle_A must contain measurable vertical hip motion for the visible body to follow: ${JSON.stringify(frames)}`
+  Math.max(...idleFrames.map(frame => frame.sourceHipDeltaY)) - Math.min(...idleFrames.map(frame => frame.sourceHipDeltaY)) > 0.001,
+  `production Idle_A must contain measurable vertical hip motion for the visible body to follow: ${JSON.stringify(idleFrames)}`
 );
 assert.ok(
-  Math.max(...frames.map(frame => frame.targetPelvisDeltaY)) - Math.min(...frames.map(frame => frame.targetPelvisDeltaY)) > 0.001,
-  `Hero M body must retain visible vertical pelvis motion across Idle_A instead of animating only the feet: ${JSON.stringify(frames)}`
+  Math.max(...idleFrames.map(frame => frame.targetPelvisDeltaY)) - Math.min(...idleFrames.map(frame => frame.targetPelvisDeltaY)) > 0.001,
+  `Hero M body must retain visible vertical pelvis motion across Idle_A instead of animating only the feet: ${JSON.stringify(idleFrames)}`
 );
 assert.ok(
-  frames.every(frame => frame.minY < 0.04),
-  `production Idle_A must not leave the rendered Hero M body physically hovering above flat terrain: ${JSON.stringify(frames)}`
+  idleFrames.every(frame => frame.minY < 0.04),
+  `production Idle_A must not leave the rendered Hero M body physically hovering above flat terrain: ${JSON.stringify(idleFrames)}`
 );
 assert.ok(
-  frames.every(frame => frame.minY > -0.18),
-  `production Idle_A grounding must not sink Hero M deeply into flat terrain: ${JSON.stringify(frames)}`
+  idleFrames.every(frame => frame.minY > -0.18),
+  `production Idle_A grounding must not sink Hero M deeply into flat terrain: ${JSON.stringify(idleFrames)}`
 );
 
-console.log('Hero M production Idle_A pelvis translation, physical planting and animated visible-foot contact anchors verified against the actual Ranger animation and Hero M asset.');
+// Regression for the phone-reported air-running/sinking cycle. HeroMPresentation
+// rebuilds its motion-root baseline every update, so holding an authored pose should
+// converge to one stable absolute sole correction. It must never ratchet downward
+// simply because update() is called repeatedly.
+const settledStates = {};
+for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
+  const clip = allClips.find(candidate => normalize(candidate.name) === normalize(state));
+  assert.ok(clip, `production Ranger clip set must expose ${state}`);
+  settledStates[state] = [];
+
+  for (const fraction of [0.2, 0.5, 0.8]) {
+    mixer.stopAllAction();
+    mixer.clipAction(clip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
+    mixer.setTime(clip.duration * fraction);
+    root.updateMatrixWorld(true);
+    player.animationState = state;
+
+    for (let frame = 0; frame < 90; frame += 1) presentation.update(1 / 60);
+    presentation.visualRoot.updateMatrixWorld(true);
+    const correctionAtSettle = presentation.heroMSoleCorrectionY;
+    const targetAtSettle = presentation.heroMMotionRoot.userData.visibleSoleTargetCorrectionY;
+    const clearanceAtSettle = presentation.heroMMotionRoot.userData.visibleSoleClearanceY;
+    const soles = visibleSoleHeights(presentation);
+    const plantedMedian = Math.min(soles.left.median, soles.right.median);
+
+    for (let frame = 0; frame < 90; frame += 1) presentation.update(1 / 60);
+    presentation.visualRoot.updateMatrixWorld(true);
+    const correctionAfterRepeat = presentation.heroMSoleCorrectionY;
+
+    assert.ok(Number.isFinite(targetAtSettle) && Number.isFinite(clearanceAtSettle), `${state} must retain a finite absolute sole target`);
+    assert.ok(
+      Math.abs(correctionAtSettle - targetAtSettle) < 1e-6,
+      `${state} frame ${fraction} must converge to the absolute fresh-pose target instead of retaining historical drift`
+    );
+    assert.ok(
+      Math.abs(correctionAfterRepeat - correctionAtSettle) < 1e-8,
+      `${state} frame ${fraction} must remain vertically stable when the same pose is updated repeatedly`
+    );
+    assert.ok(
+      correctionAfterRepeat > -0.4,
+      `${state} frame ${fraction} must not ratchet toward the 0.68 m emergency drop bound`
+    );
+    assert.ok(
+      plantedMedian >= -0.026 && plantedMedian <= 0.012,
+      `${state} frame ${fraction} must settle the visible stance boot at the terrain plane: ${JSON.stringify({ correctionAfterRepeat, targetAtSettle, clearanceAtSettle, soles })}`
+    );
+
+    settledStates[state].push({
+      fraction,
+      correction: correctionAfterRepeat,
+      target: targetAtSettle,
+      clearance: clearanceAtSettle,
+      plantedMedian
+    });
+  }
+}
+
+assert.ok(
+  Math.max(...settledStates.Idle_A.map(frame => Math.abs(frame.correction))) < 0.08,
+  `Idle_A must use only a small stable sole correction rather than accumulating a deep body offset: ${JSON.stringify(settledStates.Idle_A)}`
+);
+
+console.log('Hero M production pelvis motion, stable absolute sole correction and planted Idle_A/Walking_A/Running_A stance verified against the shipped Ranger animations and Hero M asset.');
