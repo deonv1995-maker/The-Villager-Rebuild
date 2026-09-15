@@ -3,9 +3,17 @@ import { MasculinePrismaHumanoidPresentation } from './MasculinePrismaHumanoidPr
 import { loadHeroMBody } from './HeroMAsset.js';
 
 const HERO_M_PRESENTATION_SCALE = 0.73;
+const HERO_M_GROUND_SETTLE = 0.03;
+const HERO_M_MAX_VISUAL_GROUND_DROP = 0.3;
+const HERO_M_GROUNDING_RESPONSE = 18;
+const HERO_M_FRONT_FLIP_DURATION = 0.58;
+const HERO_M_FRONT_FLIP_RADIANS = Math.PI * 2;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const GRIP_OUTER_FRACTION = 0.24;
 const MIN_GRIP_WEIGHT = 0.5;
+const ARM_REST_OUTWARD = 0.2;
+const ARM_REST_DOWN = -0.98;
+const ARM_REST_FORWARD = 0.06;
 
 const MOTION_GAIN = Object.freeze({
   hip: 1,
@@ -40,6 +48,7 @@ const TARGETS = Object.freeze([
 ]);
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const isArmTarget = key => key === 'leftArm' || key === 'rightArm';
 
 function findNamedBone(root, name) {
   const expected = normalize(name);
@@ -71,6 +80,15 @@ function scaleQuaternionAngle(quaternion, gain, target, axis) {
   return target.setFromAxisAngle(axis, angle * gain).normalize();
 }
 
+function armMotionGain(source, animationState) {
+  const base = MOTION_GAIN[source] ?? 1;
+  if (source !== 'leftUpperArm' && source !== 'rightUpperArm') return base;
+  if (animationState === 'Idle_A') return 0.06;
+  if (animationState === 'Walking_A') return 0.92;
+  if (animationState === 'Running_A') return 1.16;
+  return base;
+}
+
 /**
  * Playful Hero M presentation selected after the authored Quaternius comparisons.
  * KayKit remains the only gameplay and animation authority; Hero M contributes
@@ -82,11 +100,17 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     super(options);
     this.heroMAssetLoader = heroMAssetLoader;
     this.heroMRoot = null;
+    this.heroMMotionRoot = null;
     this.heroMBody = null;
     this.heroMBind = new Map();
     this.heroMReady = false;
     this.heroMLoadError = null;
     this.heroMToolMount = null;
+    this.heroMHalfHeight = 0;
+    this.heroMVisualGroundOffsetY = 0;
+    this.heroMFlipActive = false;
+    this.heroMFlipElapsed = 0;
+    this.heroMLastJumpStage = this.player?.jumpStage ?? 0;
 
     this.heroMRootWorldInverse = new THREE.Quaternion();
     this.heroMSourceWorldQuaternion = new THREE.Quaternion();
@@ -105,6 +129,10 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     this.heroMToolAxisWorld = new THREE.Vector3();
     this.heroMToolAxisLocal = new THREE.Vector3();
     this.heroMHandWorldQuaternion = new THREE.Quaternion();
+    this.heroMArmOrigin = new THREE.Vector3();
+    this.heroMArmEnd = new THREE.Vector3();
+    this.heroMArmBindAxis = new THREE.Vector3();
+    this.heroMArmRestAxis = new THREE.Vector3();
 
     const prismaFallbackPromise = this.prismaLoadPromise;
     this.heroMLoadPromise = prismaFallbackPromise.then(() => this.#loadHeroM());
@@ -152,7 +180,6 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.heroMRoot = candidateRoot;
       this.heroMBody = body;
       candidateRoot.updateMatrixWorld(true);
-      this.heroMToolMount = this.#createRightHandToolMount(body);
 
       const bounds = new THREE.Box3().setFromObject(candidateRoot);
       if (bounds.isEmpty()) throw new Error('Hero M produced empty presentation bounds');
@@ -162,30 +189,54 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       }
 
       const nativeHeight = size.y / HERO_M_PRESENTATION_SCALE;
-      candidateRoot.position.y = -bounds.min.y;
+      const groundingOffsetY = -bounds.min.y - HERO_M_GROUND_SETTLE;
+      this.heroMHalfHeight = size.y * 0.5;
+
+      const motionRoot = new THREE.Group();
+      motionRoot.name = 'hero-m-motion-pivot';
+      candidateRoot.removeFromParent();
+      candidateRoot.position.y = groundingOffsetY - this.heroMHalfHeight;
+      motionRoot.position.y = this.heroMHalfHeight;
+      motionRoot.add(candidateRoot);
+      this.visualRoot.add(motionRoot);
+      this.heroMMotionRoot = motionRoot;
+      this.#updateVisualGrounding(0, true);
+      this.visualRoot.updateMatrixWorld(true);
+
+      this.#calibrateArmRest(body, 'leftArm');
+      this.#calibrateArmRest(body, 'rightArm');
+      this.heroMToolMount = this.#createRightHandToolMount(body);
+
       candidateRoot.userData.source = 'user-supplied-hero-m-web-v1';
       candidateRoot.userData.nativeJointCount = 16;
       candidateRoot.userData.presentationScale = HERO_M_PRESENTATION_SCALE;
       candidateRoot.userData.nativeHeight = nativeHeight;
       candidateRoot.userData.presentationHeight = size.y;
-      candidateRoot.userData.groundingOffsetY = candidateRoot.position.y;
-      candidateRoot.userData.retargetMode = 'kaykit-bind-delta-hero-m-v1';
-      candidateRoot.userData.motionProfile = 'playful-compact-rig-v1';
+      candidateRoot.userData.groundingOffsetY = groundingOffsetY;
+      candidateRoot.userData.groundSettleY = HERO_M_GROUND_SETTLE;
+      candidateRoot.userData.retargetMode = 'kaykit-bind-delta-hero-m-v2';
+      candidateRoot.userData.motionProfile = 'playful-grounded-arms-v2';
       candidateRoot.userData.styleProfile = 'playful-low-poly-hero-v1';
+      motionRoot.userData.frontFlipProfile = 'second-jump-forward-360-v1';
+      motionRoot.userData.frontFlipDuration = HERO_M_FRONT_FLIP_DURATION;
+      motionRoot.userData.visualGroundOffsetY = this.heroMVisualGroundOffsetY;
 
       this.heroMReady = true;
       this.#retargetHeroM();
       this.#syncFallbackVisibility();
       candidateRoot.visible = true;
 
-      this.visualRoot.userData.visualRevision = 'hero-m-player-v1';
+      this.visualRoot.userData.visualRevision = 'hero-m-player-v2';
       this.visualRoot.userData.actualModelSource = 'user-supplied-hero-m-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
       this.visualRoot.userData.visibleBody = 'hero-m-playful-low-poly';
       this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
-      this.visualRoot.userData.retargeting = 'kaykit-bind-delta-hero-m-v1';
+      this.visualRoot.userData.retargeting = 'kaykit-bind-delta-hero-m-v2';
       this.visualRoot.userData.presentationFallback = 'prisma-rigged-humanoid';
       this.visualRoot.userData.toolAnchor = 'hero-m-outer-hand-grip-v1';
+      this.visualRoot.userData.grounding = 'center-support-visual-compensation-v1';
+      this.visualRoot.userData.armPose = 'geometry-calibrated-rest-swing-v1';
+      this.visualRoot.userData.doubleJumpPresentation = 'forward-flip-360-v1';
       return true;
     } catch (error) {
       this.heroMLoadError = error;
@@ -217,14 +268,15 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
         localQuaternion: bone.quaternion.clone(),
         localScale: bone.scale.clone(),
         globalQuaternion,
-        parentGlobalQuaternion
+        parentGlobalQuaternion,
+        restGlobalQuaternion: null
       });
     }
 
     return bind;
   }
 
-  #collectRightArmPoints(body, handBone) {
+  #collectArmPoints(body, handBone) {
     const points = [];
     body.updateMatrixWorld(true);
 
@@ -254,15 +306,8 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     return points;
   }
 
-  #createRightHandToolMount(body) {
-    const hand = this.heroMBind.get('rightArm')?.bone;
-    if (!hand) throw new Error('Hero M right-arm joint is unavailable for tool mounting');
-
-    const points = this.#collectRightArmPoints(body, hand);
-    if (points.length < 3) throw new Error('Hero M right-arm weighted geometry is unavailable for grip calibration');
-
-    const handInRoot = this.heroMRoot.worldToLocal(hand.getWorldPosition(new THREE.Vector3()));
-    const outwardNegative = handInRoot.x <= 0;
+  #selectOuterArmPoints(points, origin) {
+    const outwardNegative = origin.x <= 0;
     const xs = points.map(point => point.x);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
@@ -271,10 +316,54 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       ? minX + span * GRIP_OUTER_FRACTION
       : maxX - span * GRIP_OUTER_FRACTION;
     const outerPoints = points.filter(point => outwardNegative ? point.x <= cutoff : point.x >= cutoff);
-    const selected = outerPoints.length ? outerPoints : points;
-    this.heroMGripLocal.set(0, 0, 0);
-    for (const point of selected) this.heroMGripLocal.add(point);
-    this.heroMGripLocal.multiplyScalar(1 / selected.length);
+    return outerPoints.length ? outerPoints : points;
+  }
+
+  #averagePoints(points, target) {
+    target.set(0, 0, 0);
+    for (const point of points) target.add(point);
+    return target.multiplyScalar(1 / Math.max(1, points.length));
+  }
+
+  #calibrateArmRest(body, key) {
+    const bind = this.heroMBind.get(key);
+    if (!bind?.bone) throw new Error(`Hero M ${key} joint is unavailable for rest calibration`);
+
+    const points = this.#collectArmPoints(body, bind.bone);
+    if (points.length < 3) throw new Error(`Hero M ${key} weighted geometry is unavailable for rest calibration`);
+
+    this.heroMRoot.worldToLocal(bind.bone.getWorldPosition(this.heroMArmOrigin));
+    const selected = this.#selectOuterArmPoints(points, this.heroMArmOrigin);
+    this.#averagePoints(selected, this.heroMArmEnd);
+    this.heroMArmBindAxis.copy(this.heroMArmEnd).sub(this.heroMArmOrigin);
+    if (this.heroMArmBindAxis.lengthSq() < 1e-8) {
+      throw new Error(`Hero M ${key} rest calibration produced a zero-length arm axis`);
+    }
+    this.heroMArmBindAxis.normalize();
+
+    const outwardSign = this.heroMArmOrigin.x <= 0 ? -1 : 1;
+    this.heroMArmRestAxis
+      .set(outwardSign * ARM_REST_OUTWARD, ARM_REST_DOWN, ARM_REST_FORWARD)
+      .normalize();
+    const correction = new THREE.Quaternion().setFromUnitVectors(
+      this.heroMArmBindAxis,
+      this.heroMArmRestAxis
+    );
+    bind.restGlobalQuaternion = correction.multiply(bind.globalQuaternion.clone()).normalize();
+    bind.restAxis = this.heroMArmRestAxis.clone();
+    bind.restCalibrationVertexCount = points.length;
+  }
+
+  #createRightHandToolMount(body) {
+    const hand = this.heroMBind.get('rightArm')?.bone;
+    if (!hand) throw new Error('Hero M right-arm joint is unavailable for tool mounting');
+
+    const points = this.#collectArmPoints(body, hand);
+    if (points.length < 3) throw new Error('Hero M right-arm weighted geometry is unavailable for grip calibration');
+
+    const handInRoot = this.heroMRoot.worldToLocal(hand.getWorldPosition(new THREE.Vector3()));
+    const selected = this.#selectOuterArmPoints(points, handInRoot);
+    this.#averagePoints(selected, this.heroMGripLocal);
 
     this.heroMRoot.localToWorld(this.heroMGripWorld.copy(this.heroMGripLocal));
     hand.getWorldPosition(this.heroMHandWorld);
@@ -301,12 +390,77 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     return mount;
   }
 
+  #sampleVisualGroundOffset() {
+    if (!this.player?.grounded) return null;
+    const terrain = this.player?.terrain;
+    const root = this.player?.root;
+    if (!terrain || !root?.position) return 0;
+
+    const supportHeight = typeof terrain.walkableHeightAt === 'function'
+      ? terrain.walkableHeightAt(root.position.x, root.position.z)
+      : terrain.heightAt?.(root.position.x, root.position.z);
+    if (!Number.isFinite(supportHeight) || !Number.isFinite(root.position.y)) return 0;
+
+    return THREE.MathUtils.clamp(
+      supportHeight - root.position.y,
+      -HERO_M_MAX_VISUAL_GROUND_DROP,
+      0
+    );
+  }
+
+  #updateVisualGrounding(dt, immediate = false) {
+    if (!this.heroMMotionRoot) return;
+    const sampled = this.#sampleVisualGroundOffset();
+    if (sampled !== null) {
+      const response = immediate || !Number.isFinite(dt) || dt <= 0
+        ? 1
+        : 1 - Math.exp(-HERO_M_GROUNDING_RESPONSE * dt);
+      this.heroMVisualGroundOffsetY = THREE.MathUtils.lerp(
+        this.heroMVisualGroundOffsetY,
+        sampled,
+        response
+      );
+    }
+    this.heroMMotionRoot.position.y = this.heroMHalfHeight + this.heroMVisualGroundOffsetY;
+    this.heroMMotionRoot.userData.visualGroundOffsetY = this.heroMVisualGroundOffsetY;
+  }
+
+  #updateFrontFlip(dt) {
+    if (!this.heroMMotionRoot) return;
+    const jumpStage = this.player?.jumpStage ?? 0;
+    if (jumpStage === 2 && this.heroMLastJumpStage !== 2) {
+      this.heroMFlipActive = true;
+      this.heroMFlipElapsed = 0;
+    }
+    this.heroMLastJumpStage = jumpStage;
+
+    if (this.heroMFlipActive) {
+      this.heroMFlipElapsed = Math.min(HERO_M_FRONT_FLIP_DURATION, this.heroMFlipElapsed + dt);
+      const progress = THREE.MathUtils.clamp(this.heroMFlipElapsed / HERO_M_FRONT_FLIP_DURATION, 0, 1);
+      const eased = THREE.MathUtils.smoothstep(progress, 0, 1);
+      this.heroMMotionRoot.rotation.x = eased * HERO_M_FRONT_FLIP_RADIANS;
+      this.heroMMotionRoot.userData.frontFlipProgress = progress;
+      if (progress >= 1) {
+        this.heroMFlipActive = false;
+        this.heroMMotionRoot.rotation.x = 0;
+        this.heroMMotionRoot.userData.frontFlipProgress = 1;
+      }
+      return;
+    }
+
+    if (jumpStage === 0 || this.player?.grounded) {
+      this.heroMMotionRoot.rotation.x = 0;
+      this.heroMMotionRoot.userData.frontFlipProgress = 0;
+    }
+  }
+
   #retargetHeroM() {
     if (!this.heroMReady) return;
 
     this.player.root.updateMatrixWorld(true);
     this.model?.updateMatrixWorld?.(true);
     const desiredGlobal = new Map();
+    const animationState = this.player?.animationState ?? null;
 
     for (const entry of TARGETS) {
       const sourceBone = this.sourceDrivers.get(entry.source);
@@ -328,14 +482,17 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
 
       scaleQuaternionAngle(
         this.heroMDeltaQuaternion,
-        MOTION_GAIN[entry.source] ?? 1,
+        armMotionGain(entry.source, animationState),
         this.heroMScaledDeltaQuaternion,
         this.heroMMotionAxis
       );
 
+      const targetBase = isArmTarget(entry.key) && targetBind.restGlobalQuaternion
+        ? targetBind.restGlobalQuaternion
+        : targetBind.globalQuaternion;
       const targetGlobal = this.heroMDesiredQuaternion
         .copy(this.heroMScaledDeltaQuaternion)
-        .multiply(targetBind.globalQuaternion)
+        .multiply(targetBase)
         .normalize()
         .clone();
       desiredGlobal.set(entry.key, targetGlobal);
@@ -373,6 +530,9 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
     super.update(dt);
     if (!this.heroMReady || !Number.isFinite(dt) || dt <= 0) return;
     this.#retargetHeroM();
+    this.#updateVisualGrounding(dt);
+    this.#updateFrontFlip(dt);
+    this.heroMMotionRoot?.updateMatrixWorld?.(true);
     this.#syncFallbackVisibility();
   }
 }

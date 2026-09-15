@@ -120,11 +120,19 @@ const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_Movem
 const root = new THREE.Group();
 root.add(ranger.scene);
 let firstPerson = false;
+let centerSupportHeight = -0.18;
 const cameraModeListeners = new Set();
 const player = {
   root,
   model: ranger.scene,
   assetMode: 'kaykit',
+  terrain: {
+    heightAt: () => centerSupportHeight,
+    walkableHeightAt: () => centerSupportHeight
+  },
+  grounded: true,
+  jumpStage: 0,
+  animationState: 'Idle_A',
   onCameraModeChange(listener) {
     cameraModeListeners.add(listener);
     return () => cameraModeListeners.delete(listener);
@@ -148,14 +156,24 @@ assert.equal(presentation.heroMReady, true);
 assert.equal(presentation.visualRoot.userData.actualModelSource, 'user-supplied-hero-m-v1');
 assert.equal(presentation.visualRoot.userData.visibleBody, 'hero-m-playful-low-poly');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
-assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-hero-m-v1');
+assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-hero-m-v2');
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'hero-m-outer-hand-grip-v1');
+assert.equal(presentation.visualRoot.userData.grounding, 'center-support-visual-compensation-v1');
+assert.equal(presentation.visualRoot.userData.armPose, 'geometry-calibrated-rest-swing-v1');
+assert.equal(presentation.visualRoot.userData.doubleJumpPresentation, 'forward-flip-360-v1');
 assert.ok(presentation.heroMRoot?.visible, 'Hero M must be visible after activation');
+assert.ok(presentation.heroMMotionRoot, 'Hero M must use a centered motion pivot for presentation-only flips');
 assert.equal(presentation.prismaRoot?.visible, false, 'Prisma must remain available but hidden after Hero M activation');
 assert.equal(presentation.heroMBind.size, 15, 'Hero M must capture every mapped gameplay-facing deform joint');
 assert.equal(presentation.heroMRoot.userData.presentationScale, 0.73, 'Hero M must retain its calibrated visual scale');
 assert.ok(presentation.heroMRoot.userData.presentationHeight > 1.98 && presentation.heroMRoot.userData.presentationHeight < 2.05, 'Hero M visible height must remain close to the established player scale');
+assert.equal(presentation.heroMRoot.userData.groundSettleY, 0.03, 'Hero M boots should settle slightly into the rendered surface');
 assert.equal(presentation.heroMRoot.userData.styleProfile, 'playful-low-poly-hero-v1');
+assert.ok(Math.abs(presentation.heroMMotionRoot.userData.visualGroundOffsetY - centerSupportHeight) < 1e-6, 'Hero M visual root must compensate for the footprint-support hover without changing player physics');
+
+presentation.update(1 / 60);
+const groundedBounds = new THREE.Box3().setFromObject(presentation.heroMRoot);
+assert.ok(groundedBounds.min.y < centerSupportHeight - 0.005 && groundedBounds.min.y > centerSupportHeight - 0.07, 'Hero M visible soles must sit on the center support instead of hovering above it');
 
 for (const bind of presentation.heroMBind.values()) {
   assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'Hero M bind matrices must stay finite');
@@ -169,6 +187,14 @@ assert.equal(toolMount.parent, rightArm.bone, 'Hero M tool mount must live on it
 assert.equal(toolMount.userData.gripProfile, 'hero-m-outer-hand-grip-v1');
 assert.ok(toolMount.userData.calibrationVertexCount > 0, 'Hero M tool socket must be calibrated from actual weighted hand geometry');
 assert.ok(toolMount.position.length() > 0.03 && toolMount.position.length() < 0.75, 'Hero M tool socket must sit on the visible outer hand rather than at the shoulder-side joint origin');
+assert.ok(rightArm.restGlobalQuaternion, 'Hero M right arm must have a geometry-calibrated relaxed rest orientation');
+assert.ok(rightArm.restAxis?.y < -0.9, 'Hero M relaxed arm axis must point mostly downward');
+
+presentation.heroMRoot.updateMatrixWorld(true);
+const rightArmOrigin = presentation.heroMRoot.worldToLocal(rightArm.bone.getWorldPosition(new THREE.Vector3()));
+const rightHandPoint = presentation.heroMRoot.worldToLocal(toolMount.getWorldPosition(new THREE.Vector3()));
+const idleArmAxis = rightHandPoint.sub(rightArmOrigin).normalize();
+assert.ok(idleArmAxis.y < -0.78, 'Hero M idle hand must rest below the shoulder instead of being held up');
 
 const toolPresentation = new RangerToolPresentation({ player, appearancePresentation: presentation });
 toolPresentation.setEquippedTool('axe');
@@ -180,34 +206,51 @@ assert.ok(sourceUpperArm, 'production Ranger must expose a left upper arm');
 const sourceBind = presentation.sourceBind.get('leftUpperArm');
 assert.ok(sourceBind, 'Hero M retargeter must reuse the proven KayKit source bind');
 const mixer = new THREE.AnimationMixer(ranger.scene);
+const runningClip = movement.animations.find(clip => normalize(clip.name) === 'runninga');
+assert.ok(runningClip, 'production movement asset must expose Running_A');
 let strongest = null;
-for (const clip of movement.animations) {
-  mixer.stopAllAction();
-  mixer.clipAction(clip).reset().play();
-  for (const fraction of [0.18, 0.33, 0.5, 0.67, 0.82]) {
-    mixer.setTime(clip.duration * fraction);
-    root.updateMatrixWorld(true);
-    const current = rootLocalQuaternion(root, sourceUpperArm);
-    const angle = sourceBind.quaternion.angleTo(current);
-    if (!strongest || angle > strongest.angle) strongest = { clip, time: clip.duration * fraction, angle };
-  }
+mixer.clipAction(runningClip).reset().play();
+for (const fraction of [0.18, 0.33, 0.5, 0.67, 0.82]) {
+  mixer.setTime(runningClip.duration * fraction);
+  root.updateMatrixWorld(true);
+  const current = rootLocalQuaternion(root, sourceUpperArm);
+  const angle = sourceBind.quaternion.angleTo(current);
+  if (!strongest || angle > strongest.angle) strongest = { time: runningClip.duration * fraction, angle };
 }
-assert.ok(strongest?.angle > 0.08, 'production movement clips must contain a meaningful arm motion sample');
-mixer.stopAllAction();
-mixer.clipAction(strongest.clip).reset().play();
+assert.ok(strongest?.angle > 0.08, 'production running clip must contain meaningful arm swing');
 mixer.setTime(strongest.time);
 root.updateMatrixWorld(true);
+player.animationState = 'Running_A';
 presentation.update(1 / 60);
 
 const targetArm = presentation.heroMBind.get('leftArm');
 const targetCurrent = rootLocalQuaternion(presentation.heroMBody, targetArm.bone);
-const targetMotion = targetArm.globalQuaternion.angleTo(targetCurrent);
-assert.ok(targetMotion > strongest.angle * 0.9, 'Hero M arm retargeting must retain meaningful KayKit movement');
-assert.ok(targetMotion < strongest.angle * 1.18, 'Hero M arm retargeting gain must remain bounded');
+const targetMotion = targetArm.restGlobalQuaternion.angleTo(targetCurrent);
+assert.ok(targetMotion > strongest.angle * 0.98, 'Hero M running arm must retain meaningful KayKit swing around the relaxed arm pose');
+assert.ok(targetMotion < strongest.angle * 1.34, 'Hero M running arm swing gain must remain bounded');
+
+player.grounded = false;
+player.jumpStage = 1;
+presentation.update(1 / 60);
+assert.ok(Math.abs(presentation.heroMMotionRoot.rotation.x) < 1e-6, 'first jump must not trigger the front flip');
+player.jumpStage = 2;
+presentation.update(0.29);
+assert.ok(presentation.heroMMotionRoot.rotation.x > 2.5 && presentation.heroMMotionRoot.rotation.x < 3.8, 'second jump must rotate Hero M through the middle of a forward flip');
+presentation.update(0.35);
+assert.ok(Math.abs(presentation.heroMMotionRoot.rotation.x) < 1e-6, 'completed second-jump flip must return to the normal upright basis');
+player.grounded = true;
+player.jumpStage = 0;
+player.animationState = 'Idle_A';
+presentation.update(1 / 60);
+
+centerSupportHeight = -0.06;
+presentation.update(0.5);
+assert.ok(presentation.heroMMotionRoot.userData.visualGroundOffsetY > -0.08 && presentation.heroMMotionRoot.userData.visualGroundOffsetY < -0.055, 'grounded visual compensation must follow the center support without changing the gameplay root');
 
 for (const clip of movement.animations) {
   mixer.stopAllAction();
   mixer.clipAction(clip).reset().play();
+  player.animationState = clip.name;
   for (const fraction of [0, 0.25, 0.5, 0.75]) {
     mixer.setTime(clip.duration * fraction);
     presentation.update(1 / 60);
@@ -245,4 +288,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Hero M segmented compressed asset, compact 16-joint rig, playful scale, KayKit bind-delta retargeting, geometry-calibrated visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Hero M segmented asset, center-support visual grounding, relaxed idle arms, amplified running arm swing, second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
