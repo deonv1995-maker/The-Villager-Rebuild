@@ -268,9 +268,10 @@ assert.equal(presentation.visualRoot.visible, true, 'humanoid body should restor
 
 const compatibilityModule = read('src/player/RangerAppearancePresentation.js');
 assert.ok(
-  compatibilityModule.includes('SimpleHumanoidPresentation as RangerAppearancePresentation')
-    && compatibilityModule.includes("'./SimpleHumanoidPresentation.js'"),
-  'historical Ranger imports should route through the simple humanoid compatibility boundary'
+  compatibilityModule.includes('QuaterniusPeasantPresentation as RangerAppearancePresentation')
+    && compatibilityModule.includes("'./QuaterniusPeasantPresentation.js'")
+    && compatibilityModule.includes('MasculinePrismaHumanoidPresentation as RangerAppearancePresentationFallback'),
+  'historical Ranger imports should route through the Quaternius trial seam with Prisma fallback'
 );
 const simpleModule = read('src/player/SimpleHumanoidPresentation.js');
 assert.ok(
