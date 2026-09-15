@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -9,11 +9,15 @@ import { HeroMPresentation } from '../src/player/HeroMPresentation.js';
 import { RangerToolPresentation } from '../src/player/RangerToolPresentation.js';
 
 const EXPECTED = Object.freeze({
-  compressedPath: 'public/assets/player/hero_m.glb.gz',
-  compressedSize: 28058,
-  compressedSha256: 'f796af888bc53616095121dd78ff65772950e3b673dd0dbea8da0156c6015bbf',
-  glbSize: 244132,
-  glbSha256: 'ae0d4a49a68412edba8e56fdc1f2c46f73c8188ee5eacd916f54709e794799b4'
+  parts: Object.freeze([
+    Object.freeze({ path: 'public/assets/player/hero_m.glb.gz.part0.b64', decodedSize: 5200 }),
+    Object.freeze({ path: 'public/assets/player/hero_m.glb.gz.part1.b64', decodedSize: 5200 }),
+    Object.freeze({ path: 'public/assets/player/hero_m.glb.gz.part2.b64', decodedSize: 5194 })
+  ]),
+  compressedSize: 15594,
+  compressedSha256: '55416d924d90821f0a559ed7f322bd7c341638422a68a5d0f63222b5738c48b8',
+  glbSize: 40052,
+  glbSha256: 'c8355855a6c409ed0f3459a83fa0bc43958dfcbbd47d2f1dca1dc7dc3002f79c'
 });
 
 const REQUIRED_BONES = Object.freeze([
@@ -55,16 +59,6 @@ async function loadGlb(path) {
   return new GLTFLoader().parseAsync(JSON.stringify(json), '');
 }
 
-function findBone(root, wanted) {
-  const expected = normalize(wanted);
-  let found = null;
-  root.traverse(object => {
-    if (found || !object.isBone) return;
-    if (normalize(object.name) === expected) found = object;
-  });
-  return found;
-}
-
 function findLeftUpperArm(root) {
   let found = null;
   root.traverse(object => {
@@ -81,13 +75,19 @@ function rootLocalQuaternion(root, object) {
   return inverse.multiply(object.getWorldQuaternion(new THREE.Quaternion())).normalize();
 }
 
-const compressed = readFileSync(EXPECTED.compressedPath);
-assert.equal(statSync(EXPECTED.compressedPath).size, EXPECTED.compressedSize, 'Hero M compressed runtime asset byte size changed unexpectedly');
-assert.equal(createHash('sha256').update(compressed).digest('hex'), EXPECTED.compressedSha256, 'Hero M compressed runtime asset checksum changed unexpectedly');
+const compressedParts = EXPECTED.parts.map(part => {
+  const encoded = readFileSync(part.path, 'utf8').trim();
+  const decoded = Buffer.from(encoded, 'base64');
+  assert.equal(decoded.length, part.decodedSize, `${part.path} decoded byte size changed unexpectedly`);
+  return decoded;
+});
+const compressed = Buffer.concat(compressedParts);
+assert.equal(compressed.length, EXPECTED.compressedSize, 'Hero M combined compressed runtime asset byte size changed unexpectedly');
+assert.equal(createHash('sha256').update(compressed).digest('hex'), EXPECTED.compressedSha256, 'Hero M combined compressed runtime asset checksum changed unexpectedly');
 
 const glb = gunzipSync(compressed);
-assert.equal(glb.length, EXPECTED.glbSize, 'Hero M decompressed GLB byte size changed unexpectedly');
-assert.equal(createHash('sha256').update(glb).digest('hex'), EXPECTED.glbSha256, 'Hero M decompressed GLB checksum changed unexpectedly');
+assert.equal(glb.length, EXPECTED.glbSize, 'Hero M decompressed compact GLB byte size changed unexpectedly');
+assert.equal(createHash('sha256').update(glb).digest('hex'), EXPECTED.glbSha256, 'Hero M decompressed compact GLB checksum changed unexpectedly');
 assert.equal(glb.toString('ascii', 0, 4), 'glTF', 'Hero M runtime derivative must be GLB');
 assert.equal(glb.readUInt32LE(4), 2, 'Hero M runtime derivative must use GLB version 2');
 assert.equal(glb.readUInt32LE(8), glb.length, 'Hero M GLB declared length must match its bytes');
@@ -132,7 +132,7 @@ const player = {
 };
 
 const candidateLoader = async () => {
-  const bytes = gunzipSync(readFileSync(EXPECTED.compressedPath));
+  const bytes = gunzipSync(Buffer.concat(EXPECTED.parts.map(part => Buffer.from(readFileSync(part.path, 'utf8').trim(), 'base64'))));
   return parseHeroMGlb(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
 };
 
@@ -240,4 +240,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Hero M compressed asset, 16-joint compact rig, playful scale, KayKit bind-delta retargeting, geometry-calibrated visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Hero M segmented compressed asset, compact 16-joint rig, playful scale, KayKit bind-delta retargeting, geometry-calibrated visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
