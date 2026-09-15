@@ -153,6 +153,7 @@ const presentation = new HeroMPresentation({ player, heroMAssetLoader: candidate
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.heroMReady, true);
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v3');
 assert.equal(presentation.visualRoot.userData.actualModelSource, 'user-supplied-hero-m-v1');
 assert.equal(presentation.visualRoot.userData.visibleBody, 'hero-m-playful-low-poly');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
@@ -160,9 +161,13 @@ assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-he
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'hero-m-outer-hand-grip-v1');
 assert.equal(presentation.visualRoot.userData.grounding, 'center-support-visual-compensation-v1');
 assert.equal(presentation.visualRoot.userData.armPose, 'geometry-calibrated-rest-swing-v1');
-assert.equal(presentation.visualRoot.userData.doubleJumpPresentation, 'forward-flip-360-v1');
+assert.equal(presentation.visualRoot.userData.doubleJumpPresentation, 'tucked-forward-flip-360-v2');
 assert.ok(presentation.heroMRoot?.visible, 'Hero M must be visible after activation');
 assert.ok(presentation.heroMMotionRoot, 'Hero M must use a centered motion pivot for presentation-only flips');
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipProfile, 'second-jump-tuck-forward-360-v2');
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipTuckProfile, 'mid-rotation-ball-silhouette-v1');
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipTuckHorizontalScale, 0.84);
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipTuckVerticalScale, 0.62);
 assert.equal(presentation.prismaRoot?.visible, false, 'Prisma must remain available but hidden after Hero M activation');
 assert.equal(presentation.heroMBind.size, 15, 'Hero M must capture every mapped gameplay-facing deform joint');
 assert.equal(presentation.heroMRoot.userData.presentationScale, 0.73, 'Hero M must retain its calibrated visual scale');
@@ -233,11 +238,19 @@ player.grounded = false;
 player.jumpStage = 1;
 presentation.update(1 / 60);
 assert.ok(Math.abs(presentation.heroMMotionRoot.rotation.x) < 1e-6, 'first jump must not trigger the front flip');
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipTuckAmount, 0, 'first jump must not trigger the ball tuck');
+assert.ok(presentation.heroMMotionRoot.scale.distanceTo(new THREE.Vector3(1, 1, 1)) < 1e-6, 'first jump must keep the normal Hero M silhouette scale');
 player.jumpStage = 2;
 presentation.update(0.29);
 assert.ok(presentation.heroMMotionRoot.rotation.x > 2.5 && presentation.heroMMotionRoot.rotation.x < 3.8, 'second jump must rotate Hero M through the middle of a forward flip');
+assert.ok(presentation.heroMMotionRoot.userData.frontFlipTuckAmount > 0.99, 'second jump must reach a full tuck around the middle of the flip');
+assert.ok(Math.abs(presentation.heroMMotionRoot.scale.x - 0.84) < 1e-6, 'mid-flip tuck must pull the Hero M silhouette inward horizontally');
+assert.ok(Math.abs(presentation.heroMMotionRoot.scale.y - 0.62) < 1e-6, 'mid-flip tuck must compress Hero M vertically into a compact ball silhouette');
+assert.ok(Math.abs(presentation.heroMMotionRoot.scale.z - 0.84) < 1e-6, 'mid-flip tuck must keep depth compact around the centered pivot');
 presentation.update(0.35);
 assert.ok(Math.abs(presentation.heroMMotionRoot.rotation.x) < 1e-6, 'completed second-jump flip must return to the normal upright basis');
+assert.equal(presentation.heroMMotionRoot.userData.frontFlipTuckAmount, 0, 'completed second-jump flip must fully release the tuck');
+assert.ok(presentation.heroMMotionRoot.scale.distanceTo(new THREE.Vector3(1, 1, 1)) < 1e-6, 'completed second-jump flip must restore the normal Hero M silhouette scale');
 player.grounded = true;
 player.jumpStage = 0;
 player.animationState = 'Idle_A';
@@ -288,4 +301,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Hero M segmented asset, center-support visual grounding, relaxed idle arms, amplified running arm swing, second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Hero M segmented asset, center-support visual grounding, relaxed idle arms, amplified running arm swing, tucked second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
