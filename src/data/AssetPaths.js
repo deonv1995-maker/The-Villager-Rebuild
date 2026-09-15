@@ -21,7 +21,11 @@ export const ASSET_PATHS = Object.freeze({
     general: asset('kaykit/animations/Rig_Medium_General.glb'),
     combatMelee: asset('kaykit/animations/Rig_Medium_CombatMelee.glb'),
     heroM: Object.freeze({
-      body: asset('player/hero_m.glb.gz')
+      parts: Object.freeze([
+        asset('player/hero_m.glb.gz.part0.b64'),
+        asset('player/hero_m.glb.gz.part1.b64'),
+        asset('player/hero_m.glb.gz.part2.b64')
+      ])
     }),
     quaterniusPeasant: Object.freeze({
       // Historical key retained with the authored-character rollback assets so
