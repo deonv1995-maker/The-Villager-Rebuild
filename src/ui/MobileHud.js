@@ -105,10 +105,6 @@ export class MobileHud {
         <span data-role="camera-mode-label" aria-hidden="true">3P</span>
         <small aria-hidden="true">VIEW</small>
       </button>
-      <div class="hud-button sprint contextual-sprint" data-role="sprint-target" aria-hidden="true" hidden>
-        <img class="button-bg" src="${ui.buttonCircle}" alt="">
-        <span class="button-glyph">RUN</span>
-      </div>
       <button class="hud-button action" type="button" aria-label="Action" disabled>
         <img class="button-bg" src="${ui.buttonCircle}" alt="">
         <img class="button-icon" data-role="action-icon" src="${ui.hand}" alt="">
@@ -136,7 +132,6 @@ export class MobileHud {
     this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
     this.cameraToggle = this.root.querySelector('[data-role="camera-toggle"]');
     this.cameraModeLabel = this.root.querySelector('[data-role="camera-mode-label"]');
-    this.sprintTarget = this.root.querySelector('[data-role="sprint-target"]');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
@@ -418,18 +413,12 @@ export class MobileHud {
     let sprintCenterX = 0;
     let sprintCenterY = 0;
 
-    const positionSprintTarget = () => {
+    const positionSprintGestureTarget = () => {
       const movementEdge = window.innerWidth * MOVE_SIDE_RATIO;
       const minX = SPRINT_TARGET_EDGE_PADDING_PX;
       const maxX = Math.max(minX, movementEdge - SPRINT_TARGET_EDGE_PADDING_PX);
       sprintCenterX = Math.min(maxX, Math.max(minX, originX));
       sprintCenterY = Math.max(SPRINT_TARGET_EDGE_PADDING_PX, originY - SPRINT_TARGET_OFFSET_PX);
-      this.sprintTarget.style.left = `${sprintCenterX - 27}px`;
-      this.sprintTarget.style.top = `${sprintCenterY - 27}px`;
-      this.sprintTarget.style.right = 'auto';
-      this.sprintTarget.style.bottom = 'auto';
-      this.sprintTarget.style.pointerEvents = 'none';
-      this.sprintTarget.hidden = false;
     };
 
     const update = event => {
@@ -449,15 +438,12 @@ export class MobileHud {
 
       const sprintDistance = Math.hypot(event.clientX - sprintCenterX, event.clientY - sprintCenterY);
       const sprinting = sprintDistance <= SPRINT_TARGET_RADIUS_PX;
-      this.sprintTarget.classList.toggle('equipped', sprinting);
       this.player.setSprint(sprinting);
     };
 
     const release = event => {
       if (event.pointerId !== pointer) return;
       pointer = null;
-      this.sprintTarget.hidden = true;
-      this.sprintTarget.classList.remove('equipped');
       this.player.setMove(0, 0);
       this.player.setSprint(false);
     };
@@ -468,7 +454,7 @@ export class MobileHud {
       originX = event.clientX;
       originY = event.clientY;
       this.canvas.setPointerCapture(pointer);
-      positionSprintTarget();
+      positionSprintGestureTarget();
       this.player.setMove(0, 0);
       this.player.setSprint(false);
       event.preventDefault();
