@@ -1,0 +1,88 @@
+name: Prepare Quaternius male ranger trial
+
+on:
+  push:
+    branches:
+      - feat/quaternius-male-ranger-trial
+    paths:
+      - .github/workflows/ingest-quaternius-male-ranger-trial.yml
+
+permissions:
+  contents: write
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/quaternius-male-ranger-trial
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install project dependencies
+        run: npm install --no-audit --no-fund
+      - name: Fetch vetted Quaternius male ranger asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p public/assets/quaternius/player
+          url='https://raw.githubusercontent.com/Genesara/genesara-web/90c166baa14682eedf1358c6c0a6e40e91765495/public/models/characters/male_ranger.glb'
+          curl --fail --location --retry 3 "$url" -o public/assets/quaternius/player/male_ranger.glb
+          test "$(stat -c%s public/assets/quaternius/player/male_ranger.glb)" -eq 1617696
+          sha256sum public/assets/quaternius/player/male_ranger.glb > /tmp/male_ranger.sha256
+      - name: Inspect universal rig and bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE' > docs/QUATERNIUS_MALE_RANGER_INSPECTION.txt
+          import { readFileSync } from 'node:fs';
+          import * as THREE from 'three';
+          import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+          globalThis.ProgressEvent ??= class ProgressEvent { constructor(type, init) { Object.assign(this, { type }, init); } };
+          const path = 'public/assets/quaternius/player/male_ranger.glb';
+          const bytes = readFileSync(path);
+          const jsonLength = bytes.readUInt32LE(12);
+          const json = JSON.parse(bytes.toString('utf8', 20, 20 + jsonLength));
+          const binOffset = 20 + jsonLength;
+          const binLength = bytes.readUInt32LE(binOffset);
+          json.buffers[0].uri = `data:application/octet-stream;base64,${bytes.subarray(binOffset + 8, binOffset + 8 + binLength).toString('base64')}`;
+          delete json.images;
+          delete json.textures;
+          delete json.materials;
+          for (const mesh of json.meshes ?? []) for (const primitive of mesh.primitives ?? []) delete primitive.material;
+          const gltf = await new GLTFLoader().parseAsync(JSON.stringify(json), '');
+          const root = gltf.scene;
+          root.updateMatrixWorld(true);
+          const meshes = [];
+          const skinned = [];
+          const bones = [];
+          root.traverse(o => {
+            if (o.isMesh) meshes.push(o.name);
+            if (o.isSkinnedMesh) skinned.push(o);
+            if (o.isBone) bones.push(o.name);
+          });
+          const skeletons = [...new Set(skinned.map(m => m.skeleton))];
+          const bounds = new THREE.Box3().setFromObject(root);
+          const size = bounds.getSize(new THREE.Vector3());
+          const required = ['pelvis','spine_01','spine_02','spine_03','neck_01','Head','clavicle_l','upperarm_l','lowerarm_l','hand_l','middle_01_r','clavicle_r','upperarm_r','lowerarm_r','hand_r','thigh_l','calf_l','foot_l','ball_l','thigh_r','calf_r','foot_r','ball_r'];
+          console.log('asset=male_ranger.glb');
+          console.log(`meshes=${meshes.length} skinnedMeshes=${skinned.length} skeletons=${skeletons.length}`);
+          console.log(`skeletonJointCounts=${skeletons.map(s => s.bones.length).join(',')}`);
+          console.log(`boundsMin=${bounds.min.toArray().map(v => v.toFixed(6)).join(',')}`);
+          console.log(`boundsMax=${bounds.max.toArray().map(v => v.toFixed(6)).join(',')}`);
+          console.log(`size=${size.toArray().map(v => v.toFixed(6)).join(',')}`);
+          console.log(`required=${required.map(name => `${name}:${bones.includes(name) ? 'yes' : 'no'}`).join(',')}`);
+          console.log(`meshNames=${meshes.join(',')}`);
+          console.log(`boneCount=${new Set(bones).size}`);
+          NODE
+          echo "sha256=$(cut -d' ' -f1 /tmp/male_ranger.sha256)" >> docs/QUATERNIUS_MALE_RANGER_INSPECTION.txt
+      - name: Commit inspected trial asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/quaternius/player/male_ranger.glb docs/QUATERNIUS_MALE_RANGER_INSPECTION.txt
+          git commit -m 'Inspect Quaternius male ranger candidate'
+          git push origin HEAD:feat/quaternius-male-ranger-trial
