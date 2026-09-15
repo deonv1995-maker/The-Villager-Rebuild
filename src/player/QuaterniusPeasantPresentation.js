@@ -2,10 +2,31 @@ import * as THREE from 'three';
 import { MasculinePrismaHumanoidPresentation } from './MasculinePrismaHumanoidPresentation.js';
 import { loadQuaterniusPeasantParts } from './QuaterniusPeasantAsset.js';
 
-const QUATERNIUS_PRESENTATION_SCALE = 1;
+const QUATERNIUS_PRESENTATION_SCALE = 1.08;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
-const PLAYER_UP = new THREE.Vector3(0, 1, 0);
-const PALM_EXTENSION = 0.085;
+const PLAYER_FORWARD = new THREE.Vector3(0, 0, 1);
+const PALM_CENTER_BLEND = 0.56;
+const FOREARM_RELAXATION_RADIANS = THREE.MathUtils.degToRad(5);
+
+const MOTION_GAIN = Object.freeze({
+  waist: 1.04,
+  chest: 1.05,
+  shoulder: 1.05,
+  neck: 1.02,
+  head: 1.02,
+  leftShoulder: 1.06,
+  rightShoulder: 1.06,
+  leftUpperArm: 1.1,
+  rightUpperArm: 1.1,
+  leftForearm: 1.08,
+  rightForearm: 1.08,
+  leftHand: 1.04,
+  rightHand: 1.04,
+  leftThigh: 1.03,
+  rightThigh: 1.03,
+  leftCalf: 1.03,
+  rightCalf: 1.03
+});
 
 const TARGETS = Object.freeze([
   Object.freeze({ source: 'hip', target: 'pelvis', parent: null }),
@@ -55,6 +76,20 @@ function rootLocalPosition(root, object, target) {
   return root.worldToLocal(target);
 }
 
+function scaleQuaternionAngle(quaternion, gain, target, axis) {
+  target.copy(quaternion).normalize();
+  if (!Number.isFinite(gain) || Math.abs(gain - 1) < 1e-5) return target;
+  if (target.w < 0) target.set(-target.x, -target.y, -target.z, -target.w);
+
+  const w = THREE.MathUtils.clamp(target.w, -1, 1);
+  const angle = 2 * Math.acos(w);
+  const sinHalf = Math.sqrt(Math.max(0, 1 - w * w));
+  if (angle < 1e-5 || sinHalf < 1e-5) return target;
+
+  axis.set(target.x / sinHalf, target.y / sinHalf, target.z / sinHalf).normalize();
+  return target.setFromAxisAngle(axis, angle * gain).normalize();
+}
+
 /**
  * Trial presentation for the Quaternius CC0 Peasant_Male character.
  *
@@ -73,13 +108,24 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
     this.quaterniusReady = false;
     this.quaterniusLoadError = null;
     this.quaterniusToolMount = null;
+    this.quaterniusToolMiddleFinger = null;
     this.quaterniusRootWorldInverse = new THREE.Quaternion();
     this.quaterniusSourceWorldQuaternion = new THREE.Quaternion();
     this.quaterniusSourceQuaternion = new THREE.Quaternion();
     this.quaterniusSourceBindInverse = new THREE.Quaternion();
     this.quaterniusDeltaQuaternion = new THREE.Quaternion();
+    this.quaterniusScaledDeltaQuaternion = new THREE.Quaternion();
     this.quaterniusDesiredQuaternion = new THREE.Quaternion();
     this.quaterniusParentInverse = new THREE.Quaternion();
+    this.quaterniusMotionAxis = new THREE.Vector3();
+    this.quaterniusRelaxQuaternion = new THREE.Quaternion();
+    this.quaterniusToolHandPosition = new THREE.Vector3();
+    this.quaterniusToolForearmPosition = new THREE.Vector3();
+    this.quaterniusToolFingerPosition = new THREE.Vector3();
+    this.quaterniusToolPalmPosition = new THREE.Vector3();
+    this.quaterniusToolAxisWorld = new THREE.Vector3();
+    this.quaterniusToolAxisLocal = new THREE.Vector3();
+    this.quaterniusToolHandWorldQuaternion = new THREE.Quaternion();
 
     const prismaFallbackPromise = this.prismaLoadPromise;
     // Make activation deterministic: the proven Prisma path finishes resolving first,
@@ -135,19 +181,23 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
       const bounds = new THREE.Box3().setFromObject(candidateRoot);
       if (bounds.isEmpty()) throw new Error('Quaternius candidate produced empty presentation bounds');
       const size = bounds.getSize(new THREE.Vector3());
-      if (![size.x, size.y, size.z].every(Number.isFinite) || size.y < 1.5 || size.y > 2.2) {
+      if (![size.x, size.y, size.z].every(Number.isFinite) || size.y < 1.65 || size.y > 2.25) {
         throw new Error(`Unexpected Quaternius candidate bounds: ${size.toArray().join(',')}`);
       }
 
+      const authoredHeight = size.y / QUATERNIUS_PRESENTATION_SCALE;
       const nativeGroundY = bounds.min.y;
       candidateRoot.position.y = -nativeGroundY;
       candidateRoot.userData.source = 'quaternius-cc0-universal-rig-v1';
       candidateRoot.userData.parts = ['male_peasant', 'male_head', 'hair_simpleparted'];
       candidateRoot.userData.nativeJointCount = 65;
       candidateRoot.userData.presentationScale = QUATERNIUS_PRESENTATION_SCALE;
-      candidateRoot.userData.nativeHeight = size.y;
+      candidateRoot.userData.nativeHeight = authoredHeight;
+      candidateRoot.userData.presentationHeight = size.y;
       candidateRoot.userData.groundingOffsetY = candidateRoot.position.y;
-      candidateRoot.userData.retargetMode = 'kaykit-bind-delta-quaternius-v1';
+      candidateRoot.userData.retargetMode = 'kaykit-bind-delta-quaternius-v2';
+      candidateRoot.userData.motionProfile = 'expressive-retarget-gain-v1';
+      candidateRoot.userData.relaxedArmProfile = 'inward-elbow-v1';
 
       this.visualRoot.add(candidateRoot);
       this.quaterniusRoot = candidateRoot;
@@ -156,14 +206,14 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
       this.#syncFallbackVisibility();
       candidateRoot.visible = true;
 
-      this.visualRoot.userData.visualRevision = 'quaternius-peasant-candidate-v1';
+      this.visualRoot.userData.visualRevision = 'quaternius-peasant-candidate-v2';
       this.visualRoot.userData.actualModelSource = 'quaternius-cc0-peasant-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
       this.visualRoot.userData.visibleBody = 'quaternius-modular-peasant';
       this.visualRoot.userData.animationAuthority = 'kaykit-medium-rig';
-      this.visualRoot.userData.retargeting = 'kaykit-bind-delta-quaternius-v1';
+      this.visualRoot.userData.retargeting = 'kaykit-bind-delta-quaternius-v2';
       this.visualRoot.userData.presentationFallback = 'prisma-rigged-humanoid';
-      this.visualRoot.userData.toolAnchor = 'quaternius-visible-palm-v1';
+      this.visualRoot.userData.toolAnchor = 'quaternius-palm-center-forearm-axis-v2';
       return true;
     } catch (error) {
       this.quaterniusLoadError = error;
@@ -207,27 +257,53 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
   #createRightHandToolMount(body) {
     const hand = body.bind.get('rightHand');
     const forearm = body.bind.get('rightForearm');
-    if (!hand?.bone || !forearm) throw new Error('Quaternius right-hand tool joints are unavailable');
+    const middleFinger = findNamedBone(body.root, 'middle_01_r');
+    if (!hand?.bone || !forearm?.bone || !middleFinger) {
+      throw new Error('Quaternius right-hand palm joints are unavailable');
+    }
+
+    body.root.updateMatrixWorld(true);
+    hand.bone.getWorldPosition(this.quaterniusToolHandPosition);
+    middleFinger.getWorldPosition(this.quaterniusToolFingerPosition);
+    this.quaterniusToolPalmPosition
+      .copy(this.quaterniusToolHandPosition)
+      .lerp(this.quaterniusToolFingerPosition, PALM_CENTER_BLEND);
 
     const mount = new THREE.Group();
     mount.name = 'quaternius-right-hand-tool-mount';
-    const inverseHand = hand.globalQuaternion.clone().invert();
-    const palmDirection = hand.globalPosition
-      .clone()
-      .sub(forearm.globalPosition)
-      .normalize()
-      .applyQuaternion(inverseHand)
-      .normalize();
-    mount.position.copy(palmDirection).multiplyScalar(PALM_EXTENSION);
-
-    const upInHandSpace = PLAYER_UP.clone().applyQuaternion(inverseHand).normalize();
-    mount.quaternion.setFromUnitVectors(TOOL_AXIS, upInHandSpace);
+    mount.position.copy(hand.bone.worldToLocal(this.quaterniusToolPalmPosition.clone()));
     mount.scale.setScalar(1 / QUATERNIUS_PRESENTATION_SCALE);
     mount.userData.source = 'quaternius-visible-palm';
-    mount.userData.gripProfile = 'quaternius-upright-palm-v1';
-    mount.userData.palmExtension = PALM_EXTENSION;
+    mount.userData.gripProfile = 'quaternius-palm-center-forearm-axis-v2';
+    mount.userData.palmCenterBlend = PALM_CENTER_BLEND;
     hand.bone.add(mount);
+
+    this.quaterniusToolMiddleFinger = middleFinger;
+    this.quaterniusToolMount = mount;
+    this.#syncRightHandToolMount(body);
     return mount;
+  }
+
+  #syncRightHandToolMount(body) {
+    if (!this.quaterniusToolMount) return;
+    const hand = body?.bind.get('rightHand');
+    const forearm = body?.bind.get('rightForearm');
+    if (!hand?.bone || !forearm?.bone) return;
+
+    hand.bone.getWorldPosition(this.quaterniusToolHandPosition);
+    forearm.bone.getWorldPosition(this.quaterniusToolForearmPosition);
+    this.quaterniusToolAxisWorld
+      .copy(this.quaterniusToolHandPosition)
+      .sub(this.quaterniusToolForearmPosition);
+    if (this.quaterniusToolAxisWorld.lengthSq() < 1e-8) return;
+    this.quaterniusToolAxisWorld.normalize();
+
+    hand.bone.getWorldQuaternion(this.quaterniusToolHandWorldQuaternion).invert();
+    this.quaterniusToolAxisLocal
+      .copy(this.quaterniusToolAxisWorld)
+      .applyQuaternion(this.quaterniusToolHandWorldQuaternion)
+      .normalize();
+    this.quaterniusToolMount.quaternion.setFromUnitVectors(TOOL_AXIS, this.quaterniusToolAxisLocal);
   }
 
   #retargetCandidate() {
@@ -257,11 +333,29 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
           .multiply(this.quaterniusSourceBindInverse.copy(sourceBind.quaternion).invert())
           .normalize();
 
+        const motionGain = MOTION_GAIN[entry.source] ?? 1;
+        scaleQuaternionAngle(
+          this.quaterniusDeltaQuaternion,
+          motionGain,
+          this.quaterniusScaledDeltaQuaternion,
+          this.quaterniusMotionAxis
+        );
+
         const targetGlobal = this.quaterniusDesiredQuaternion
-          .copy(this.quaterniusDeltaQuaternion)
+          .copy(this.quaterniusScaledDeltaQuaternion)
           .multiply(targetBind.globalQuaternion)
           .normalize()
           .clone();
+
+        if (entry.source === 'leftForearm' || entry.source === 'rightForearm') {
+          const relaxation = entry.source === 'leftForearm'
+            ? -FOREARM_RELAXATION_RADIANS
+            : FOREARM_RELAXATION_RADIANS;
+          targetGlobal
+            .premultiply(this.quaterniusRelaxQuaternion.setFromAxisAngle(PLAYER_FORWARD, relaxation))
+            .normalize();
+        }
+
         desiredGlobal.set(entry.source, targetGlobal);
 
         const parentGlobal = entry.parent
@@ -281,6 +375,8 @@ export class QuaterniusPeasantPresentation extends MasculinePrismaHumanoidPresen
 
       part.root.updateMatrixWorld(true);
     }
+
+    this.#syncRightHandToolMount(this.quaterniusParts.get('body'));
   }
 
   #syncFallbackVisibility() {
