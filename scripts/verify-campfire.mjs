@@ -1,3 +1,4 @@
+import './verify-campfire-sleep-storage.mjs';
 import * as THREE from 'three';
 import { readFile } from 'node:fs/promises';
 import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
