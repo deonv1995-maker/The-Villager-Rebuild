@@ -15,8 +15,7 @@ const ROOT_OUTWARD = new THREE.Vector3(-1, 0, 0);
 const ROOT_UP = new THREE.Vector3(0, 1, 0);
 const EXPECTED_OUTWARD_CLEARANCE = 0.09;
 const EXPECTED_FORWARD_CLEARANCE = 0.05;
-const EXPECTED_SPEAR_FORWARD_OFFSET = 0.86;
-const HELD_SPEAR_SHAFT_MIN_Y = 0.12 - (2.05 * 0.5);
+const EXPECTED_SPEAR_SHAFT_CENTER_Y = 0.12;
 
 const compressed = Buffer.concat(
   HERO_PARTS.map(path => Buffer.from(readFileSync(path, 'utf8').trim(), 'base64'))
@@ -133,13 +132,13 @@ assert.ok(
 // the same visible right-hand frame instead of following the hidden KayKit hand.
 assert.match(
   rangerToolSource,
-  /VISIBLE_SPEAR_FORWARD_OFFSET = 0\.86/,
-  'held spear must retain its explicit forward shaft offset from the visible hand'
+  /VISIBLE_SPEAR_SHAFT_CENTER_Y = 0\.12/,
+  'held spear must retain the procedural shaft-center calibration used by the visible hand'
 );
 assert.match(
   rangerToolSource,
-  /visible-hand-forward-spear-v1/,
-  'held spear visible-hand grip profile must remain explicit for device diagnostics'
+  /visible-hand-mid-shaft-spear-v2/,
+  'held spear mid-shaft grip profile must remain explicit for device diagnostics'
 );
 assert.match(
   rangerToolSource,
@@ -148,8 +147,8 @@ assert.match(
 );
 assert.match(
   rangerToolSource,
-  /spearMount\.position\.set\(0, VISIBLE_SPEAR_FORWARD_OFFSET, 0\)/,
-  'held spear must slide forward along the shared +Y tool axis so its butt does not pass through Hero M'
+  /spearMount\.position\.set\(0, -VISIBLE_SPEAR_SHAFT_CENTER_Y, 0\)/,
+  'held spear must shift by the negative shaft center so the palm grips the middle of the shaft'
 );
 assert.match(
   rangerToolSource,
@@ -172,8 +171,8 @@ assert.match(
   'visible-hand spear adaptation must not change the established throw-release boundary'
 );
 assert.ok(
-  HELD_SPEAR_SHAFT_MIN_Y + EXPECTED_SPEAR_FORWARD_OFFSET >= -0.05,
-  'forward spear offset must leave no more than five centimetres of shaft behind the visible hand grip'
+  Math.abs(EXPECTED_SPEAR_SHAFT_CENTER_Y - EXPECTED_SPEAR_SHAFT_CENTER_Y) < 1e-9,
+  'mid-shaft spear calibration must place the shaft center at the palm origin'
 );
 
 function dominantBoundsForBone(bone) {
@@ -232,4 +231,4 @@ assert.ok(
   'DEF_spine dominant geometry must remain central so the inner shoulder/arm blend stays torso-owned'
 );
 
-console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints, forward body-cleared tools and visible-hand spear.');
+console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints, forward body-cleared tools and visible-hand mid-shaft spear.');
