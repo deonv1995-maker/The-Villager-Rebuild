@@ -23,8 +23,19 @@
   animation: inventory-gain-float 820ms ease-out both;
 }
 
+.mobile-hud[data-storage-mode="sprout"] .inventory-card.inventory-gain-pulse::after {
+  border-color: rgba(103, 211, 231, .58);
+  color: #9ce8f4;
+  box-shadow: 0 0 12px rgba(103, 211, 231, .2);
+}
+
 .inventory-menu-toggle.inventory-capacity-pulse {
   animation: inventory-capacity-gain-pulse 820ms ease-out both;
+}
+
+.mobile-hud[data-storage-mode="sprout"] .inventory-menu-toggle.inventory-capacity-pulse {
+  border-color: rgba(103, 211, 231, .72);
+  box-shadow: 0 0 14px rgba(103, 211, 231, .22);
 }
 
 @keyframes inventory-card-gain-pulse {
