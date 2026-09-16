@@ -80,10 +80,10 @@ const presentation = new HeroMArmMotionPresentation({
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.heroMArmMotionReady, true, 'production Ranger presentation must complete Hero M arm calibration');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v5');
-assert.equal(presentation.visualRoot.userData.armPose, 'hip-rest-plus-source-hand-arc-v2');
-assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-opposed-hand-arc-v1');
-assert.equal(presentation.heroMRoot.userData.armRestProfile, 'visible-grip-hip-anchor-v1');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v6');
+assert.equal(presentation.visualRoot.userData.armPose, 'shoulder-pivot-hip-rest-v3');
+assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-shoulder-pivot-swing-v2');
+assert.equal(presentation.heroMRoot.userData.armRestProfile, 'visible-grip-shoulder-pivot-v2');
 
 presentation.update(1 / 60);
 presentation.heroMRoot.updateMatrixWorld(true);
@@ -94,6 +94,11 @@ const spine = presentation.heroMBind.get('spine');
 const toolMount = presentation.getRightHandToolMount();
 assert.ok(rightArm?.bone && leftArm?.bone && pelvis?.bone && spine?.bone && toolMount, 'arm regression requires Hero M torso, both arms and the visible grip');
 assert.equal(toolMount.parent, rightArm.bone, 'tool mount must continue following the corrected right arm joint');
+assert.ok(
+  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
+    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
+  'arm polish must keep both complete-arm joints at their authored shoulder positions instead of translating them toward the hips'
+);
 
 const pelvisPoint = rootLocalPosition(presentation.heroMRoot, pelvis.bone);
 const spinePoint = rootLocalPosition(presentation.heroMRoot, spine.bone);
@@ -103,21 +108,39 @@ const torsoHeight = Math.max(0.001, spinePoint.y - pelvisPoint.y);
 const idleLateral = Math.abs(idleGrip.x - torsoCenterX);
 const idleHeightFromPelvis = (idleGrip.y - pelvisPoint.y) / torsoHeight;
 assert.ok(
-  idleLateral >= 0.24 && idleLateral <= 0.54,
-  `idle visible hand must rest close beside the torso instead of floating far away: ${JSON.stringify({ idleGrip: idleGrip.toArray(), pelvis: pelvisPoint.toArray(), spine: spinePoint.toArray(), idleLateral })}`
+  idleLateral >= 0.18 && idleLateral <= 0.66,
+  `idle visible hand must remain relaxed beside the torso after shoulder-pivot calibration: ${JSON.stringify({ idleGrip: idleGrip.toArray(), pelvis: pelvisPoint.toArray(), spine: spinePoint.toArray(), idleLateral })}`
 );
 assert.ok(
-  idleHeightFromPelvis >= -0.18 && idleHeightFromPelvis <= 0.34,
-  `idle visible hand must sit around hip level instead of chest/shoulder height: ${JSON.stringify({ idleGrip: idleGrip.toArray(), pelvis: pelvisPoint.toArray(), spine: spinePoint.toArray(), idleHeightFromPelvis })}`
+  idleHeightFromPelvis >= -0.24 && idleHeightFromPelvis <= 0.46,
+  `idle visible hand must remain around hip level without moving the shoulder joint: ${JSON.stringify({ idleGrip: idleGrip.toArray(), pelvis: pelvisPoint.toArray(), spine: spinePoint.toArray(), idleHeightFromPelvis })}`
 );
 
-const idleLeftPivot = rootLocalPosition(presentation.heroMRoot, leftArm.bone);
-const idleRightPivot = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+// The left arm has no production tool socket. Create a test-only mirrored endpoint
+// from the visible right grip so the regression can verify that both one-bone arms
+// swing in opposition around their fixed shoulder pivots.
+const mirroredLeftGripRoot = new THREE.Vector3(
+  torsoCenterX * 2 - idleGrip.x,
+  idleGrip.y,
+  idleGrip.z
+);
+const mirroredLeftGripWorld = presentation.heroMRoot.localToWorld(mirroredLeftGripRoot.clone());
+const leftGripProbe = new THREE.Object3D();
+leftGripProbe.position.copy(leftArm.bone.worldToLocal(mirroredLeftGripWorld));
+leftArm.bone.add(leftGripProbe);
+presentation.heroMRoot.updateMatrixWorld(true);
+const idleLeftGrip = rootLocalPosition(presentation.heroMRoot, leftGripProbe);
+
 const rootBefore = root.position.clone();
 for (let frame = 0; frame < 30; frame += 1) presentation.update(1 / 60);
 assert.ok(root.position.distanceTo(rootBefore) < 1e-12, 'arm polish must never move the gameplay root');
 const settledGrip = rootLocalPosition(presentation.heroMRoot, toolMount);
-assert.ok(settledGrip.distanceTo(idleGrip) < 0.02, 'idle arm placement must settle without drifting away from the hip rest pose');
+assert.ok(settledGrip.distanceTo(idleGrip) < 0.03, 'idle shoulder-pivot arm placement must settle without visible drift');
+assert.ok(
+  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
+    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
+  'idle settling must never move either shoulder pivot'
+);
 
 const mixer = new THREE.AnimationMixer(ranger.scene);
 async function sampleState(state, fractions) {
@@ -135,10 +158,15 @@ async function sampleState(state, fractions) {
     root.updateMatrixWorld(true);
     for (let frame = 0; frame < 14; frame += 1) presentation.update(1 / 60);
     presentation.heroMRoot.updateMatrixWorld(true);
+    assert.ok(
+      rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
+        && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
+      `${state} must keep both arm joints fixed at their authored shoulder pivots`
+    );
     samples.push({
       fraction,
-      left: rootLocalPosition(presentation.heroMRoot, leftArm.bone),
-      right: rootLocalPosition(presentation.heroMRoot, rightArm.bone)
+      leftGrip: rootLocalPosition(presentation.heroMRoot, leftGripProbe),
+      rightGrip: rootLocalPosition(presentation.heroMRoot, toolMount)
     });
   }
   return samples;
@@ -146,37 +174,48 @@ async function sampleState(state, fractions) {
 
 const walkSamples = await sampleState('Walking_A', [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]);
 const runSamples = await sampleState('Running_A', [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]);
-const walkRightZRange = range(walkSamples.map(sample => sample.right.z));
-const runRightZRange = range(runSamples.map(sample => sample.right.z));
+const walkRightZRange = range(walkSamples.map(sample => sample.rightGrip.z));
+const runRightZRange = range(runSamples.map(sample => sample.rightGrip.z));
+const walkRightYRange = range(walkSamples.map(sample => sample.rightGrip.y));
+const runRightYRange = range(runSamples.map(sample => sample.rightGrip.y));
 assert.ok(
-  walkRightZRange > 0.025,
-  `Walking_A must translate the complete Hero M arm through a visible arc instead of rotation-only motion: ${walkRightZRange}`
+  walkRightZRange > 0.035,
+  `Walking_A must swing the visible hand fore/aft around the shoulder instead of pinning the wrist near the hip: ${walkRightZRange}`
 );
 assert.ok(
-  runRightZRange > 0.045,
-  `Running_A must translate the complete Hero M arm through a larger visible arc instead of rotation-only motion: ${runRightZRange}`
+  runRightZRange > 0.055,
+  `Running_A must produce a stronger visible shoulder-pivot hand swing: ${runRightZRange}`
 );
 assert.ok(
-  runRightZRange > walkRightZRange * 1.12,
-  `running positional arm swing must read more strongly than walking: ${JSON.stringify({ walkRightZRange, runRightZRange })}`
+  runRightZRange > walkRightZRange * 1.08,
+  `running hand swing must read more strongly than walking: ${JSON.stringify({ walkRightZRange, runRightZRange })}`
+);
+assert.ok(
+  walkRightYRange > 0.008 && runRightYRange > 0.012,
+  `the circular shoulder arc must give the hand visible vertical bounce in walk/run: ${JSON.stringify({ walkRightYRange, runRightYRange })}`
 );
 
 const oppositeRunSample = runSamples.find(sample => {
-  const leftDelta = sample.left.z - idleLeftPivot.z;
-  const rightDelta = sample.right.z - idleRightPivot.z;
+  const leftDelta = sample.leftGrip.z - idleLeftGrip.z;
+  const rightDelta = sample.rightGrip.z - idleGrip.z;
   return leftDelta * rightDelta < -0.001;
 });
-assert.ok(oppositeRunSample, 'left and right run arms must travel in opposing fore/aft arcs');
+assert.ok(oppositeRunSample, 'left and right run hands must swing in opposing fore/aft arcs');
 
-// Tool actions keep the corrected rest anchor but suppress the extra locomotion arc;
-// the existing KayKit/tool-action rotation remains the sole action authority.
+// Tool actions suppress only the extra locomotion swing; the established KayKit
+// action rotation remains authoritative and the arm joints remain on the shoulders.
 toolActing = true;
-const rightBeforeToolSuppression = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+const swingBeforeSuppression = Math.abs(presentation.heroMArmCurrentSwing.get('right') ?? 0);
 for (let frame = 0; frame < 24; frame += 1) presentation.update(1 / 60);
-const rightAfterToolSuppression = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+const swingAfterSuppression = Math.abs(presentation.heroMArmCurrentSwing.get('right') ?? 0);
 assert.ok(
-  Math.abs(rightAfterToolSuppression.z - idleRightPivot.z) < Math.abs(rightBeforeToolSuppression.z - idleRightPivot.z),
-  'tool actions must decay the extra locomotion position arc instead of competing with tool animation'
+  swingAfterSuppression < swingBeforeSuppression,
+  'tool actions must decay the extra locomotion shoulder swing instead of competing with tool animation'
+);
+assert.ok(
+  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
+    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
+  'tool suppression must not translate either arm joint away from the shoulder'
 );
 toolActing = false;
 
@@ -184,4 +223,4 @@ for (const bind of presentation.heroMBind.values()) {
   assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'arm polish must keep every Hero M transform finite');
 }
 
-console.log(`Hero M hip-level rest hands and source-driven positional arm arcs verified: ${JSON.stringify({ idleGrip: idleGrip.toArray(), idleHeightFromPelvis, idleLateral, walkRightZRange, runRightZRange })}`);
+console.log(`Hero M fixed-shoulder hand swing and bounce verified: ${JSON.stringify({ idleGrip: idleGrip.toArray(), idleHeightFromPelvis, idleLateral, walkRightZRange, runRightZRange, walkRightYRange, runRightYRange })}`);
