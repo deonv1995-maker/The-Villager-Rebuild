@@ -74,8 +74,6 @@ export class StorageRuntimeController {
       const openContainer = this.system.describe(this.activeContainerId);
       if (!openContainer || this.#distanceTo(openContainer.position) > STORAGE_INTERACTION_RADIUS + 0.7) {
         this.panel.close();
-      } else {
-        this.panel.render();
       }
     }
 
