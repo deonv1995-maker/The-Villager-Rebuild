@@ -38,7 +38,7 @@ export const SPROUT_COMPANION = Object.freeze({
   hardCatchUpDistance: 11.5,
   collisionRadius: 0.28,
   collisionHeight: 0.82,
-  collectionRadius: 9,
+  collectionRadius: 18,
   beamRange: 2.15,
   scanIntervalSeconds: 0.18,
   targetScanHoldSeconds: 0.55,
