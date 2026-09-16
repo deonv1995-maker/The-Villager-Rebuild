@@ -10,7 +10,11 @@ const HERO_PARTS = [
   'public/assets/player/hero_m.glb.gz.part2.b64'
 ];
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
-const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const ROOT_FORWARD = new THREE.Vector3(0, 0, 1);
+const ROOT_OUTWARD = new THREE.Vector3(-1, 0, 0);
+const ROOT_UP = new THREE.Vector3(0, 1, 0);
+const EXPECTED_OUTWARD_CLEARANCE = 0.09;
+const EXPECTED_FORWARD_CLEARANCE = 0.05;
 
 const compressed = Buffer.concat(
   HERO_PARTS.map(path => Buffer.from(readFileSync(path, 'utf8').trim(), 'base64'))
@@ -50,16 +54,16 @@ const rightPivot = rootLocalBonePosition(rightHand);
 assert.ok(leftPivot.x > 0.7 && rightPivot.x < -0.7, 'authored DEF_hand pivots must remain lateral endpoint anchors');
 assert.ok(leftPivot.y > 1.6 && rightPivot.y > 1.6, 'authored DEF_hand pivots must remain near the raised source-pose arm endpoints');
 
-// The selected Hero M grip must preserve the geometry-derived visible-hand
-// position while using an upright tool axis in hand space. This mirrors the
-// proven Prisma fallback grip contract and prevents axe/hammer handles from
-// projecting sideways through the compact hand endpoint.
+// Hero M's selected carrying frame must keep the normalized tool long axis
+// pointing in the character's forward direction and offset the socket slightly
+// away from the torso. This protects the device-level requirement that long
+// handles/blades do not rest sideways through the character silhouette.
 const appearanceSource = readFileSync('src/player/RangerAppearancePresentation.js', 'utf8');
 const toolGripSource = readFileSync('src/player/HeroMToolGripPresentation.js', 'utf8');
 assert.match(
   appearanceSource,
   /HeroMToolGripPresentation as RangerAppearancePresentation/,
-  'Ranger compatibility boundary must select the final Hero M upright tool-grip layer'
+  'Ranger compatibility boundary must select the final Hero M forward tool-grip layer'
 );
 assert.match(
   toolGripSource,
@@ -68,30 +72,56 @@ assert.match(
 );
 assert.match(
   toolGripSource,
-  /WORLD_UP\.clone\(\)\.applyQuaternion\(inverseHandBind\)/,
-  'Hero M grip must derive world-up in the compact hand bind space'
+  /makeBasis\(ROOT_OUTWARD, ROOT_FORWARD, ROOT_UP\)/,
+  'Hero M grip must define a complete forward/outward/up carrying basis instead of a one-axis lateral socket'
 );
 assert.match(
   toolGripSource,
-  /setFromUnitVectors\(TOOL_AXIS, upInHandSpace\)/,
-  'Hero M grip must align the shared tool axis upright in hand space'
+  /\.copy\(inverseHandBind\)\s*\.multiply\(desiredRootQuaternion\)/,
+  'Hero M grip must express the desired root-space carrying frame in the compact hand bind space'
 );
 assert.match(
   toolGripSource,
-  /hero-m-upright-visible-hand-v2/,
-  'Hero M upright grip profile must remain explicit for regression and device diagnostics'
+  /hero-m-forward-clearance-grip-v3/,
+  'Hero M forward-clearance grip profile must remain explicit for regression and device diagnostics'
+);
+assert.match(
+  toolGripSource,
+  /GRIP_OUTWARD_CLEARANCE = 0\.09/,
+  'Hero M grip must retain the bounded outward clearance that prevents thigh/torso clipping'
+);
+assert.match(
+  toolGripSource,
+  /GRIP_FORWARD_CLEARANCE = 0\.05/,
+  'Hero M grip must retain the small forward clearance that keeps the held prop ahead of the hand silhouette'
 );
 
 const rightHandBind = rightHand.getWorldQuaternion(new THREE.Quaternion());
-const upInHandSpace = WORLD_UP.clone().applyQuaternion(rightHandBind.clone().invert()).normalize();
-const mountBind = new THREE.Quaternion().setFromUnitVectors(TOOL_AXIS, upInHandSpace);
-const mountedWorldAxis = TOOL_AXIS.clone()
+const desiredRootBasis = new THREE.Matrix4().makeBasis(ROOT_OUTWARD, ROOT_FORWARD, ROOT_UP);
+const desiredRootQuaternion = new THREE.Quaternion().setFromRotationMatrix(desiredRootBasis).normalize();
+const mountBind = rightHandBind.clone().invert().multiply(desiredRootQuaternion).normalize();
+const mountedRootAxis = TOOL_AXIS.clone()
   .applyQuaternion(mountBind)
   .applyQuaternion(rightHandBind)
   .normalize();
 assert.ok(
-  mountedWorldAxis.distanceTo(WORLD_UP) < 1e-6,
-  'shipped Hero M bind must support an upright tool axis through the selected hand-space calibration'
+  mountedRootAxis.distanceTo(ROOT_FORWARD) < 1e-6,
+  'shipped Hero M bind must support a forward-pointing tool axis through the selected hand-space calibration'
+);
+
+const clearanceRoot = ROOT_OUTWARD.clone()
+  .multiplyScalar(EXPECTED_OUTWARD_CLEARANCE)
+  .addScaledVector(ROOT_FORWARD, EXPECTED_FORWARD_CLEARANCE);
+const clearanceHand = clearanceRoot.clone().applyQuaternion(rightHandBind.clone().invert());
+const recoveredClearanceRoot = clearanceHand.applyQuaternion(rightHandBind);
+assert.ok(
+  recoveredClearanceRoot.distanceTo(clearanceRoot) < 1e-6,
+  'Hero M grip clearance must survive conversion into and back out of hand-local bind space'
+);
+assert.ok(
+  recoveredClearanceRoot.x <= -EXPECTED_OUTWARD_CLEARANCE + 1e-6
+    && recoveredClearanceRoot.z >= EXPECTED_FORWARD_CLEARANCE - 1e-6,
+  'Hero M tool socket must move away from the torso and slightly forward rather than inward through the character'
 );
 
 function dominantBoundsForBone(bone) {
@@ -150,4 +180,4 @@ assert.ok(
   'DEF_spine dominant geometry must remain central so the inner shoulder/arm blend stays torso-owned'
 );
 
-console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints and upright visible-hand tool grip.');
+console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints and forward body-cleared tool grip.');
