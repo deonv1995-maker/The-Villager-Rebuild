@@ -1,25 +1,24 @@
-# Batch 05 Asset Audit — KayKit FBX tools
+# Batch 05 Asset Audit — Fantasy Pawn Shape FBX tools
 
 Date: 2026-09-16
 
-This batch reviews the tool/weapon models supplied in `FBX Assets.zip` for use with the existing Ranger equipment presentation. The existing `ToolDefinitions` registry remains the gameplay authority; this batch does not add new tool types or change recipes, durability, damage, controls, harvesting, inventory, or combat rules.
+This batch reviews the tool/weapon models supplied in `FBX Assets.zip` for use with the existing Hero M equipment presentation. The existing `ToolDefinitions` registry remains the gameplay authority; this batch does not add new tool types or change recipes, durability, damage, controls, harvesting, inventory, or combat rules.
 
 ## Source and provenance
 
-- The archive was supplied directly for this project as `FBX Assets.zip`.
-- The user confirmed on 2026-09-16 that these models came from the same KayKit asset collection/source used for the production Ranger character.
-- The Ranger source is already recorded in `docs/assets/BATCH_01_AUDIT.md` as `KayKit_Adventurers_2.0_FREE.zip`, with the supplied `License.txt` recorded as CC0.
-- The same prior audit records `KayKit_RPGToolsBits_1.0_FREE.zip` as CC0 and identifies axe, pickaxe, shovel, hammer, saw, knife, torch and other RPG tools.
-- The same prior audit records `KayKit_FantasyWeaponsBits_1.0_FREE.zip` as CC0 and identifies spear, axes, hammers, swords, daggers, shields and related weapons.
-- Kay Lousberg's current itch.io pages independently confirm that both KayKit RPG Tools Bits and KayKit Fantasy Weapons Bits are licensed under Creative Commons Zero v1.0 Universal, are free for personal and commercial use, require no attribution, and include FBX/OBJ/GLTF formats:
-  - https://kaylousberg.itch.io/rpg-tools-bits
-  - https://kaylousberg.itch.io/fantasy-weapons-bits
+- Asset pack: **Fantasy Pawn Shape Character Pack v2**.
+- Creator: **TheRulerMeasure**.
+- Source page: https://therulermeasure.itch.io/fantasy-pawn-shape-character-pack
+- itch.io asset license: **Creative Commons Zero v1.0 Universal (CC0 1.0)**.
+- The source page explicitly states that the assets are free for personal and commercial use and that attribution is not required.
+- The live source page was verified on 2026-09-16.
+- The project owner supplied screenshots of the same itch.io page showing the CC0/commercial-use note and the download entries `GLTF Assets.zip` (7 MB) and `FBX Assets.zip` (14 MB).
+- The page describes 12 fully rigged/animated characters, 18 accessories and one arrow projectile, with 58 character animations. Those details and the exact `FBX Assets.zip` download name identify the supplied archive as this pack.
+- Hero M comes from this same supplied archive at `Characters/hero_m.fbx`; its source hash and runtime derivative are recorded in `licenses/hero-m-player.md`.
 - Relevant files in the supplied archive's `Weapons and Others/` directory include `axe.fbx`, `hammer.fbx`, `shovel.fbx`, `spear.fbx`, `sword.fbx`, plus additional weapon variants that are not required by the current tool registry.
 - The selected files are binary Kaydara FBX 7.4 assets. Embedded metadata identifies Blender's FBX exporter (`Blender (stable FBX IO) - 4.2.13 LTS - 5.12.4`).
 
-Decision: **provenance gate cleared for the selected KayKit tool/weapon assets.** The source family and CC0 commercial-use license are now recorded both by the repository's earlier supplied-license audit and the publisher's current itch.io listings.
-
-The repository should continue to avoid reselling unmodified asset packs or representing third-party assets as original project art, consistent with the publisher's itch.io guidance.
+Decision: **provenance and license gate cleared for the selected tool/weapon assets.** These files are part of the same CC0 pack as Hero M and may be used commercially without attribution.
 
 ## Selected production candidates
 
@@ -42,7 +41,7 @@ The extra blade, club, staff, shield, scythe, pitchfork, crossbow and alternate 
 - `src/player/RangerToolPresentation.js` retains its existing primitive geometry as an immediate fallback, then swaps to the FBX only after a successful load.
 - Async model loads are request-versioned so changing equipped tools cannot install a stale model after a later selection.
 - Pickaxe continues to use its established presentation because substituting another model would be semantically incorrect.
-- Spear remains unchanged in this pass because the held Ranger spear and projectile/embedded spear are currently constructed by separate systems. A later spear model import should first make one presentation source authoritative for both states rather than replacing only one copy.
+- Spear remains unchanged in this pass because the held Hero M spear and projectile/embedded spear are currently constructed by separate systems. A later spear model import should first make one presentation source authoritative for both states rather than replacing only one copy.
 
 ## Web delivery
 
