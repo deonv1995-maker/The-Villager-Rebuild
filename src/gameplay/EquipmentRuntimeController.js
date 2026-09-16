@@ -6,6 +6,8 @@ const RETRIEVAL_ACTION_ID = 'spear-retrieve';
 const STUMP_ACTION_ID = 'shovel-stump';
 const TORCH_PLACEMENT_ACTION_ID = 'torch-place';
 const CAMPFIRE_RECIPE_ID = 'campfire';
+const PORTABLE_PLACEABLE_RECIPE_IDS = Object.freeze(['crafting-bench']);
+const BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel']);
 
 export class EquipmentRuntimeController {
   constructor({ game, random = Math.random }) {
@@ -19,6 +21,7 @@ export class EquipmentRuntimeController {
     this.syncQueued = false;
     this.hudAttached = false;
     this.started = false;
+    this.craftingStation = 'hand';
     this.boundCraft = recipeId => this.craft(recipeId);
     this.boundRetrieve = () => this.retrieveSpear();
     this.boundDigStump = () => this.digStump();
@@ -50,14 +53,30 @@ export class EquipmentRuntimeController {
     this.started = false;
   }
 
+  setCraftingStation(station = 'hand') {
+    const next = station === 'bench' ? 'bench' : 'hand';
+    if (this.craftingStation === next) return next;
+    this.craftingStation = next;
+    this.#syncHud();
+    return next;
+  }
+
+  syncHud() {
+    this.#syncHud();
+  }
+
   craft(recipeId) {
     if (recipeId === CAMPFIRE_RECIPE_ID) return this.#craftCampfirePlacement();
 
-    const definition = TOOL_DEFINITIONS[recipeId];
-    if (!definition) return null;
-    const result = this.game.crafting.craft(recipeId);
+    const recipe = this.game.crafting.getRecipe(recipeId);
+    if (!this.game.crafting.canUseStation(recipeId, this.craftingStation)) {
+      this.game.setStatus(`${recipe.label.toUpperCase()} · USE A CRAFTING BENCH`);
+      this.#syncHud();
+      return null;
+    }
+
+    const result = this.game.crafting.craft(recipeId, { station: this.craftingStation });
     if (!result) {
-      const recipe = this.game.crafting.getRecipe(recipeId);
       const missing = recipe.ingredients
         .map(ingredient => ({
           itemId: ingredient.itemId,
@@ -66,14 +85,14 @@ export class EquipmentRuntimeController {
         .filter(ingredient => ingredient.quantity > 0)
         .map(ingredient => `${ingredient.itemId.toUpperCase()} ${ingredient.quantity}`)
         .join(' · ');
-      this.game.setStatus(`${definition.label.toUpperCase()} · NEED ${missing || 'MATERIALS'}`);
+      this.game.setStatus(`${recipe.label.toUpperCase()} · NEED ${missing || 'MATERIALS'}`);
       this.#syncHud();
       return null;
     }
 
-    this.durability.registerCrafted(recipeId);
+    if (TOOL_DEFINITIONS[recipeId]) this.durability.registerCrafted(recipeId);
     this.#syncHud();
-    this.game.setStatus(`CRAFTED ${definition.label.toUpperCase()} · ${this.game.inventory.get(recipeId)} AVAILABLE`);
+    this.game.setStatus(`CRAFTED ${recipe.label.toUpperCase()} · ${this.game.inventory.get(recipeId)} AVAILABLE`);
     return result;
   }
 
@@ -274,7 +293,7 @@ export class EquipmentRuntimeController {
 
     hud.setInventory(this.game.inventory.snapshot());
     hud.setToolbelt(this.game.toolbelt.snapshot());
-    hud.setCrafting(this.#craftingSnapshot());
+    hud.setCrafting(this.#craftingSnapshot(), { station: this.craftingStation });
     this.#updateRetrievalAction();
     this.#updateStumpAction();
     this.#updateTorchPlacementAction();
@@ -287,30 +306,60 @@ export class EquipmentRuntimeController {
 
   #craftingSnapshot() {
     const entries = this.game.toolbelt.craftingSnapshot();
-    const recipe = this.game.crafting.getRecipe(CAMPFIRE_RECIPE_ID);
+    const campfireRecipe = this.game.crafting.getRecipe(CAMPFIRE_RECIPE_ID);
     const built = this.game.campfire?.isBuilt() ?? false;
     const previewing = this.game.campfire?.isPreviewing() ?? false;
     const carryingLog = this.game.physicalLogs?.isCarrying() ?? false;
-    const canCraft = !built && !carryingLog && (previewing || this.game.crafting.canCraft(CAMPFIRE_RECIPE_ID));
+    const canBuildCampfire = !built && !carryingLog && (previewing || this.game.crafting.canCraft(CAMPFIRE_RECIPE_ID));
 
     entries.push({
-      id: recipe.id,
-      label: recipe.label,
+      id: campfireRecipe.id,
+      label: campfireRecipe.label,
       icon: 'campfire',
-      kind: recipe.kind,
+      kind: campfireRecipe.kind,
       quantity: built ? 1 : 0,
       statusLabel: built ? 'Built' : previewing ? 'Placing' : 'Not built',
-      canCraft,
+      canCraft: canBuildCampfire,
       actionLabel: built ? 'BUILT' : previewing ? 'PLACE' : 'BUILD',
       outputQuantity: 1,
-      ingredients: recipe.ingredients.map(ingredient => ({
-        ...ingredient,
-        label: this.game.inventory.definitions[ingredient.itemId]?.label ?? ingredient.itemId,
-        available: this.game.inventory.get(ingredient.itemId)
-      }))
+      ingredients: this.#ingredientSnapshot(campfireRecipe)
     });
 
+    for (const recipeId of PORTABLE_PLACEABLE_RECIPE_IDS) {
+      entries.push(this.#placeableRecipeSnapshot(recipeId));
+    }
+    if (this.craftingStation === 'bench') {
+      for (const recipeId of BENCH_PLACEABLE_RECIPE_IDS) {
+        entries.push(this.#placeableRecipeSnapshot(recipeId));
+      }
+    }
+
     return entries;
+  }
+
+  #placeableRecipeSnapshot(recipeId) {
+    const recipe = this.game.crafting.getRecipe(recipeId);
+    const quantity = this.game.inventory.get(recipeId);
+    return {
+      id: recipe.id,
+      label: recipe.label,
+      icon: recipe.id,
+      kind: recipe.kind,
+      quantity,
+      statusLabel: `Packed ${quantity}`,
+      canCraft: !this.game.physicalLogs?.isCarrying() && this.game.crafting.canCraft(recipeId, { station: this.craftingStation }),
+      actionLabel: 'CRAFT',
+      outputQuantity: recipe.output?.quantity ?? 1,
+      ingredients: this.#ingredientSnapshot(recipe)
+    };
+  }
+
+  #ingredientSnapshot(recipe) {
+    return recipe.ingredients.map(ingredient => ({
+      ...ingredient,
+      label: this.game.inventory.definitions[ingredient.itemId]?.label ?? ingredient.itemId,
+      available: this.game.inventory.get(ingredient.itemId)
+    }));
   }
 
   #updateRetrievalAction() {
