@@ -51,7 +51,6 @@ const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const root = new THREE.Group();
 root.add(ranger.scene);
-let toolActing = false;
 
 const player = {
   root,
@@ -69,7 +68,7 @@ const player = {
   isFirstPerson: () => false,
   getPosition: target => target.copy(root.position),
   mountRightHandObject: () => true,
-  isToolActing: () => toolActing,
+  isToolActing: () => false,
   playToolAction: () => null
 };
 
@@ -79,11 +78,11 @@ const presentation = new HeroMArmMotionPresentation({
 });
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
-assert.equal(presentation.heroMArmMotionReady, true, 'production Ranger presentation must activate the Hero M locomotion arm layer');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v6');
-assert.equal(presentation.visualRoot.userData.armPose, 'geometry-rest-fixed-shoulder-v4');
-assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-shoulder-pivot-swing-v2');
-assert.equal(presentation.heroMRoot.userData.armRestProfile, 'base-geometry-rest-fixed-shoulder-v3');
+assert.equal(presentation.heroMArmMotionReady, true, 'production Ranger presentation must activate the Hero M hand-endpoint retarget');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v7');
+assert.equal(presentation.visualRoot.userData.armPose, 'bind-calibrated-hand-endpoints-v1');
+assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-full-hand-trajectory-v1');
+assert.equal(presentation.heroMRoot.userData.armRestProfile, 'source-hand-endpoint-retarget-v1');
 
 presentation.update(1 / 60);
 presentation.heroMRoot.updateMatrixWorld(true);
@@ -92,55 +91,36 @@ const leftArm = presentation.heroMBind.get('leftArm');
 const pelvis = presentation.heroMBind.get('pelvis');
 const spine = presentation.heroMBind.get('spine');
 const toolMount = presentation.getRightHandToolMount();
-assert.ok(rightArm?.bone && leftArm?.bone && pelvis?.bone && spine?.bone && toolMount, 'arm regression requires Hero M torso, both arms and the visible grip');
-assert.equal(toolMount.parent, rightArm.bone, 'tool mount must continue following the corrected right arm joint');
-assert.ok(
-  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
-    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
-  'arm polish must keep both complete-arm joints at their authored positions instead of translating them toward the hips'
-);
+const sourceHip = presentation.sourceDrivers.get('hip');
+const sourceRightHand = presentation.sourceDrivers.get('rightHand');
+assert.ok(rightArm?.bone && leftArm?.bone && pelvis?.bone && spine?.bone && toolMount && sourceHip && sourceRightHand,
+  'arm regression requires Hero M torso/endpoints, production grip and KayKit hip/hand drivers');
+assert.equal(toolMount.parent, rightArm.bone, 'tool mount must remain parented to the translated right-hand endpoint');
 
 const pelvisPoint = rootLocalPosition(presentation.heroMRoot, pelvis.bone);
 const spinePoint = rootLocalPosition(presentation.heroMRoot, spine.bone);
-const rightArmOrigin = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+const idleRightEndpoint = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+const idleLeftEndpoint = rootLocalPosition(presentation.heroMRoot, leftArm.bone);
 const idleGrip = rootLocalPosition(presentation.heroMRoot, toolMount);
-const idleReach = idleGrip.clone().sub(rightArmOrigin);
-const idleArmAxis = idleReach.clone().normalize();
-const torsoCenterX = (pelvisPoint.x + spinePoint.x) * 0.5;
 assert.ok(
-  idleReach.length() > 0.03 && idleReach.length() < 0.75,
-  `idle visible grip must remain a real endpoint on the rigid Hero M arm: ${JSON.stringify({ rightArmOrigin: rightArmOrigin.toArray(), idleGrip: idleGrip.toArray(), reach: idleReach.length() })}`
+  rightArm.bone.position.distanceTo(rightArm.localPosition) > 0.12
+    && leftArm.bone.position.distanceTo(leftArm.localPosition) > 0.12,
+  `idle must translate both authored T-pose hand endpoints into the live KayKit hand pose: ${JSON.stringify({ rightLocal: rightArm.bone.position.toArray(), rightBind: rightArm.localPosition.toArray(), leftLocal: leftArm.bone.position.toArray(), leftBind: leftArm.localPosition.toArray() })}`
 );
 assert.ok(
-  idleArmAxis.y < -0.70,
-  `idle arm must retain the proven geometry-calibrated downward rest direction: ${JSON.stringify({ rightArmOrigin: rightArmOrigin.toArray(), idleGrip: idleGrip.toArray(), idleArmAxis: idleArmAxis.toArray() })}`
+  idleRightEndpoint.y < spinePoint.y + 0.28 && idleLeftEndpoint.y < spinePoint.y + 0.28,
+  `idle hand endpoints must sit below the upper torso instead of remaining raised in the authored T-pose: ${JSON.stringify({ spineY: spinePoint.y, rightY: idleRightEndpoint.y, leftY: idleLeftEndpoint.y })}`
 );
-
-// The left arm has no production tool socket. Create a test-only mirrored endpoint
-// from the visible right grip so the regression can verify that both one-bone arms
-// swing in opposition around their fixed authored pivots.
-const mirroredLeftGripRoot = new THREE.Vector3(
-  torsoCenterX * 2 - idleGrip.x,
-  idleGrip.y,
-  idleGrip.z
+assert.ok(
+  Math.abs(idleRightEndpoint.x - pelvisPoint.x) > 0.20 && Math.abs(idleLeftEndpoint.x - pelvisPoint.x) > 0.20,
+  'relaxed hand endpoints must remain visibly beside the body rather than collapsing through the torso'
 );
-const mirroredLeftGripWorld = presentation.heroMRoot.localToWorld(mirroredLeftGripRoot.clone());
-const leftGripProbe = new THREE.Object3D();
-leftGripProbe.position.copy(leftArm.bone.worldToLocal(mirroredLeftGripWorld));
-leftArm.bone.add(leftGripProbe);
-presentation.heroMRoot.updateMatrixWorld(true);
-const idleLeftGrip = rootLocalPosition(presentation.heroMRoot, leftGripProbe);
 
 const rootBefore = root.position.clone();
 for (let frame = 0; frame < 30; frame += 1) presentation.update(1 / 60);
-assert.ok(root.position.distanceTo(rootBefore) < 1e-12, 'arm polish must never move the gameplay root');
-const settledGrip = rootLocalPosition(presentation.heroMRoot, toolMount);
-assert.ok(settledGrip.distanceTo(idleGrip) < 0.03, 'idle geometry-calibrated arm placement must settle without visible drift');
-assert.ok(
-  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
-    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
-  'idle settling must never move either arm pivot'
-);
+assert.ok(root.position.distanceTo(rootBefore) < 1e-12, 'arm endpoint retarget must never move the gameplay root');
+const settledRightEndpoint = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+assert.ok(settledRightEndpoint.distanceTo(idleRightEndpoint) < 0.005, 'idle endpoint placement must be deterministic without cumulative drift');
 
 const mixer = new THREE.AnimationMixer(ranger.scene);
 async function sampleState(state, fractions) {
@@ -156,71 +136,74 @@ async function sampleState(state, fractions) {
   for (const fraction of fractions) {
     mixer.setTime(clip.duration * fraction);
     root.updateMatrixWorld(true);
-    for (let frame = 0; frame < 14; frame += 1) presentation.update(1 / 60);
+    presentation.update(1 / 60);
     presentation.heroMRoot.updateMatrixWorld(true);
+
+    const sourceHipPoint = rootLocalPosition(root, sourceHip);
+    const sourceHandPoint = rootLocalPosition(root, sourceRightHand);
+    const targetPelvisPoint = rootLocalPosition(presentation.heroMRoot, pelvis.bone);
+    const rightEndpoint = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
+    const leftEndpoint = rootLocalPosition(presentation.heroMRoot, leftArm.bone);
+    const grip = rootLocalPosition(presentation.heroMRoot, toolMount);
+    const expectedRight = targetPelvisPoint.clone()
+      .add(sourceHandPoint.clone().sub(sourceHipPoint).multiplyScalar(presentation.heroMPelvisMotionScale))
+      .add(presentation.heroMArmEndpointCorrection.get('right'));
+
     assert.ok(
-      rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
-        && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
-      `${state} must keep both arm joints fixed at their authored pivots`
+      rightEndpoint.distanceTo(expectedRight) < 1e-5,
+      `${state} right endpoint must follow the full live KayKit hand trajectory instead of rotating around a fixed wrist pivot`
     );
-    samples.push({
-      fraction,
-      leftGrip: rootLocalPosition(presentation.heroMRoot, leftGripProbe),
-      rightGrip: rootLocalPosition(presentation.heroMRoot, toolMount)
-    });
+    samples.push({ fraction, sourceHand: sourceHandPoint, rightEndpoint, leftEndpoint, grip });
   }
   return samples;
 }
 
-const walkSamples = await sampleState('Walking_A', [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]);
-const runSamples = await sampleState('Running_A', [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]);
-const walkRightZRange = range(walkSamples.map(sample => sample.rightGrip.z));
-const runRightZRange = range(runSamples.map(sample => sample.rightGrip.z));
-const walkRightYRange = range(walkSamples.map(sample => sample.rightGrip.y));
-const runRightYRange = range(runSamples.map(sample => sample.rightGrip.y));
+const fractions = [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95];
+const walkSamples = await sampleState('Walking_A', fractions);
+const runSamples = await sampleState('Running_A', fractions);
+const walkRightZRange = range(walkSamples.map(sample => sample.rightEndpoint.z));
+const runRightZRange = range(runSamples.map(sample => sample.rightEndpoint.z));
+const walkRightYRange = range(walkSamples.map(sample => sample.rightEndpoint.y));
+const runRightYRange = range(runSamples.map(sample => sample.rightEndpoint.y));
+const walkGripZRange = range(walkSamples.map(sample => sample.grip.z));
+const runGripZRange = range(runSamples.map(sample => sample.grip.z));
+
 assert.ok(
-  walkRightZRange > 0.035,
-  `Walking_A must swing the visible hand fore/aft around its fixed pivot instead of pinning the wrist near the hip: ${walkRightZRange}`
+  walkRightZRange > 0.05,
+  `Walking_A must translate the right arm endpoint fore/aft instead of leaving the wrist pinned: ${walkRightZRange}`
 );
 assert.ok(
-  runRightZRange > 0.055,
-  `Running_A must produce a stronger visible fixed-pivot hand swing: ${runRightZRange}`
+  runRightZRange > 0.08,
+  `Running_A must translate the right arm endpoint through a clearly visible fore/aft range: ${runRightZRange}`
 );
 assert.ok(
-  runRightZRange > walkRightZRange * 1.08,
-  `running hand swing must read more strongly than walking: ${JSON.stringify({ walkRightZRange, runRightZRange })}`
+  runRightZRange > walkRightZRange * 1.05,
+  `running endpoint travel must read more strongly than walking: ${JSON.stringify({ walkRightZRange, runRightZRange })}`
 );
 assert.ok(
-  walkRightYRange > 0.008 && runRightYRange > 0.012,
-  `the circular arm arc must give the hand visible vertical bounce in walk/run: ${JSON.stringify({ walkRightYRange, runRightYRange })}`
+  walkRightYRange > 0.015 && runRightYRange > 0.02,
+  `KayKit endpoint retarget must preserve vertical hand bounce in walk/run: ${JSON.stringify({ walkRightYRange, runRightYRange })}`
+);
+assert.ok(
+  walkGripZRange > 0.05 && runGripZRange > 0.08,
+  `the production visible-hand/tool grip must travel with the translated endpoint: ${JSON.stringify({ walkGripZRange, runGripZRange })}`
 );
 
 const oppositeRunSample = runSamples.find(sample => {
-  const leftDelta = sample.leftGrip.z - idleLeftGrip.z;
-  const rightDelta = sample.rightGrip.z - idleGrip.z;
-  return leftDelta * rightDelta < -0.001;
+  const leftDelta = sample.leftEndpoint.z - idleLeftEndpoint.z;
+  const rightDelta = sample.rightEndpoint.z - idleRightEndpoint.z;
+  return leftDelta * rightDelta < -0.002;
 });
-assert.ok(oppositeRunSample, 'left and right run hands must swing in opposing fore/aft arcs');
+assert.ok(oppositeRunSample, 'left and right run endpoints must swing fore/aft in opposition');
 
-// Tool actions suppress only the extra locomotion swing; the established KayKit
-// action rotation remains authoritative and the arm joints remain fixed.
-toolActing = true;
-const swingBeforeSuppression = Math.abs(presentation.heroMArmCurrentSwing.get('right') ?? 0);
-for (let frame = 0; frame < 24; frame += 1) presentation.update(1 / 60);
-const swingAfterSuppression = Math.abs(presentation.heroMArmCurrentSwing.get('right') ?? 0);
+const maxRunEndpointY = Math.max(...runSamples.flatMap(sample => [sample.leftEndpoint.y, sample.rightEndpoint.y]));
 assert.ok(
-  swingAfterSuppression < swingBeforeSuppression,
-  'tool actions must decay the extra locomotion arm swing instead of competing with tool animation'
+  maxRunEndpointY < spinePoint.y + 0.55,
+  `run endpoint mapping must not throw the hands back above the shoulders: ${JSON.stringify({ maxRunEndpointY, spineY: spinePoint.y })}`
 );
-assert.ok(
-  rightArm.bone.position.distanceTo(rightArm.localPosition) < 1e-10
-    && leftArm.bone.position.distanceTo(leftArm.localPosition) < 1e-10,
-  'tool suppression must not translate either arm joint toward the hip'
-);
-toolActing = false;
 
 for (const bind of presentation.heroMBind.values()) {
-  assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'arm polish must keep every Hero M transform finite');
+  assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'arm endpoint retarget must keep every Hero M transform finite');
 }
 
-console.log(`Hero M fixed-pivot hand swing and bounce verified: ${JSON.stringify({ idleGrip: idleGrip.toArray(), idleArmAxis: idleArmAxis.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange })}`);
+console.log(`Hero M translated hand endpoints verified: ${JSON.stringify({ idleRightEndpoint: idleRightEndpoint.toArray(), idleLeftEndpoint: idleLeftEndpoint.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange, walkGripZRange, runGripZRange, maxRunEndpointY })}`);

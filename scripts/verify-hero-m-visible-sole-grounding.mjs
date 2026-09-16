@@ -85,27 +85,37 @@ const armSource = readFileSync('src/player/HeroMArmMotionPresentation.js', 'utf8
 assert.match(
   armSource,
   /extends HeroMVisibleSoleGroundingPresentation/,
-  'arm polish must layer above the proven Hero M grounding/contact presentation'
+  'arm endpoint retarget must layer above the proven Hero M grounding/contact presentation'
 );
 assert.match(
   armSource,
-  /base-geometry-rest-fixed-shoulder-v3/,
-  'final arm polish must reuse the base geometry-calibrated rest pose rather than introduce a competing rest system'
+  /source-hand-endpoint-retarget-v1/,
+  'Hero M arm adaptation must explicitly identify the compact rig as a source-hand endpoint retarget'
 );
 assert.match(
   armSource,
-  /kaykit-shoulder-pivot-swing-v2/,
-  'walk/run fixed-pivot swing must remain driven by the established KayKit source rig'
+  /kaykit-full-hand-trajectory-v1/,
+  'walk/run arm motion must consume the established KayKit hand trajectory rather than synthesize a wrist-only arc'
 );
 assert.match(
   armSource,
   /leftHand|rightHand/,
-  'one-bone Hero M arms must use source hand motion rather than upper-arm rotation alone'
+  'Hero M arm endpoints must use the real source hand drivers'
+);
+assert.match(
+  armSource,
+  /bind\.bone\.position\.copy\(this\.heroMArmDesiredLocal\)/,
+  'Hero M DEF_hand endpoints must translate through space; rotation-only motion cannot animate the torso-blended arms'
+);
+assert.match(
+  armSource,
+  /heroMArmSourceHand[\s\S]*heroMArmSourceHip[\s\S]*heroMPelvisMotionScale/,
+  'endpoint translation must derive from live source hand position relative to the source hip and shared body scale'
 );
 assert.doesNotMatch(
   armSource,
-  /heroMArmRestLocal|#applyArmPosition|#calibrateArmRestOrientations/,
-  'final arm polish must not reintroduce translated hip-area pivots or duplicate the base rest calibration'
+  /ROOT_SWING_AXIS|kaykit-shoulder-pivot-swing|base-geometry-rest-fixed-shoulder|ARM_SWING_PROFILE/,
+  'Hero M arm adaptation must not reintroduce the disproven fixed-pivot shoulder/wrist rotation model or a hand-authored swing profile'
 );
 assert.doesNotMatch(
   armSource,
@@ -122,4 +132,4 @@ assert.doesNotMatch(
 
 await import('./verify-hero-m-runtime-grounding.mjs');
 
-console.log('Hero M local grounding, rendering-only foot contacts, base-owned arm rest, fixed arm pivots, source-driven arm swing and gameplay-root isolation verified.');
+console.log('Hero M local grounding, rendering-only foot contacts, translated hand endpoints, KayKit-driven arm trajectories and gameplay-root isolation verified.');

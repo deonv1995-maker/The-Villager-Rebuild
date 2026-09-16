@@ -5,25 +5,16 @@ const ARM_BIND_KEYS = Object.freeze({
   left: 'leftArm',
   right: 'rightArm'
 });
-const SOURCE_ARM_KEYS = Object.freeze({
-  left: Object.freeze({ shoulder: 'leftShoulder', hand: 'leftHand' }),
-  right: Object.freeze({ shoulder: 'rightShoulder', hand: 'rightHand' })
+const SOURCE_HAND_KEYS = Object.freeze({
+  left: 'leftHand',
+  right: 'rightHand'
 });
 
-// Hero M has one deform joint for each complete arm rather than a conventional
-// shoulder/elbow/forearm/hand chain. HeroMPresentation already owns the geometry-
-// calibrated relaxed rest orientation for those rigid arm pieces. Keep that one
-// source of truth and leave each deform joint at its authored shoulder position.
-// This layer only adds a bounded KayKit-driven locomotion swing around the fixed
-// shoulder pivot; it never translates the joint toward the hip.
-const ARM_SWING_RESPONSE = 18;
-const ROOT_SWING_AXIS = new THREE.Vector3(1, 0, 0);
-
-const ARM_SWING_PROFILE = Object.freeze({
-  Walking_A: Object.freeze({ radians: THREE.MathUtils.degToRad(10) }),
-  Running_A: Object.freeze({ radians: THREE.MathUtils.degToRad(17) })
-});
-const ZERO_SWING_PROFILE = Object.freeze({ radians: 0 });
+// Hero M does not expose a conventional shoulder/elbow/wrist deform chain. The
+// production asset uses DEF_hand_L/R as movable arm endpoints while the inner arm
+// is blended back into the torso. Natural locomotion therefore requires endpoint
+// translation. Rotating those joints in place only spins the wrist/outer-arm
+// vertices around their authored T-pose anchors.
 
 function rootLocalPosition(root, object, target) {
   object.getWorldPosition(target);
@@ -37,147 +28,163 @@ function rootLocalQuaternion(root, object, target, rootInverse, worldQuaternion)
 }
 
 /**
- * Final player-facing locomotion arm layer for Hero M.
+ * Final player-facing arm endpoint retarget for Hero M.
  *
- * HeroMPresentation remains the sole owner of skeletal retargeting and relaxed
- * geometry-calibrated arm orientation. HeroMVisibleSoleGroundingPresentation still
- * owns rendering-only foot contacts. This class only adapts the unusual one-bone-
- * per-arm rig during walk/run: the authored joint position remains fixed while a
- * bounded source-driven rotation makes the visible hand swing and bounce around it.
+ * HeroMPresentation still owns the compact body/leg retarget and
+ * HeroMVisibleSoleGroundingPresentation owns rendering-only foot contacts. This
+ * layer adapts the unusual Hero M arm skinning by mapping each live KayKit hand
+ * position into the corresponding DEF_hand endpoint. The mapping is calibrated
+ * from both rigs' bind poses and follows the full source hand trajectory, so walk
+ * and run move the visible arm through space instead of only rotating the wrist.
  */
 export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresentation {
   constructor(options) {
     super(options);
 
     this.heroMArmMotionReady = false;
-    this.heroMArmCurrentSwing = new Map([
-      ['left', 0],
-      ['right', 0]
-    ]);
+    this.heroMArmEndpointCorrection = new Map();
 
-    this.heroMArmSourceLeftShoulder = new THREE.Vector3();
-    this.heroMArmSourceLeftHand = new THREE.Vector3();
-    this.heroMArmSourceRightShoulder = new THREE.Vector3();
-    this.heroMArmSourceRightHand = new THREE.Vector3();
-    this.heroMArmSourceLeftReach = new THREE.Vector3();
-    this.heroMArmSourceRightReach = new THREE.Vector3();
-    this.heroMArmParentInverse = new THREE.Quaternion();
+    this.heroMArmSourceHip = new THREE.Vector3();
+    this.heroMArmSourceHand = new THREE.Vector3();
+    this.heroMArmSourceRelative = new THREE.Vector3();
+    this.heroMArmTargetPelvis = new THREE.Vector3();
+    this.heroMArmDesiredRoot = new THREE.Vector3();
+    this.heroMArmDesiredWorld = new THREE.Vector3();
+    this.heroMArmDesiredLocal = new THREE.Vector3();
     this.heroMArmRootInverse = new THREE.Quaternion();
-    this.heroMArmWorldQuaternion = new THREE.Quaternion();
-    this.heroMArmParentGlobal = new THREE.Quaternion();
-    this.heroMArmCurrentGlobal = new THREE.Quaternion();
-    this.heroMArmSwingQuaternion = new THREE.Quaternion();
+    this.heroMArmSourceWorldQuaternion = new THREE.Quaternion();
+    this.heroMArmSourceQuaternion = new THREE.Quaternion();
+    this.heroMArmSourceBindInverse = new THREE.Quaternion();
+    this.heroMArmDeltaQuaternion = new THREE.Quaternion();
     this.heroMArmDesiredGlobal = new THREE.Quaternion();
+    this.heroMArmParentGlobal = new THREE.Quaternion();
+    this.heroMArmParentInverse = new THREE.Quaternion();
+    this.heroMArmDesiredLocalQuaternion = new THREE.Quaternion();
 
     const baseHeroLoadPromise = this.heroMLoadPromise;
     this.heroMLoadPromise = baseHeroLoadPromise.then(active => {
       if (!active || !this.heroMReady) return false;
+      this.#calibrateEndpointMapping();
       this.heroMArmMotionReady = true;
-      this.visualRoot.userData.visualRevision = 'hero-m-player-v6';
-      this.visualRoot.userData.armPose = 'geometry-rest-fixed-shoulder-v4';
-      this.visualRoot.userData.armMotion = 'kaykit-shoulder-pivot-swing-v2';
-      this.heroMRoot.userData.armRestProfile = 'base-geometry-rest-fixed-shoulder-v3';
+      this.#updateArmEndpoints();
+      this.visualRoot.userData.visualRevision = 'hero-m-player-v7';
+      this.visualRoot.userData.armPose = 'bind-calibrated-hand-endpoints-v1';
+      this.visualRoot.userData.armMotion = 'kaykit-full-hand-trajectory-v1';
+      this.heroMRoot.userData.armRestProfile = 'source-hand-endpoint-retarget-v1';
       return true;
     });
   }
 
-  #sourceArmSwingPhase() {
-    const leftShoulder = this.sourceDrivers.get(SOURCE_ARM_KEYS.left.shoulder);
-    const leftHand = this.sourceDrivers.get(SOURCE_ARM_KEYS.left.hand);
-    const rightShoulder = this.sourceDrivers.get(SOURCE_ARM_KEYS.right.shoulder);
-    const rightHand = this.sourceDrivers.get(SOURCE_ARM_KEYS.right.hand);
-    if (!leftShoulder || !leftHand || !rightShoulder || !rightHand) return 0;
+  #calibrateEndpointMapping() {
+    const sourceHipBind = this.sourceBind.get('hip')?.position;
+    const targetPelvisBind = this.heroMBind.get('pelvis')?.globalPosition;
+    if (!sourceHipBind || !targetPelvisBind) {
+      throw new Error('Hero M arm endpoint mapping requires source hip and target pelvis bind positions');
+    }
 
-    this.player.root.updateMatrixWorld(true);
-    rootLocalPosition(this.player.root, leftShoulder, this.heroMArmSourceLeftShoulder);
-    rootLocalPosition(this.player.root, leftHand, this.heroMArmSourceLeftHand);
-    rootLocalPosition(this.player.root, rightShoulder, this.heroMArmSourceRightShoulder);
-    rootLocalPosition(this.player.root, rightHand, this.heroMArmSourceRightHand);
+    const scale = this.heroMPelvisMotionScale;
+    for (const side of ['left', 'right']) {
+      const sourceHandBind = this.sourceBind.get(SOURCE_HAND_KEYS[side])?.position;
+      const targetHandBind = this.heroMBind.get(ARM_BIND_KEYS[side])?.globalPosition;
+      if (!sourceHandBind || !targetHandBind) {
+        throw new Error(`Hero M ${side} endpoint mapping requires source and target hand bind positions`);
+      }
 
-    this.heroMArmSourceLeftReach
-      .copy(this.heroMArmSourceLeftHand)
-      .sub(this.heroMArmSourceLeftShoulder);
-    this.heroMArmSourceRightReach
-      .copy(this.heroMArmSourceRightHand)
-      .sub(this.heroMArmSourceRightShoulder);
+      const correction = targetHandBind.clone()
+        .sub(targetPelvisBind)
+        .sub(sourceHandBind.clone().sub(sourceHipBind).multiplyScalar(scale));
+      this.heroMArmEndpointCorrection.set(side, correction);
+    }
 
-    const referenceLength = Math.max(
-      0.001,
-      (this.heroMArmSourceLeftReach.length() + this.heroMArmSourceRightReach.length()) * 0.5
-    );
-    return THREE.MathUtils.clamp(
-      (this.heroMArmSourceLeftReach.z - this.heroMArmSourceRightReach.z) / referenceLength,
-      -1,
-      1
-    );
+    this.heroMRoot.userData.armEndpointScale = scale;
+    this.heroMRoot.userData.armEndpointLeftCorrection = this.heroMArmEndpointCorrection.get('left').toArray();
+    this.heroMRoot.userData.armEndpointRightCorrection = this.heroMArmEndpointCorrection.get('right').toArray();
   }
 
-  #profileForCurrentState() {
-    if (this.player?.isToolActing?.()) return ZERO_SWING_PROFILE;
-    return ARM_SWING_PROFILE[this.player?.animationState] ?? ZERO_SWING_PROFILE;
+  #rootPointToParentLocal(parent, rootPoint, target) {
+    if (!parent || !this.heroMRoot) return target.set(0, 0, 0);
+    this.heroMRoot.updateMatrixWorld(true);
+    parent.updateMatrixWorld(true);
+    this.heroMArmDesiredWorld.copy(rootPoint);
+    this.heroMRoot.localToWorld(this.heroMArmDesiredWorld);
+    return target.copy(parent.worldToLocal(this.heroMArmDesiredWorld));
   }
 
-  #applyShoulderSwing(side, desiredAngle, dt) {
+  #applyEndpoint(side) {
     const bind = this.heroMBind.get(ARM_BIND_KEYS[side]);
     const parent = bind?.bone?.parent;
-    if (!bind?.bone || !parent || !this.heroMRoot) return;
+    const sourceHip = this.sourceDrivers.get('hip');
+    const sourceHand = this.sourceDrivers.get(SOURCE_HAND_KEYS[side]);
+    const sourceHandBind = this.sourceBind.get(SOURCE_HAND_KEYS[side]);
+    const correction = this.heroMArmEndpointCorrection.get(side);
+    const pelvis = this.heroMBind.get('pelvis')?.bone;
+    if (!bind?.bone || !parent || !sourceHip || !sourceHand || !sourceHandBind || !correction || !pelvis || !this.heroMRoot) {
+      return;
+    }
 
-    const response = Number.isFinite(dt) && dt > 0
-      ? 1 - Math.exp(-ARM_SWING_RESPONSE * dt)
-      : 1;
-    const currentAngle = THREE.MathUtils.lerp(
-      this.heroMArmCurrentSwing.get(side) ?? 0,
-      desiredAngle,
-      response
-    );
-    this.heroMArmCurrentSwing.set(side, currentAngle);
-    if (Math.abs(currentAngle) < 1e-7) return;
-
+    this.player.root.updateMatrixWorld(true);
     this.heroMRoot.updateMatrixWorld(true);
-    const currentGlobal = rootLocalQuaternion(
-      this.heroMRoot,
-      bind.bone,
-      this.heroMArmCurrentGlobal,
+
+    rootLocalPosition(this.player.root, sourceHip, this.heroMArmSourceHip);
+    rootLocalPosition(this.player.root, sourceHand, this.heroMArmSourceHand);
+    rootLocalPosition(this.heroMRoot, pelvis, this.heroMArmTargetPelvis);
+
+    this.heroMArmSourceRelative
+      .copy(this.heroMArmSourceHand)
+      .sub(this.heroMArmSourceHip)
+      .multiplyScalar(this.heroMPelvisMotionScale);
+    this.heroMArmDesiredRoot
+      .copy(this.heroMArmTargetPelvis)
+      .add(this.heroMArmSourceRelative)
+      .add(correction);
+
+    this.#rootPointToParentLocal(parent, this.heroMArmDesiredRoot, this.heroMArmDesiredLocal);
+    // HeroMPresentation resets compact-rig joint positions every frame before this
+    // adapter runs. Copy the live endpoint directly; lerping from that reset pose
+    // each frame would permanently attenuate the hand travel and recreate the
+    // visually pinned-wrist failure.
+    bind.bone.position.copy(this.heroMArmDesiredLocal);
+
+    rootLocalQuaternion(
+      this.player.root,
+      sourceHand,
+      this.heroMArmSourceQuaternion,
       this.heroMArmRootInverse,
-      this.heroMArmWorldQuaternion
+      this.heroMArmSourceWorldQuaternion
     );
-    const parentGlobal = rootLocalQuaternion(
+    this.heroMArmDeltaQuaternion
+      .copy(this.heroMArmSourceQuaternion)
+      .multiply(this.heroMArmSourceBindInverse.copy(sourceHandBind.quaternion).invert())
+      .normalize();
+    this.heroMArmDesiredGlobal
+      .copy(this.heroMArmDeltaQuaternion)
+      .multiply(bind.globalQuaternion)
+      .normalize();
+
+    rootLocalQuaternion(
       this.heroMRoot,
       parent,
       this.heroMArmParentGlobal,
       this.heroMArmRootInverse,
-      this.heroMArmWorldQuaternion
+      this.heroMArmSourceWorldQuaternion
     );
-
-    this.heroMArmSwingQuaternion.setFromAxisAngle(ROOT_SWING_AXIS, currentAngle);
-    this.heroMArmDesiredGlobal
-      .copy(this.heroMArmSwingQuaternion)
-      .multiply(currentGlobal)
-      .normalize();
-    bind.bone.quaternion
-      .copy(this.heroMArmParentInverse.copy(parentGlobal).invert())
+    this.heroMArmDesiredLocalQuaternion
+      .copy(this.heroMArmParentInverse.copy(this.heroMArmParentGlobal).invert())
       .multiply(this.heroMArmDesiredGlobal)
       .normalize();
+    bind.bone.quaternion.copy(this.heroMArmDesiredLocalQuaternion);
   }
 
-  #updateArmMotion(dt) {
-    if (!this.heroMArmMotionReady) return;
-
-    const profile = this.#profileForCurrentState();
-    const phase = profile === ZERO_SWING_PROFILE ? 0 : this.#sourceArmSwingPhase();
-
-    // For a mostly downward rigid arm, opposite X-axis rotations move the hands
-    // fore/aft while the circular shoulder arc naturally lifts them near each end
-    // of the stride. The joint itself never leaves its authored position.
-    this.#applyShoulderSwing('left', -profile.radians * phase, dt);
-    this.#applyShoulderSwing('right', profile.radians * phase, dt);
-
+  #updateArmEndpoints() {
+    if (!this.heroMReady) return;
+    this.#applyEndpoint('left');
+    this.#applyEndpoint('right');
     this.heroMBody?.updateMatrixWorld?.(true);
   }
 
   update(dt) {
     super.update(dt);
     if (!this.heroMArmMotionReady || !Number.isFinite(dt) || dt <= 0) return;
-    this.#updateArmMotion(dt);
+    this.#updateArmEndpoints();
   }
 }
