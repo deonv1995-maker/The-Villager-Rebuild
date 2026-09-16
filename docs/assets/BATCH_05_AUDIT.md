@@ -24,10 +24,10 @@ Decision: **provenance and license gate cleared for the selected tool/weapon ass
 
 | Existing tool slot | Candidate source | Integration status |
 | --- | --- | --- |
-| Axe | `Weapons and Others/axe.fbx` | FBX presentation implemented on scoped branch |
-| Hammer | `Weapons and Others/hammer.fbx` | FBX presentation implemented on scoped branch |
-| Shovel | `Weapons and Others/shovel.fbx` | FBX presentation implemented on scoped branch |
-| Sword | `Weapons and Others/sword.fbx` | FBX presentation implemented on scoped branch |
+| Axe | `Weapons and Others/axe.fbx` | FBX presentation implemented |
+| Hammer | `Weapons and Others/hammer.fbx` | FBX presentation implemented |
+| Shovel | `Weapons and Others/shovel.fbx` | FBX presentation implemented |
+| Sword | `Weapons and Others/sword.fbx` | FBX presentation implemented |
 | Pickaxe | No matching FBX in this archive | Existing procedural presentation retained |
 | Torch | No matching FBX in this archive | Existing torch system retained |
 | Spear | `Weapons and Others/spear.fbx` | Candidate identified; integration deferred until the held/projectile presentation is unified cleanly |
@@ -36,18 +36,27 @@ The extra blade, club, staff, shield, scythe, pitchfork, crossbow and alternate 
 
 ## Runtime integration boundary
 
-- `src/rendering/ToolModelAsset.js` owns FBX loading, caching, deterministic orientation/scale normalization, and material/shadow preparation.
+- `src/rendering/ToolModelAsset.js` owns FBX loading, caching, deterministic orientation/scale normalization, segmented-payload decoding and material/shadow preparation.
 - `src/data/AssetPaths.js` remains the single path authority.
 - `src/player/RangerToolPresentation.js` retains its existing primitive geometry as an immediate fallback, then swaps to the FBX only after a successful load.
+- `src/player/HeroMToolGripPresentation.js` is the final Hero M presentation layer. It preserves the geometry-derived visible-hand grip position but calibrates the shared tool axis upright in Hero M hand space, matching the already proven Prisma grip contract.
 - Async model loads are request-versioned so changing equipped tools cannot install a stale model after a later selection.
 - Pickaxe continues to use its established presentation because substituting another model would be semantically incorrect.
 - Spear remains unchanged in this pass because the held Hero M spear and projectile/embedded spear are currently constructed by separate systems. A later spear model import should first make one presentation source authoritative for both states rather than replacing only one copy.
 
 ## Web delivery
 
-The browser build cannot rely on a binary-file upload path through the connected repository tooling, so the selected FBX bytes are gzip-compressed, base64-encoded and segmented under `public/assets/tools/user-fbx/`. This deliberately follows the repository's existing Hero M segmented compressed-payload pattern rather than introducing a second delivery mechanism.
+The browser build cannot rely on a binary-file upload path through the connected repository tooling, so the selected FBX bytes are gzip-compressed, base64-encoded and segmented under `public/assets/tools/user-fbx/`. This deliberately follows the repository's existing segmented compressed-payload architecture rather than introducing a second delivery mechanism.
 
-Each selected asset is reconstructed in memory, decompressed with `DecompressionStream`, then parsed by Three.js `FBXLoader`. Existing procedural tools remain functional if decoding, decompression, parsing, or loading fails.
+The tool archive segmentation differs from the Hero M runtime payload in one important way: the FBX tool text files are slices of **one continuous base64 stream**, and several segment boundaries fall between base64 quartets. Those individual files are therefore not valid standalone base64 documents. Runtime reconstruction must concatenate the encoded text first and perform one base64 decode, then gzip-decompress and parse the resulting FBX.
+
+A previous implementation decoded each tool text segment independently before concatenating the decoded bytes. On the shipped axe and hammer payloads that throws before FBX parsing, leaving the procedural fallback visible indefinitely. `decodeSegmentedToolPayload()` is now the production reassembly authority for these tool payloads, and `verify-runtime-assets.mjs` exercises that same decoder against both `public` and built `dist` assets before accepting the build.
+
+## Hero M grip correction
+
+Hero M's `DEF_hand_R` is a compact outer-arm/hand endpoint rather than a conventional wrist chain. The original Hero M tool mount used the vector from the endpoint bone to the outer weighted hand geometry as the tool's long-axis direction. That made the axe/hammer axis follow the lateral arm/hand direction, so the handle/head could project sideways through the visible hand instead of reading as an upright held tool.
+
+The grip position remains geometry-derived and follows the translated Hero M endpoint. Only the orientation frame changes: the shared tool +Y axis is calibrated to world-up expressed in the Hero M hand bind space, using the same presentation contract already established by `MasculinePrismaHumanoidPresentation`. Live KayKit hand deltas still rotate the mounted tool during locomotion and actions, so this does not create a second animation authority.
 
 ## Production gate
 
@@ -57,6 +66,7 @@ Merge still requires the normal engineering gates:
 
 - branch synchronized with current `main`;
 - full repository CI/check suite green on the final branch head;
+- segmented FBX payload verification green for both `public` and built `dist`;
 - no unresolved PR review blockers;
 - post-merge GitHub Pages verification for the deployed build;
-- device verification of hand grip, orientation, scale, swing readability and mobile runtime loading.
+- device verification of Hero M hand grip, model orientation/scale, swing readability and mobile runtime loading.

@@ -9,6 +9,8 @@ const HERO_PARTS = [
   'public/assets/player/hero_m.glb.gz.part1.b64',
   'public/assets/player/hero_m.glb.gz.part2.b64'
 ];
+const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 const compressed = Buffer.concat(
   HERO_PARTS.map(path => Buffer.from(readFileSync(path, 'utf8').trim(), 'base64'))
@@ -47,6 +49,50 @@ const leftPivot = rootLocalBonePosition(leftHand);
 const rightPivot = rootLocalBonePosition(rightHand);
 assert.ok(leftPivot.x > 0.7 && rightPivot.x < -0.7, 'authored DEF_hand pivots must remain lateral endpoint anchors');
 assert.ok(leftPivot.y > 1.6 && rightPivot.y > 1.6, 'authored DEF_hand pivots must remain near the raised source-pose arm endpoints');
+
+// The selected Hero M grip must preserve the geometry-derived visible-hand
+// position while using an upright tool axis in hand space. This mirrors the
+// proven Prisma fallback grip contract and prevents axe/hammer handles from
+// projecting sideways through the compact hand endpoint.
+const appearanceSource = readFileSync('src/player/RangerAppearancePresentation.js', 'utf8');
+const toolGripSource = readFileSync('src/player/HeroMToolGripPresentation.js', 'utf8');
+assert.match(
+  appearanceSource,
+  /HeroMToolGripPresentation as RangerAppearancePresentation/,
+  'Ranger compatibility boundary must select the final Hero M upright tool-grip layer'
+);
+assert.match(
+  toolGripSource,
+  /extends HeroMArmMotionPresentation/,
+  'Hero M tool grip must remain a presentation-only layer above the established arm endpoint retarget'
+);
+assert.match(
+  toolGripSource,
+  /WORLD_UP\.clone\(\)\.applyQuaternion\(inverseHandBind\)/,
+  'Hero M grip must derive world-up in the compact hand bind space'
+);
+assert.match(
+  toolGripSource,
+  /setFromUnitVectors\(TOOL_AXIS, upInHandSpace\)/,
+  'Hero M grip must align the shared tool axis upright in hand space'
+);
+assert.match(
+  toolGripSource,
+  /hero-m-upright-visible-hand-v2/,
+  'Hero M upright grip profile must remain explicit for regression and device diagnostics'
+);
+
+const rightHandBind = rightHand.getWorldQuaternion(new THREE.Quaternion());
+const upInHandSpace = WORLD_UP.clone().applyQuaternion(rightHandBind.clone().invert()).normalize();
+const mountBind = new THREE.Quaternion().setFromUnitVectors(TOOL_AXIS, upInHandSpace);
+const mountedWorldAxis = TOOL_AXIS.clone()
+  .applyQuaternion(mountBind)
+  .applyQuaternion(rightHandBind)
+  .normalize();
+assert.ok(
+  mountedWorldAxis.distanceTo(WORLD_UP) < 1e-6,
+  'shipped Hero M bind must support an upright tool axis through the selected hand-space calibration'
+);
 
 function dominantBoundsForBone(bone) {
   const bounds = new THREE.Box3();
@@ -104,4 +150,4 @@ assert.ok(
   'DEF_spine dominant geometry must remain central so the inner shoulder/arm blend stays torso-owned'
 );
 
-console.log('Hero M compact arm rig verified: torso-blended shoulder region with spine-parented left/right hand endpoints.');
+console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints and upright visible-hand tool grip.');

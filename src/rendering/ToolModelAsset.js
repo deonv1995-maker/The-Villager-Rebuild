@@ -18,6 +18,22 @@ export function hasToolModelAsset(toolId) {
   return Boolean(TOOL_MODEL_PRESENTATION[toolId] && Array.isArray(parts) && parts.length > 0);
 }
 
+export function decodeSegmentedToolPayload(encodedParts) {
+  if (!Array.isArray(encodedParts) || encodedParts.length === 0) {
+    throw new Error('Tool asset payload requires at least one base64 segment');
+  }
+
+  const encoded = encodedParts
+    .map((part, index) => {
+      const normalized = String(part ?? '').replace(/\s+/g, '');
+      if (!normalized) throw new Error(`Tool asset payload segment ${index} is empty`);
+      return normalized;
+    })
+    .join('');
+
+  return decodeBase64(encoded);
+}
+
 export async function createToolModelAsset(toolId) {
   const presentation = TOOL_MODEL_PRESENTATION[toolId];
   const parts = ASSET_PATHS.tools?.[toolId]?.parts;
@@ -52,24 +68,19 @@ async function fetchCompressedParts(toolId, parts) {
     }
     return response.text();
   }));
-  return concatenate(encodedParts.map(decodeBase64));
+
+  // Tool payloads are one base64 stream split for repository transport. Some
+  // boundaries intentionally fall between base64 quartets, so each segment is
+  // not independently decodable. Reassemble the encoded stream first, then
+  // decode once. The previous per-segment atob() path forced the runtime back to
+  // the procedural tools on mobile because those non-quartet segments throw.
+  return decodeSegmentedToolPayload(encodedParts);
 }
 
 function decodeBase64(text) {
   const binary = atob(String(text ?? '').trim());
   const bytes = new Uint8Array(binary.length);
   for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-}
-
-function concatenate(parts) {
-  const length = parts.reduce((total, part) => total + part.byteLength, 0);
-  const bytes = new Uint8Array(length);
-  let offset = 0;
-  for (const part of parts) {
-    bytes.set(part, offset);
-    offset += part.byteLength;
-  }
   return bytes;
 }
 
