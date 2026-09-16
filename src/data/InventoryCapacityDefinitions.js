@@ -35,5 +35,8 @@ export const INVENTORY_ITEM_BULK = Object.freeze({
   pickaxe: 4,
   shovel: 4,
   sword: 4,
-  torch: 3
+  torch: 3,
+  'crafting-bench': 8,
+  chest: 6,
+  barrel: 6
 });
