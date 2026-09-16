@@ -13,6 +13,7 @@ import { WorldCollisionSystem } from './WorldCollisionSystem.js';
 import { WorldChunkSystem } from './WorldChunkSystem.js';
 import { TreeOcclusionSystem } from './TreeOcclusionSystem.js';
 import { WaterVisualSystem } from './WaterVisualSystem.js';
+import { RenderedTerrainSurfaceSampler } from './RenderedTerrainSurfaceSampler.js';
 
 const UNBOUNDED_SUPPORT_REFERENCE = Number.MAX_SAFE_INTEGER;
 
@@ -34,6 +35,10 @@ export class TestIslandSystem {
       group: this.group,
       terrain: this.terrain,
       chunks: this.chunks
+    });
+    this.renderedTerrainSurface = new RenderedTerrainSurfaceSampler({
+      group: this.group,
+      fallbackHeightAt: (x, z) => this.constructionHeightAt(x, z)
     });
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
@@ -137,6 +142,22 @@ export class TestIslandSystem {
     });
   }
 
+  /**
+   * Presentation-only support height matching the low-poly triangle the player sees.
+   * Gameplay/collision deliberately continue to use the analytical construction
+   * surface above. Standable floors are resolved through the same vertical collision
+   * context so the visual character still follows real built surfaces.
+   */
+  visualGroundHeightAt(x, z) {
+    const renderedBase = this.renderedTerrainSurface.heightAt(x, z);
+    if (!Number.isFinite(renderedBase)) return this.walkableHeightAt(x, z);
+    const referenceY = this.collision.getSupportReferenceY();
+    return this.collision.supportHeightAt(x, z, renderedBase, {
+      referenceY: Number.isFinite(referenceY) ? referenceY : renderedBase,
+      maxStepUp: 0.58
+    });
+  }
+
   setConstructionFloors(floors) {
     return this.constructionTerrain.setFloors(floors);
   }
@@ -189,6 +210,7 @@ export class TestIslandSystem {
     this.collision.clear();
     this.terrain.create();
     this.constructionTerrain.captureTerrainMeshes();
+    this.renderedTerrainSurface.captureTerrainMeshes();
     this.waterVisuals.create();
     const mountainCount = this.mountains.create();
     const explorationPoiCount = this.explorationPois.create();
