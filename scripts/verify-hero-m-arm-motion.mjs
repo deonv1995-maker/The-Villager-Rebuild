@@ -86,6 +86,7 @@ assert.equal(presentation.heroMArmMotionReady, true, 'production Ranger presenta
 assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v8');
 assert.equal(presentation.visualRoot.userData.armPose, 'bind-calibrated-hand-endpoints-v1');
 assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-bilateral-hand-travel-v2');
+assert.equal(presentation.visualRoot.userData.armCarry, 'semantic-right-hand-carry-v1');
 assert.equal(presentation.heroMRoot.userData.armRestProfile, 'source-hand-endpoint-retarget-v1');
 assert.deepEqual(presentation.heroMRoot.userData.armTravelGain, EXPECTED_TRAVEL_GAIN,
   'Hero M locomotion arm travel gain must remain explicit and presentation-only');
@@ -130,7 +131,7 @@ const settledRightEndpoint = rootLocalPosition(presentation.heroMRoot, rightArm.
 assert.ok(settledRightEndpoint.distanceTo(idleRightEndpoint) < 0.005, 'idle endpoint placement must be deterministic without cumulative drift');
 
 const mixer = new THREE.AnimationMixer(ranger.scene);
-async function sampleState(state, fractions) {
+async function sampleState(state, fractions, { verifyExact = true } = {}) {
   const clip = movement.animations.find(candidate => normalize(candidate.name) === normalize(state));
   assert.ok(clip, `production movement asset must expose ${state}`);
   const samples = [];
@@ -170,10 +171,12 @@ async function sampleState(state, fractions) {
       .add(leftRelative)
       .add(presentation.heroMArmEndpointCorrection.get('left'));
 
-    assert.ok(
-      rightEndpoint.distanceTo(expectedRight) < 1e-5 && leftEndpoint.distanceTo(expectedLeft) < 1e-5,
-      `${state} endpoints must follow the gain-adjusted live KayKit hand trajectories instead of rotating around fixed wrist pivots`
-    );
+    if (verifyExact) {
+      assert.ok(
+        rightEndpoint.distanceTo(expectedRight) < 1e-5 && leftEndpoint.distanceTo(expectedLeft) < 1e-5,
+        `${state} endpoints must follow the gain-adjusted live KayKit hand trajectories instead of rotating around fixed wrist pivots`
+      );
+    }
     samples.push({ fraction, sourceRightHand: sourceRightHandPoint, sourceLeftHand: sourceLeftHandPoint, rightEndpoint, leftEndpoint, grip });
   }
   return samples;
@@ -186,6 +189,8 @@ const walkRightZRange = range(walkSamples.map(sample => sample.rightEndpoint.z))
 const runRightZRange = range(runSamples.map(sample => sample.rightEndpoint.z));
 const walkRightYRange = range(walkSamples.map(sample => sample.rightEndpoint.y));
 const runRightYRange = range(runSamples.map(sample => sample.rightEndpoint.y));
+const walkLeftZRange = range(walkSamples.map(sample => sample.leftEndpoint.z));
+const runLeftZRange = range(runSamples.map(sample => sample.leftEndpoint.z));
 const walkGripZRange = range(walkSamples.map(sample => sample.grip.z));
 const runGripZRange = range(runSamples.map(sample => sample.grip.z));
 
@@ -223,8 +228,43 @@ assert.ok(
   `run endpoint mapping must not throw the hands back above the shoulders: ${JSON.stringify({ maxRunEndpointY, spineY: spinePoint.y })}`
 );
 
+presentation.setRightHandCarryProfile('steady-upright');
+for (let frame = 0; frame < 60; frame += 1) presentation.update(1 / 60);
+assert.ok(presentation.rightHandCarryBlend > 0.99, 'steady carry profile must ease fully in without a selection pop');
+assert.equal(presentation.heroMRoot.userData.rightHandCarryProfile, 'steady-upright');
+
+const carriedWalkSamples = await sampleState('Walking_A', fractions, { verifyExact: false });
+const carriedRunSamples = await sampleState('Running_A', fractions, { verifyExact: false });
+const carriedWalkRightZRange = range(carriedWalkSamples.map(sample => sample.rightEndpoint.z));
+const carriedRunRightZRange = range(carriedRunSamples.map(sample => sample.rightEndpoint.z));
+const carriedWalkRightYRange = range(carriedWalkSamples.map(sample => sample.rightEndpoint.y));
+const carriedRunRightYRange = range(carriedRunSamples.map(sample => sample.rightEndpoint.y));
+const carriedWalkLeftZRange = range(carriedWalkSamples.map(sample => sample.leftEndpoint.z));
+const carriedRunLeftZRange = range(carriedRunSamples.map(sample => sample.leftEndpoint.z));
+
+assert.ok(
+  carriedWalkRightZRange < walkRightZRange * 0.85
+    && carriedRunRightZRange < runRightZRange * 0.85,
+  `steady carry must substantially reduce free right-hand fore/aft swing: ${JSON.stringify({ walkRightZRange, carriedWalkRightZRange, runRightZRange, carriedRunRightZRange })}`
+);
+assert.ok(
+  carriedWalkRightYRange < walkRightYRange * 0.9
+    && carriedRunRightYRange < runRightYRange * 0.9,
+  `steady carry must restrain right-hand vertical bounce while preserving common gait motion: ${JSON.stringify({ walkRightYRange, carriedWalkRightYRange, runRightYRange, carriedRunRightYRange })}`
+);
+assert.ok(
+  Math.abs(carriedWalkLeftZRange - walkLeftZRange) < 1e-5
+    && Math.abs(carriedRunLeftZRange - runLeftZRange) < 1e-5,
+  'steady right-hand carry must leave the free left-arm locomotion trajectory unchanged'
+);
+
+presentation.setRightHandCarryProfile(null);
+for (let frame = 0; frame < 60; frame += 1) presentation.update(1 / 60);
+assert.ok(presentation.rightHandCarryBlend < 0.001, 'clearing steady carry must ease back to the normal free-arm gait');
+assert.equal(presentation.heroMRoot.userData.rightHandCarryProfile, null);
+
 for (const bind of presentation.heroMBind.values()) {
   assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'arm endpoint retarget must keep every Hero M transform finite');
 }
 
-console.log(`Hero M amplified hand endpoints verified: ${JSON.stringify({ idleRightEndpoint: idleRightEndpoint.toArray(), idleLeftEndpoint: idleLeftEndpoint.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange, walkGripZRange, runGripZRange, maxRunEndpointY, armTravelGain: EXPECTED_TRAVEL_GAIN })}`);
+console.log(`Hero M amplified/free and steady-carried hand endpoints verified: ${JSON.stringify({ idleRightEndpoint: idleRightEndpoint.toArray(), idleLeftEndpoint: idleLeftEndpoint.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange, walkGripZRange, runGripZRange, carriedWalkRightZRange, carriedRunRightZRange, carriedWalkRightYRange, carriedRunRightYRange, maxRunEndpointY, armTravelGain: EXPECTED_TRAVEL_GAIN })}`);
