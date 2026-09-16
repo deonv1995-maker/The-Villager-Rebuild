@@ -49,9 +49,9 @@ const root = new THREE.Group();
 root.add(ranger.scene);
 
 // Reproduce the physical-device failure at the coordinate-space boundary. Hero M is
-// loaded while the gameplay root is on terrain below world zero. The old calibration
-// measured world-space bounds and reused them as a local offset, which raised the
-// complete character by |GROUND_Y| and visually pinned its feet toward world Y=0.
+// loaded while the gameplay root is on terrain below world zero. Before this fix,
+// world-space candidate bounds were reused as a local grounding offset and the full
+// character was visibly raised toward world Y=0 by |GROUND_Y|.
 const GROUND_Y = -0.34;
 let supportY = GROUND_Y;
 root.position.set(0, supportY, 0);
@@ -83,20 +83,16 @@ const presentation = new HeroMVisibleSoleGroundingPresentation({
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 
-assert.ok(presentation.heroMLoadSpaceGroundingReady, 'production Hero M must normalize its load-time grounding reference space');
-assert.ok(
-  Math.abs(presentation.heroMLoadSpaceCorrectionY - GROUND_Y) < 1e-9,
-  `load-space correction must remove exactly the parent world Y that contaminated base calibration: ${presentation.heroMLoadSpaceCorrectionY}`
-);
+assert.ok(presentation.heroMGroundContactsReady, 'production compatibility boundary must finish after local-space Hero M loading');
 assert.equal(
   presentation.heroMRoot.userData.groundingReferenceSpace,
   'presentation-local-v1',
-  'Hero M grounding calibration must be recorded as presentation-local after normalization'
+  'Hero M authored bounds must be calibrated in presentation-local space'
 );
 assert.equal(
   presentation.visualRoot.userData.grounding,
-  'presentation-local-load-calibration-v1',
-  'the production compatibility boundary must identify local-space load calibration as its grounding fix'
+  'presentation-local-calibration-plus-center-support-v2',
+  'production Hero M must expose local calibration plus the existing bounded center-support compensation'
 );
 assert.equal(
   presentation.heroMRoot.userData.pelvisMotionProfile,
@@ -109,7 +105,7 @@ const loadBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
 const loadRelativeBottom = loadBounds.min.y - supportY;
 assert.ok(
   loadRelativeBottom >= -0.09 && loadRelativeBottom <= 0.04,
-  `Hero M loaded at Y=${GROUND_Y} must be grounded relative to that terrain instead of world zero: ${JSON.stringify({ minY: loadBounds.min.y, supportY, relative: loadRelativeBottom, correctionY: presentation.heroMLoadSpaceCorrectionY })}`
+  `Hero M loaded at Y=${GROUND_Y} must be grounded relative to that terrain instead of world zero: ${JSON.stringify({ minY: loadBounds.min.y, supportY, relative: loadRelativeBottom })}`
 );
 assert.ok(
   Math.abs(loadBounds.min.y) > 0.18,
@@ -128,7 +124,7 @@ const targetPelvisDelta = new THREE.Vector3();
 const expectedPelvisDelta = new THREE.Vector3();
 const idlePelvisFrames = [];
 const stateBounds = {};
-const correctedHeroRootY = presentation.heroMRoot.position.y;
+const calibratedHeroRootY = presentation.heroMRoot.position.y;
 
 for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
   const clip = allClips.find(candidate => normalize(candidate.name) === normalize(state));
@@ -151,8 +147,8 @@ for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
 
     assert.equal(root.position.y, supportY, `${state} must never move the gameplay root to solve presentation grounding`);
     assert.ok(
-      Math.abs(presentation.heroMRoot.position.y - correctedHeroRootY) < 1e-9,
-      `${state} must not accumulate or reapply the one-time load-space correction`
+      Math.abs(presentation.heroMRoot.position.y - calibratedHeroRootY) < 1e-9,
+      `${state} must preserve the one-time local authored calibration without accumulating another correction`
     );
     assert.equal(contacts.length, 2, `${state} must retain both rendering-only foot contact anchors`);
     assert.ok(
@@ -186,11 +182,11 @@ assert.ok(
 );
 assert.ok(
   Math.max(...idlePelvisFrames.map(frame => frame.targetY)) - Math.min(...idlePelvisFrames.map(frame => frame.targetY)) > 0.001,
-  `Hero M must retain visible pelvis motion after local-space grounding normalization: ${JSON.stringify(idlePelvisFrames)}`
+  `Hero M must retain visible pelvis motion after local-space grounding calibration: ${JSON.stringify(idlePelvisFrames)}`
 );
 
-// With a fixed authored pose, changing the gameplay/world support elevation must move
-// Hero M by the exact same amount. This directly guards against world-zero pinning.
+// With a fixed authored pose, changing gameplay/world support elevation must move Hero
+// M by the exact same amount. This directly guards against world-zero pinning.
 const runningClip = allClips.find(candidate => normalize(candidate.name) === normalize('Running_A'));
 mixer.stopAllAction();
 mixer.clipAction(runningClip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
@@ -217,7 +213,7 @@ assert.ok(
 );
 
 // Airborne updates keep the established base presentation offset and follow the
-// gameplay root; the one-time load correction must never become a terrain magnet.
+// gameplay root; local calibration must never become a terrain magnet.
 const groundedMinY = highBounds.min.y;
 player.grounded = false;
 player.animationState = 'Jump_Idle';
@@ -228,11 +224,11 @@ presentation.visualRoot.updateMatrixWorld(true);
 const airborneBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
 assert.ok(
   airborneBounds.min.y > groundedMinY + 0.65,
-  'Hero M must follow the gameplay root upward during a jump after load-space normalization'
+  'Hero M must follow the gameplay root upward during a jump after local-space calibration'
 );
 assert.ok(
-  Math.abs(presentation.heroMRoot.position.y - correctedHeroRootY) < 1e-9,
-  'airborne updates must not mutate the one-time local-space calibration'
+  Math.abs(presentation.heroMRoot.position.y - calibratedHeroRootY) < 1e-9,
+  'airborne updates must not mutate the authored local grounding calibration'
 );
 
-console.log(`Hero M nonzero-world load calibration verified against shipped assets at ${GROUND_Y.toFixed(2)} m terrain elevation: ${JSON.stringify(stateBounds)}`);
+console.log(`Hero M presentation-local calibration verified against shipped assets at ${GROUND_Y.toFixed(2)} m terrain elevation: ${JSON.stringify(stateBounds)}`);
