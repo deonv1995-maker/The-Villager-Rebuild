@@ -98,7 +98,7 @@ assert.ok(
 );
 assert.equal(
   presentation.visualRoot.userData.grounding,
-  'rendered-surface-root-anchor-v1',
+  'rendered-surface-root-anchor-v2',
   'Hero M must use the rendered terrain surface rather than animated-sole inference as its final grounding seam'
 );
 
