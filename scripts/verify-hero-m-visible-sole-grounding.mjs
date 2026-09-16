@@ -89,13 +89,13 @@ assert.match(
 );
 assert.match(
   armSource,
-  /visible-grip-shoulder-pivot-v2/,
-  'arm polish must use the visible hand grip to calibrate a shoulder-pivot rest orientation'
+  /base-geometry-rest-fixed-shoulder-v3/,
+  'final arm polish must reuse the base geometry-calibrated rest pose rather than introduce a competing rest system'
 );
 assert.match(
   armSource,
   /kaykit-shoulder-pivot-swing-v2/,
-  'walk/run shoulder swing must remain driven by the established KayKit source rig'
+  'walk/run fixed-pivot swing must remain driven by the established KayKit source rig'
 );
 assert.match(
   armSource,
@@ -104,8 +104,8 @@ assert.match(
 );
 assert.doesNotMatch(
   armSource,
-  /heroMArmRestLocal|#applyArmPosition/,
-  'arm polish must not reintroduce translated hip-area arm pivots'
+  /heroMArmRestLocal|#applyArmPosition|#calibrateArmRestOrientations/,
+  'final arm polish must not reintroduce translated hip-area pivots or duplicate the base rest calibration'
 );
 assert.doesNotMatch(
   armSource,
@@ -122,4 +122,4 @@ assert.doesNotMatch(
 
 await import('./verify-hero-m-runtime-grounding.mjs');
 
-console.log('Hero M local grounding, rendering-only foot contacts, fixed shoulder pivots, source-driven arm swing and gameplay-root isolation verified.');
+console.log('Hero M local grounding, rendering-only foot contacts, base-owned arm rest, fixed arm pivots, source-driven arm swing and gameplay-root isolation verified.');
