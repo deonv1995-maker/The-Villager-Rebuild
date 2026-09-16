@@ -7,6 +7,7 @@ import { InventoryCapacityController } from './gameplay/InventoryCapacityControl
 import { InventoryGainFeedbackController } from './gameplay/InventoryGainFeedbackController.js';
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
+import { PlaceableUtilityRuntimeController } from './gameplay/PlaceableUtilityRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
 import { SproutCompanionController } from './gameplay/SproutCompanionController.js';
@@ -97,6 +98,11 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     const equipmentRuntime = new EquipmentRuntimeController({ game });
     equipmentRuntime.start();
     game.equipmentRuntime = equipmentRuntime;
+
+    const placeableUtilityRuntime = new PlaceableUtilityRuntimeController({ game });
+    placeableUtilityRuntime.start();
+    game.placeableUtilityRuntime = placeableUtilityRuntime;
+    game.craftingBenches = placeableUtilityRuntime.benchSystem;
 
     const panelConstructionRuntime = new PanelConstructionRuntimeController({ game });
     panelConstructionRuntime.start();
