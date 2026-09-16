@@ -7,33 +7,22 @@ const GROUND_CONTACT_BIND_KEYS = Object.freeze({
 });
 const EMPTY_GROUND_CONTACTS = Object.freeze([]);
 
-export function heroMLoadSpaceCorrection(presentationWorldY) {
-  return Number.isFinite(presentationWorldY) ? presentationWorldY : 0;
-}
-
 /**
- * Production Hero M compatibility boundary.
+ * Stable production compatibility boundary for Hero M.
  *
- * HeroMPresentation calibrates the authored Hero M body before placing it under its
- * motion pivot. The original calibration measured Box3 bounds after temporarily
- * attaching the candidate to visualRoot, so bounds.min.y was in world space while the
- * resulting groundingOffsetY was later used as a local-space offset. If Hero M
- * finished loading while the Ranger stood at a non-zero world elevation, that world Y
- * was baked into the character's local presentation offset. On terrain below world
- * zero this raises the complete character by the same amount and produces a persistent
- * visible hover even though the gameplay root is correctly grounded.
+ * The large device-visible hover is now fixed at its source in HeroMPresentation:
+ * authored body bounds are calibrated while the candidate is detached, so a player's
+ * current world elevation can never be baked into a local presentation offset.
  *
- * Keep gameplay, collision and terrain untouched. Once the base Hero M load finishes,
- * remove exactly that parent-world-Y contamination from the already-created local
- * presentation transform. This is a one-time coordinate-space normalization, not a
- * per-frame grounding feedback system.
+ * This class intentionally does not add a second grounding controller. It only keeps
+ * the established foot-local rendering anchors used by CelestialShadowSystem. The
+ * gameplay root remains the collision/support authority and HeroMPresentation owns
+ * presentation-local calibration plus its bounded center-support compensation.
  */
 export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   constructor(options) {
     super(options);
-    this.heroMLoadSpaceCorrectionY = 0;
-    this.heroMLoadSpaceGroundingReady = false;
-    this.heroMLoadSpaceWorldPosition = new THREE.Vector3();
+    this.heroMGroundContactsReady = false;
     this.heroMGroundContacts = Object.entries(GROUND_CONTACT_BIND_KEYS).map(([side, bindKey]) => ({
       side,
       bindKey,
@@ -43,32 +32,13 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
 
     const baseHeroLoadPromise = this.heroMLoadPromise;
     this.heroMLoadPromise = baseHeroLoadPromise.then(active => {
-      if (!active || !this.heroMReady || !this.heroMRoot) return false;
-
-      this.visualRoot.updateMatrixWorld(true);
-      this.visualRoot.getWorldPosition(this.heroMLoadSpaceWorldPosition);
-      const correctionY = heroMLoadSpaceCorrection(this.heroMLoadSpaceWorldPosition.y);
-
-      // Base calibration produced: localOffset = correctLocalOffset - parentWorldY.
-      // Adding the exact parent world Y restores the presentation-local offset. This
-      // runs once immediately after base loading and never mutates the gameplay root.
-      this.heroMRoot.position.y += correctionY;
-      this.heroMLoadSpaceCorrectionY = correctionY;
-      this.heroMLoadSpaceGroundingReady = true;
-
-      const storedGroundingOffset = this.heroMRoot.userData.groundingOffsetY;
-      if (Number.isFinite(storedGroundingOffset)) {
-        this.heroMRoot.userData.groundingOffsetY = storedGroundingOffset + correctionY;
-      }
-      this.heroMRoot.userData.loadSpaceCorrectionY = correctionY;
-      this.heroMRoot.userData.groundingReferenceSpace = 'presentation-local-v1';
-      this.visualRoot.userData.grounding = 'presentation-local-load-calibration-v1';
-      this.visualRoot.userData.groundingAuthority = 'gameplay-root-plus-local-presentation-v1';
+      if (!active || !this.heroMReady) return false;
+      this.heroMGroundContactsReady = true;
+      this.visualRoot.userData.grounding = 'presentation-local-calibration-plus-center-support-v2';
       this.visualRoot.userData.soleGrounding = 'retired-after-load-space-root-cause-v1';
-      this.visualRoot.updateMatrixWorld(true);
+      this.visualRoot.userData.groundContactAnchors = 'visible-foot-bones-walkable-support-v2';
       return true;
     });
-    this.heroMLoadSpaceGroundingPromise = this.heroMLoadPromise;
   }
 
   #supportHeightAt(x, z) {
@@ -82,12 +52,12 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   }
 
   /**
-   * Rendering-only foot-local anchors retained for ambient contact shading. They do
-   * not participate in player grounding; X/Z follows the animated foot bones and Y
-   * follows the existing walkable support seam.
+   * Rendering-only foot-local anchors for ambient contact shading. X/Z follows the
+   * animated Hero M foot bones and Y follows the existing walkable support seam.
+   * These points never participate in collision, movement or presentation grounding.
    */
   getGroundContactPoints() {
-    if (!this.heroMReady || !this.heroMLoadSpaceGroundingReady) return EMPTY_GROUND_CONTACTS;
+    if (!this.heroMReady || !this.heroMGroundContactsReady) return EMPTY_GROUND_CONTACTS;
     this.heroMBody?.updateMatrixWorld?.(true);
 
     let activeCount = 0;
