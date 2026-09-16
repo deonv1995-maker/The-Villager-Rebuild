@@ -1,6 +1,9 @@
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { deflateSync, gunzipSync } from 'node:zlib';
+import * as THREE from 'three';
+import { parseHeroMGlb } from '../src/player/HeroMAsset.js';
 
 const HERO_M_PARTS = Object.freeze([
   '../public/assets/player/hero_m.glb.gz.part0.b64',
@@ -8,36 +11,13 @@ const HERO_M_PARTS = Object.freeze([
   '../public/assets/player/hero_m.glb.gz.part2.b64'
 ]);
 
-const TYPE_COMPONENTS = Object.freeze({
-  SCALAR: 1,
-  VEC2: 2,
-  VEC3: 3,
-  VEC4: 4,
-  MAT2: 4,
-  MAT3: 9,
-  MAT4: 16
-});
-
-const COMPONENT_BYTES = Object.freeze({
-  5120: 1,
-  5121: 1,
-  5122: 2,
-  5123: 2,
-  5125: 4,
-  5126: 4
-});
-
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const CAMERA_YAW = -0.48;
-const LIGHT_DIRECTION = normalize3([-0.38, 0.72, 0.58]);
+const LIGHT_DIRECTION = new THREE.Vector3(-0.38, 0.72, 0.58).normalize();
+const DEFAULT_COLOR = new THREE.Color(0xaeb8a3);
 
 function clamp(value, min = 0, max = 255) {
   return Math.max(min, Math.min(max, value));
-}
-
-function normalize3(vector) {
-  const length = Math.hypot(vector[0], vector[1], vector[2]) || 1;
-  return [vector[0] / length, vector[1] / length, vector[2] / length];
 }
 
 function crc32(buffer) {
@@ -87,191 +67,54 @@ function encodeRgbPng(size, pixels) {
   ]);
 }
 
-function parseGlb(bytes) {
-  if (bytes.toString('ascii', 0, 4) !== 'glTF') throw new Error('Hero M launcher source must be a GLB');
-  if (bytes.readUInt32LE(4) !== 2) throw new Error('Hero M launcher source must use glTF 2.0');
-
-  let offset = 12;
-  let json = null;
-  let binary = null;
-  while (offset + 8 <= bytes.length) {
-    const length = bytes.readUInt32LE(offset);
-    const type = bytes.readUInt32LE(offset + 4);
-    const start = offset + 8;
-    const end = start + length;
-    if (end > bytes.length) throw new Error('Hero M GLB contains a truncated chunk');
-    if (type === 0x4e4f534a) {
-      json = JSON.parse(bytes.toString('utf8', start, end).replace(/\u0000+$/g, '').trim());
-    } else if (type === 0x004e4942) {
-      binary = bytes.subarray(start, end);
-    }
-    offset = end;
-  }
-
-  if (!json || !binary) throw new Error('Hero M GLB must contain JSON and BIN chunks');
-  return { json, binary };
+function materialRgb(material) {
+  const source = Array.isArray(material) ? material[0] : material;
+  const color = source?.color?.clone?.() ?? DEFAULT_COLOR.clone();
+  color.convertLinearToSRGB();
+  return [color.r * 255, color.g * 255, color.b * 255];
 }
 
-function readComponent(buffer, offset, type) {
-  switch (type) {
-    case 5120: return buffer.readInt8(offset);
-    case 5121: return buffer.readUInt8(offset);
-    case 5122: return buffer.readInt16LE(offset);
-    case 5123: return buffer.readUInt16LE(offset);
-    case 5125: return buffer.readUInt32LE(offset);
-    case 5126: return buffer.readFloatLE(offset);
-    default: throw new Error(`Unsupported glTF component type ${type}`);
-  }
+function vertexRgb(attribute, index, baseRgb) {
+  if (!attribute) return baseRgb;
+  const r = attribute.getX(index);
+  const g = attribute.itemSize > 1 ? attribute.getY(index) : r;
+  const b = attribute.itemSize > 2 ? attribute.getZ(index) : r;
+  return [baseRgb[0] * r, baseRgb[1] * g, baseRgb[2] * b];
 }
 
-function normalizeComponent(value, type) {
-  switch (type) {
-    case 5120: return Math.max(value / 127, -1);
-    case 5121: return value / 255;
-    case 5122: return Math.max(value / 32767, -1);
-    case 5123: return value / 65535;
-    case 5125: return value / 4294967295;
-    default: return value;
-  }
+function averageRgb(colors) {
+  return [0, 1, 2].map(channel => colors.reduce((sum, color) => sum + color[channel], 0) / colors.length);
 }
 
-function readAccessor(json, binary, accessorIndex) {
-  const accessor = json.accessors?.[accessorIndex];
-  if (!accessor) throw new Error(`Missing glTF accessor ${accessorIndex}`);
-  const view = json.bufferViews?.[accessor.bufferView];
-  if (!view) throw new Error(`Accessor ${accessorIndex} has no buffer view`);
-  const itemSize = TYPE_COMPONENTS[accessor.type];
-  const componentBytes = COMPONENT_BYTES[accessor.componentType];
-  if (!itemSize || !componentBytes) throw new Error(`Unsupported accessor ${accessorIndex}`);
-
-  const stride = view.byteStride ?? itemSize * componentBytes;
-  const base = (view.byteOffset ?? 0) + (accessor.byteOffset ?? 0);
-  const values = new Float64Array(accessor.count * itemSize);
-  for (let item = 0; item < accessor.count; item += 1) {
-    const itemOffset = base + item * stride;
-    for (let component = 0; component < itemSize; component += 1) {
-      let value = readComponent(binary, itemOffset + component * componentBytes, accessor.componentType);
-      if (accessor.normalized) value = normalizeComponent(value, accessor.componentType);
-      values[item * itemSize + component] = value;
-    }
-  }
-  return { values, itemSize, count: accessor.count };
-}
-
-function identityMatrix() {
-  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-}
-
-function multiplyMatrices(a, b) {
-  const out = new Array(16).fill(0);
-  for (let column = 0; column < 4; column += 1) {
-    for (let row = 0; row < 4; row += 1) {
-      out[column * 4 + row] =
-        a[row] * b[column * 4]
-        + a[4 + row] * b[column * 4 + 1]
-        + a[8 + row] * b[column * 4 + 2]
-        + a[12 + row] * b[column * 4 + 3];
-    }
-  }
-  return out;
-}
-
-function nodeMatrix(node) {
-  if (Array.isArray(node.matrix) && node.matrix.length === 16) return [...node.matrix];
-
-  const [x, y, z, w] = node.rotation ?? [0, 0, 0, 1];
-  const [sx, sy, sz] = node.scale ?? [1, 1, 1];
-  const [tx, ty, tz] = node.translation ?? [0, 0, 0];
-  const x2 = x + x;
-  const y2 = y + y;
-  const z2 = z + z;
-  const xx = x * x2;
-  const xy = x * y2;
-  const xz = x * z2;
-  const yy = y * y2;
-  const yz = y * z2;
-  const zz = z * z2;
-  const wx = w * x2;
-  const wy = w * y2;
-  const wz = w * z2;
-
-  return [
-    (1 - (yy + zz)) * sx, (xy + wz) * sx, (xz - wy) * sx, 0,
-    (xy - wz) * sy, (1 - (xx + zz)) * sy, (yz + wx) * sy, 0,
-    (xz + wy) * sz, (yz - wx) * sz, (1 - (xx + yy)) * sz, 0,
-    tx, ty, tz, 1
-  ];
-}
-
-function transformPoint(matrix, point) {
-  const [x, y, z] = point;
-  return [
-    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
-    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
-    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]
-  ];
-}
-
-function accessorVector(accessor, index, length = accessor.itemSize) {
-  const start = index * accessor.itemSize;
-  return Array.from(accessor.values.subarray(start, start + length));
-}
-
-function materialColor(json, primitive) {
-  const factor = json.materials?.[primitive.material]?.pbrMetallicRoughness?.baseColorFactor ?? [0.68, 0.72, 0.64, 1];
-  return [factor[0] * 255, factor[1] * 255, factor[2] * 255];
-}
-
-function collectTriangles(json, binary) {
+function collectTriangles(scene) {
   const triangles = [];
-  const scene = json.scenes?.[json.scene ?? 0];
-  const roots = scene?.nodes ?? [];
+  const localVertex = new THREE.Vector3();
+  scene.updateMatrixWorld(true);
 
-  const visit = (nodeIndex, parentMatrix) => {
-    const node = json.nodes?.[nodeIndex];
-    if (!node) return;
-    const world = multiplyMatrices(parentMatrix, nodeMatrix(node));
+  scene.traverse(object => {
+    if (!object.isMesh || !object.geometry?.attributes?.position) return;
+    object.skeleton?.update?.();
+    const geometry = object.geometry;
+    const index = geometry.index;
+    const position = geometry.attributes.position;
+    const vertexColor = geometry.attributes.color ?? null;
+    const baseRgb = materialRgb(object.material);
+    const elementCount = index?.count ?? position.count;
 
-    if (Number.isInteger(node.mesh)) {
-      const mesh = json.meshes?.[node.mesh];
-      for (const primitive of mesh?.primitives ?? []) {
-        if ((primitive.mode ?? 4) !== 4 || primitive.attributes?.POSITION === undefined) continue;
-        const positions = readAccessor(json, binary, primitive.attributes.POSITION);
-        const colors = primitive.attributes.COLOR_0 === undefined
-          ? null
-          : readAccessor(json, binary, primitive.attributes.COLOR_0);
-        const indices = primitive.indices === undefined
-          ? null
-          : readAccessor(json, binary, primitive.indices);
-        const baseColor = materialColor(json, primitive);
-        const triangleCount = Math.floor((indices?.count ?? positions.count) / 3);
+    const resolveIndex = element => index ? index.getX(element) : element;
+    const resolvePoint = vertexIndex => {
+      object.getVertexPosition(vertexIndex, localVertex);
+      return localVertex.clone().applyMatrix4(object.matrixWorld);
+    };
 
-        for (let triangleIndex = 0; triangleIndex < triangleCount; triangleIndex += 1) {
-          const vertexIndices = [0, 1, 2].map(corner => {
-            const sequential = triangleIndex * 3 + corner;
-            return indices ? Math.round(indices.values[sequential * indices.itemSize]) : sequential;
-          });
-          const points = vertexIndices.map(index => transformPoint(world, accessorVector(positions, index, 3)));
-          let color = baseColor;
-          if (colors) {
-            const averaged = [0, 0, 0];
-            for (const index of vertexIndices) {
-              const vertexColor = accessorVector(colors, index, Math.min(3, colors.itemSize));
-              averaged[0] += vertexColor[0] ?? 1;
-              averaged[1] += vertexColor[1] ?? vertexColor[0] ?? 1;
-              averaged[2] += vertexColor[2] ?? vertexColor[0] ?? 1;
-            }
-            color = averaged.map((value, channel) => baseColor[channel] * (value / 3));
-          }
-          triangles.push({ points, color });
-        }
-      }
+    for (let element = 0; element + 2 < elementCount; element += 3) {
+      const vertexIndices = [resolveIndex(element), resolveIndex(element + 1), resolveIndex(element + 2)];
+      const points = vertexIndices.map(resolvePoint);
+      const color = averageRgb(vertexIndices.map(vertexIndex => vertexRgb(vertexColor, vertexIndex, baseRgb)));
+      triangles.push({ points, color });
     }
+  });
 
-    for (const child of node.children ?? []) visit(child, world);
-  };
-
-  for (const root of roots) visit(root, identityMatrix());
   if (triangles.length < 12) throw new Error(`Hero M icon renderer found only ${triangles.length} triangles`);
   return triangles;
 }
@@ -279,11 +122,11 @@ function collectTriangles(json, binary) {
 function rotateForCamera(point) {
   const cos = Math.cos(CAMERA_YAW);
   const sin = Math.sin(CAMERA_YAW);
-  return [
-    point[0] * cos + point[2] * sin,
-    point[1],
-    -point[0] * sin + point[2] * cos
-  ];
+  return new THREE.Vector3(
+    point.x * cos + point.z * sin,
+    point.y,
+    -point.x * sin + point.z * cos
+  );
 }
 
 function setPixel(pixels, size, x, y, color) {
@@ -348,27 +191,10 @@ function fillTriangle(pixels, size, a, b, c, color) {
 }
 
 function triangleShade(points) {
-  const ab = [
-    points[1][0] - points[0][0],
-    points[1][1] - points[0][1],
-    points[1][2] - points[0][2]
-  ];
-  const ac = [
-    points[2][0] - points[0][0],
-    points[2][1] - points[0][1],
-    points[2][2] - points[0][2]
-  ];
-  const normal = normalize3([
-    ab[1] * ac[2] - ab[2] * ac[1],
-    ab[2] * ac[0] - ab[0] * ac[2],
-    ab[0] * ac[1] - ab[1] * ac[0]
-  ]);
-  const light = Math.abs(
-    normal[0] * LIGHT_DIRECTION[0]
-    + normal[1] * LIGHT_DIRECTION[1]
-    + normal[2] * LIGHT_DIRECTION[2]
-  );
-  return 0.7 + light * 0.38;
+  const ab = points[1].clone().sub(points[0]);
+  const ac = points[2].clone().sub(points[0]);
+  const normal = ab.cross(ac).normalize();
+  return 0.7 + Math.abs(normal.dot(LIGHT_DIRECTION)) * 0.38;
 }
 
 function renderHeroM(size, triangles, maskable = false) {
@@ -380,10 +206,10 @@ function renderHeroM(size, triangles, maskable = false) {
     points: triangle.points.map(rotateForCamera)
   }));
   const allPoints = rotated.flatMap(triangle => triangle.points);
-  const minX = Math.min(...allPoints.map(point => point[0]));
-  const maxX = Math.max(...allPoints.map(point => point[0]));
-  const minY = Math.min(...allPoints.map(point => point[1]));
-  const maxY = Math.max(...allPoints.map(point => point[1]));
+  const minX = Math.min(...allPoints.map(point => point.x));
+  const maxX = Math.max(...allPoints.map(point => point.x));
+  const minY = Math.min(...allPoints.map(point => point.y));
+  const maxY = Math.max(...allPoints.map(point => point.y));
   const spanX = Math.max(0.001, maxX - minX);
   const spanY = Math.max(0.001, maxY - minY);
   const safeScale = maskable ? 0.76 : 0.9;
@@ -395,8 +221,8 @@ function renderHeroM(size, triangles, maskable = false) {
   const baseY = size * (maskable ? 0.82 : 0.89);
 
   const project = point => [
-    size * 0.5 + (point[0] - centerX) * scale,
-    baseY - (point[1] - minY) * scale + point[2] * scale * 0.035
+    size * 0.5 + (point.x - centerX) * scale,
+    baseY - (point.y - minY) * scale + point.z * scale * 0.035
   ];
 
   fillEllipse(
@@ -412,7 +238,7 @@ function renderHeroM(size, triangles, maskable = false) {
   rotated
     .map(triangle => ({
       ...triangle,
-      depth: (triangle.points[0][2] + triangle.points[1][2] + triangle.points[2][2]) / 3
+      depth: (triangle.points[0].z + triangle.points[1].z + triangle.points[2].z) / 3
     }))
     .sort((left, right) => left.depth - right.depth)
     .forEach(triangle => {
@@ -431,18 +257,19 @@ function renderHeroM(size, triangles, maskable = false) {
   return pixels;
 }
 
-async function loadHeroMTriangles() {
+async function loadHeroMScene() {
   const compressedParts = await Promise.all(HERO_M_PARTS.map(async relativePath => {
     const encoded = await readFile(new URL(relativePath, import.meta.url), 'utf8');
     return Buffer.from(encoded.trim(), 'base64');
   }));
   const glb = gunzipSync(Buffer.concat(compressedParts));
-  const { json, binary } = parseGlb(glb);
-  return collectTriangles(json, binary);
+  const arrayBuffer = glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength);
+  return parseHeroMGlb(arrayBuffer);
 }
 
 export async function generatePwaIcons(outputDir = 'public/icons') {
-  const triangles = await loadHeroMTriangles();
+  const scene = await loadHeroMScene();
+  const triangles = collectTriangles(scene);
   await mkdir(outputDir, { recursive: true });
 
   const outputs = [
@@ -458,7 +285,8 @@ export async function generatePwaIcons(outputDir = 'public/icons') {
   return { triangleCount: triangles.length };
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${path.resolve(process.argv[1])}`).href) {
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : null;
+if (invokedPath && path.resolve(fileURLToPath(import.meta.url)) === invokedPath) {
   const outputDir = process.argv[2] ?? 'public/icons';
   const result = await generatePwaIcons(outputDir);
   console.log(`Generated Hero M launcher icons from ${result.triangleCount} source triangles`);
