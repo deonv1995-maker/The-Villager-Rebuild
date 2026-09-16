@@ -2,9 +2,9 @@
 
 ## Status
 
-Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves to `HeroMVisibleSoleGroundingPresentation`, which extends `HeroMPresentation`; despite the retained compatibility class name, the final production grounding seam no longer uses sampled boot vertices as its authority.
+Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves through `HeroMVisibleSoleGroundingPresentation`, which now serves as a stable compatibility/contact-anchor layer above `HeroMPresentation`; it no longer owns a sampled-sole grounding controller.
 
-The masculine Prisma presentation remains the immediate visual fallback if Hero M cannot load or validate. Previous Quaternius comparison assets remain available only as rollback/audit material.
+The masculine Prisma presentation remains the immediate visual fallback if Hero M cannot load or validate. Previous Quaternius comparison assets remain in the repository only as rollback/audit material.
 
 ## Source and runtime derivative
 
@@ -34,51 +34,53 @@ The authored Hero M is approximately 2.754 m tall in source units. A presentatio
 
 ## Grounding architecture
 
-### Why gameplay height and visible ground are different
+### Root cause confirmed by physical-device review
 
-The Ranger controller deliberately grounds against gameplay/collision support, including the highest support sampled under the player's footprint and standable construction surfaces. That behavior is correct for collision stability and must not be changed merely to make a mesh look lower.
+The persistent device-visible hover was not primarily a terrain, collision or animated-foot problem. It originated during Hero M asset initialization.
 
-The island terrain shown to the player is a low-poly triangle mesh. Its vertices are generated from the analytical terrain function, but the visible surface between those vertices is the triangle interpolation performed by the renderer. On sufficiently uneven terrain, the analytical/collision support used by the controller can therefore be materially different from the actual triangle surface visible beneath the character.
+`HeroMPresentation` previously added the fresh `candidateRoot` underneath `visualRoot` **before** measuring `new THREE.Box3().setFromObject(candidateRoot)`. Because `visualRoot` is already parented to the gameplay Ranger root, those bounds included the player's current world-space Y elevation. The code then calculated:
 
-Physical-device screenshots on 2026-09-16 demonstrated that this distinction was not theoretical: Hero M remained visibly suspended above the terrain even after several boot-clearance fixes passed automated flat-support tests. Those earlier tests were proving contact against the analytical support model, not against the triangle the phone was actually drawing.
+`groundingOffsetY = -bounds.min.y - HERO_M_GROUND_SETTLE`
 
-### Rendered terrain surface seam
+and later reused that value as a **local** `candidateRoot.position.y` offset.
 
-`RenderedTerrainSurfaceSampler` is the presentation-only source of truth for visible terrain height. It captures the existing `terrain-chunk-*` meshes and retains references to their live position/index buffers. A query finds the low-poly cell containing the requested X/Z coordinate and barycentrically interpolates the exact rendered triangle.
+That mixed coordinate spaces. If Hero M finished loading while the Ranger stood at world Y = `-0.34`, the local presentation inherited roughly `+0.34 m` of unwanted lift and the entire character appeared suspended above the terrain. If it loaded above world zero, the same bug could bias the character downward. Earlier automated checks normally constructed the test Ranger at world Y = `0`, so they could pass while a physical phone showed the character floating elsewhere in the island.
 
-The sampler does not create another terrain model. Because it reads the existing live vertex buffers, terrain deformation performed by `ConstructionTerrainAdaptationSystem` is reflected automatically. Outside captured terrain it falls back to the existing construction-height source.
+### Correct calibration order
 
-`TestIslandSystem.visualGroundHeightAt(x, z)` exposes this visible surface to presentation code. The rendered terrain height is still passed through the existing collision support context so real standable construction floors remain valid visual support. `walkableHeightAt`, `heightAt`, controller collision and movement remain unchanged.
+Hero M grounding is now calibrated entirely in presentation-local space:
 
-### Hero M final ground solve
+1. Load the Hero M body beneath an unattached `candidateRoot` and apply the production presentation scale.
+2. Capture the compact rig bind data and pelvis-motion scale.
+3. Keep `candidateRoot` detached from the gameplay/player hierarchy.
+4. Measure `candidateRoot` bounds while detached, so `bounds.min.y` contains only authored presentation geometry and scale.
+5. Calculate the existing 3 cm settle offset from those local bounds.
+6. Build the centered Hero M motion pivot and only then attach that completed presentation beneath `visualRoot`.
 
-`HeroMPresentation` continues to own retargeting, calibrated scale, base presentation setup, front-flip/tuck behavior and its historical center-support compensation. `HeroMVisibleSoleGroundingPresentation` is the final visual seam after `super.update()`.
+The candidate is no longer temporarily attached and removed. `candidateRoot.userData.groundingReferenceSpace` is recorded as `presentation-local-v1` so the coordinate-space decision is explicit and regression-testable.
 
-While gameplay reports the Ranger as grounded, the final seam performs the following bounded presentation-only solve:
+This is a one-time authored-presentation calibration. It does not inspect world terrain, mutate gameplay root height, add collision logic, or accumulate a correction over time.
 
-1. Read the gameplay root's world X/Z and its current world Y.
-2. Read `visualGroundHeightAt()` for the low-poly surface actually rendered beneath that root.
-3. Replace the Hero M motion-pivot Y with one absolute root-relative offset from gameplay-root Y to rendered-ground Y.
-4. Measure the complete posed Hero M body after that pivot move.
-5. Resolve any small residual against the visible floor in the same update, with a maximum total whole-body settle correction of 0.30 m and a 1.2 cm visual settle depth.
-6. Repeat only within that same frame for a bounded number of passes so skinned bounds can stabilize after the pivot change.
+### Runtime support compensation
 
-The solve is rebuilt from the current pose every update. It does not use the previous frame's measured clearance, does not integrate an offset over time, and cannot ratchet toward an emergency limit. Animated boot vertices are no longer the final grounding authority.
+After local calibration, the existing `HeroMPresentation` center-support compensation remains responsible for small presentation-only differences between the gameplay root's highest sampled footprint support and the walkable surface at the character center. That correction is bounded and only recalculates while gameplay reports the Ranger as grounded; while airborne it retains the established offset so the gameplay root owns jump motion.
 
-While airborne, the last valid grounded relative presentation offset is retained. The gameplay root therefore owns the full jump and double-jump trajectory; Hero M is not magnetized back toward terrain in the air.
+The previously added skinned-boot sampling/median correction is retired from the final grounding authority. It was useful diagnostically, but it was compensating downstream for a character whose base local transform could already be wrong. Keeping both systems would create competing height logic.
 
 ### Ground-contact rendering
 
-`HeroMVisibleSoleGroundingPresentation` still exposes two rendering-only contact anchors from the animated Hero M foot bones. Their X/Z coordinates follow the feet, while their Y values use the same rendered-surface seam as the body. `CelestialShadowSystem` uses those anchors for compact foot-local ambient contact layers. These anchors are visual cues only and never affect collision, support or animation authority.
+`HeroMVisibleSoleGroundingPresentation` retains its class name for compatibility with existing player/tool imports, but its only Hero-M-specific responsibility beyond the corrected base presentation is exposing two rendering-only contact anchors. X/Z follows the animated left/right foot bones and Y uses the existing walkable-support seam. `CelestialShadowSystem` uses those anchors for compact foot-local ambient contact layers.
 
-## Historical grounding fixes retained where relevant
+The contact anchors do not affect collision, movement, character height or animation authority.
 
-Device testing before the rendered-surface change exposed two independent problems that remain valid fixes:
+## Historical fixes retained
 
-- Hero M originally discarded KayKit hip translation, making the feet animate under an unnaturally fixed pelvis. The pelvis translation retarget remains in production.
-- A later visible-sole correction fed a fresh-pose measurement back into the previous correction and could ratchet vertically over repeated updates. That feedback path has now been removed entirely from the final grounding authority.
+Two earlier device findings remain valid and are intentionally preserved:
 
-The current architecture solves a different and more fundamental boundary: gameplay collision height and visible low-poly render height are allowed to differ, and presentation is responsible for reconciling them without moving gameplay state.
+- Hero M originally discarded KayKit hip translation, making the feet animate under an unnaturally fixed pelvis. The pelvis translation retarget remains active.
+- A later sampled-sole correction fed fresh-pose clearance into previous-frame correction state and could ratchet vertically. That temporal feedback path is now removed entirely from production grounding.
+
+The 2026-09-16 screenshots established the more fundamental initialization issue: the complete character could start with the wrong local Y because world-space bounds were used to build a local transform. Fixing that boundary removes the large persistent hover without changing terrain or gameplay grounding.
 
 ## Double-jump presentation
 
@@ -94,16 +96,16 @@ Hero M does not expose a conventional finger/palm chain. The visible right-hand 
 
 ## Stable systems deliberately unchanged
 
-This grounding change does not modify movement speed, controller radius/height, jump or double-jump physics, collision resolution, terrain generation, construction physics, camera behavior, harvesting, ecology, world generation, day/night, save data, UI, PWA/install behavior, spear behavior, tool timing or KayKit animation ownership.
+This grounding correction does not modify movement speed, controller radius/height, jump or double-jump physics, collision resolution, terrain generation, construction terrain, camera behavior, harvesting, ecology, world generation, day/night, save data, UI, PWA/install behavior, spear behavior, tool timing or KayKit animation ownership. No new terrain-height system is introduced.
 
 ## Automated verification
 
 `npm run check` includes Hero M verification through `verify:prisma-native`.
 
-The grounding verifier now checks the rendered-surface boundary rather than sampled-sole convergence. It verifies the direct root-offset math, bounded same-frame whole-body settle, live triangle interpolation from actual terrain buffers, continued response to post-capture terrain deformation, standable-surface resolution through the existing collision system, gameplay-root isolation and the absence of the old per-vertex sole-feedback authority.
+The grounding regression now pins the calibration order directly: `candidateRoot` must remain detached while bounds are measured, the motion pivot may only be attached afterward, and no temporary `visualRoot.add(candidateRoot)`/`removeFromParent()` sequence is allowed. It also rejects the retired per-frame skinned-sole feedback authority and guards against gameplay-root/jump mutation.
 
-The production runtime probe reconstructs the shipped segmented Hero M asset and loads the real KayKit Ranger plus movement/general animation GLBs. It deliberately creates a 0.34 m mismatch: gameplay/collision support is placed 34 cm above the rendered floor. Across production `Idle_A`, `Walking_A` and `Running_A` poses the test requires the gameplay root to remain unchanged while the visible Hero M body settles onto the rendered floor, remains stable across repeated updates and keeps both visual contact anchors on that same floor. It separately verifies that KayKit hip translation still reaches the Hero M pelvis and that an airborne gameplay-root rise carries Hero M upward rather than re-grounding it.
+The production runtime probe reconstructs the shipped segmented Hero M asset and loads the real KayKit Ranger plus movement/general animation GLBs. It deliberately initializes the gameplay root and terrain support at world Y = `-0.34 m`, reproducing the coordinate-space condition that previously lifted the presentation toward world zero. The test requires Hero M's visible bounds to remain relative to that negative terrain elevation rather than world zero, exercises production `Idle_A`, `Walking_A` and `Running_A`, preserves KayKit-to-Hero-M pelvis translation, verifies both foot-local rendering anchors, then moves the same gameplay root upward by `0.8 m` and requires Hero M to follow one-for-one. An airborne check confirms a later jump still follows the gameplay root without changing the authored local calibration.
 
 ## Device verification required after deployment
 
-On a physical phone, revisit the locations shown in the 2026-09-16 screenshots and verify Hero M from front, side and rear views. In idle, confirm the visible boots/body meet the actual terrain with no large air gap and without creeping vertically. Walk and run over the same meadow/crash-site area, then test slopes and raised construction floors. Finally verify first jump and second-jump flip/tuck still leave the ground normally and land cleanly, tools remain aligned to the visible right hand, first-person still hides the body/contact cue correctly, and no gameplay collision or interaction behavior changed.
+On a physical phone, revisit the locations shown in the 2026-09-16 screenshots and verify Hero M from front, side and rear views. The entire character should now remain attached to the gameplay root's actual terrain elevation instead of hovering toward a fixed world-height reference. In idle, confirm the boots/body no longer show the large persistent air gap. Walk and run through the same meadow/crash-site area, then test slopes and raised construction floors. Finally verify the first jump and second-jump flip/tuck still leave the ground normally and land cleanly, tools remain aligned to the visible right hand, first-person still hides the body/contact cue correctly, and no gameplay collision or interaction behavior changed.
