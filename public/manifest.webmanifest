@@ -12,19 +12,19 @@
   "theme_color": "#101d15",
   "icons": [
     {
-      "src": "icons/ranger-install-192-v4.png",
+      "src": "icons/hero-m-install-192-v1.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/ranger-install-512-v4.png",
+      "src": "icons/hero-m-install-512-v1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/ranger-install-maskable-512-v4.png",
+      "src": "icons/hero-m-install-maskable-512-v1.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
