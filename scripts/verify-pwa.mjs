@@ -6,18 +6,18 @@ import { inflateSync } from 'node:zlib';
 const root = process.argv[2] ?? 'dist';
 const packageJson = JSON.parse(await readFile('package.json', 'utf8'));
 const expectedVersion = packageJson.version;
-const shellRevision = 'ranger-icon-5';
+const shellRevision = 'hero-m-icon-1';
 const installIcons = {
-  png192: 'icons/ranger-install-192-v4.png',
-  png512: 'icons/ranger-install-512-v4.png',
-  maskable512: 'icons/ranger-install-maskable-512-v4.png'
+  png192: 'icons/hero-m-install-192-v1.png',
+  png512: 'icons/hero-m-install-512-v1.png',
+  maskable512: 'icons/hero-m-install-maskable-512-v1.png'
 };
 
-const expectedPixelHashes = {
-  'icons/icon-192.png': 'f7c17130ba31868976dfd9a14c172114746b8cd8bbe0a5ae62e321a0804f05ae',
-  'icons/icon-512.png': '875a110f2b4c61d313745c9a300734835ea985c6e76316d9f38016a5884e8365',
-  'icons/icon-maskable-512.png': 'f18ee17d32f4f7742e1c5489c28c36868eea969fbaec87b9e5ec2fc972f10ade'
-};
+const legacyRangerPixelHashes = new Set([
+  'f7c17130ba31868976dfd9a14c172114746b8cd8bbe0a5ae62e321a0804f05ae',
+  '875a110f2b4c61d313745c9a300734835ea985c6e76316d9f38016a5884e8365',
+  'f18ee17d32f4f7742e1c5489c28c36868eea969fbaec87b9e5ec2fc972f10ade'
+]);
 
 async function requireFile(relativePath, allowEmpty = false) {
   const filePath = path.join(root, relativePath);
@@ -68,7 +68,7 @@ function decodeGeneratedRgbPng(data, expectedSize, filePath) {
   return pixels;
 }
 
-async function verifyPng(relativePath, expectedSize, expectedPixelHash) {
+async function verifyPng(relativePath, expectedSize) {
   const filePath = await requireFile(relativePath);
   const data = await readFile(filePath);
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -84,13 +84,20 @@ async function verifyPng(relativePath, expectedSize, expectedPixelHash) {
   if (colorType !== 2) {
     throw new Error(`${filePath}: launcher PNG must be truecolor RGB, got PNG color type ${colorType}`);
   }
-  if (expectedPixelHash) {
-    const pixels = decodeGeneratedRgbPng(data, expectedSize, filePath);
-    const actualPixelHash = createHash('sha256').update(pixels).digest('hex');
-    if (actualPixelHash !== expectedPixelHash) {
-      throw new Error(`${filePath}: approved Ranger launcher artwork pixels changed`);
-    }
+
+  const pixels = decodeGeneratedRgbPng(data, expectedSize, filePath);
+  const pixelHash = createHash('sha256').update(pixels).digest('hex');
+  if (legacyRangerPixelHashes.has(pixelHash)) {
+    throw new Error(`${filePath}: old Ranger launcher artwork is still active`);
   }
+
+  const colors = new Set();
+  for (let offset = 0; offset < pixels.length; offset += 3) {
+    colors.add(`${pixels[offset]},${pixels[offset + 1]},${pixels[offset + 2]}`);
+    if (colors.size >= 48) break;
+  }
+  if (colors.size < 48) throw new Error(`${filePath}: Hero M launcher rendering has insufficient visual detail`);
+  return { pixels, pixelHash };
 }
 
 async function requireSameFile(leftPath, rightPath) {
@@ -99,6 +106,21 @@ async function requireSameFile(leftPath, rightPath) {
   if (!left.equals(right)) {
     throw new Error(`${leftPath} must remain byte-identical to ${rightPath}`);
   }
+}
+
+const generatorSource = await readFile('scripts/generate-pwa-icons.mjs', 'utf8');
+for (const heroPart of [
+  'hero_m.glb.gz.part0.b64',
+  'hero_m.glb.gz.part1.b64',
+  'hero_m.glb.gz.part2.b64'
+]) {
+  if (!generatorSource.includes(heroPart)) throw new Error(`Hero M launcher generator is missing ${heroPart}`);
+}
+if (generatorSource.includes('RANGER_DATA_B64')) {
+  throw new Error('Legacy embedded Ranger launcher artwork must not remain the icon source of truth');
+}
+if (!generatorSource.includes('collectTriangles') || !generatorSource.includes('renderHeroM')) {
+  throw new Error('Launcher artwork must be deterministically rendered from the Hero M runtime asset');
 }
 
 const manifestPath = await requireFile('manifest.webmanifest');
@@ -124,25 +146,28 @@ for (const icon of icons) {
   if (icon.type !== 'image/png' || icon.sizes === 'any' || /\.svg(?:\?|$)/i.test(icon.src ?? '')) {
     throw new Error('Manifest must not advertise SVG or sizes=any launcher candidates');
   }
+  if (!String(icon.src).includes('hero-m-install-')) {
+    throw new Error('Manifest launcher candidates must use the Hero M revisioned asset names');
+  }
 }
 const png192 = icons.find(icon => icon.src === installIcons.png192);
 const png512 = icons.find(icon => icon.src === installIcons.png512);
 const pngMaskable = icons.find(icon => icon.src === installIcons.maskable512);
 if (png192?.sizes !== '192x192' || png192?.type !== 'image/png' || png192?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires the approved 192x192 Ranger PNG resource');
+  throw new Error('Current Chromium installability requires the approved 192x192 Hero M PNG resource');
 }
 if (png512?.sizes !== '512x512' || png512?.type !== 'image/png' || png512?.purpose !== 'any') {
-  throw new Error('Current Chromium installability requires the approved 512x512 Ranger PNG resource');
+  throw new Error('Current Chromium installability requires the approved 512x512 Hero M PNG resource');
 }
 if (pngMaskable?.sizes !== '512x512' || pngMaskable?.type !== 'image/png' || pngMaskable?.purpose !== 'maskable') {
-  throw new Error('Android launcher presentation requires the approved 512x512 maskable Ranger PNG resource');
+  throw new Error('Android launcher presentation requires the approved 512x512 maskable Hero M PNG resource');
 }
-await verifyPng('icons/icon-192.png', 192, expectedPixelHashes['icons/icon-192.png']);
-await verifyPng('icons/icon-512.png', 512, expectedPixelHashes['icons/icon-512.png']);
-await verifyPng('icons/icon-maskable-512.png', 512, expectedPixelHashes['icons/icon-maskable-512.png']);
-await requireSameFile('icons/icon-192.png', 'icons/ranger-192.png');
-await requireSameFile('icons/icon-512.png', 'icons/ranger-512.png');
-await requireSameFile('icons/icon-maskable-512.png', 'icons/ranger-maskable-512.png');
+const generated192 = await verifyPng('icons/icon-192.png', 192);
+const generated512 = await verifyPng('icons/icon-512.png', 512);
+const generatedMaskable = await verifyPng('icons/icon-maskable-512.png', 512);
+if (generated512.pixelHash === generatedMaskable.pixelHash) {
+  throw new Error('Maskable Hero M artwork must retain its own safe-zone composition');
+}
 await requireSameFile('icons/icon-192.png', installIcons.png192);
 await requireSameFile('icons/icon-512.png', installIcons.png512);
 await requireSameFile('icons/icon-maskable-512.png', installIcons.maskable512);
@@ -173,10 +198,10 @@ for (const forbidden of ['caches.open(', 'caches.match(', 'cache.addAll(', 'LEGA
 const indexPath = await requireFile('index.html');
 const index = await readFile(indexPath, 'utf8');
 if (!index.includes(`./manifest.webmanifest?v=${shellRevision}`)) {
-  throw new Error('Built index must link the approved Ranger-only manifest revision');
+  throw new Error('Built index must link the approved Hero M manifest revision');
 }
 if (!index.includes(`./${installIcons.png192}`)) {
-  throw new Error('Built index must expose the approved Ranger PNG favicon/touch icon');
+  throw new Error('Built index must expose the approved Hero M PNG favicon/touch icon');
 }
 if (!index.includes(`navigator.serviceWorker.register('./sw.js?v=${shellRevision}')`)) {
   throw new Error('Built index must use the simple versioned service-worker registration pattern');
@@ -204,4 +229,5 @@ if (!index.includes(`Foundation ${expectedVersion}`) || !index.includes(`FOUNDAT
 await requireMissing('pwa-install.js');
 await requireMissing('pwa-install.css');
 
-console.log(`Villager approved Ranger-only PNG PWA contract verified in ${root}`);
+console.log(`Villager Hero M PNG PWA contract verified in ${root}`);
+console.log(`Hero M icon pixel hashes: ${generated192.pixelHash} ${generated512.pixelHash} ${generatedMaskable.pixelHash}`);
