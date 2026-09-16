@@ -187,11 +187,15 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
 
       this.heroMBind = this.#captureBind(body);
       this.#calibratePelvisMotion();
-      this.visualRoot.add(candidateRoot);
       this.heroMRoot = candidateRoot;
       this.heroMBody = body;
-      candidateRoot.updateMatrixWorld(true);
 
+      // Grounding calibration must be presentation-local. Keep candidateRoot detached
+      // while measuring it so the player's current world elevation cannot be baked
+      // into a local Y offset. The previous order attached candidateRoot to visualRoot
+      // first, which made bounds.min.y world-space and caused persistent hovering on
+      // terrain below world zero (or sinking above it).
+      candidateRoot.updateMatrixWorld(true);
       const bounds = new THREE.Box3().setFromObject(candidateRoot);
       if (bounds.isEmpty()) throw new Error('Hero M produced empty presentation bounds');
       const size = bounds.getSize(new THREE.Vector3());
@@ -205,7 +209,6 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
 
       const motionRoot = new THREE.Group();
       motionRoot.name = 'hero-m-motion-pivot';
-      candidateRoot.removeFromParent();
       candidateRoot.position.y = groundingOffsetY - this.heroMHalfHeight;
       motionRoot.position.y = this.heroMHalfHeight;
       motionRoot.add(candidateRoot);
@@ -226,6 +229,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       candidateRoot.userData.presentationHeight = size.y;
       candidateRoot.userData.groundingOffsetY = groundingOffsetY;
       candidateRoot.userData.groundSettleY = HERO_M_GROUND_SETTLE;
+      candidateRoot.userData.groundingReferenceSpace = 'presentation-local-v1';
       candidateRoot.userData.retargetMode = 'kaykit-bind-delta-hero-m-v2';
       candidateRoot.userData.pelvisMotionProfile = 'kaykit-scaled-hip-translation-v1';
       candidateRoot.userData.pelvisMotionScale = this.heroMPelvisMotionScale;
@@ -243,7 +247,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.#syncFallbackVisibility();
       candidateRoot.visible = true;
 
-      this.visualRoot.userData.visualRevision = 'hero-m-player-v3';
+      this.visualRoot.userData.visualRevision = 'hero-m-player-v4';
       this.visualRoot.userData.actualModelSource = 'user-supplied-hero-m-v1';
       this.visualRoot.userData.actualModelStatus = 'active';
       this.visualRoot.userData.visibleBody = 'hero-m-playful-low-poly';
@@ -252,7 +256,7 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
       this.visualRoot.userData.pelvisMotion = 'kaykit-scaled-hip-translation-v1';
       this.visualRoot.userData.presentationFallback = 'prisma-rigged-humanoid';
       this.visualRoot.userData.toolAnchor = 'hero-m-outer-hand-grip-v1';
-      this.visualRoot.userData.grounding = 'center-support-visual-compensation-v1';
+      this.visualRoot.userData.grounding = 'presentation-local-calibration-plus-center-support-v2';
       this.visualRoot.userData.armPose = 'geometry-calibrated-rest-swing-v1';
       this.visualRoot.userData.doubleJumpPresentation = 'tucked-forward-flip-360-v2';
       return true;

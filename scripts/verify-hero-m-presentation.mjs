@@ -153,13 +153,13 @@ const presentation = new HeroMPresentation({ player, heroMAssetLoader: candidate
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.heroMReady, true);
-assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v3');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v4');
 assert.equal(presentation.visualRoot.userData.actualModelSource, 'user-supplied-hero-m-v1');
 assert.equal(presentation.visualRoot.userData.visibleBody, 'hero-m-playful-low-poly');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
 assert.equal(presentation.visualRoot.userData.retargeting, 'kaykit-bind-delta-hero-m-v2');
 assert.equal(presentation.visualRoot.userData.toolAnchor, 'hero-m-outer-hand-grip-v1');
-assert.equal(presentation.visualRoot.userData.grounding, 'center-support-visual-compensation-v1');
+assert.equal(presentation.visualRoot.userData.grounding, 'presentation-local-calibration-plus-center-support-v2');
 assert.equal(presentation.visualRoot.userData.armPose, 'geometry-calibrated-rest-swing-v1');
 assert.equal(presentation.visualRoot.userData.doubleJumpPresentation, 'tucked-forward-flip-360-v2');
 assert.ok(presentation.heroMRoot?.visible, 'Hero M must be visible after activation');
@@ -173,6 +173,7 @@ assert.equal(presentation.heroMBind.size, 15, 'Hero M must capture every mapped 
 assert.equal(presentation.heroMRoot.userData.presentationScale, 0.73, 'Hero M must retain its calibrated visual scale');
 assert.ok(presentation.heroMRoot.userData.presentationHeight > 1.98 && presentation.heroMRoot.userData.presentationHeight < 2.05, 'Hero M visible height must remain close to the established player scale');
 assert.equal(presentation.heroMRoot.userData.groundSettleY, 0.03, 'Hero M boots should settle slightly into the rendered surface');
+assert.equal(presentation.heroMRoot.userData.groundingReferenceSpace, 'presentation-local-v1', 'Hero M base grounding must be calibrated before attachment to the moving player root');
 assert.equal(presentation.heroMRoot.userData.styleProfile, 'playful-low-poly-hero-v1');
 assert.ok(Math.abs(presentation.heroMMotionRoot.userData.visualGroundOffsetY - centerSupportHeight) < 1e-6, 'Hero M visual root must compensate for the footprint-support hover without changing player physics');
 
@@ -301,4 +302,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Hero M segmented asset, center-support visual grounding, relaxed idle arms, amplified running arm swing, tucked second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Hero M segmented asset, presentation-local load grounding, center-support visual grounding, relaxed idle arms, amplified running arm swing, tucked second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);

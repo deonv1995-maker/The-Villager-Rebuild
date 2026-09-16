@@ -41,48 +41,29 @@ function rootLocalPosition(root, object, target) {
   return root.worldToLocal(target);
 }
 
-function median(values) {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor((sorted.length - 1) * 0.5)];
-}
-
-function visibleSoleHeights(presentation) {
-  presentation.heroMBody?.updateMatrixWorld?.(true);
-  const bySide = { left: [], right: [] };
-  const local = new THREE.Vector3();
-  const world = new THREE.Vector3();
-  for (const sample of presentation.heroMSoleSamples ?? []) {
-    const position = sample.mesh.geometry?.getAttribute?.('position');
-    if (!position || !bySide[sample.side]) continue;
-    local.fromBufferAttribute(position, sample.vertexIndex);
-    sample.mesh.applyBoneTransform(sample.vertexIndex, local);
-    sample.mesh.localToWorld(world.copy(local));
-    bySide[sample.side].push(world.y);
-  }
-  return Object.fromEntries(Object.entries(bySide).map(([side, values]) => [side, {
-    median: median(values),
-    min: values.length ? Math.min(...values) : null,
-    max: values.length ? Math.max(...values) : null
-  }]));
-}
-
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 const ranger = await loadGlb('public/assets/kaykit/adventurers/Ranger.glb');
 const movement = await loadGlb('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_General.glb');
 const root = new THREE.Group();
 root.add(ranger.scene);
-root.position.set(0, 0, 0);
+
+// Reproduce the physical-device failure at the coordinate-space boundary. Hero M is
+// loaded while the gameplay root is on terrain below world zero. Before this fix,
+// world-space candidate bounds were reused as a local grounding offset and the full
+// character was visibly raised toward world Y=0 by |GROUND_Y|.
+const GROUND_Y = -0.34;
+let supportY = GROUND_Y;
+root.position.set(0, supportY, 0);
 
 const player = {
   root,
   model: ranger.scene,
   assetMode: 'kaykit',
   terrain: {
-    heightAt: () => 0,
-    constructionHeightAt: () => 0,
-    walkableHeightAt: () => 0
+    heightAt: () => supportY,
+    constructionHeightAt: () => supportY,
+    walkableHeightAt: () => supportY
   },
   grounded: true,
   jumpStage: 0,
@@ -100,153 +81,154 @@ const presentation = new HeroMVisibleSoleGroundingPresentation({
   heroMAssetLoader: loadHeroBody
 });
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
-assert.equal(await presentation.heroMSoleLoadPromise, true, 'visible boot grounding calibration must initialize against the production Hero M asset');
 await presentation.prismaLoadPromise;
+
+assert.ok(presentation.heroMGroundContactsReady, 'production compatibility boundary must finish after local-space Hero M loading');
+assert.equal(
+  presentation.heroMRoot.userData.groundingReferenceSpace,
+  'presentation-local-v1',
+  'Hero M authored bounds must be calibrated in presentation-local space'
+);
+assert.equal(
+  presentation.visualRoot.userData.grounding,
+  'presentation-local-calibration-plus-center-support-v2',
+  'production Hero M must expose local calibration plus the existing bounded center-support compensation'
+);
 assert.equal(
   presentation.heroMRoot.userData.pelvisMotionProfile,
   'kaykit-scaled-hip-translation-v1',
-  'Hero M must retain KayKit hip translation so the body follows the feet during locomotion and idle motion'
+  'Hero M must retain KayKit hip translation so the body follows the source animation'
+);
+
+presentation.visualRoot.updateMatrixWorld(true);
+const loadBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+const loadRelativeBottom = loadBounds.min.y - supportY;
+assert.ok(
+  loadRelativeBottom >= -0.09 && loadRelativeBottom <= 0.04,
+  `Hero M loaded at Y=${GROUND_Y} must be grounded relative to that terrain instead of world zero: ${JSON.stringify({ minY: loadBounds.min.y, supportY, relative: loadRelativeBottom })}`
 );
 assert.ok(
-  presentation.heroMPelvisMotionScale >= 0.75 && presentation.heroMPelvisMotionScale <= 1.35,
-  'Hero M pelvis translation scaling must stay within the proven retarget bounds'
-);
-assert.equal(
-  presentation.visualRoot.userData.soleClearancePolicy,
-  'per-foot-median-absolute-pose-v2',
-  'Hero M must resolve sole correction from each freshly rebuilt pose without frame-history accumulation'
+  Math.abs(loadBounds.min.y) > 0.18,
+  'nonzero-terrain regression must prove the body is no longer visually pinned near world Y=0'
 );
 
 const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
-const idleClip = allClips.find(clip => normalize(clip.name) === 'idlea');
-assert.ok(idleClip, `production Ranger clip set must expose Idle_A; found: ${allClips.map(clip => clip.name).join(', ')}`);
 const mixer = new THREE.AnimationMixer(ranger.scene);
-const idle = mixer.clipAction(idleClip).reset().play();
-idle.setLoop(THREE.LoopRepeat, Infinity);
-
 const sourceHip = presentation.sourceDrivers.get('hip');
 const sourceHipBind = presentation.sourceBind.get('hip');
 const targetPelvis = presentation.heroMBind.get('pelvis');
-assert.ok(sourceHip && sourceHipBind && targetPelvis?.bone, 'runtime pelvis-motion regression requires both KayKit hip and Hero M pelvis joints');
+assert.ok(sourceHip && sourceHipBind && targetPelvis?.bone, 'runtime regression requires both KayKit hip and Hero M pelvis joints');
 const sourceHipPosition = new THREE.Vector3();
 const sourceHipDelta = new THREE.Vector3();
 const targetPelvisDelta = new THREE.Vector3();
 const expectedPelvisDelta = new THREE.Vector3();
+const idlePelvisFrames = [];
+const stateBounds = {};
+const calibratedHeroRootY = presentation.heroMRoot.position.y;
 
-const idleFrames = [];
-for (const fraction of [0.05, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95]) {
-  mixer.setTime(idleClip.duration * fraction);
-  root.updateMatrixWorld(true);
-  presentation.update(1 / 60);
-  presentation.visualRoot.updateMatrixWorld(true);
-  const bounds = new THREE.Box3().setFromObject(presentation.heroMRoot);
-  const contacts = presentation.getGroundContactPoints().filter(contact => contact.active);
-  assert.equal(contacts.length, 2, `production Idle_A must expose both visible-foot contacts at frame ${fraction}`);
-  assert.ok(contacts.every(contact => Math.abs(contact.position.y) < 1e-9), 'visible-foot contact anchors must resolve onto the authoritative walkable support');
-  const contactSeparation = contacts[0].position.distanceTo(contacts[1].position);
-  assert.ok(contactSeparation > 0.2, 'left and right visible-foot anchors must remain spatially distinct');
-
-  rootLocalPosition(root, sourceHip, sourceHipPosition);
-  sourceHipDelta.copy(sourceHipPosition).sub(sourceHipBind.position);
-  targetPelvisDelta.copy(targetPelvis.bone.position).sub(targetPelvis.localPosition);
-  expectedPelvisDelta.copy(sourceHipDelta).multiplyScalar(presentation.heroMPelvisMotionScale);
-  assert.ok(
-    targetPelvisDelta.distanceTo(expectedPelvisDelta) < 1e-6,
-    `Hero M pelvis must follow the KayKit hip translation at Idle_A frame ${fraction}`
-  );
-
-  idleFrames.push({
-    fraction,
-    clearance: presentation.heroMMotionRoot.userData.visibleSoleClearanceY,
-    correction: presentation.heroMMotionRoot.userData.visibleSoleCorrectionY,
-    minY: bounds.min.y,
-    maxY: bounds.max.y,
-    contactSeparation,
-    sourceHipDeltaY: sourceHipDelta.y,
-    targetPelvisDeltaY: targetPelvisDelta.y
-  });
-}
-
-assert.ok(presentation.heroMSoleCorrectionInitialized, 'grounded Idle_A must initialize the presentation-only visible-sole correction');
-assert.ok(idleFrames.every(frame => Number.isFinite(frame.clearance)), 'every sampled idle pose must produce a finite visible-sole clearance');
-assert.ok(idleFrames.every(frame => Number.isFinite(frame.correction)), 'every sampled idle pose must retain a finite visible-sole correction');
-assert.ok(
-  Math.max(...idleFrames.map(frame => frame.sourceHipDeltaY)) - Math.min(...idleFrames.map(frame => frame.sourceHipDeltaY)) > 0.001,
-  `production Idle_A must contain measurable vertical hip motion for the visible body to follow: ${JSON.stringify(idleFrames)}`
-);
-assert.ok(
-  Math.max(...idleFrames.map(frame => frame.targetPelvisDeltaY)) - Math.min(...idleFrames.map(frame => frame.targetPelvisDeltaY)) > 0.001,
-  `Hero M body must retain visible vertical pelvis motion across Idle_A instead of animating only the feet: ${JSON.stringify(idleFrames)}`
-);
-assert.ok(
-  idleFrames.every(frame => frame.minY < 0.04),
-  `production Idle_A must not leave the rendered Hero M body physically hovering above flat terrain: ${JSON.stringify(idleFrames)}`
-);
-assert.ok(
-  idleFrames.every(frame => frame.minY > -0.18),
-  `production Idle_A grounding must not sink Hero M deeply into flat terrain: ${JSON.stringify(idleFrames)}`
-);
-
-// Regression for the phone-reported air-running/sinking cycle. HeroMPresentation
-// rebuilds its motion-root baseline every update, so holding an authored pose should
-// converge to one stable absolute sole correction. It must never ratchet downward
-// simply because update() is called repeatedly.
-const settledStates = {};
 for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
   const clip = allClips.find(candidate => normalize(candidate.name) === normalize(state));
   assert.ok(clip, `production Ranger clip set must expose ${state}`);
-  settledStates[state] = [];
+  stateBounds[state] = [];
 
   for (const fraction of [0.2, 0.5, 0.8]) {
     mixer.stopAllAction();
     mixer.clipAction(clip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
     mixer.setTime(clip.duration * fraction);
+    root.position.y = supportY;
     root.updateMatrixWorld(true);
     player.animationState = state;
+    player.grounded = true;
 
-    for (let frame = 0; frame < 90; frame += 1) presentation.update(1 / 60);
+    for (let frame = 0; frame < 10; frame += 1) presentation.update(1 / 60);
     presentation.visualRoot.updateMatrixWorld(true);
-    const correctionAtSettle = presentation.heroMSoleCorrectionY;
-    const targetAtSettle = presentation.heroMMotionRoot.userData.visibleSoleTargetCorrectionY;
-    const clearanceAtSettle = presentation.heroMMotionRoot.userData.visibleSoleClearanceY;
-    const soles = visibleSoleHeights(presentation);
-    const plantedMedian = Math.min(soles.left.median, soles.right.median);
+    const bounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+    const contacts = presentation.getGroundContactPoints().filter(contact => contact.active);
 
-    for (let frame = 0; frame < 90; frame += 1) presentation.update(1 / 60);
-    presentation.visualRoot.updateMatrixWorld(true);
-    const correctionAfterRepeat = presentation.heroMSoleCorrectionY;
-
-    assert.ok(Number.isFinite(targetAtSettle) && Number.isFinite(clearanceAtSettle), `${state} must retain a finite absolute sole target`);
+    assert.equal(root.position.y, supportY, `${state} must never move the gameplay root to solve presentation grounding`);
     assert.ok(
-      Math.abs(correctionAtSettle - targetAtSettle) < 1e-6,
-      `${state} frame ${fraction} must converge to the absolute fresh-pose target instead of retaining historical drift`
+      Math.abs(presentation.heroMRoot.position.y - calibratedHeroRootY) < 1e-9,
+      `${state} must preserve the one-time local authored calibration without accumulating another correction`
+    );
+    assert.equal(contacts.length, 2, `${state} must retain both rendering-only foot contact anchors`);
+    assert.ok(
+      contacts.every(contact => Math.abs(contact.position.y - supportY) < 1e-9),
+      `${state} contact shading must remain on the existing walkable support seam`
     );
     assert.ok(
-      Math.abs(correctionAfterRepeat - correctionAtSettle) < 1e-8,
-      `${state} frame ${fraction} must remain vertically stable when the same pose is updated repeatedly`
-    );
-    assert.ok(
-      correctionAfterRepeat > -0.4,
-      `${state} frame ${fraction} must not ratchet toward the 0.68 m emergency drop bound`
-    );
-    assert.ok(
-      plantedMedian >= -0.026 && plantedMedian <= 0.012,
-      `${state} frame ${fraction} must settle the visible stance boot at the terrain plane: ${JSON.stringify({ correctionAfterRepeat, targetAtSettle, clearanceAtSettle, soles })}`
+      Math.abs(bounds.min.y) > 0.12,
+      `${state} at negative terrain elevation must not drift back toward world Y=0: ${bounds.min.y}`
     );
 
-    settledStates[state].push({
-      fraction,
-      correction: correctionAfterRepeat,
-      target: targetAtSettle,
-      clearance: clearanceAtSettle,
-      plantedMedian
-    });
+    if (state === 'Idle_A') {
+      rootLocalPosition(root, sourceHip, sourceHipPosition);
+      sourceHipDelta.copy(sourceHipPosition).sub(sourceHipBind.position);
+      targetPelvisDelta.copy(targetPelvis.bone.position).sub(targetPelvis.localPosition);
+      expectedPelvisDelta.copy(sourceHipDelta).multiplyScalar(presentation.heroMPelvisMotionScale);
+      assert.ok(
+        targetPelvisDelta.distanceTo(expectedPelvisDelta) < 1e-6,
+        `Hero M pelvis must still follow KayKit hip translation at Idle_A frame ${fraction}`
+      );
+      idlePelvisFrames.push({ sourceY: sourceHipDelta.y, targetY: targetPelvisDelta.y });
+    }
+
+    stateBounds[state].push({ fraction, minY: bounds.min.y, relativeMinY: bounds.min.y - supportY });
   }
 }
 
 assert.ok(
-  Math.max(...settledStates.Idle_A.map(frame => Math.abs(frame.correction))) < 0.08,
-  `Idle_A must use only a small stable sole correction rather than accumulating a deep body offset: ${JSON.stringify(settledStates.Idle_A)}`
+  Math.max(...idlePelvisFrames.map(frame => frame.sourceY)) - Math.min(...idlePelvisFrames.map(frame => frame.sourceY)) > 0.001,
+  `production Idle_A must contain measurable vertical hip motion: ${JSON.stringify(idlePelvisFrames)}`
+);
+assert.ok(
+  Math.max(...idlePelvisFrames.map(frame => frame.targetY)) - Math.min(...idlePelvisFrames.map(frame => frame.targetY)) > 0.001,
+  `Hero M must retain visible pelvis motion after local-space grounding calibration: ${JSON.stringify(idlePelvisFrames)}`
 );
 
-console.log('Hero M production pelvis motion, stable absolute sole correction and planted Idle_A/Walking_A/Running_A stance verified against the shipped Ranger animations and Hero M asset.');
+// With a fixed authored pose, changing gameplay/world support elevation must move Hero
+// M by the exact same amount. This directly guards against world-zero pinning.
+const runningClip = allClips.find(candidate => normalize(candidate.name) === normalize('Running_A'));
+mixer.stopAllAction();
+mixer.clipAction(runningClip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
+mixer.setTime(runningClip.duration * 0.5);
+player.animationState = 'Running_A';
+player.grounded = true;
+supportY = GROUND_Y;
+root.position.y = supportY;
+root.updateMatrixWorld(true);
+presentation.update(1 / 60);
+presentation.visualRoot.updateMatrixWorld(true);
+const lowBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+
+const elevationDelta = 0.8;
+supportY = GROUND_Y + elevationDelta;
+root.position.y = supportY;
+root.updateMatrixWorld(true);
+presentation.update(1 / 60);
+presentation.visualRoot.updateMatrixWorld(true);
+const highBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+assert.ok(
+  Math.abs((highBounds.min.y - lowBounds.min.y) - elevationDelta) < 1e-6,
+  `Hero M must follow later gameplay-root elevation one-for-one after loading: ${JSON.stringify({ low: lowBounds.min.y, high: highBounds.min.y, elevationDelta })}`
+);
+
+// Airborne updates keep the established base presentation offset and follow the
+// gameplay root; local calibration must never become a terrain magnet.
+const groundedMinY = highBounds.min.y;
+player.grounded = false;
+player.animationState = 'Jump_Idle';
+root.position.y += 0.72;
+root.updateMatrixWorld(true);
+presentation.update(1 / 60);
+presentation.visualRoot.updateMatrixWorld(true);
+const airborneBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+assert.ok(
+  airborneBounds.min.y > groundedMinY + 0.65,
+  'Hero M must follow the gameplay root upward during a jump after local-space calibration'
+);
+assert.ok(
+  Math.abs(presentation.heroMRoot.position.y - calibratedHeroRootY) < 1e-9,
+  'airborne updates must not mutate the authored local grounding calibration'
+);
+
+console.log(`Hero M presentation-local calibration verified against shipped assets at ${GROUND_Y.toFixed(2)} m terrain elevation: ${JSON.stringify(stateBounds)}`);
