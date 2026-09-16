@@ -51,8 +51,11 @@ export function heroMBodySettleCorrection(bodyBottomY, visualGroundY, {
 export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   constructor(options) {
     super(options);
-    this.heroMVisualGroundOffsetY = 0;
-    this.heroMVisualGroundInitialized = false;
+    // Keep this state separate from HeroMPresentation.heroMVisualGroundOffsetY.
+    // The base class is still free to maintain its analytical center-support value;
+    // this final seam overwrites only the visible motion-pivot Y after super.update().
+    this.heroMRenderedGroundOffsetY = 0;
+    this.heroMRenderedGroundInitialized = false;
     this.heroMBodyBounds = new THREE.Box3();
     this.heroMRootWorldPosition = new THREE.Vector3();
     this.heroMGroundContacts = Object.entries(GROUND_CONTACT_BIND_KEYS).map(([side, bindKey]) => ({
@@ -94,7 +97,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   #applyRenderedGrounding() {
     const motionRoot = this.heroMMotionRoot;
     const playerRoot = this.player?.root;
-    if (!motionRoot || !playerRoot || !Number.isFinite(this.heroMMotionPivotHalfHeight)) return;
+    if (!motionRoot || !playerRoot || !Number.isFinite(this.heroMHalfHeight)) return;
 
     if (this.player?.grounded) {
       playerRoot.getWorldPosition(this.heroMRootWorldPosition);
@@ -107,13 +110,13 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         const rootOffset = heroMVisualGroundOffset(
           this.heroMRootWorldPosition.y,
           visualGroundY,
-          this.heroMVisualGroundOffsetY
+          this.heroMRenderedGroundOffsetY
         );
 
         // Replace the analytical/footprint compensation from HeroMPresentation with
         // one deterministic anchor to the rendered surface. This assignment is
         // absolute every frame; no previous correction participates in the target.
-        motionRoot.position.y = this.heroMMotionPivotHalfHeight + rootOffset;
+        motionRoot.position.y = this.heroMHalfHeight + rootOffset;
         motionRoot.updateMatrixWorld(true);
         this.heroMBody?.updateMatrixWorld?.(true);
 
@@ -123,18 +126,18 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         const settleCorrection = heroMBodySettleCorrection(bodyBottomY, visualGroundY);
         motionRoot.position.y += settleCorrection;
 
-        this.heroMVisualGroundOffsetY = motionRoot.position.y - this.heroMMotionPivotHalfHeight;
-        this.heroMVisualGroundInitialized = true;
-        motionRoot.userData.visualGroundY = visualGroundY;
-        motionRoot.userData.visualGroundRootOffsetY = rootOffset;
+        this.heroMRenderedGroundOffsetY = motionRoot.position.y - this.heroMHalfHeight;
+        this.heroMRenderedGroundInitialized = true;
+        motionRoot.userData.renderedGroundY = visualGroundY;
+        motionRoot.userData.renderedGroundRootOffsetY = rootOffset;
         motionRoot.userData.visibleBodyBottomY = bodyBottomY;
         motionRoot.userData.visibleBodySettleCorrectionY = settleCorrection;
       }
-    } else if (this.heroMVisualGroundInitialized) {
+    } else if (this.heroMRenderedGroundInitialized) {
       // Preserve the last grounded relative offset. The gameplay root owns the entire
       // airborne trajectory, so Hero M follows that root without being pulled back
       // toward the terrain during either jump stage.
-      motionRoot.position.y = this.heroMMotionPivotHalfHeight + this.heroMVisualGroundOffsetY;
+      motionRoot.position.y = this.heroMHalfHeight + this.heroMRenderedGroundOffsetY;
     }
 
     motionRoot.userData.visibleGrounding = 'rendered-surface-root-anchor-v1';
