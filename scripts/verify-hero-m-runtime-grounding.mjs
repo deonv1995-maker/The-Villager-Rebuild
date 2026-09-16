@@ -147,6 +147,10 @@ for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
       `${state} contact shading must use the rendered ground surface`
     );
     assert.ok(
+      presentation.heroMRenderedGroundInitialized,
+      `${state} must initialize the final rendered-ground presentation anchor`
+    );
+    assert.ok(
       Math.abs(repeatedMotionY - firstMotionY) < 1e-8,
       `${state} frame ${fraction} must be an absolute rendered-ground anchor with no frame-history drift`
     );
@@ -156,7 +160,7 @@ for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
       `${state} frame ${fraction} must settle the visible body onto the rendered floor despite a 34 cm gameplay/render mismatch: ${JSON.stringify({ minY: repeatedBounds.min.y, firstMinY: firstBounds.min.y, motionY: repeatedMotionY })}`
     );
     assert.equal(
-      presentation.heroMMotionRoot.userData.visualGroundY,
+      presentation.heroMMotionRoot.userData.renderedGroundY,
       RENDERED_GROUND_Y,
       `${state} must retain the rendered floor as the final presentation reference`
     );
@@ -177,7 +181,7 @@ for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
       fraction,
       motionY: repeatedMotionY,
       minY: repeatedBounds.min.y,
-      rootOffset: presentation.heroMMotionRoot.userData.visualGroundRootOffsetY,
+      rootOffset: presentation.heroMMotionRoot.userData.renderedGroundRootOffsetY,
       settle: presentation.heroMMotionRoot.userData.visibleBodySettleCorrectionY
     });
   }
@@ -196,7 +200,7 @@ assert.ok(
 // last grounded visual offset and let the gameplay root own the jump displacement.
 const groundedBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
 const groundedMinY = groundedBounds.min.y;
-const groundedOffset = presentation.heroMVisualGroundOffsetY;
+const groundedOffset = presentation.heroMRenderedGroundOffsetY;
 player.grounded = false;
 player.animationState = 'Jump_Idle';
 root.position.y += 0.72;
@@ -209,7 +213,7 @@ assert.ok(
   'Hero M must follow the gameplay root upward instead of being re-grounded during a jump'
 );
 assert.ok(
-  Math.abs(presentation.heroMVisualGroundOffsetY - groundedOffset) < 1e-9,
+  Math.abs(presentation.heroMRenderedGroundOffsetY - groundedOffset) < 1e-9,
   'airborne updates must retain the last grounded relative presentation offset'
 );
 
