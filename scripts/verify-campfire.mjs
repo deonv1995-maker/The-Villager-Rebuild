@@ -120,19 +120,22 @@ for (const requirement of [
   'setCampfireAction(action)',
   'setCraftPlacementAction(action)',
   'this.currentCraftPlacementAction = action ? { ...action } : null;',
-  'data-role="craft-toggle-icon"',
-  'data-role="craft-toggle-label"',
-  "this.onCraft?.(this.currentCraftPlacementAction.recipeId ?? 'campfire')"
+  "const CRAFT_PLACEMENT_ACTION_ID = 'craft-placement'",
+  'this.setExternalAction(CRAFT_PLACEMENT_ACTION_ID',
+  "this.onCraft?.(placement.recipeId ?? 'campfire')"
 ]) {
   assert(hudSource.includes(requirement), `Crafting HUD is missing campfire placement contract: ${requirement}`);
 }
+assert(hudSource.includes('class="inventory-menu-toggle"'), 'Campfire crafting must be reachable through the suitcase inventory/crafting menu');
+assert(hudSource.includes('data-inventory-tab="craft"'), 'Campfire recipe must share the suitcase Craft tab');
 assert(!hudSource.includes("if (action.source === 'campfire')"), 'Unified Action trigger must not own campfire construction');
 assert(!contextActionSource.includes("source: 'campfire'"), 'Context Action policy must not offer campfire BUILD or PLACE');
 assert(!hudSource.includes('class="hud-button craft"'), 'Campfire must not restore a separate round craft button');
+assert(!hudSource.includes('class="craft-menu-toggle"'), 'Campfire must not restore the retired standalone craft menu toggle');
 assert(equipmentSource.includes("const CAMPFIRE_RECIPE_ID = 'campfire'"), 'Crafting runtime must recognize the campfire recipe');
 assert(equipmentSource.includes('#craftCampfirePlacement()'), 'Crafting runtime must delegate campfire placement to the existing world handler');
 assert(equipmentSource.includes('hud.onCampfire();'), 'Campfire recipe selection must preserve GameApp as the authoritative placement handler');
-assert(equipmentSource.includes('hud.setCrafting(this.#craftingSnapshot())'), 'Craft menu must receive tools and campfire from one runtime snapshot');
+assert(equipmentSource.includes('hud.setCrafting(this.#craftingSnapshot(), { station: this.craftingStation })'), 'Suitcase Craft tab must receive the current station-aware crafting snapshot');
 assert(craftingDefinitionsSource.includes("kind: 'structure'"), 'Campfire recipe must be marked as a placeable structure');
 assert(structureDefinitionsSource.includes('ingredients: CRAFTING_RECIPES.campfire.ingredients'), 'World placement must reuse the crafting recipe ingredients');
 assert(assetSource.includes("campfire: asset('ui/cosy/icon-campfire.webp')"), 'Campfire icon must remain in the shared cosy asset registry');
@@ -148,4 +151,4 @@ assert(campfireIcon.subarray(12, 16).toString('ascii') === 'VP8X', 'Campfire HUD
 assert((campfireIcon[20] & 0x10) !== 0, 'Campfire HUD icon must retain transparency');
 assert(campfireIcon.readUIntLE(24, 3) + 1 === 96 && campfireIcon.readUIntLE(27, 3) + 1 === 96, 'Campfire HUD icon must remain normalized to the cosy 96x96 icon contract');
 
-console.log('Campfire crafting, preview/confirmation, shared recipe, generated cosy HUD icon and Action-button separation verified');
+console.log('Campfire crafting, preview/confirmation, suitcase integration, shared recipe, cosy HUD icon and Action-button separation verified');
