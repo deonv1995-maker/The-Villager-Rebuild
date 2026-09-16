@@ -57,7 +57,7 @@
     "verify:humanoid-side-binding": "node scripts/verify-humanoid-side-binding.mjs",
     "verify:resource-icons": "node scripts/verify-resource-inventory-icons.mjs",
     "verify:animals": "node scripts/verify-animal-behavior.mjs",
-    "verify:title-scene": "node scripts/verify-title-scene.mjs",
+    "verify:title-scene": "node scripts/verify-title-scene.mjs && node scripts/verify-title-hero-m.mjs",
     "verify:sprout-arrival": "node scripts/verify-sprout-arrival.mjs",
     "verify:sprout-crash-site": "node scripts/verify-sprout-crash-site.mjs",
     "verify:sprout-companion": "node scripts/verify-sprout-companion.mjs",

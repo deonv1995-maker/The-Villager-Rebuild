@@ -4,6 +4,7 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { createTitleIslandBackdrop } from './TitleIslandBackdrop.js';
 import { TitleCinematicCamera } from './TitleCinematicCamera.js';
 import { TitleCelestialEvent } from './TitleCelestialEvent.js';
+import { TitleHeroPresentation } from './TitleHeroPresentation.js';
 import { TITLE_SCENE } from './TitleSceneConfig.js';
 import { addTitleShipDeckDetails } from './TitleShipDeckDetails.js';
 import { createTitleShipVisual } from './TitleShipVisual.js';
@@ -79,7 +80,7 @@ export class TitleSceneApp {
     });
     this.#createMenuUi();
 
-    this.setStatus('VOYAGE · LOADING RANGER');
+    this.setStatus('VOYAGE · LOADING HERO M');
     await this.#loadRanger();
 
     this.state = 'menu';
@@ -111,6 +112,8 @@ export class TitleSceneApp {
     window.removeEventListener('resize', this.resize);
     this.menuUi?.remove();
     this.menuUi = null;
+    this.titleHeroPresentation?.dispose();
+    this.titleHeroPresentation = null;
 
     if (!keepTransition) {
       this.transitionCover?.remove();
@@ -173,10 +176,11 @@ export class TitleSceneApp {
     this.rangerRig = new THREE.Group();
     this.rangerRig.name = 'title-ranger-balance-rig';
     this.rangerRig.position.set(RANGER_DECK_BASE.x, RANGER_DECK_BASE.y, RANGER_DECK_BASE.z);
+    this.rangerRig.rotation.y = RANGER_DECK_MODEL_YAW;
     this.ship.add(this.rangerRig);
 
     this.ranger = rangerGltf.scene;
-    this.ranger.name = 'title-production-ranger';
+    this.ranger.name = 'title-kaykit-animation-driver';
     this.ranger.traverse(object => {
       if (!object.isMesh) return;
       object.castShadow = false;
@@ -184,23 +188,29 @@ export class TitleSceneApp {
       if (object.material?.map) object.material.map.colorSpace = THREE.SRGBColorSpace;
     });
     this.ranger.position.set(0, 0, 0);
-    this.ranger.rotation.y = RANGER_DECK_MODEL_YAW;
+    this.ranger.rotation.set(0, 0, 0);
     this.rangerRig.add(this.ranger);
 
     this.mixer = new THREE.AnimationMixer(this.ranger);
     const idle = [...generalGltf.animations, ...rangerGltf.animations]
       .find(clip => clip.name === 'Idle_A');
-    if (!idle) throw new Error('Title Ranger requires KayKit Idle_A from the general animation set');
+    if (!idle) throw new Error('Title hero requires KayKit Idle_A from the general animation set');
 
     this.idleAction = this.mixer.clipAction(idle, this.ranger);
     this.idleAction.setEffectiveTimeScale(RANGER_DECK_IDLE_SPEED);
     this.idleAction.play();
 
     const jump = movementGltf.animations.find(clip => clip.name === 'Jump_Full_Short');
-    if (!jump) throw new Error('Title Ranger requires KayKit Jump_Full_Short for the shipwreck jump');
+    if (!jump) throw new Error('Title hero requires KayKit Jump_Full_Short for the shipwreck jump');
     this.jumpAction = this.mixer.clipAction(jump, this.ranger);
     this.jumpAction.setLoop(THREE.LoopOnce, 1);
     this.jumpAction.clampWhenFinished = true;
+
+    this.titleHeroPresentation = new TitleHeroPresentation({
+      root: this.rangerRig,
+      model: this.ranger
+    });
+    await this.titleHeroPresentation.readyPromise;
   }
 
   #createMenuUi() {
@@ -243,6 +253,7 @@ export class TitleSceneApp {
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
     this.elapsed += dt;
     this.mixer?.update(dt);
+    this.titleHeroPresentation?.update(dt);
 
     let introProgress = 0;
     if (this.state === 'menu') this.#updateMenu();
@@ -286,7 +297,7 @@ export class TitleSceneApp {
       );
       this.rangerRig.rotation.x = -this.ship.rotation.x * 0.52 + Math.sin(this.elapsed * 0.83) * 0.018;
       this.rangerRig.rotation.z = -this.ship.rotation.z * 0.72 + Math.sin(this.elapsed * 1.18) * 0.014;
-      this.rangerRig.rotation.y = Math.sin(this.elapsed * 0.42) * 0.018;
+      this.rangerRig.rotation.y = RANGER_DECK_MODEL_YAW + Math.sin(this.elapsed * 0.42) * 0.018;
     }
 
     this.camera.position.x = 8.5 + Math.sin(this.elapsed * 0.13) * 0.45;
@@ -329,7 +340,7 @@ export class TitleSceneApp {
       const brace = Math.sin(this.elapsed * (2.2 + danger * 1.7));
       this.rangerRig.rotation.x = -this.ship.rotation.x * 0.78 + severe * 0.08 + impact * 0.2 + brace * danger * 0.028;
       this.rangerRig.rotation.z = -this.ship.rotation.z * 0.82 + brace * severe * 0.055;
-      this.rangerRig.rotation.y = Math.sin(this.elapsed * 1.25) * danger * 0.035;
+      this.rangerRig.rotation.y = RANGER_DECK_MODEL_YAW + Math.sin(this.elapsed * 1.25) * danger * 0.035;
       this.rangerRig.position.x = RANGER_DECK_BASE.x + Math.sin(this.elapsed * 1.8) * severe * 0.045;
       this.rangerRig.position.y = RANGER_DECK_BASE.y + Math.abs(this.ship.rotation.z) * 0.18 + Math.cos(this.elapsed * 2.4) * danger * 0.022;
       this.rangerRig.position.z = RANGER_DECK_BASE.z + impact * 0.16 + Math.sin(this.elapsed * 1.55) * severe * 0.035;
@@ -386,6 +397,7 @@ export class TitleSceneApp {
     this.rangerJumpElapsed = 0;
     this.idleAction?.fadeOut(0.12);
     this.jumpAction?.reset().fadeIn(0.08).play();
+    this.titleHeroPresentation?.setAnimationState('Jump_Full_Short');
     this.setStatus('VOYAGE · ABANDON SHIP');
   }
 
