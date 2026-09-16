@@ -13,6 +13,13 @@ const ARM_TRAVEL_GAIN = Object.freeze({
   Walking_A: 1.12,
   Running_A: 1.16
 });
+const RIGHT_HAND_CARRY_PROFILES = Object.freeze({
+  'steady-upright': Object.freeze({
+    travelScale: 0.24,
+    rotationScale: 0.34
+  })
+});
+const RIGHT_HAND_CARRY_BLEND_RESPONSE = 10;
 
 // Hero M does not expose a conventional shoulder/elbow/wrist deform chain. The
 // production asset uses DEF_hand_L/R as movable arm endpoints while the inner arm
@@ -53,6 +60,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
 
     this.heroMArmMotionReady = false;
     this.heroMArmEndpointCorrection = new Map();
+    this.rightHandCarryProfile = null;
+    this.rightHandCarrySettings = RIGHT_HAND_CARRY_PROFILES['steady-upright'];
+    this.rightHandCarryBlend = 0;
 
     this.heroMArmSourceHip = new THREE.Vector3();
     this.heroMArmSourceHand = new THREE.Vector3();
@@ -68,6 +78,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     this.heroMArmSourceQuaternion = new THREE.Quaternion();
     this.heroMArmSourceBindInverse = new THREE.Quaternion();
     this.heroMArmDeltaQuaternion = new THREE.Quaternion();
+    this.heroMArmIdentityQuaternion = new THREE.Quaternion();
     this.heroMArmDesiredGlobal = new THREE.Quaternion();
     this.heroMArmParentGlobal = new THREE.Quaternion();
     this.heroMArmParentInverse = new THREE.Quaternion();
@@ -82,10 +93,32 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       this.visualRoot.userData.visualRevision = 'hero-m-player-v8';
       this.visualRoot.userData.armPose = 'bind-calibrated-hand-endpoints-v1';
       this.visualRoot.userData.armMotion = 'kaykit-bilateral-hand-travel-v2';
+      this.visualRoot.userData.armCarry = 'semantic-right-hand-carry-v1';
       this.heroMRoot.userData.armRestProfile = 'source-hand-endpoint-retarget-v1';
       this.heroMRoot.userData.armTravelGain = { ...ARM_TRAVEL_GAIN };
+      this.heroMRoot.userData.rightHandCarryProfile = null;
+      this.heroMRoot.userData.rightHandCarryBlend = 0;
       return true;
     });
+  }
+
+  setRightHandCarryProfile(profile = null) {
+    if (profile !== null && !RIGHT_HAND_CARRY_PROFILES[profile]) {
+      throw new Error(`Unknown Hero M right-hand carry profile: ${profile}`);
+    }
+    if (profile) this.rightHandCarrySettings = RIGHT_HAND_CARRY_PROFILES[profile];
+    this.rightHandCarryProfile = profile;
+    if (this.heroMRoot) this.heroMRoot.userData.rightHandCarryProfile = profile;
+    return true;
+  }
+
+  #updateRightHandCarryBlend(dt) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    const target = this.rightHandCarryProfile ? 1 : 0;
+    const blend = 1 - Math.exp(-RIGHT_HAND_CARRY_BLEND_RESPONSE * dt);
+    this.rightHandCarryBlend = THREE.MathUtils.lerp(this.rightHandCarryBlend, target, blend);
+    if (target === 0 && this.rightHandCarryBlend < 0.0001) this.rightHandCarryBlend = 0;
+    if (this.heroMRoot) this.heroMRoot.userData.rightHandCarryBlend = this.rightHandCarryBlend;
   }
 
   #calibrateEndpointMapping() {
@@ -158,12 +191,28 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     // Amplify only the opposed Y/Z component between the two live hands. Their
     // bilateral midpoint remains unchanged, so body bounce/common translation is
     // still source-authored and the arms do not drift farther from the torso.
+    const midpointY = (this.heroMArmSourceRelative.y + this.heroMArmOppositeRelative.y) * 0.5;
+    const midpointZ = (this.heroMArmSourceRelative.z + this.heroMArmOppositeRelative.z) * 0.5;
     const travelGain = armTravelGain(this.player.animationState);
     if (Math.abs(travelGain - 1) > 1e-5) {
-      const midpointY = (this.heroMArmSourceRelative.y + this.heroMArmOppositeRelative.y) * 0.5;
-      const midpointZ = (this.heroMArmSourceRelative.z + this.heroMArmOppositeRelative.z) * 0.5;
       this.heroMArmSourceRelative.y = midpointY + ((this.heroMArmSourceRelative.y - midpointY) * travelGain);
       this.heroMArmSourceRelative.z = midpointZ + ((this.heroMArmSourceRelative.z - midpointZ) * travelGain);
+    }
+
+    // A steady handheld item should follow common body motion without using the
+    // free-arm fore/aft swing as though the hand were empty. Blend only the right
+    // hand's opposed motion toward the bilateral midpoint; the left arm and common
+    // gait translation remain fully source-authored.
+    if (side === 'right' && this.rightHandCarryBlend > 0.0001) {
+      const carryTravelScale = THREE.MathUtils.lerp(
+        1,
+        this.rightHandCarrySettings.travelScale,
+        this.rightHandCarryBlend
+      );
+      this.heroMArmSourceRelative.y = midpointY
+        + ((this.heroMArmSourceRelative.y - midpointY) * carryTravelScale);
+      this.heroMArmSourceRelative.z = midpointZ
+        + ((this.heroMArmSourceRelative.z - midpointZ) * carryTravelScale);
     }
 
     this.heroMArmDesiredRoot
@@ -189,6 +238,16 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .copy(this.heroMArmSourceQuaternion)
       .multiply(this.heroMArmSourceBindInverse.copy(sourceHandBind.quaternion).invert())
       .normalize();
+    if (side === 'right' && this.rightHandCarryBlend > 0.0001) {
+      const carryRotationScale = THREE.MathUtils.lerp(
+        1,
+        this.rightHandCarrySettings.rotationScale,
+        this.rightHandCarryBlend
+      );
+      this.heroMArmDeltaQuaternion
+        .slerp(this.heroMArmIdentityQuaternion, 1 - carryRotationScale)
+        .normalize();
+    }
     this.heroMArmDesiredGlobal
       .copy(this.heroMArmDeltaQuaternion)
       .multiply(bind.globalQuaternion)
@@ -217,7 +276,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
 
   update(dt) {
     super.update(dt);
-    if (!this.heroMArmMotionReady || !Number.isFinite(dt) || dt <= 0) return;
+    if (!Number.isFinite(dt) || dt <= 0) return;
+    this.#updateRightHandCarryBlend(dt);
+    if (!this.heroMArmMotionReady) return;
     this.#updateArmEndpoints();
   }
 }
