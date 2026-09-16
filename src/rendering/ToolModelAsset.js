@@ -7,7 +7,7 @@ const UP = new THREE.Vector3(0, 1, 0);
 const SOURCE_HEAD_AXIS = new THREE.Vector3(0, -1, 0);
 
 const TOOL_MODEL_PRESENTATION = Object.freeze({
-  axe: Object.freeze({ targetLength: 1.05, restMinY: -0.38 }),
+  axe: Object.freeze({ targetLength: 1.05, restMinY: -0.38, axialRotation: Math.PI }),
   hammer: Object.freeze({ targetLength: 0.98, restMinY: -0.35 }),
   shovel: Object.freeze({ targetLength: 1.2, restMinY: -0.51 }),
   sword: Object.freeze({ targetLength: 1.68, restMinY: -0.21 })
@@ -114,6 +114,16 @@ function normalizeModel(model, presentation) {
     if (headDirection.lengthSq() > 0.000001) {
       model.quaternion.premultiply(new THREE.Quaternion().setFromUnitVectors(headDirection, UP));
     }
+  }
+
+  // Asset-specific roll belongs here, after every source has been normalized to
+  // the same +Y shaft/head axis. The supplied axe FBX is authored half a turn
+  // around that axis relative to the in-game palm frame, so only its presentation
+  // needs a 180° axial correction. This does not change tool reach or action logic.
+  if (Number.isFinite(presentation.axialRotation) && Math.abs(presentation.axialRotation) > 0.000001) {
+    model.quaternion.premultiply(
+      new THREE.Quaternion().setFromAxisAngle(UP, presentation.axialRotation)
+    );
   }
 
   model.updateMatrixWorld(true);

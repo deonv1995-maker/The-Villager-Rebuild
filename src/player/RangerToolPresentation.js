@@ -3,8 +3,8 @@ import { createToolModelAsset, hasToolModelAsset } from '../rendering/ToolModelA
 import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
-const VISIBLE_SPEAR_FORWARD_OFFSET = 0.86;
-const VISIBLE_SPEAR_GRIP_PROFILE = 'visible-hand-forward-spear-v1';
+const VISIBLE_SPEAR_SHAFT_CENTER_Y = 0.12;
+const VISIBLE_SPEAR_GRIP_PROFILE = 'visible-hand-mid-shaft-spear-v2';
 
 export class RangerToolPresentation {
   constructor({ player, appearancePresentation = null }) {
@@ -126,15 +126,15 @@ export class RangerToolPresentation {
     if (!visibleMount) return false;
     if (spearMount.parent !== visibleMount) visibleMount.add(spearMount);
 
-    // The procedural held spear uses the same +Y long-axis convention as the
-    // normalized FBX hand tools. The visible Hero M hand mount already maps +Y
-    // to character-forward, so keep the spear rotation identity and slide the
-    // shaft forward until only a short butt remains behind the hand. RangerController
-    // continues to own equip/throw/release state; this is presentation only.
-    spearMount.position.set(0, VISIBLE_SPEAR_FORWARD_OFFSET, 0);
+    // RangerController's procedural held shaft is centered at local Y 0.12.
+    // Moving the mount back by that same amount places Hero M's palm at the
+    // actual midpoint of the shaft. Rotation stays identity because the visible
+    // hand mount already maps the spear's +Y long axis to character-forward.
+    // Throw/release/projectile authority remains entirely outside this layer.
+    spearMount.position.set(0, -VISIBLE_SPEAR_SHAFT_CENTER_Y, 0);
     spearMount.quaternion.identity();
     spearMount.userData.gripProfile = VISIBLE_SPEAR_GRIP_PROFILE;
-    spearMount.userData.forwardOffset = VISIBLE_SPEAR_FORWARD_OFFSET;
+    spearMount.userData.shaftCenterY = VISIBLE_SPEAR_SHAFT_CENTER_Y;
     this.presentationSpearMounted = true;
     return true;
   }
