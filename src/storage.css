@@ -1,0 +1,85 @@
+.storage-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 34;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top)) 16px max(18px, env(safe-area-inset-bottom));
+  background: rgba(8, 12, 10, 0.68);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+}
+
+.storage-panel[hidden] { display: none; }
+
+.storage-panel-card {
+  width: min(92vw, 560px);
+  max-height: min(76vh, 620px);
+  overflow: auto;
+  border: 1px solid rgba(233, 222, 190, 0.34);
+  border-radius: 18px;
+  background: rgba(25, 31, 25, 0.96);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.46);
+  color: #f2ecd9;
+}
+
+.storage-panel-header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(25, 31, 25, 0.98);
+  border-bottom: 1px solid rgba(233, 222, 190, 0.16);
+}
+
+.storage-panel-header div { display: grid; gap: 3px; }
+.storage-panel-header strong { font-size: 1rem; letter-spacing: 0.08em; }
+.storage-panel-header span { font-size: 0.74rem; opacity: 0.72; }
+.storage-panel-header button {
+  width: 42px;
+  height: 42px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  color: inherit;
+  font-size: 1.65rem;
+}
+
+.storage-panel-list { display: grid; padding: 10px 14px 16px; }
+.storage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 2px;
+  border-bottom: 1px solid rgba(233, 222, 190, 0.12);
+}
+.storage-row:last-child { border-bottom: 0; }
+.storage-row-copy { display: grid; gap: 3px; min-width: 0; }
+.storage-row-copy strong { font-size: 0.95rem; }
+.storage-row-copy span { font-size: 0.78rem; opacity: 0.72; }
+.storage-row-actions { display: flex; gap: 7px; flex-shrink: 0; }
+.storage-row-actions button {
+  min-width: 66px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(233, 222, 190, 0.24);
+  border-radius: 11px;
+  background: rgba(220, 196, 137, 0.14);
+  color: inherit;
+  font-weight: 800;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+.storage-row-actions button:disabled { opacity: 0.32; }
+
+body.storage-panel-open .mobile-hud { pointer-events: none; }
+
+@media (max-width: 430px) {
+  .storage-row { align-items: flex-start; flex-direction: column; }
+  .storage-row-actions { width: 100%; }
+  .storage-row-actions button { flex: 1; }
+}

@@ -1,6 +1,7 @@
 import { WorldTimeRuntime } from './core/WorldTimeRuntime.js';
 import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
+import { CampfireSleepRuntimeController } from './gameplay/CampfireSleepRuntimeController.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
 import { InventoryCapacityController } from './gameplay/InventoryCapacityController.js';
 import { InventoryGainFeedbackController } from './gameplay/InventoryGainFeedbackController.js';
@@ -11,6 +12,7 @@ import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
 import { SproutCompanionController } from './gameplay/SproutCompanionController.js';
 import { SproutVisualRuntimeController } from './gameplay/SproutVisualRuntimeController.js';
 import { StairConstructionRuntimeController } from './gameplay/StairConstructionRuntimeController.js';
+import { StorageRuntimeController } from './gameplay/StorageRuntimeController.js';
 import { StructureInteriorOcclusionController } from './gameplay/StructureInteriorOcclusionController.js';
 import { VisibleHandTorchRuntimeController as TorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
@@ -78,6 +80,15 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     game.torchRuntime = torchRuntime;
     game.worldTimeRuntime = worldTimeRuntime;
     worldTimeRuntime.sync();
+
+    const campfireSleepRuntime = new CampfireSleepRuntimeController({ game });
+    campfireSleepRuntime.start();
+    game.campfireSleepRuntime = campfireSleepRuntime;
+
+    const storageRuntime = new StorageRuntimeController({ game });
+    storageRuntime.start();
+    game.storageRuntime = storageRuntime;
+    game.storage = storageRuntime.system;
 
     const stairConstructionRuntime = new StairConstructionRuntimeController({ game });
     stairConstructionRuntime.start();
