@@ -11,6 +11,10 @@ const HERO_PARTS = [
   'public/assets/player/hero_m.glb.gz.part1.b64',
   'public/assets/player/hero_m.glb.gz.part2.b64'
 ];
+const EXPECTED_TRAVEL_GAIN = Object.freeze({
+  Walking_A: 1.12,
+  Running_A: 1.16
+});
 
 const normalize = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
@@ -79,10 +83,12 @@ const presentation = new HeroMArmMotionPresentation({
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.heroMArmMotionReady, true, 'production Ranger presentation must activate the Hero M hand-endpoint retarget');
-assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v7');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v8');
 assert.equal(presentation.visualRoot.userData.armPose, 'bind-calibrated-hand-endpoints-v1');
-assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-full-hand-trajectory-v1');
+assert.equal(presentation.visualRoot.userData.armMotion, 'kaykit-bilateral-hand-travel-v2');
 assert.equal(presentation.heroMRoot.userData.armRestProfile, 'source-hand-endpoint-retarget-v1');
+assert.deepEqual(presentation.heroMRoot.userData.armTravelGain, EXPECTED_TRAVEL_GAIN,
+  'Hero M locomotion arm travel gain must remain explicit and presentation-only');
 
 presentation.update(1 / 60);
 presentation.heroMRoot.updateMatrixWorld(true);
@@ -93,8 +99,9 @@ const spine = presentation.heroMBind.get('spine');
 const toolMount = presentation.getRightHandToolMount();
 const sourceHip = presentation.sourceDrivers.get('hip');
 const sourceRightHand = presentation.sourceDrivers.get('rightHand');
-assert.ok(rightArm?.bone && leftArm?.bone && pelvis?.bone && spine?.bone && toolMount && sourceHip && sourceRightHand,
-  'arm regression requires Hero M torso/endpoints, production grip and KayKit hip/hand drivers');
+const sourceLeftHand = presentation.sourceDrivers.get('leftHand');
+assert.ok(rightArm?.bone && leftArm?.bone && pelvis?.bone && spine?.bone && toolMount && sourceHip && sourceRightHand && sourceLeftHand,
+  'arm regression requires Hero M torso/endpoints, production grip and both KayKit hand drivers');
 assert.equal(toolMount.parent, rightArm.bone, 'tool mount must remain parented to the translated right-hand endpoint');
 
 const pelvisPoint = rootLocalPosition(presentation.heroMRoot, pelvis.bone);
@@ -140,20 +147,34 @@ async function sampleState(state, fractions) {
     presentation.heroMRoot.updateMatrixWorld(true);
 
     const sourceHipPoint = rootLocalPosition(root, sourceHip);
-    const sourceHandPoint = rootLocalPosition(root, sourceRightHand);
+    const sourceRightHandPoint = rootLocalPosition(root, sourceRightHand);
+    const sourceLeftHandPoint = rootLocalPosition(root, sourceLeftHand);
     const targetPelvisPoint = rootLocalPosition(presentation.heroMRoot, pelvis.bone);
     const rightEndpoint = rootLocalPosition(presentation.heroMRoot, rightArm.bone);
     const leftEndpoint = rootLocalPosition(presentation.heroMRoot, leftArm.bone);
     const grip = rootLocalPosition(presentation.heroMRoot, toolMount);
+    const scale = presentation.heroMPelvisMotionScale;
+    const rightRelative = sourceRightHandPoint.clone().sub(sourceHipPoint).multiplyScalar(scale);
+    const leftRelative = sourceLeftHandPoint.clone().sub(sourceHipPoint).multiplyScalar(scale);
+    const travelGain = EXPECTED_TRAVEL_GAIN[state] ?? 1;
+    const midpointY = (rightRelative.y + leftRelative.y) * 0.5;
+    const midpointZ = (rightRelative.z + leftRelative.z) * 0.5;
+    rightRelative.y = midpointY + ((rightRelative.y - midpointY) * travelGain);
+    rightRelative.z = midpointZ + ((rightRelative.z - midpointZ) * travelGain);
+    leftRelative.y = midpointY + ((leftRelative.y - midpointY) * travelGain);
+    leftRelative.z = midpointZ + ((leftRelative.z - midpointZ) * travelGain);
     const expectedRight = targetPelvisPoint.clone()
-      .add(sourceHandPoint.clone().sub(sourceHipPoint).multiplyScalar(presentation.heroMPelvisMotionScale))
+      .add(rightRelative)
       .add(presentation.heroMArmEndpointCorrection.get('right'));
+    const expectedLeft = targetPelvisPoint.clone()
+      .add(leftRelative)
+      .add(presentation.heroMArmEndpointCorrection.get('left'));
 
     assert.ok(
-      rightEndpoint.distanceTo(expectedRight) < 1e-5,
-      `${state} right endpoint must follow the full live KayKit hand trajectory instead of rotating around a fixed wrist pivot`
+      rightEndpoint.distanceTo(expectedRight) < 1e-5 && leftEndpoint.distanceTo(expectedLeft) < 1e-5,
+      `${state} endpoints must follow the gain-adjusted live KayKit hand trajectories instead of rotating around fixed wrist pivots`
     );
-    samples.push({ fraction, sourceHand: sourceHandPoint, rightEndpoint, leftEndpoint, grip });
+    samples.push({ fraction, sourceRightHand: sourceRightHandPoint, sourceLeftHand: sourceLeftHandPoint, rightEndpoint, leftEndpoint, grip });
   }
   return samples;
 }
@@ -206,4 +227,4 @@ for (const bind of presentation.heroMBind.values()) {
   assert.ok(bind.bone.matrixWorld.elements.every(Number.isFinite), 'arm endpoint retarget must keep every Hero M transform finite');
 }
 
-console.log(`Hero M translated hand endpoints verified: ${JSON.stringify({ idleRightEndpoint: idleRightEndpoint.toArray(), idleLeftEndpoint: idleLeftEndpoint.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange, walkGripZRange, runGripZRange, maxRunEndpointY })}`);
+console.log(`Hero M amplified hand endpoints verified: ${JSON.stringify({ idleRightEndpoint: idleRightEndpoint.toArray(), idleLeftEndpoint: idleLeftEndpoint.toArray(), walkRightZRange, runRightZRange, walkRightYRange, runRightYRange, walkGripZRange, runGripZRange, maxRunEndpointY, armTravelGain: EXPECTED_TRAVEL_GAIN })}`);
