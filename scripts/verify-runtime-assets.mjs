@@ -1,6 +1,8 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { ASSET_PATHS } from '../src/data/AssetPaths.js';
+import { decodeSegmentedToolPayload } from '../src/rendering/ToolModelAsset.js';
 
 const root = process.argv[2] ?? 'public';
 
@@ -49,13 +51,16 @@ async function verifyGltf(filePath) {
   }
 }
 
-async function verifyFbx(filePath) {
-  const data = await readFile(filePath);
-  if (data.length < 64) throw new Error(`${filePath}: FBX is too small`);
+function verifyFbxBuffer(data, label) {
+  if (data.length < 64) throw new Error(`${label}: FBX is too small`);
   const header = data.toString('ascii', 0, 21);
   if (!header.startsWith('Kaydara FBX Binary')) {
-    throw new Error(`${filePath}: expected binary FBX header`);
+    throw new Error(`${label}: expected binary FBX header`);
   }
+}
+
+async function verifyFbx(filePath) {
+  verifyFbxBuffer(await readFile(filePath), filePath);
 }
 
 async function verifyPng(filePath) {
@@ -85,4 +90,22 @@ for (const [name, runtimePath] of flattenAssetPaths(ASSET_PATHS)) {
   else if (filePath.endsWith('.webp')) await verifyWebp(filePath);
 
   console.log(`verified ${name}: ${filePath}`);
+}
+
+// The selected Fantasy Pawn tools are transported as one gzip-compressed FBX
+// base64 stream split across repository-friendly text segments. Their current
+// boundaries are not guaranteed to land on base64 quartets, so asset integrity
+// must be verified through the exact production reassembly decoder rather than
+// by treating each text file as an independently decodable base64 document.
+for (const [toolId, definition] of Object.entries(ASSET_PATHS.tools ?? {})) {
+  const parts = definition?.parts;
+  if (!Array.isArray(parts) || parts.length === 0) continue;
+
+  const encodedParts = await Promise.all(
+    parts.map(runtimePath => readFile(resolveRuntimePath(runtimePath), 'utf8'))
+  );
+  const compressed = decodeSegmentedToolPayload(encodedParts);
+  const fbx = gunzipSync(compressed);
+  verifyFbxBuffer(fbx, `${toolId} segmented runtime payload`);
+  console.log(`verified tools.${toolId}.segmentedPayload: ${parts.length} parts -> ${fbx.length} FBX bytes`);
 }
