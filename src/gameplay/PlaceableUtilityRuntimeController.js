@@ -9,6 +9,7 @@ const ANGLE_OFFSETS = Object.freeze([0, 0.5, -0.5, 1, -1, Math.PI]);
 const DISTANCE_OFFSETS = Object.freeze([0, 0.7, 1.4]);
 const PLACE_ACTION_ID = 'utility-place';
 const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
+const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
 
 export class PlaceableUtilityRuntimeController {
   constructor({
@@ -36,6 +37,7 @@ export class PlaceableUtilityRuntimeController {
     this.previewRoot = null;
     this.previewPlacement = null;
     this.activeBenchSessionId = null;
+    this.nextStorageId = this.#resolveNextStorageId();
     this.boundInventorySelect = itemId => this.selectInventoryItem(itemId);
     this.boundInventoryVisibility = open => this.#onInventoryVisibility(open);
   }
@@ -65,6 +67,7 @@ export class PlaceableUtilityRuntimeController {
   restoreState(state) {
     this.cancelPlacement();
     this.#endBenchSession();
+    this.nextStorageId = this.#resolveNextStorageId();
     if (!state || !Array.isArray(state.craftingBenches)) return false;
     return this.benchSystem.restore(state.craftingBenches);
   }
@@ -114,7 +117,12 @@ export class PlaceableUtilityRuntimeController {
     if (definition.kind === 'crafting-bench') {
       placed = this.benchSystem.createBench(placement);
     } else if (definition.kind === 'storage') {
-      placed = this.game.storageRuntime.system.createContainer(definition.storageType, placement);
+      const system = this.game.storageRuntime.system;
+      let id = null;
+      do {
+        id = `placed-${definition.storageType}-${this.nextStorageId++}`;
+      } while (system.describe(id));
+      placed = system.addContainer({ id, type: definition.storageType, ...placement });
     }
 
     if (!placed) {
@@ -194,7 +202,8 @@ export class PlaceableUtilityRuntimeController {
     const terrain = this.game.island;
     const collision = terrain.collision;
     if (terrain.isPlayable?.(x, z, definition.placementRadius + 0.25) === false) return false;
-    if (Number.isFinite(terrain.slopeAt?.(x, z)) && terrain.slopeAt(x, z) > definition.maxSlope) return false;
+    const slope = terrain.slopeAt?.(x, z);
+    if (Number.isFinite(slope) && slope > definition.maxSlope) return false;
     return collision.isCircleClear?.(x, z, definition.placementRadius) ?? true;
   }
 
@@ -241,6 +250,15 @@ export class PlaceableUtilityRuntimeController {
 
   #onInventoryVisibility(open) {
     if (!open) this.#endBenchSession();
+  }
+
+  #resolveNextStorageId() {
+    let next = 1;
+    for (const record of this.game.storageRuntime?.system?.snapshot?.() ?? []) {
+      const match = String(record.id ?? '').match(PLACED_STORAGE_ID);
+      if (match) next = Math.max(next, Number(match[1]) + 1);
+    }
+    return next;
   }
 
   #distanceTo(position) {
