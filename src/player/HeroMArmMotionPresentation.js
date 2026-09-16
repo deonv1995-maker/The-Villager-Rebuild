@@ -15,8 +15,6 @@ const SOURCE_HAND_KEYS = Object.freeze({
 // is blended back into the torso. Natural locomotion therefore requires endpoint
 // translation. Rotating those joints in place only spins the wrist/outer-arm
 // vertices around their authored T-pose anchors.
-const ARM_ENDPOINT_RESPONSE = 24;
-const ARM_ORIENTATION_RESPONSE = 20;
 
 function rootLocalPosition(root, object, target) {
   object.getWorldPosition(target);
@@ -68,7 +66,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       if (!active || !this.heroMReady) return false;
       this.#calibrateEndpointMapping();
       this.heroMArmMotionReady = true;
-      this.#updateArmEndpoints(0, true);
+      this.#updateArmEndpoints();
       this.visualRoot.userData.visualRevision = 'hero-m-player-v7';
       this.visualRoot.userData.armPose = 'bind-calibrated-hand-endpoints-v1';
       this.visualRoot.userData.armMotion = 'kaykit-full-hand-trajectory-v1';
@@ -112,7 +110,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     return target.copy(parent.worldToLocal(this.heroMArmDesiredWorld));
   }
 
-  #applyEndpoint(side, dt, immediate = false) {
+  #applyEndpoint(side) {
     const bind = this.heroMBind.get(ARM_BIND_KEYS[side]);
     const parent = bind?.bone?.parent;
     const sourceHip = this.sourceDrivers.get('hip');
@@ -141,10 +139,11 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .add(correction);
 
     this.#rootPointToParentLocal(parent, this.heroMArmDesiredRoot, this.heroMArmDesiredLocal);
-    const positionResponse = immediate || !Number.isFinite(dt) || dt <= 0
-      ? 1
-      : 1 - Math.exp(-ARM_ENDPOINT_RESPONSE * dt);
-    bind.bone.position.lerp(this.heroMArmDesiredLocal, positionResponse);
+    // HeroMPresentation resets compact-rig joint positions every frame before this
+    // adapter runs. Copy the live endpoint directly; lerping from that reset pose
+    // each frame would permanently attenuate the hand travel and recreate the
+    // visually pinned-wrist failure.
+    bind.bone.position.copy(this.heroMArmDesiredLocal);
 
     rootLocalQuaternion(
       this.player.root,
@@ -173,22 +172,19 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .copy(this.heroMArmParentInverse.copy(this.heroMArmParentGlobal).invert())
       .multiply(this.heroMArmDesiredGlobal)
       .normalize();
-    const orientationResponse = immediate || !Number.isFinite(dt) || dt <= 0
-      ? 1
-      : 1 - Math.exp(-ARM_ORIENTATION_RESPONSE * dt);
-    bind.bone.quaternion.slerp(this.heroMArmDesiredLocalQuaternion, orientationResponse).normalize();
+    bind.bone.quaternion.copy(this.heroMArmDesiredLocalQuaternion);
   }
 
-  #updateArmEndpoints(dt, immediate = false) {
+  #updateArmEndpoints() {
     if (!this.heroMReady) return;
-    this.#applyEndpoint('left', dt, immediate);
-    this.#applyEndpoint('right', dt, immediate);
+    this.#applyEndpoint('left');
+    this.#applyEndpoint('right');
     this.heroMBody?.updateMatrixWorld?.(true);
   }
 
   update(dt) {
     super.update(dt);
     if (!this.heroMArmMotionReady || !Number.isFinite(dt) || dt <= 0) return;
-    this.#updateArmEndpoints(dt);
+    this.#updateArmEndpoints();
   }
 }
