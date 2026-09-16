@@ -97,8 +97,8 @@ const torch = new VisibleHandTorchRuntimeController({ game, now: () => 1000 });
 assert.equal(torch.visualRoot.parent, visiblePalm, 'handheld torch must transfer from hidden KayKit hand to visible presentation palm');
 assert.equal(torch.visibleHandMounted, true, 'torch runtime must record visible-hand ownership');
 assert.equal(torch.handMounted, true, 'torch remains hand-mounted for the base presentation contract');
-assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-torch-v2', 'torch must use the dedicated upright visible-palm grip');
-assert.ok(torch.visualRoot.position.y < 0, 'torch grip origin should pass through the palm instead of floating beside it');
+assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-back-tip-torch-v3', 'torch must use the dedicated back-tip visible-palm grip');
+assert.ok(Math.abs(torch.visualRoot.position.y - 0.27) < 1e-9, 'torch handle back tip must sit at the visible palm origin');
 torch.dispose();
 
 console.log('Hero M selected presentation seam, Prisma fallback, visible-hand tool/torch grip, and reduced Sprout relative scale verified.');
