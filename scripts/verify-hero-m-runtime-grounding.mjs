@@ -48,22 +48,22 @@ const general = await loadGlb('public/assets/kaykit/animations/Rig_Medium_Genera
 const root = new THREE.Group();
 root.add(ranger.scene);
 
-// Reproduce the device failure mode deliberately: gameplay/collision says the Ranger
-// feet are 34 cm above the triangle the player actually sees. The presentation must
-// close that entire visual gap without mutating the gameplay root.
-const ANALYTICAL_GROUND_Y = 0.34;
-const RENDERED_GROUND_Y = 0;
-root.position.set(0, ANALYTICAL_GROUND_Y, 0);
+// Reproduce the physical-device failure at the coordinate-space boundary. Hero M is
+// loaded while the gameplay root is on terrain below world zero. The old calibration
+// measured world-space bounds and reused them as a local offset, which raised the
+// complete character by |GROUND_Y| and visually pinned its feet toward world Y=0.
+const GROUND_Y = -0.34;
+let supportY = GROUND_Y;
+root.position.set(0, supportY, 0);
 
 const player = {
   root,
   model: ranger.scene,
   assetMode: 'kaykit',
   terrain: {
-    heightAt: () => ANALYTICAL_GROUND_Y,
-    constructionHeightAt: () => ANALYTICAL_GROUND_Y,
-    walkableHeightAt: () => ANALYTICAL_GROUND_Y,
-    visualGroundHeightAt: () => RENDERED_GROUND_Y
+    heightAt: () => supportY,
+    constructionHeightAt: () => supportY,
+    walkableHeightAt: () => supportY
   },
   grounded: true,
   jumpStage: 0,
@@ -81,25 +81,39 @@ const presentation = new HeroMVisibleSoleGroundingPresentation({
   heroMAssetLoader: loadHeroBody
 });
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
-assert.equal(
-  await presentation.heroMRenderedGroundLoadPromise,
-  true,
-  'rendered-surface grounding must initialize against the production Hero M asset'
-);
 await presentation.prismaLoadPromise;
+
+assert.ok(presentation.heroMLoadSpaceGroundingReady, 'production Hero M must normalize its load-time grounding reference space');
+assert.ok(
+  Math.abs(presentation.heroMLoadSpaceCorrectionY - GROUND_Y) < 1e-9,
+  `load-space correction must remove exactly the parent world Y that contaminated base calibration: ${presentation.heroMLoadSpaceCorrectionY}`
+);
+assert.equal(
+  presentation.heroMRoot.userData.groundingReferenceSpace,
+  'presentation-local-v1',
+  'Hero M grounding calibration must be recorded as presentation-local after normalization'
+);
+assert.equal(
+  presentation.visualRoot.userData.grounding,
+  'presentation-local-load-calibration-v1',
+  'the production compatibility boundary must identify local-space load calibration as its grounding fix'
+);
 assert.equal(
   presentation.heroMRoot.userData.pelvisMotionProfile,
   'kaykit-scaled-hip-translation-v1',
   'Hero M must retain KayKit hip translation so the body follows the source animation'
 );
+
+presentation.visualRoot.updateMatrixWorld(true);
+const loadBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+const loadRelativeBottom = loadBounds.min.y - supportY;
 assert.ok(
-  presentation.heroMPelvisMotionScale >= 0.75 && presentation.heroMPelvisMotionScale <= 1.35,
-  'Hero M pelvis translation scaling must stay within the proven retarget bounds'
+  loadRelativeBottom >= -0.09 && loadRelativeBottom <= 0.04,
+  `Hero M loaded at Y=${GROUND_Y} must be grounded relative to that terrain instead of world zero: ${JSON.stringify({ minY: loadBounds.min.y, supportY, relative: loadRelativeBottom, correctionY: presentation.heroMLoadSpaceCorrectionY })}`
 );
-assert.equal(
-  presentation.visualRoot.userData.grounding,
-  'rendered-surface-root-anchor-v2',
-  'Hero M must use the rendered terrain surface rather than animated-sole inference as its final grounding seam'
+assert.ok(
+  Math.abs(loadBounds.min.y) > 0.18,
+  'nonzero-terrain regression must prove the body is no longer visually pinned near world Y=0'
 );
 
 const allClips = [...ranger.animations, ...movement.animations, ...general.animations];
@@ -112,57 +126,42 @@ const sourceHipPosition = new THREE.Vector3();
 const sourceHipDelta = new THREE.Vector3();
 const targetPelvisDelta = new THREE.Vector3();
 const expectedPelvisDelta = new THREE.Vector3();
-
-const settledStates = {};
 const idlePelvisFrames = [];
+const stateBounds = {};
+const correctedHeroRootY = presentation.heroMRoot.position.y;
+
 for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
   const clip = allClips.find(candidate => normalize(candidate.name) === normalize(state));
   assert.ok(clip, `production Ranger clip set must expose ${state}`);
-  settledStates[state] = [];
+  stateBounds[state] = [];
 
   for (const fraction of [0.2, 0.5, 0.8]) {
     mixer.stopAllAction();
     mixer.clipAction(clip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
     mixer.setTime(clip.duration * fraction);
+    root.position.y = supportY;
     root.updateMatrixWorld(true);
     player.animationState = state;
     player.grounded = true;
-    root.position.y = ANALYTICAL_GROUND_Y;
 
-    presentation.update(1 / 60);
+    for (let frame = 0; frame < 10; frame += 1) presentation.update(1 / 60);
     presentation.visualRoot.updateMatrixWorld(true);
-    const firstMotionY = presentation.heroMMotionRoot.position.y;
-    const firstBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
-
-    for (let frame = 0; frame < 90; frame += 1) presentation.update(1 / 60);
-    presentation.visualRoot.updateMatrixWorld(true);
-    const repeatedMotionY = presentation.heroMMotionRoot.position.y;
-    const repeatedBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+    const bounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
     const contacts = presentation.getGroundContactPoints().filter(contact => contact.active);
 
-    assert.equal(root.position.y, ANALYTICAL_GROUND_Y, `${state} must never move the gameplay root to solve a visual gap`);
-    assert.equal(contacts.length, 2, `${state} must expose both visible-foot ground anchors`);
+    assert.equal(root.position.y, supportY, `${state} must never move the gameplay root to solve presentation grounding`);
     assert.ok(
-      contacts.every(contact => Math.abs(contact.position.y - RENDERED_GROUND_Y) < 1e-9),
-      `${state} contact shading must use the rendered ground surface`
+      Math.abs(presentation.heroMRoot.position.y - correctedHeroRootY) < 1e-9,
+      `${state} must not accumulate or reapply the one-time load-space correction`
+    );
+    assert.equal(contacts.length, 2, `${state} must retain both rendering-only foot contact anchors`);
+    assert.ok(
+      contacts.every(contact => Math.abs(contact.position.y - supportY) < 1e-9),
+      `${state} contact shading must remain on the existing walkable support seam`
     );
     assert.ok(
-      presentation.heroMRenderedGroundInitialized,
-      `${state} must initialize the final rendered-ground presentation anchor`
-    );
-    assert.ok(
-      Math.abs(repeatedMotionY - firstMotionY) < 1e-8,
-      `${state} frame ${fraction} must be an absolute rendered-ground anchor with no frame-history drift`
-    );
-    assert.ok(
-      repeatedBounds.min.y >= RENDERED_GROUND_Y - 0.03 &&
-      repeatedBounds.min.y <= RENDERED_GROUND_Y + 0.005,
-      `${state} frame ${fraction} must settle the visible body onto the rendered floor despite a 34 cm gameplay/render mismatch: ${JSON.stringify({ minY: repeatedBounds.min.y, firstMinY: firstBounds.min.y, motionY: repeatedMotionY })}`
-    );
-    assert.equal(
-      presentation.heroMMotionRoot.userData.renderedGroundY,
-      RENDERED_GROUND_Y,
-      `${state} must retain the rendered floor as the final presentation reference`
+      Math.abs(bounds.min.y) > 0.12,
+      `${state} at negative terrain elevation must not drift back toward world Y=0: ${bounds.min.y}`
     );
 
     if (state === 'Idle_A') {
@@ -177,13 +176,7 @@ for (const state of ['Idle_A', 'Walking_A', 'Running_A']) {
       idlePelvisFrames.push({ sourceY: sourceHipDelta.y, targetY: targetPelvisDelta.y });
     }
 
-    settledStates[state].push({
-      fraction,
-      motionY: repeatedMotionY,
-      minY: repeatedBounds.min.y,
-      rootOffset: presentation.heroMMotionRoot.userData.renderedGroundRootOffsetY,
-      settle: presentation.heroMMotionRoot.userData.visibleBodySettleCorrectionY
-    });
+    stateBounds[state].push({ fraction, minY: bounds.min.y, relativeMinY: bounds.min.y - supportY });
   }
 }
 
@@ -193,14 +186,39 @@ assert.ok(
 );
 assert.ok(
   Math.max(...idlePelvisFrames.map(frame => frame.targetY)) - Math.min(...idlePelvisFrames.map(frame => frame.targetY)) > 0.001,
-  `Hero M must retain visible pelvis motion while the whole-body ground anchor remains stable: ${JSON.stringify(idlePelvisFrames)}`
+  `Hero M must retain visible pelvis motion after local-space grounding normalization: ${JSON.stringify(idlePelvisFrames)}`
 );
 
-// Airborne motion must not be magnetized back to the rendered ground. Preserve the
-// last grounded visual offset and let the gameplay root own the jump displacement.
-const groundedBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
-const groundedMinY = groundedBounds.min.y;
-const groundedOffset = presentation.heroMRenderedGroundOffsetY;
+// With a fixed authored pose, changing the gameplay/world support elevation must move
+// Hero M by the exact same amount. This directly guards against world-zero pinning.
+const runningClip = allClips.find(candidate => normalize(candidate.name) === normalize('Running_A'));
+mixer.stopAllAction();
+mixer.clipAction(runningClip).reset().play().setLoop(THREE.LoopRepeat, Infinity);
+mixer.setTime(runningClip.duration * 0.5);
+player.animationState = 'Running_A';
+player.grounded = true;
+supportY = GROUND_Y;
+root.position.y = supportY;
+root.updateMatrixWorld(true);
+presentation.update(1 / 60);
+presentation.visualRoot.updateMatrixWorld(true);
+const lowBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+
+const elevationDelta = 0.8;
+supportY = GROUND_Y + elevationDelta;
+root.position.y = supportY;
+root.updateMatrixWorld(true);
+presentation.update(1 / 60);
+presentation.visualRoot.updateMatrixWorld(true);
+const highBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
+assert.ok(
+  Math.abs((highBounds.min.y - lowBounds.min.y) - elevationDelta) < 1e-6,
+  `Hero M must follow later gameplay-root elevation one-for-one after loading: ${JSON.stringify({ low: lowBounds.min.y, high: highBounds.min.y, elevationDelta })}`
+);
+
+// Airborne updates keep the established base presentation offset and follow the
+// gameplay root; the one-time load correction must never become a terrain magnet.
+const groundedMinY = highBounds.min.y;
 player.grounded = false;
 player.animationState = 'Jump_Idle';
 root.position.y += 0.72;
@@ -210,11 +228,11 @@ presentation.visualRoot.updateMatrixWorld(true);
 const airborneBounds = new THREE.Box3().setFromObject(presentation.heroMRoot, true);
 assert.ok(
   airborneBounds.min.y > groundedMinY + 0.65,
-  'Hero M must follow the gameplay root upward instead of being re-grounded during a jump'
+  'Hero M must follow the gameplay root upward during a jump after load-space normalization'
 );
 assert.ok(
-  Math.abs(presentation.heroMRenderedGroundOffsetY - groundedOffset) < 1e-9,
-  'airborne updates must retain the last grounded relative presentation offset'
+  Math.abs(presentation.heroMRoot.position.y - correctedHeroRootY) < 1e-9,
+  'airborne updates must not mutate the one-time local-space calibration'
 );
 
-console.log(`Hero M rendered-surface root anchor verified against shipped assets with a deliberate ${ANALYTICAL_GROUND_Y.toFixed(2)} m gameplay/render ground mismatch: ${JSON.stringify(settledStates)}`);
+console.log(`Hero M nonzero-world load calibration verified against shipped assets at ${GROUND_Y.toFixed(2)} m terrain elevation: ${JSON.stringify(stateBounds)}`);
