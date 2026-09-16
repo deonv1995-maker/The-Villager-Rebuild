@@ -132,6 +132,7 @@ export class InventorySystem {
     return Object.values(this.definitions).map(definition => ({
       id: definition.id,
       label: definition.label,
+      kind: definition.kind ?? 'resource',
       quantity: this.get(definition.id)
     }));
   }
