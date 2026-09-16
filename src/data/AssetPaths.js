@@ -94,6 +94,10 @@ export const ASSET_PATHS = Object.freeze({
       campfire: asset('ui/cosy/icon-campfire.webp'),
       jump: asset('ui/cosy/icon-jump.webp'),
       spear: asset('ui/cosy/icon-spear.webp'),
+      suitcase: asset('ui/mobile/icon-suitcase.svg'),
+      craftingBench: asset('ui/mobile/icon-crafting-bench.svg'),
+      chest: asset('ui/mobile/icon-storage-chest.svg'),
+      barrel: asset('ui/mobile/icon-food-barrel.svg'),
       resources: Object.freeze({
         stick: asset('ui/cosy/icon-resource-stick.webp'),
         stone: asset('ui/cosy/icon-resource-stone.webp'),
