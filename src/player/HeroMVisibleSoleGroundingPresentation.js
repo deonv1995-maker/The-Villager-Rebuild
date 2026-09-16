@@ -8,6 +8,8 @@ const GROUND_CONTACT_BIND_KEYS = Object.freeze({
 const EMPTY_GROUND_CONTACTS = Object.freeze([]);
 const BODY_GROUND_SETTLE = 0.012;
 const MAX_BODY_SETTLE_CORRECTION = 0.3;
+const BODY_SETTLE_PASSES = 3;
+const BODY_SETTLE_EPSILON = 0.0005;
 
 export function heroMVisualGroundOffset(rootY, visualGroundY, fallback = 0) {
   if (!Number.isFinite(rootY) || !Number.isFinite(visualGroundY)) {
@@ -42,11 +44,12 @@ export function heroMBodySettleCorrection(bodyBottomY, visualGroundY, {
  * trying to infer the floor from animated boot vertices while the controller is
  * standing on a separate analytical/collision surface.
  *
- * While grounded, the motion pivot is placed directly relative to the rendered floor
- * and the complete posed Hero M body gets one bounded whole-body settle so its lowest
- * visible geometry meets that floor. There is no accumulated correction and no
- * frame-history feedback. While airborne, the last grounded presentation offset is
- * retained so jump motion remains owned entirely by the gameplay root.
+ * While grounded, the motion pivot is placed directly relative to the rendered floor.
+ * The complete posed Hero M body is then measured and corrected again within the same
+ * update until its visible minimum settles onto that floor. The bounded same-frame
+ * solve uses no previous-frame clearance and therefore cannot ratchet or drift. While
+ * airborne, the last grounded presentation offset is retained so jump motion remains
+ * owned entirely by the gameplay root.
  */
 export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
   constructor(options) {
@@ -68,9 +71,9 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
     const heroLoadPromise = this.heroMLoadPromise;
     this.heroMRenderedGroundLoadPromise = heroLoadPromise.then(active => {
       if (!active || !this.heroMReady) return false;
-      this.visualRoot.userData.grounding = 'rendered-surface-root-anchor-v1';
+      this.visualRoot.userData.grounding = 'rendered-surface-root-anchor-v2';
       this.visualRoot.userData.groundingAuthority = 'presentation-only-rendered-terrain-v1';
-      this.visualRoot.userData.groundingSettle = 'posed-whole-body-min-v1';
+      this.visualRoot.userData.groundingSettle = 'posed-whole-body-same-frame-v2';
       this.visualRoot.userData.groundContactAnchors = 'visible-foot-bones-render-surface-v2';
       return true;
     });
@@ -92,6 +95,16 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
       if (Number.isFinite(value)) return value;
     }
     return null;
+  }
+
+  #measureVisibleBodyBottom() {
+    if (!this.heroMBody) return null;
+    this.heroMBody.updateMatrixWorld?.(true);
+    this.heroMBodyBounds.makeEmpty();
+    this.heroMBodyBounds.setFromObject(this.heroMBody, true);
+    return this.heroMBodyBounds.isEmpty() || !Number.isFinite(this.heroMBodyBounds.min.y)
+      ? null
+      : this.heroMBodyBounds.min.y;
   }
 
   #applyRenderedGrounding() {
@@ -117,21 +130,40 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
         // one deterministic anchor to the rendered surface. This assignment is
         // absolute every frame; no previous correction participates in the target.
         motionRoot.position.y = this.heroMHalfHeight + rootOffset;
+
+        // A skinned/retargeted body can shift its final visible minimum after the
+        // pivot changes. Re-measure that final posed geometry and resolve the small
+        // residual in this same update. The total correction remains bounded and is
+        // rebuilt from zero next frame, so this is not a temporal feedback loop.
+        let totalSettleCorrection = 0;
+        let measuredBottomY = null;
+        for (let pass = 0; pass < BODY_SETTLE_PASSES; pass += 1) {
+          motionRoot.updateMatrixWorld(true);
+          measuredBottomY = this.#measureVisibleBodyBottom();
+          if (!Number.isFinite(measuredBottomY)) break;
+
+          const residual = heroMBodySettleCorrection(measuredBottomY, visualGroundY);
+          if (Math.abs(residual) <= BODY_SETTLE_EPSILON) break;
+
+          const nextTotal = THREE.MathUtils.clamp(
+            totalSettleCorrection + residual,
+            -MAX_BODY_SETTLE_CORRECTION,
+            MAX_BODY_SETTLE_CORRECTION
+          );
+          const applied = nextTotal - totalSettleCorrection;
+          if (Math.abs(applied) <= BODY_SETTLE_EPSILON) break;
+          motionRoot.position.y += applied;
+          totalSettleCorrection = nextTotal;
+        }
+
         motionRoot.updateMatrixWorld(true);
-        this.heroMBody?.updateMatrixWorld?.(true);
-
-        this.heroMBodyBounds.makeEmpty();
-        if (this.heroMBody) this.heroMBodyBounds.setFromObject(this.heroMBody, true);
-        const bodyBottomY = this.heroMBodyBounds.min.y;
-        const settleCorrection = heroMBodySettleCorrection(bodyBottomY, visualGroundY);
-        motionRoot.position.y += settleCorrection;
-
+        const finalBottomY = this.#measureVisibleBodyBottom();
         this.heroMRenderedGroundOffsetY = motionRoot.position.y - this.heroMHalfHeight;
         this.heroMRenderedGroundInitialized = true;
         motionRoot.userData.renderedGroundY = visualGroundY;
         motionRoot.userData.renderedGroundRootOffsetY = rootOffset;
-        motionRoot.userData.visibleBodyBottomY = bodyBottomY;
-        motionRoot.userData.visibleBodySettleCorrectionY = settleCorrection;
+        motionRoot.userData.visibleBodyBottomY = finalBottomY;
+        motionRoot.userData.visibleBodySettleCorrectionY = totalSettleCorrection;
       }
     } else if (this.heroMRenderedGroundInitialized) {
       // Preserve the last grounded relative offset. The gameplay root owns the entire
@@ -140,7 +172,7 @@ export class HeroMVisibleSoleGroundingPresentation extends HeroMPresentation {
       motionRoot.position.y = this.heroMHalfHeight + this.heroMRenderedGroundOffsetY;
     }
 
-    motionRoot.userData.visibleGrounding = 'rendered-surface-root-anchor-v1';
+    motionRoot.userData.visibleGrounding = 'rendered-surface-root-anchor-v2';
     motionRoot.updateMatrixWorld(true);
   }
 
