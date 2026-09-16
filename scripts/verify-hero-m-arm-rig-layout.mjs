@@ -15,6 +15,8 @@ const ROOT_OUTWARD = new THREE.Vector3(-1, 0, 0);
 const ROOT_UP = new THREE.Vector3(0, 1, 0);
 const EXPECTED_OUTWARD_CLEARANCE = 0.09;
 const EXPECTED_FORWARD_CLEARANCE = 0.05;
+const EXPECTED_SPEAR_FORWARD_OFFSET = 0.86;
+const HELD_SPEAR_SHAFT_MIN_Y = 0.12 - (2.05 * 0.5);
 
 const compressed = Buffer.concat(
   HERO_PARTS.map(path => Buffer.from(readFileSync(path, 'utf8').trim(), 'base64'))
@@ -60,6 +62,8 @@ assert.ok(leftPivot.y > 1.6 && rightPivot.y > 1.6, 'authored DEF_hand pivots mus
 // handles/blades do not rest sideways through the character silhouette.
 const appearanceSource = readFileSync('src/player/RangerAppearancePresentation.js', 'utf8');
 const toolGripSource = readFileSync('src/player/HeroMToolGripPresentation.js', 'utf8');
+const rangerToolSource = readFileSync('src/player/RangerToolPresentation.js', 'utf8');
+const rangerControllerSource = readFileSync('src/player/RangerController.js', 'utf8');
 assert.match(
   appearanceSource,
   /HeroMToolGripPresentation as RangerAppearancePresentation/,
@@ -124,6 +128,54 @@ assert.ok(
   'Hero M tool socket must move away from the torso and slightly forward rather than inward through the character'
 );
 
+// The legacy held spear remains owned by RangerController for equip/throw state,
+// but its rendered mount must be adapted after Hero M retargeting so it shares
+// the same visible right-hand frame instead of following the hidden KayKit hand.
+assert.match(
+  rangerToolSource,
+  /VISIBLE_SPEAR_FORWARD_OFFSET = 0\.86/,
+  'held spear must retain its explicit forward shaft offset from the visible hand'
+);
+assert.match(
+  rangerToolSource,
+  /visible-hand-forward-spear-v1/,
+  'held spear visible-hand grip profile must remain explicit for device diagnostics'
+);
+assert.match(
+  rangerToolSource,
+  /if \(spearMount\.parent !== visibleMount\) visibleMount\.add\(spearMount\)/,
+  'held spear must be reparented to the active visible hand mount rather than remain on the hidden KayKit anchor'
+);
+assert.match(
+  rangerToolSource,
+  /spearMount\.position\.set\(0, VISIBLE_SPEAR_FORWARD_OFFSET, 0\)/,
+  'held spear must slide forward along the shared +Y tool axis so its butt does not pass through Hero M'
+);
+assert.match(
+  rangerToolSource,
+  /spearMount\.quaternion\.identity\(\)/,
+  'held spear must inherit the Hero M forward carry frame without a second competing rotation'
+);
+assert.match(
+  rangerToolSource,
+  /this\.appearancePresentation\.update\(dt\);\s*this\.#syncVisibleHandMount\(\);\s*this\.#syncVisibleSpearMount\(\);/,
+  'held spear adaptation must run after Hero M retargeting each presentation frame'
+);
+assert.match(
+  rangerControllerSource,
+  /this\.spearMount\.visible = this\.spearEquipped && !this\.spearThrowReleased && !this\.isFirstPerson\(\)/,
+  'RangerController must remain the authority for held-spear equip/release visibility'
+);
+assert.match(
+  rangerControllerSource,
+  /this\.spearThrowReleased = true;\s*if \(this\.spearMount\) this\.spearMount\.visible = false;/,
+  'visible-hand spear adaptation must not change the established throw-release boundary'
+);
+assert.ok(
+  HELD_SPEAR_SHAFT_MIN_Y + EXPECTED_SPEAR_FORWARD_OFFSET >= -0.05,
+  'forward spear offset must leave no more than five centimetres of shaft behind the visible hand grip'
+);
+
 function dominantBoundsForBone(bone) {
   const bounds = new THREE.Box3();
   let influenced = 0;
@@ -180,4 +232,4 @@ assert.ok(
   'DEF_spine dominant geometry must remain central so the inner shoulder/arm blend stays torso-owned'
 );
 
-console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints and forward body-cleared tool grip.');
+console.log('Hero M compact arm rig verified: torso-blended shoulder region, spine-parented hand endpoints, forward body-cleared tools and visible-hand spear.');
