@@ -41,6 +41,12 @@ export const ASSET_PATHS = Object.freeze({
     treeTall: asset('kaykit/forest/Tree_2_A_Color1.gltf'),
     rock: asset('kaykit/forest/Rock_1_A_Color1.gltf')
   }),
+  tools: Object.freeze({
+    axe: asset('tools/user-fbx/axe.fbx'),
+    hammer: asset('tools/user-fbx/hammer.fbx'),
+    shovel: asset('tools/user-fbx/shovel.fbx'),
+    sword: asset('tools/user-fbx/sword.fbx')
+  }),
   cliffs: Object.freeze({
     large: asset('kenney/nature/cliff_large_rock.glb'),
     rock: asset('kenney/nature/rock_largeA.glb')
