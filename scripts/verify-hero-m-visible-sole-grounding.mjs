@@ -94,8 +94,13 @@ assert.match(
 );
 assert.match(
   armSource,
-  /kaykit-full-hand-trajectory-v1/,
-  'walk/run arm motion must consume the established KayKit hand trajectory rather than synthesize a wrist-only arc'
+  /kaykit-bilateral-hand-travel-v2/,
+  'walk/run arm motion must retain the KayKit hand trajectory while applying the bounded bilateral locomotion gain'
+);
+assert.match(
+  armSource,
+  /Walking_A: 1\.12[\s\S]*Running_A: 1\.16/,
+  'walk/run arm travel gain must stay explicit and modest'
 );
 assert.match(
   armSource,
@@ -132,4 +137,4 @@ assert.doesNotMatch(
 
 await import('./verify-hero-m-runtime-grounding.mjs');
 
-console.log('Hero M local grounding, rendering-only foot contacts, translated hand endpoints, KayKit-driven arm trajectories and gameplay-root isolation verified.');
+console.log('Hero M local grounding, rendering-only foot contacts, translated hand endpoints, amplified KayKit-driven arm travel and gameplay-root isolation verified.');
