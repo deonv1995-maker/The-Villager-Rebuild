@@ -15,8 +15,10 @@ const ARM_TRAVEL_GAIN = Object.freeze({
 });
 const RIGHT_HAND_CARRY_PROFILES = Object.freeze({
   'steady-upright': Object.freeze({
-    travelScale: 0.24,
-    rotationScale: 0.34
+    travelScale: 0.12,
+    rotationScale: 0.18,
+    positionResponse: 8,
+    rotationResponse: 10
   })
 });
 const RIGHT_HAND_CARRY_BLEND_RESPONSE = 10;
@@ -42,6 +44,11 @@ function armTravelGain(animationState) {
   return ARM_TRAVEL_GAIN[animationState] ?? 1;
 }
 
+function responseBlend(response, dt) {
+  if (!Number.isFinite(response) || response <= 0 || !Number.isFinite(dt) || dt <= 0) return 1;
+  return 1 - Math.exp(-response * dt);
+}
+
 /**
  * Final player-facing arm endpoint retarget for Hero M.
  *
@@ -63,6 +70,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     this.rightHandCarryProfile = null;
     this.rightHandCarrySettings = RIGHT_HAND_CARRY_PROFILES['steady-upright'];
     this.rightHandCarryBlend = 0;
+    this.rightHandCarrySmoothingReady = false;
+    this.rightHandCarrySmoothedRoot = new THREE.Vector3();
+    this.rightHandCarrySmoothedGlobalQuaternion = new THREE.Quaternion();
 
     this.heroMArmSourceHip = new THREE.Vector3();
     this.heroMArmSourceHand = new THREE.Vector3();
@@ -89,7 +99,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       if (!active || !this.heroMReady) return false;
       this.#calibrateEndpointMapping();
       this.heroMArmMotionReady = true;
-      this.#updateArmEndpoints();
+      this.#updateArmEndpoints(0);
       this.visualRoot.userData.visualRevision = 'hero-m-player-v8';
       this.visualRoot.userData.armPose = 'bind-calibrated-hand-endpoints-v1';
       this.visualRoot.userData.armMotion = 'kaykit-bilateral-hand-travel-v2';
@@ -98,6 +108,10 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       this.heroMRoot.userData.armTravelGain = { ...ARM_TRAVEL_GAIN };
       this.heroMRoot.userData.rightHandCarryProfile = null;
       this.heroMRoot.userData.rightHandCarryBlend = 0;
+      this.heroMRoot.userData.rightHandCarrySmoothing = {
+        positionResponse: this.rightHandCarrySettings.positionResponse,
+        rotationResponse: this.rightHandCarrySettings.rotationResponse
+      };
       return true;
     });
   }
@@ -107,6 +121,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       throw new Error(`Unknown Hero M right-hand carry profile: ${profile}`);
     }
     if (profile) this.rightHandCarrySettings = RIGHT_HAND_CARRY_PROFILES[profile];
+    if (profile !== this.rightHandCarryProfile) this.rightHandCarrySmoothingReady = false;
     this.rightHandCarryProfile = profile;
     if (this.heroMRoot) this.heroMRoot.userData.rightHandCarryProfile = profile;
     return true;
@@ -115,9 +130,12 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
   #updateRightHandCarryBlend(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     const target = this.rightHandCarryProfile ? 1 : 0;
-    const blend = 1 - Math.exp(-RIGHT_HAND_CARRY_BLEND_RESPONSE * dt);
+    const blend = responseBlend(RIGHT_HAND_CARRY_BLEND_RESPONSE, dt);
     this.rightHandCarryBlend = THREE.MathUtils.lerp(this.rightHandCarryBlend, target, blend);
-    if (target === 0 && this.rightHandCarryBlend < 0.0001) this.rightHandCarryBlend = 0;
+    if (target === 0 && this.rightHandCarryBlend < 0.0001) {
+      this.rightHandCarryBlend = 0;
+      this.rightHandCarrySmoothingReady = false;
+    }
     if (this.heroMRoot) this.heroMRoot.userData.rightHandCarryBlend = this.rightHandCarryBlend;
   }
 
@@ -156,7 +174,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     return target.copy(parent.worldToLocal(this.heroMArmDesiredWorld));
   }
 
-  #applyEndpoint(side) {
+  #applyEndpoint(side, dt) {
     const bind = this.heroMBind.get(ARM_BIND_KEYS[side]);
     const parent = bind?.bone?.parent;
     const sourceHip = this.sourceDrivers.get('hip');
@@ -203,7 +221,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     // free-arm fore/aft swing as though the hand were empty. Blend only the right
     // hand's opposed motion toward the bilateral midpoint; the left arm and common
     // gait translation remain fully source-authored.
-    if (side === 'right' && this.rightHandCarryBlend > 0.0001) {
+    const carrySmoothingActive = side === 'right' && this.rightHandCarryBlend > 0.0001;
+    const carrySmoothingWasReady = this.rightHandCarrySmoothingReady;
+    if (carrySmoothingActive) {
       const carryTravelScale = THREE.MathUtils.lerp(
         1,
         this.rightHandCarrySettings.travelScale,
@@ -219,6 +239,27 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .copy(this.heroMArmTargetPelvis)
       .add(this.heroMArmSourceRelative)
       .add(correction);
+
+    // A reduced animation amplitude alone still exposes the carried hand to every
+    // source-pose sample. Low-pass only the right-hand carry target in Hero M root
+    // space, then blend that filtered target in with the semantic carry weight.
+    // The gameplay root and free left arm never enter this filter, and root-space
+    // filtering means Ranger turns and world locomotion remain immediately owned
+    // by the established controller rather than acquiring presentation lag.
+    if (carrySmoothingActive) {
+      if (!carrySmoothingWasReady) {
+        this.rightHandCarrySmoothedRoot.copy(this.heroMArmDesiredRoot);
+      } else {
+        this.rightHandCarrySmoothedRoot.lerp(
+          this.heroMArmDesiredRoot,
+          responseBlend(this.rightHandCarrySettings.positionResponse, dt)
+        );
+      }
+      this.heroMArmDesiredRoot.lerp(
+        this.rightHandCarrySmoothedRoot,
+        this.rightHandCarryBlend
+      );
+    }
 
     this.#rootPointToParentLocal(parent, this.heroMArmDesiredRoot, this.heroMArmDesiredLocal);
     // HeroMPresentation resets compact-rig joint positions every frame before this
@@ -238,7 +279,7 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .copy(this.heroMArmSourceQuaternion)
       .multiply(this.heroMArmSourceBindInverse.copy(sourceHandBind.quaternion).invert())
       .normalize();
-    if (side === 'right' && this.rightHandCarryBlend > 0.0001) {
+    if (carrySmoothingActive) {
       const carryRotationScale = THREE.MathUtils.lerp(
         1,
         this.rightHandCarrySettings.rotationScale,
@@ -252,6 +293,22 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       .copy(this.heroMArmDeltaQuaternion)
       .multiply(bind.globalQuaternion)
       .normalize();
+
+    if (carrySmoothingActive) {
+      if (!carrySmoothingWasReady) {
+        this.rightHandCarrySmoothedGlobalQuaternion.copy(this.heroMArmDesiredGlobal);
+      } else {
+        this.rightHandCarrySmoothedGlobalQuaternion.slerp(
+          this.heroMArmDesiredGlobal,
+          responseBlend(this.rightHandCarrySettings.rotationResponse, dt)
+        ).normalize();
+      }
+      this.heroMArmDesiredGlobal.slerp(
+        this.rightHandCarrySmoothedGlobalQuaternion,
+        this.rightHandCarryBlend
+      ).normalize();
+      this.rightHandCarrySmoothingReady = true;
+    }
 
     rootLocalQuaternion(
       this.heroMRoot,
@@ -267,10 +324,10 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     bind.bone.quaternion.copy(this.heroMArmDesiredLocalQuaternion);
   }
 
-  #updateArmEndpoints() {
+  #updateArmEndpoints(dt) {
     if (!this.heroMReady) return;
-    this.#applyEndpoint('left');
-    this.#applyEndpoint('right');
+    this.#applyEndpoint('left', dt);
+    this.#applyEndpoint('right', dt);
     this.heroMBody?.updateMatrixWorld?.(true);
   }
 
@@ -279,6 +336,6 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.#updateRightHandCarryBlend(dt);
     if (!this.heroMArmMotionReady) return;
-    this.#updateArmEndpoints();
+    this.#updateArmEndpoints(dt);
   }
 }
