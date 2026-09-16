@@ -4,7 +4,7 @@ import fs from 'node:fs';
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const hammerMenuSource = fs.readFileSync(new URL('../src/ui/HammerConstructionMenu.js', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
-const inventoryStyles = fs.readFileSync(new URL('../src/resource-inventory.css', import.meta.url), 'utf8');
+const inventoryMenuStyles = fs.readFileSync(new URL('../src/inventory-menu.css', import.meta.url), 'utf8');
 const cosyIconStyles = fs.readFileSync(new URL('../src/cosy-icons.css', import.meta.url), 'utf8');
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -79,6 +79,15 @@ assert.match(
   /angle: asset\('ui\/mobile\/icon-build-angle\.svg'\)/,
   'Legacy/internal angled-log icon must remain separate from the player-facing Stairs icon'
 );
+for (const [id, fileName] of Object.entries({
+  suitcase: 'icon-suitcase.svg',
+  craftingBench: 'icon-crafting-bench.svg',
+  chest: 'icon-storage-chest.svg',
+  barrel: 'icon-food-barrel.svg'
+})) {
+  assert.match(assetPathsSource, new RegExp(`${id}: asset\\('ui/mobile/${fileName.replaceAll('.', '\\.')}\\)`), `${id} must resolve through shared mobile assets`);
+  assert.ok(fs.existsSync(new URL(`../public/assets/ui/mobile/${fileName}`, import.meta.url)), `${id} SVG must exist`);
+}
 const runtimeAssetPaths = assetPathsSource.split('export const ASSET_PATHS = Object.freeze({')[1] ?? '';
 assert.doesNotMatch(runtimeAssetPaths, /ui\/survival\//, 'Player-facing runtime paths must not fall back to the older survival icon family');
 assert.match(
@@ -100,18 +109,22 @@ assert.match(hammerMenuSource, /door: ui\.build\.door,/, 'Hammer menu Door must 
 assert.match(hammerMenuSource, /window: ui\.build\.window,/, 'Hammer menu Window must resolve through the shared build icon map');
 
 assert.match(mobileHudSource, /this\.resourceIcons = ui\.resources;/, 'Mobile HUD must use the shared resource icon map');
-assert.match(mobileHudSource, /row\.dataset\.resource = entry\.id;/, 'Inventory rows must expose their resource id');
-assert.match(mobileHudSource, /icon\.className = 'inventory-resource-icon';/, 'Inventory resources must render as images');
-assert.match(mobileHudSource, /icon\.src = this\.resourceIcons\[entry\.id\]/, 'Inventory images must resolve through AssetPaths');
-assert.doesNotMatch(mobileHudSource, /label\.textContent = entry\.label;/, 'Inventory must not render resource names as visible text');
-assert.match(mobileHudSource, /row\.setAttribute\('aria-label'/, 'Icon-only inventory must retain accessible resource labels');
+assert.match(mobileHudSource, /this\.itemIcons = Object\.freeze\(\{ \.\.\.this\.resourceIcons, \.\.\.this\.toolIcons \}\);/, 'Suitcase inventory must resolve resources and placeables through one icon map');
+assert.match(mobileHudSource, /card\.dataset\.resource = entry\.id;/, 'Inventory cards must expose their item id');
+assert.match(mobileHudSource, /icon\.className = 'inventory-resource-icon';/, 'Inventory items must render as images');
+assert.match(mobileHudSource, /icon\.src = this\.itemIcons\[entry\.id\]/, 'Inventory images must resolve through AssetPaths');
+assert.match(mobileHudSource, /label\.textContent = entry\.label;/, 'Suitcase grid must expose collected item names alongside icons');
+assert.match(mobileHudSource, /card\.setAttribute\('aria-label'/, 'Inventory grid must retain accessible item labels');
+assert.match(mobileHudSource, /data-role="inventory-toggle"/, 'One suitcase toggle must replace the always-visible inventory strip');
+assert.match(mobileHudSource, /data-inventory-tab="craft"/, 'Crafting must share the suitcase panel');
+assert.doesNotMatch(mobileHudSource, /class="craft-menu-toggle"/, 'Standalone craft toggle must stay retired');
 
-assert.match(indexSource, /resource-inventory\.css/, 'The resource inventory stylesheet must be loaded');
+assert.match(indexSource, /inventory-menu\.css/, 'The suitcase inventory stylesheet must be loaded');
 assert.match(indexSource, /cosy-icons\.css/, 'The cosy icon stylesheet must be loaded');
 assert.doesNotMatch(indexSource, /survival-icons\.css/, 'The retired survival icon stylesheet must not be loaded');
-assert.match(inventoryStyles, /\.inventory-strip\s*\{[\s\S]*?width: 52px;/, 'Icon inventory should use a compact mobile footprint');
-assert.match(inventoryStyles, /\.inventory-resource-icon\s*\{[\s\S]*?width: 24px;[\s\S]*?height: 24px;/, 'Resource icons must have a consistent readable size');
-assert.match(inventoryStyles, /\.inventory-row strong\s*\{[\s\S]*?position: absolute;/, 'Resource quantities must remain visible as compact badges');
+assert.match(inventoryMenuStyles, /\.inventory-menu-toggle\s*\{[\s\S]*?width: 46px;[\s\S]*?height: 46px;/, 'Suitcase toggle must keep a compact mobile footprint');
+assert.match(inventoryMenuStyles, /\.inventory-grid\s*\{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/, 'Suitcase contents must use a compact inventory grid');
+assert.match(inventoryMenuStyles, /\.inventory-card \.inventory-resource-icon\s*\{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/, 'Inventory item icons must remain readable inside the opened suitcase');
 assert.match(
   cosyIconStyles,
   /src\*="\/ui\/cosy\/"[\s\S]*?image-rendering: auto;[\s\S]*?filter: none;/,
@@ -123,4 +136,4 @@ for (const toolId of ['spear', 'pickaxe', 'sword']) {
 }
 assert.match(cosyIconStyles, /transform: scale\(1\.12\);/, 'Slender cosy tool silhouettes must be enlarged without replacing their approved assets');
 
-console.log('Approved generated cosy resource, tool, action and complete semantic build icon set verified');
+console.log('Approved cosy gameplay icons plus suitcase resource/placeable inventory presentation verified');
