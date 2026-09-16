@@ -30,7 +30,7 @@ Decision: **provenance and license gate cleared for the selected tool/weapon ass
 | Sword | `Weapons and Others/sword.fbx` | FBX presentation implemented |
 | Pickaxe | No matching FBX in this archive | Existing procedural presentation retained |
 | Torch | No matching FBX in this archive | Existing torch system retained |
-| Spear | `Weapons and Others/spear.fbx` | Candidate identified; integration deferred until the held/projectile presentation is unified cleanly |
+| Spear | `Weapons and Others/spear.fbx` | Source model remains deferred; current procedural held spear now shares the visible Hero M hand frame |
 
 The extra blade, club, staff, shield, scythe, pitchfork, crossbow and alternate sword files are not imported. They are outside the current milestone/tool registry and would otherwise create unused production payload.
 
@@ -38,11 +38,12 @@ The extra blade, club, staff, shield, scythe, pitchfork, crossbow and alternate 
 
 - `src/rendering/ToolModelAsset.js` owns FBX loading, caching, deterministic orientation/scale normalization, segmented-payload decoding and material/shadow preparation.
 - `src/data/AssetPaths.js` remains the single path authority.
-- `src/player/RangerToolPresentation.js` retains its existing primitive geometry as an immediate fallback, then swaps to the FBX only after a successful load.
-- `src/player/HeroMToolGripPresentation.js` is the final Hero M presentation layer. It preserves the geometry-derived visible-hand grip location, defines one forward-facing carry frame for standard hand tools, and applies bounded outward/forward clearance so long props stay outside the body silhouette at rest.
+- `src/player/RangerToolPresentation.js` retains its existing primitive geometry as an immediate fallback, then swaps to the FBX only after a successful load. It also owns the final visible-hand adaptation for the existing procedural held spear so that the spear uses the same Hero M carry frame without moving throw/gameplay authority out of `RangerController`.
+- `src/player/HeroMToolGripPresentation.js` is the final Hero M presentation layer. It preserves the geometry-derived visible-hand grip location, defines one forward-facing carry frame for hand tools, and applies bounded outward/forward clearance so long props stay outside the body silhouette at rest.
+- `VisibleHandTorchRuntimeController` already reparents the handheld torch under this same visible Hero M hand mount, so the torch inherits the forward/body-cleared frame while its dedicated fuel, flame, lighting and placement system remains unchanged.
 - Async model loads are request-versioned so changing equipped tools cannot install a stale model after a later selection.
 - Pickaxe continues to use its established presentation because substituting another model would be semantically incorrect. It still benefits from the shared Hero M forward-facing hand mount because its procedural model uses the same +Y tool-axis convention.
-- Spear remains unchanged in this pass because the held Hero M spear and projectile/embedded spear are currently constructed by separate systems. A later spear model import should first make one presentation source authoritative for both states rather than replacing only one copy.
+- The spear **FBX import** remains deferred because held and projectile/embedded spear geometry are still constructed by separate systems. This pass only corrects the existing held spear presentation: `RangerController` continues to own equip/throw/release state and `SpearProjectileSystem` remains the projectile authority. A future spear model import should first make one model source authoritative for both held and projectile states.
 
 ## Web delivery
 
@@ -58,7 +59,13 @@ Hero M's `DEF_hand_R` is a compact outer-arm/hand endpoint rather than a convent
 
 The production carry contract is now explicit and three-dimensional. The normalized tool **+Y** axis points along Hero M's local **+Z forward** direction, tool **+X** points outward from the right side of the torso, and tool **+Z** stays up. This full basis is converted into the Hero M right-hand bind space, so live KayKit hand deltas remain the only animation authority after calibration.
 
-The geometry-derived hand socket is also shifted by a bounded **0.09 Hero-M-local units outward** and **0.05 units forward**. This clearance is presentation-only: it does not move the gameplay root, alter collision, change reach/range, or affect harvesting/combat logic. Its only purpose is to keep axe, hammer, pickaxe, shovel and sword silhouettes from resting through Hero M's thigh or torso while the character is idle or walking.
+The geometry-derived hand socket is also shifted by a bounded **0.09 Hero-M-local units outward** and **0.05 units forward**. This clearance is presentation-only: it does not move the gameplay root, alter collision, change reach/range, or affect harvesting/combat logic. Its only purpose is to keep axe, hammer, pickaxe, shovel, sword and the mounted torch outside Hero M's thigh/torso silhouette while the character is idle or walking.
+
+### Held spear adaptation
+
+The held spear is a special case because its equip/throw lifecycle predates the shared hand-tool presentation. `RangerController` still creates and owns that spear, but `RangerToolPresentation` now reparents its render mount under the active visible Hero M right-hand socket after the Hero M retarget update. The spear keeps identity rotation inside that socket, so its local +Y shaft follows the same character-forward carry axis as the other tools.
+
+The held spear shaft is shifted **0.86 units forward along the shared tool axis**. With the current 2.05-unit shaft centred at local Y `0.12`, this leaves only about **0.045 units of shaft behind the hand** instead of roughly 0.9 units extending backward through the character. Throw timing, release visibility, durability, projectile trajectory, hit logic and embedded/retrieval behavior are unchanged.
 
 ## Production gate
 
@@ -70,6 +77,7 @@ Merge still requires the normal engineering gates:
 - full repository CI/check suite green on the final branch head;
 - segmented FBX payload verification green for both `public` and built `dist`;
 - Hero M grip regression confirming forward tool-axis alignment and bounded body clearance;
+- held-spear regression confirming the existing spear is attached to the visible hand, points forward and retains the established throw-release boundary;
 - no unresolved PR review blockers;
 - post-merge GitHub Pages verification for the deployed build;
-- device verification that axe, hammer, pickaxe, shovel and sword point forward, remain visibly gripped, stay clear of the torso/thigh at rest, and still read correctly during locomotion and swings.
+- device verification that axe, hammer, pickaxe, shovel, sword, torch and held spear point forward, remain visibly gripped, stay clear of the torso/thigh at rest, and still read correctly during locomotion/actions.
