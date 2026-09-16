@@ -11,21 +11,15 @@ const SOURCE_ARM_KEYS = Object.freeze({
 });
 
 // Hero M has one deform joint for each complete arm rather than a conventional
-// shoulder/elbow/forearm/hand chain. Keep that joint at its authored shoulder
-// position. Idle hand placement is corrected by rotating the complete arm toward
-// a hip-level target, and locomotion adds a small extra shoulder-pivot swing from
-// the real KayKit hand phase. Translating the arm joint toward the hip makes the
-// wrist read as pinned, because the entire rigid arm then rotates around the hip.
-const ARM_REST_LATERAL_RETAIN = 0.58;
-const ARM_REST_MIN_LATERAL = 0.30;
-const ARM_REST_MAX_LATERAL = 0.48;
-const ARM_REST_HEIGHT_FROM_PELVIS = 0.10;
-const ARM_REST_FORWARD_RETAIN = 0.35;
+// shoulder/elbow/forearm/hand chain. HeroMPresentation already owns the geometry-
+// calibrated relaxed rest orientation for those rigid arm pieces. Keep that one
+// source of truth and leave each deform joint at its authored shoulder position.
+// This layer only adds a bounded KayKit-driven locomotion swing around the fixed
+// shoulder pivot; it never translates the joint toward the hip.
 const ARM_SWING_RESPONSE = 18;
 const ROOT_SWING_AXIS = new THREE.Vector3(1, 0, 0);
 
 const ARM_SWING_PROFILE = Object.freeze({
-  Idle_A: Object.freeze({ radians: THREE.MathUtils.degToRad(1.5) }),
   Walking_A: Object.freeze({ radians: THREE.MathUtils.degToRad(10) }),
   Running_A: Object.freeze({ radians: THREE.MathUtils.degToRad(17) })
 });
@@ -42,35 +36,14 @@ function rootLocalQuaternion(root, object, target, rootInverse, worldQuaternion)
   return target.copy(rootInverse).multiply(worldQuaternion).normalize();
 }
 
-function snapshotBindTransforms(bindMap) {
-  const snapshot = new Map();
-  for (const bind of bindMap.values()) {
-    const bone = bind?.bone;
-    if (!bone || snapshot.has(bone)) continue;
-    snapshot.set(bone, {
-      position: bone.position.clone(),
-      quaternion: bone.quaternion.clone(),
-      scale: bone.scale.clone()
-    });
-  }
-  return snapshot;
-}
-
-function restoreBindTransforms(snapshot) {
-  for (const [bone, transform] of snapshot) {
-    bone.position.copy(transform.position);
-    bone.quaternion.copy(transform.quaternion);
-    bone.scale.copy(transform.scale);
-  }
-}
-
 /**
- * Final player-facing arm placement/motion layer for Hero M.
+ * Final player-facing locomotion arm layer for Hero M.
  *
- * HeroMPresentation still owns skeletal retargeting and HeroMVisibleSoleGroundingPresentation
- * still owns rendering-only foot contacts. This class only adapts the unusual one-bone-per-arm
- * Hero M rig. The arm joint remains at its authored shoulder pivot; idle placement is solved by
- * rest orientation and walk/run receive a bounded source-driven shoulder swing.
+ * HeroMPresentation remains the sole owner of skeletal retargeting and relaxed
+ * geometry-calibrated arm orientation. HeroMVisibleSoleGroundingPresentation still
+ * owns rendering-only foot contacts. This class only adapts the unusual one-bone-
+ * per-arm rig during walk/run: the authored joint position remains fixed while a
+ * bounded source-driven rotation makes the visible hand swing and bounce around it.
  */
 export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresentation {
   constructor(options) {
@@ -88,17 +61,6 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     this.heroMArmSourceRightHand = new THREE.Vector3();
     this.heroMArmSourceLeftReach = new THREE.Vector3();
     this.heroMArmSourceRightReach = new THREE.Vector3();
-    this.heroMArmTempPelvis = new THREE.Vector3();
-    this.heroMArmTempSpine = new THREE.Vector3();
-    this.heroMArmTempGrip = new THREE.Vector3();
-    this.heroMArmTempRightOrigin = new THREE.Vector3();
-    this.heroMArmTempLeftOrigin = new THREE.Vector3();
-    this.heroMArmTempTarget = new THREE.Vector3();
-    this.heroMArmTempLeftGrip = new THREE.Vector3();
-    this.heroMArmTempLeftTarget = new THREE.Vector3();
-    this.heroMArmCurrentReach = new THREE.Vector3();
-    this.heroMArmTargetReach = new THREE.Vector3();
-    this.heroMArmCorrection = new THREE.Quaternion();
     this.heroMArmParentInverse = new THREE.Quaternion();
     this.heroMArmRootInverse = new THREE.Quaternion();
     this.heroMArmWorldQuaternion = new THREE.Quaternion();
@@ -110,140 +72,13 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     const baseHeroLoadPromise = this.heroMLoadPromise;
     this.heroMLoadPromise = baseHeroLoadPromise.then(active => {
       if (!active || !this.heroMReady) return false;
-      this.#calibrateArmRestOrientations();
       this.heroMArmMotionReady = true;
       this.visualRoot.userData.visualRevision = 'hero-m-player-v6';
-      this.visualRoot.userData.armPose = 'shoulder-pivot-hip-rest-v3';
+      this.visualRoot.userData.armPose = 'geometry-rest-fixed-shoulder-v4';
       this.visualRoot.userData.armMotion = 'kaykit-shoulder-pivot-swing-v2';
+      this.heroMRoot.userData.armRestProfile = 'base-geometry-rest-fixed-shoulder-v3';
       return true;
     });
-  }
-
-  #applyDeterministicRestPose() {
-    for (const bind of this.heroMBind.values()) {
-      if (!bind?.bone) continue;
-      bind.bone.position.copy(bind.localPosition);
-      bind.bone.quaternion.copy(bind.localQuaternion);
-      bind.bone.scale.copy(bind.localScale);
-    }
-
-    for (const bindKey of Object.values(ARM_BIND_KEYS)) {
-      const bind = this.heroMBind.get(bindKey);
-      if (!bind?.bone || !bind.restGlobalQuaternion) continue;
-      bind.bone.quaternion
-        .copy(this.heroMArmParentInverse.copy(bind.parentGlobalQuaternion).invert())
-        .multiply(bind.restGlobalQuaternion)
-        .normalize();
-    }
-    this.heroMBody?.updateMatrixWorld?.(true);
-  }
-
-  #rotateRestToward(bind, currentGrip, targetGrip) {
-    if (!bind?.bone || !bind.restGlobalQuaternion) return 0;
-
-    const origin = bind === this.heroMBind.get(ARM_BIND_KEYS.right)
-      ? this.heroMArmTempRightOrigin
-      : this.heroMArmTempLeftOrigin;
-    rootLocalPosition(this.heroMRoot, bind.bone, origin);
-
-    this.heroMArmCurrentReach.copy(currentGrip).sub(origin);
-    this.heroMArmTargetReach.copy(targetGrip).sub(origin);
-    if (this.heroMArmCurrentReach.lengthSq() < 1e-8 || this.heroMArmTargetReach.lengthSq() < 1e-8) {
-      throw new Error('Hero M shoulder-pivot arm calibration produced a zero-length reach');
-    }
-
-    this.heroMArmCurrentReach.normalize();
-    this.heroMArmTargetReach.normalize();
-    this.heroMArmCorrection.setFromUnitVectors(
-      this.heroMArmCurrentReach,
-      this.heroMArmTargetReach
-    );
-    const correctionAngle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(this.heroMArmCorrection.w), 0, 1));
-
-    // The correction is expressed in Hero M root space. Premultiply it onto the
-    // already-calibrated rest quaternion so the existing rest orientation is
-    // preserved. Copying the correction into restGlobalQuaternion first would
-    // alias the multiply operand and accidentally square the correction.
-    bind.restGlobalQuaternion
-      .premultiply(this.heroMArmCorrection)
-      .normalize();
-    return correctionAngle;
-  }
-
-  #calibrateArmRestOrientations() {
-    const rightBind = this.heroMBind.get(ARM_BIND_KEYS.right);
-    const leftBind = this.heroMBind.get(ARM_BIND_KEYS.left);
-    const pelvis = this.heroMBind.get('pelvis')?.bone;
-    const spine = this.heroMBind.get('spine')?.bone;
-    const toolMount = this.getRightHandToolMount();
-    if (!rightBind?.bone || !leftBind?.bone || !pelvis || !spine || !toolMount || !this.heroMRoot) {
-      throw new Error('Hero M shoulder-pivot arm calibration requires both arms, torso landmarks and the visible right-hand grip');
-    }
-
-    const animatedPose = snapshotBindTransforms(this.heroMBind);
-    try {
-      // Asset loading may complete while the player is already moving. Measure from
-      // one deterministic rest pose so the correction never depends on the frame at
-      // which the asynchronous Hero M load happened to finish.
-      this.#applyDeterministicRestPose();
-      this.heroMRoot.updateMatrixWorld(true);
-
-      rootLocalPosition(this.heroMRoot, pelvis, this.heroMArmTempPelvis);
-      rootLocalPosition(this.heroMRoot, spine, this.heroMArmTempSpine);
-      rootLocalPosition(this.heroMRoot, toolMount, this.heroMArmTempGrip);
-      rootLocalPosition(this.heroMRoot, rightBind.bone, this.heroMArmTempRightOrigin);
-      rootLocalPosition(this.heroMRoot, leftBind.bone, this.heroMArmTempLeftOrigin);
-
-      const torsoCenterX = (this.heroMArmTempPelvis.x + this.heroMArmTempSpine.x) * 0.5;
-      const torsoCenterZ = (this.heroMArmTempPelvis.z + this.heroMArmTempSpine.z) * 0.5;
-      const sideSign = Math.sign(this.heroMArmTempGrip.x - torsoCenterX) || 1;
-      const currentLateral = Math.abs(this.heroMArmTempGrip.x - torsoCenterX);
-      const desiredLateral = THREE.MathUtils.clamp(
-        currentLateral * ARM_REST_LATERAL_RETAIN,
-        ARM_REST_MIN_LATERAL,
-        ARM_REST_MAX_LATERAL
-      );
-      const torsoHeight = Math.max(0.001, this.heroMArmTempSpine.y - this.heroMArmTempPelvis.y);
-
-      this.heroMArmTempTarget.set(
-        torsoCenterX + sideSign * desiredLateral,
-        this.heroMArmTempPelvis.y + torsoHeight * ARM_REST_HEIGHT_FROM_PELVIS,
-        torsoCenterZ + (this.heroMArmTempGrip.z - torsoCenterZ) * ARM_REST_FORWARD_RETAIN
-      );
-
-      // The right visible grip is an actual calibrated point on the weighted arm.
-      // Hero M is authored symmetrically, so mirror that grip and target for the
-      // left side. Only orientation changes: both deform joints keep their original
-      // parent-local shoulder positions.
-      this.heroMArmTempLeftGrip.set(
-        torsoCenterX * 2 - this.heroMArmTempGrip.x,
-        this.heroMArmTempGrip.y,
-        this.heroMArmTempGrip.z
-      );
-      this.heroMArmTempLeftTarget.set(
-        torsoCenterX * 2 - this.heroMArmTempTarget.x,
-        this.heroMArmTempTarget.y,
-        this.heroMArmTempTarget.z
-      );
-
-      const rightCorrectionAngle = this.#rotateRestToward(
-        rightBind,
-        this.heroMArmTempGrip,
-        this.heroMArmTempTarget
-      );
-      const leftCorrectionAngle = this.#rotateRestToward(
-        leftBind,
-        this.heroMArmTempLeftGrip,
-        this.heroMArmTempLeftTarget
-      );
-
-      this.heroMRoot.userData.armRestProfile = 'visible-grip-shoulder-pivot-v2';
-      this.heroMRoot.userData.armRestTarget = this.heroMArmTempTarget.toArray();
-      this.heroMRoot.userData.armRestCorrectionRadians = [leftCorrectionAngle, rightCorrectionAngle];
-    } finally {
-      restoreBindTransforms(animatedPose);
-      this.heroMBody?.updateMatrixWorld?.(true);
-    }
   }
 
   #sourceArmSwingPhase() {
@@ -331,10 +166,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     const profile = this.#profileForCurrentState();
     const phase = profile === ZERO_SWING_PROFILE ? 0 : this.#sourceArmSwingPhase();
 
-    // For a mostly downward arm, opposite X-axis rotations move the two hands
-    // fore/aft while the circular shoulder arc naturally lifts them near each
-    // end of the stride. This gives the requested swing and bounce without
-    // translating either shoulder joint away from its authored position.
+    // For a mostly downward rigid arm, opposite X-axis rotations move the hands
+    // fore/aft while the circular shoulder arc naturally lifts them near each end
+    // of the stride. The joint itself never leaves its authored position.
     this.#applyShoulderSwing('left', -profile.radians * phase, dt);
     this.#applyShoulderSwing('right', profile.radians * phase, dt);
 
