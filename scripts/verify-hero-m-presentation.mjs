@@ -173,6 +173,7 @@ assert.equal(presentation.heroMBind.size, 15, 'Hero M must capture every mapped 
 assert.equal(presentation.heroMRoot.userData.presentationScale, 0.73, 'Hero M must retain its calibrated visual scale');
 assert.ok(presentation.heroMRoot.userData.presentationHeight > 1.98 && presentation.heroMRoot.userData.presentationHeight < 2.05, 'Hero M visible height must remain close to the established player scale');
 assert.equal(presentation.heroMRoot.userData.groundSettleY, 0.03, 'Hero M boots should settle slightly into the rendered surface');
+assert.equal(presentation.heroMRoot.userData.groundingCalibrationSpace, 'detached-local-space-v1', 'Hero M base grounding must be calibrated before attachment to the moving player root');
 assert.equal(presentation.heroMRoot.userData.styleProfile, 'playful-low-poly-hero-v1');
 assert.ok(Math.abs(presentation.heroMMotionRoot.userData.visualGroundOffsetY - centerSupportHeight) < 1e-6, 'Hero M visual root must compensate for the footprint-support hover without changing player physics');
 
@@ -301,4 +302,4 @@ try {
   console.error = logError;
 }
 
-console.log(`Hero M segmented asset, center-support visual grounding, relaxed idle arms, amplified running arm swing, tucked second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
+console.log(`Hero M segmented asset, detached local-space load grounding, center-support visual grounding, relaxed idle arms, amplified running arm swing, tucked second-jump front flip, compact 16-joint retargeting, visible-hand tool grip, ${movement.animations.length} movement clips, sane bounds, first-person visibility and Prisma fallback verified.`);
