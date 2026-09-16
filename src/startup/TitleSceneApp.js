@@ -174,7 +174,7 @@ export class TitleSceneApp {
     ]);
 
     this.rangerRig = new THREE.Group();
-    this.rangerRig.name = 'title-production-hero-balance-rig';
+    this.rangerRig.name = 'title-ranger-balance-rig';
     this.rangerRig.position.set(RANGER_DECK_BASE.x, RANGER_DECK_BASE.y, RANGER_DECK_BASE.z);
     this.rangerRig.rotation.y = RANGER_DECK_MODEL_YAW;
     this.ship.add(this.rangerRig);
