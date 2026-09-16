@@ -36,7 +36,7 @@ The persistent device-reported hover was ultimately traced to the Hero M load pa
 
 That coordinate-space mismatch meant the Ranger's world Y at the exact moment Hero M finished loading could be baked into Hero M's local grounding offset. If the player happened to stand below world Y=0, the negative world elevation was subtracted a second time and the visible character was lifted above the Ranger root by approximately that elevation. The resulting gap was stable across idle, walking and running, which is why repeated per-frame boot/terrain compensation could not reliably eliminate it.
 
-The corrected loader calibrates Hero M while the candidate is still detached from the gameplay/player hierarchy. Its bounds are therefore measured in a neutral local frame where world Y equals model-local Y. Only after `groundingOffsetY` and presentation height have been calculated is the candidate placed under the centered motion pivot and attached to `visualRoot`. The resulting calibration is explicitly tagged `detached-local-space-v1` and the presentation revision is `hero-m-player-v4`.
+The corrected loader calibrates Hero M while the candidate is still detached from the gameplay/player hierarchy. Its bounds are therefore measured in a neutral presentation-local frame where world Y equals model-local Y. Only after `groundingOffsetY` and presentation height have been calculated is the candidate placed under the centered motion pivot and attached to `visualRoot`. The resulting calibration is explicitly tagged `presentation-local-v1` and the presentation revision is `hero-m-player-v4`.
 
 This is the authoritative fix for the load-time vertical bias. No second terrain-height model or continuously accumulating sole offset is allowed to compensate for it.
 
@@ -72,7 +72,7 @@ This presentation fix does not change movement speed, jump or double-jump physic
 
 `npm run check` includes Hero M verification through `verify:prisma-native`.
 
-The static Hero M presentation verifier pins the segmented runtime asset, validates the compact 16-joint rig and visual scale, requires the `hero-m-player-v4` presentation revision and the `detached-local-space-v1` grounding calibration marker, checks center-support compensation, idle/run arm behavior, the double-jump flip/tuck, finite animated bounds, tool transfer, first-person visibility and Prisma fallback.
+The static Hero M presentation verifier pins the segmented runtime asset, validates the compact 16-joint rig and visual scale, requires the `hero-m-player-v4` presentation revision and the `presentation-local-v1` grounding reference-space marker, checks center-support compensation, idle/run arm behavior, the double-jump flip/tuck, finite animated bounds, tool transfer, first-person visibility and Prisma fallback.
 
 The load-space runtime regression reconstructs the shipped Hero M and Ranger assets and deliberately loads Hero M while the Ranger root is at world Y `-0.34`. It requires the final Hero M local grounding calibration and motion-pivot baseline to match the same values obtained when loaded at world Y `0`. It then checks `Idle_A`, `Walking_A` and `Running_A` after moving the gameplay root to several world elevations. The visible Hero M must move by exactly the same world delta as the Ranger root rather than retaining any bias toward world Y=0. The regression also verifies that airborne motion continues to follow the gameplay root unchanged.
 
