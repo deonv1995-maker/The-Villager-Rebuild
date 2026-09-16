@@ -1,146 +1,143 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
 import {
-  heroMRepresentativeSoleClearance,
-  heroMSoleCorrectionForClearance,
-  heroMSoleSupportHeight
+  heroMBodySettleCorrection,
+  heroMVisualGroundOffset
 } from '../src/player/HeroMVisibleSoleGroundingPresentation.js';
-
-assert.equal(heroMSoleCorrectionForClearance(Number.NaN), 0, 'invalid clearance must never move the presentation');
-assert.equal(heroMSoleCorrectionForClearance(-0.04), 0, 'an already contacting sole must never be raised or lowered again');
-assert.equal(heroMSoleCorrectionForClearance(0.006), 0, 'sub-tolerance sole clearance must remain stable');
-assert.ok(
-  Math.abs(heroMSoleCorrectionForClearance(0.12) + 0.132) < 1e-9,
-  'a visible 12 cm boot gap must be removed plus the small visual settle'
-);
-assert.equal(
-  heroMSoleCorrectionForClearance(2),
-  -0.68,
-  'sole correction must stay bounded while covering the residual gap left by steep footprint grounding'
-);
-assert.ok(
-  Math.abs(heroMSoleCorrectionForClearance(0.12) - heroMSoleCorrectionForClearance(0.12)) < 1e-12,
-  'the same freshly posed clearance must always resolve to the same absolute correction instead of accumulating frame history'
-);
+import { RenderedTerrainSurfaceSampler } from '../src/world/RenderedTerrainSurfaceSampler.js';
 
 assert.equal(
-  heroMSoleSupportHeight(3.2, 3.2, 4),
-  3.2,
-  'a legitimate center slope support must not be replaced by the higher max-footprint gameplay root'
+  heroMVisualGroundOffset(0.34, 0),
+  -0.34,
+  'presentation root must close the full gap between analytical gameplay support and rendered ground'
 );
 assert.equal(
-  heroMSoleSupportHeight(3.05, 3.2, 4),
-  3.05,
-  'nearby downhill sole support must remain valid on a walkable slope'
+  heroMVisualGroundOffset(1.25, 1.25),
+  0,
+  'matching gameplay and rendered surfaces require no root offset'
 );
 assert.equal(
-  heroMSoleSupportHeight(1.8, 3.2, 4),
-  3.2,
-  'a sole projected far beyond a raised support edge must stay anchored to the center walkable surface'
-);
-assert.equal(
-  heroMSoleSupportHeight(Number.NaN, 3.2, 4),
-  3.2,
-  'missing sole support must fall back to the center walkable surface'
-);
-assert.equal(
-  heroMSoleSupportHeight(Number.NaN, Number.NaN, 4),
-  4,
-  'missing terrain support must retain the controller root as a last-resort fallback only'
-);
-
-const screenshotClearance = heroMRepresentativeSoleClearance([
-  { side: 'left', clearance: 0.002 },
-  { side: 'left', clearance: 0.006 },
-  { side: 'left', clearance: 0.224 },
-  { side: 'left', clearance: 0.231 },
-  { side: 'left', clearance: 0.238 },
-  { side: 'left', clearance: 0.244 },
-  { side: 'right', clearance: 0.004 },
-  { side: 'right', clearance: 0.229 },
-  { side: 'right', clearance: 0.235 },
-  { side: 'right', clearance: 0.241 },
-  { side: 'right', clearance: 0.247 },
-  { side: 'right', clearance: 0.252 }
-]);
-assert.equal(
-  screenshotClearance,
-  0.224,
-  'one or two abnormally low sole vertices must not mask the large visible boot gap reproduced by the phone screenshot'
+  heroMVisualGroundOffset(Number.NaN, 0, -0.18),
+  -0.18,
+  'an invalid surface sample must preserve the last safe presentation offset'
 );
 assert.ok(
-  Math.abs(heroMSoleCorrectionForClearance(screenshotClearance) + 0.236) < 1e-9,
-  'the reproduced phone gap must produce one bounded absolute downward presentation correction'
+  Math.abs(heroMBodySettleCorrection(0.08, 0) + 0.092) < 1e-9,
+  'a posed body still eight centimetres above the rendered floor must be settled directly onto it'
+);
+assert.ok(
+  Math.abs(heroMBodySettleCorrection(-0.04, 0) - 0.028) < 1e-9,
+  'a slightly over-settled posed body may recover to the small visual settle depth'
 );
 assert.equal(
-  heroMRepresentativeSoleClearance([
-    { side: 'left', clearance: 0.16 },
-    { side: 'left', clearance: 0.17 },
-    { side: 'left', clearance: 0.18 },
-    { side: 'right', clearance: 0.28 },
-    { side: 'right', clearance: 0.29 },
-    { side: 'right', clearance: 0.3 }
-  ]),
-  0.17,
-  'the nearer boot must remain the presentation contact authority so uneven terrain does not force the higher boot through the surface'
+  heroMBodySettleCorrection(1, 0),
+  -0.3,
+  'whole-body settle correction must remain bounded if a malformed pose produces an extreme gap'
 );
-assert.equal(heroMRepresentativeSoleClearance([]), null, 'missing sole samples must not fabricate a visual correction');
+
+// The visual sampler must read the triangle buffer that is actually drawn, not the
+// analytical fallback height. Mutating that buffer after capture reproduces the same
+// live-reference behavior used by construction terrain deformation.
+const group = new THREE.Group();
+const geometry = new THREE.PlaneGeometry(4, 4, 1, 1);
+geometry.rotateX(-Math.PI / 2);
+const positions = geometry.getAttribute('position');
+for (let index = 0; index < positions.count; index += 1) {
+  positions.setY(index, 0.25 + positions.getX(index) * 0.1 + positions.getZ(index) * 0.05);
+}
+positions.needsUpdate = true;
+geometry.computeBoundingBox();
+const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+mesh.name = 'terrain-chunk-0-0';
+mesh.position.set(2, 0, 2);
+group.add(mesh);
+
+const sampler = new RenderedTerrainSurfaceSampler({
+  group,
+  fallbackHeightAt: () => 9
+});
+assert.equal(sampler.captureTerrainMeshes(), 1, 'rendered ground sampler must capture the low-poly terrain chunk');
+const firstRenderedHeight = sampler.heightAt(2.5, 2.5);
+assert.ok(
+  Math.abs(firstRenderedHeight - 0.325) < 1e-6,
+  `rendered ground sampler must interpolate the real terrain triangle, got ${firstRenderedHeight}`
+);
+for (let index = 0; index < positions.count; index += 1) positions.setY(index, positions.getY(index) - 0.4);
+positions.needsUpdate = true;
+const adaptedRenderedHeight = sampler.heightAt(2.5, 2.5);
+assert.ok(
+  Math.abs(adaptedRenderedHeight + 0.075) < 1e-6,
+  'rendered ground sampler must follow later geometry deformation without maintaining a competing height model'
+);
+assert.equal(sampler.heightAt(20, 20), 9, 'outside captured terrain the sampler must use its explicit fallback source');
 
 const compatibilitySource = readFileSync('src/player/RangerAppearancePresentation.js', 'utf8');
 assert.match(
   compatibilitySource,
   /HeroMVisibleSoleGroundingPresentation as RangerAppearancePresentation/,
-  'the production compatibility boundary must use the visible-sole-grounded Hero M presentation'
+  'stable player/tool imports must keep resolving through the Hero M presentation boundary'
 );
 
 const groundingSource = readFileSync('src/player/HeroMVisibleSoleGroundingPresentation.js', 'utf8');
-assert.match(groundingSource, /applyBoneTransform/, 'visible sole grounding must measure posed skinned boot vertices');
-assert.match(groundingSource, /leftCalfB.*leftFoot/s, 'left sole calibration must use the authored lower-leg and foot deform chain');
-assert.match(groundingSource, /rightCalfB.*rightFoot/s, 'right sole calibration must use the authored lower-leg and foot deform chain');
 assert.match(
   groundingSource,
-  /heroMSoleSupportHeight\(sampleSupport, centerSupport, rootY\)/,
-  'visible sole support must be resolved against the center walkable surface before the gameplay root fallback'
+  /terrain\.visualGroundHeightAt/,
+  'Hero M final grounding must prefer the rendered visual-ground seam'
 );
 assert.match(
   groundingSource,
-  /heroMRepresentativeSoleClearance\(clearances\)/,
-  'production grounding must use a robust per-foot contact estimate instead of the single lowest sampled vertex'
+  /motionRoot\.position\.y = this\.heroMMotionPivotHalfHeight \+ rootOffset/,
+  'grounded Hero M must receive one absolute root-relative render-surface anchor each frame'
 );
 assert.match(
   groundingSource,
-  /sourceIndex = Math\.round\(index \* \(band\.length - 1\) \/ \(count - 1\)\)/,
-  'boot calibration must distribute its bounded samples through the full lower contact band'
+  /setFromObject\(this\.heroMBody, true\)/,
+  'grounded Hero M must settle the complete posed visible body after the root anchor is applied'
 );
 assert.match(
   groundingSource,
-  /const target = heroMSoleCorrectionForClearance\(clearance\)/,
-  'production grounding must resolve one absolute correction from the freshly rebuilt pose each frame'
+  /this\.player\?\.grounded/,
+  'render-surface settling must only recalculate while gameplay says the Ranger is grounded'
 );
 assert.doesNotMatch(
   groundingSource,
-  /heroMSoleCorrectionTarget|current\s*-\s*clearance/,
-  'production grounding must never accumulate the prior frame correction into a fresh-pose clearance'
+  /applyBoneTransform/,
+  'the final grounding authority must no longer depend on per-vertex animated boot inference'
+);
+assert.doesNotMatch(
+  groundingSource,
+  /heroMSoleSamples/,
+  'the final grounding authority must not keep a parallel sampled-sole feedback system'
+);
+assert.doesNotMatch(
+  groundingSource,
+  /player\.root\.position\.y\s*[+\-=]/,
+  'visual grounding must never mutate gameplay root height'
+);
+assert.doesNotMatch(
+  groundingSource,
+  /jumpVelocity\s*[+\-=]/,
+  'visual grounding must never alter jump physics'
+);
+
+const islandSource = readFileSync('src/world/TestIslandSystem.js', 'utf8');
+assert.match(
+  islandSource,
+  /new RenderedTerrainSurfaceSampler/,
+  'world presentation must retain one sampler for the triangles actually rendered to the player'
 );
 assert.match(
-  groundingSource,
-  /GROUNDED_CONTACT_STATES\.has\(animationState\)/,
-  'ground-contact correction must remain active through grounded idle, walking and running loops'
+  islandSource,
+  /visualGroundHeightAt\(x, z\)/,
+  'the island must expose a presentation-only visual ground seam distinct from gameplay collision height'
 );
-assert.doesNotMatch(
-  groundingSource,
-  /minimumClearance\s*=\s*Math\.min/,
-  'a single lowest clearance sample must never be able to disable correction for an otherwise visibly floating boot'
+assert.match(
+  islandSource,
+  /this\.collision\.supportHeightAt\(x, z, renderedBase/,
+  'rendered terrain grounding must still resolve real standable construction surfaces through collision context'
 );
-assert.doesNotMatch(
-  groundingSource,
-  /support\s*<\s*rootY/,
-  'steep valid terrain must never be rejected just because the max-footprint gameplay root is higher'
-);
-assert.match(groundingSource, /motionRoot\.position\.y \+= this\.heroMSoleCorrectionY/, 'the correction must stay presentation-only on the Hero M motion pivot');
-assert.doesNotMatch(groundingSource, /player\.root\.position\.y\s*[+\-=]/, 'visible sole grounding must never mutate gameplay root height');
-assert.doesNotMatch(groundingSource, /jumpVelocity\s*[+\-=]/, 'visible sole grounding must never change jump physics');
 
 await import('./verify-hero-m-runtime-grounding.mjs');
 
-console.log('Hero M robust posed visible-sole grounding, absolute fresh-pose correction, grounded locomotion contact, slope support, outlier rejection, production runtime contact and presentation-only seam verified.');
+console.log('Hero M rendered-surface root anchoring, whole-body settle, live low-poly triangle sampling, gameplay-root isolation and production asset regression verified.');
