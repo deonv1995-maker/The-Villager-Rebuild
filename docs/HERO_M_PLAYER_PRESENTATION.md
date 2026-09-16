@@ -2,7 +2,7 @@
 
 ## Status
 
-Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves to `HeroMArmMotionPresentation`, which layers arm presentation polish above `HeroMVisibleSoleGroundingPresentation` and `HeroMPresentation`. The grounding compatibility class no longer uses sampled boot vertices as an authority; it only exposes rendering-only foot contact anchors.
+Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves to `HeroMArmMotionPresentation`, which layers fixed-pivot locomotion arm presentation polish above `HeroMVisibleSoleGroundingPresentation` and `HeroMPresentation`. The grounding compatibility class no longer uses sampled boot vertices as an authority; it only exposes rendering-only foot contact anchors.
 
 ## Source and runtime derivative
 
@@ -26,13 +26,17 @@ That pelvis translation is presentation-only skeletal motion, not gameplay root 
 
 ### One-bone arm adaptation
 
-Hero M does not contain a conventional upper-arm/elbow/forearm/hand chain. Each side has one deform joint that drives the complete visible arm/hand piece. Mapping only KayKit upper-arm rotation to that single joint caused two device-visible problems: the hands stayed too high and too far from the torso in idle, and walk/run read as rigid arm pieces rotating around a fixed distant pivot rather than as a natural arm swing.
+Hero M does not contain a conventional upper-arm/elbow/forearm/hand chain. Each side has one deform joint that drives the complete visible arm/hand piece. There is therefore no separate elbow or wrist joint available to reproduce the complete KayKit arm chain. The final presentation treats each side as one rigid arm piece driven around its authored deform-joint pivot.
 
-`HeroMArmMotionPresentation` is the final presentation-only adapter for that rig limitation. After the base Hero M load finishes, it reconstructs a deterministic authored/rest pose and uses the existing visible right-hand tool grip plus pelvis/spine landmarks to calculate a hip-level hand target. The right arm is translated so the visible grip sits beside the hip instead of at chest/shoulder height. Because the source Hero M is authored symmetrically, the same correction is mirrored to the left arm. The resulting rest anchor is stored in the arm bone's parent-local space, so later torso motion and retargeted rotation continue to work normally.
+The first arm-polish pass moved each complete-arm joint toward a hip-level rest anchor and then translated those joints through a small walk/run arc. Physical-device testing exposed the structural problem with that approach: relocating the only deform joint toward the hip makes the wrist appear attached to that area even when a small positional arc is added. The visible hand therefore reads as pinned instead of swinging freely with locomotion.
 
-Walk and run keep the established KayKit rotations, but now receive a second presentation component: the current KayKit left/right hand positions relative to their shoulders are sampled from the already-running source rig. Their opposed fore/aft difference becomes a bounded phase signal that moves the two Hero M arm joints through small opposite position arcs. Walking uses a restrained arc; running uses a larger fore/aft travel and lift. Idle keeps only a very small positional movement. During tool actions the additional locomotion arc decays to zero so tool-action rotation remains authoritative.
+The corrected boundary removes that translated hip anchor entirely. `HeroMPresentation` remains the single owner of the relaxed arm rest orientation; its existing geometry calibration measures the actual weighted arm vertices and derives a mostly downward, slightly outward rest axis. `HeroMArmMotionPresentation` does not perform a second rest calibration. It preserves the base rest pose and allows the base retargeter to restore each arm joint to its authored parent-local position every frame.
 
-This is not a second animation system. No new mixer, locomotion state, root motion, collision authority or gameplay timing is introduced. The adapter consumes the same KayKit pose that already drives the rest of Hero M and only changes the two presentation-bone local positions after the base retarget pass.
+Walking and running continue to consume the established KayKit retargeted upper-arm rotation. The final arm layer additionally samples the live KayKit left/right hand positions relative to their shoulders and converts their opposed fore/aft difference into a bounded locomotion phase. A small extra rotation is then applied around the character-local arm-swing axis: approximately `10°` at full walking phase and `17°` at full running phase, with opposite signs on the two sides. Idle adds no supplemental swing. Because the visible arm now rotates around its fixed authored pivot instead of being translated toward the hip, the hand describes a circular path with clear forward/backward travel and a small natural vertical bounce near the ends of the stride.
+
+The supplemental swing is exponentially smoothed. During tool actions its target returns to zero so the established KayKit/tool-action rotation remains authoritative. The arm joints themselves are never translated by this adapter in idle, locomotion or tool use.
+
+This remains a presentation-only correction. No new mixer, locomotion state, root motion, collision authority or gameplay timing is introduced. KayKit remains the sole animation source, the base Hero M presentation remains the sole rest-pose owner, and the Ranger gameplay root remains the sole movement/collision authority.
 
 ## Scale and visual grounding
 
@@ -66,7 +70,7 @@ The flip and tuck are both applied above the authored rig on the centered Hero M
 
 Hero M does not expose a conventional finger/palm bone chain. The visible right-hand tool socket is calibrated from the actual skinned vertices influenced by `DEF_hand_R`. The presentation selects the outer region of that weighted hand geometry, places the mount there, and aligns the tool axis from the arm joint toward the visible grip point.
 
-The arm-rest correction deliberately uses this same visible grip as its right-hand landmark, so the rest pose is calibrated against what the player actually sees rather than the unusual one-bone joint pivot. `RangerToolPresentation` and the existing tool-action timing remain unchanged. Tools continue to ask the appearance presentation for one right-hand mount and automatically follow the corrected arm position.
+The final locomotion arm layer does not recalibrate or relocate that grip. `RangerToolPresentation` and the existing tool-action timing remain unchanged. Tools continue to ask the appearance presentation for one right-hand mount, so they follow the base KayKit action rotation plus any active walking/running arm swing automatically. During a tool action the extra locomotion swing decays to zero rather than competing with the action animation.
 
 ## Fallback and retained comparison assets
 
@@ -78,18 +82,18 @@ This presentation fix does not change movement speed, jump or double-jump physic
 
 ## Automated verification
 
-`npm run check` includes Hero M verification through `verify:prisma-native`.
+`npm run check` includes Hero M verification through `verify:prisma-native`. `verify:hero-m-player` explicitly runs `verify-hero-m-arm-motion.mjs` so the fixed-pivot arm regression is part of the normal CI path.
 
 The static Hero M presentation verifier pins the segmented runtime asset, validates the compact 16-joint rig and visual scale, checks presentation-local grounding, center-support compensation, idle/run rotational retargeting, the double-jump flip/tuck, finite animated bounds, tool transfer, first-person visibility and Prisma fallback.
 
 The load-space runtime regression reconstructs the shipped Hero M and Ranger assets and deliberately loads Hero M while the Ranger root is at world Y `-0.34`. It requires the final Hero M local grounding calibration and motion-pivot baseline to remain independent of world zero, then checks `Idle_A`, `Walking_A`, `Running_A`, elevation changes and airborne root following.
 
-The arm-motion runtime regression reconstructs the shipped Hero M and KayKit Ranger assets through `HeroMArmMotionPresentation`. It verifies the visible right-hand grip settles near pelvis height and within a bounded lateral distance of the torso, repeated idle updates do not drift, `Walking_A` changes the arm joint position through a measurable fore/aft arc, `Running_A` produces a larger arc, the two sides travel in opposition, tool actions suppress the extra locomotion arc, every Hero M matrix stays finite and the gameplay root never moves because of arm polish.
+The arm-motion runtime regression reconstructs the shipped Hero M and KayKit Ranger assets through `HeroMArmMotionPresentation`. It requires both complete-arm joint positions to remain equal to their authored local positions during idle, walking, running and tool suppression. It also requires the idle visible grip to retain the proven base geometry-calibrated downward arm direction, verifies measurable walk fore/aft hand travel, stronger run travel, vertical hand bounce from the circular fixed-pivot arc, opposed left/right motion, decay of the supplemental swing during tool actions, finite Hero M matrices and complete gameplay-root isolation.
 
-The compatibility verifier also rejects any return of animated-vertex sole grounding or a parallel rendered-terrain grounding authority, and requires the stable Ranger import to resolve through the final arm-motion layer.
+The compatibility verifier rejects any return of translated hip-area arm pivots, a duplicate final-layer rest calibration, animated-vertex sole grounding or a parallel rendered-terrain grounding authority. It also requires the stable Ranger import to resolve through the final arm-motion layer.
 
 ## Device verification required after deployment
 
 On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. The boots should remain aligned with the terrain while idle, walking and running without the whole character hovering at a fixed distance above the floor.
 
-For the arms, confirm both hands now rest beside the hips rather than high and wide at chest level. In idle they should look relaxed and remain stable. During walking, the complete arms should travel through a restrained forward/back arc instead of only rotating in place. During running, the same motion should be more pronounced and the two sides should swing in opposition. Then confirm tools still follow the visible right hand, tool actions do not inherit the extra locomotion arc, first-person still hides the presentation correctly, and no movement/collision/construction behavior changed.
+For the arms, confirm the relaxed idle pose still looks natural, neither complete-arm joint visibly shifts toward the hips, and the hands do not look locked to the body during locomotion. During walking, each hand should swing clearly forward and backward and rise slightly near the ends of the arc. During running, that swing and bounce should be more pronounced, with the two sides moving in opposition. Then confirm tools still follow the visible right hand, tool actions do not retain the extra locomotion swing, first-person still hides the presentation correctly, and no movement/collision/construction behavior changed.
