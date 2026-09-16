@@ -159,9 +159,13 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       this.heroMArmTargetReach
     );
     const correctionAngle = 2 * Math.acos(THREE.MathUtils.clamp(Math.abs(this.heroMArmCorrection.w), 0, 1));
+
+    // The correction is expressed in Hero M root space. Premultiply it onto the
+    // already-calibrated rest quaternion so the existing rest orientation is
+    // preserved. Copying the correction into restGlobalQuaternion first would
+    // alias the multiply operand and accidentally square the correction.
     bind.restGlobalQuaternion
-      .copy(this.heroMArmCorrection)
-      .multiply(bind.restGlobalQuaternion)
+      .premultiply(this.heroMArmCorrection)
       .normalize();
     return correctionAngle;
   }
