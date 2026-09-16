@@ -1,5 +1,8 @@
 import * as THREE from 'three';
-import { STORAGE_INTERACTION_RADIUS } from '../data/StorageContainerDefinitions.js';
+import {
+  LEGACY_STARTER_STORAGE_IDS,
+  STORAGE_INTERACTION_RADIUS
+} from '../data/StorageContainerDefinitions.js';
 import { StoragePanel } from '../ui/StoragePanel.js';
 import { StorageContainerSystem } from '../world/StorageContainerSystem.js';
 
@@ -48,7 +51,22 @@ export class StorageRuntimeController {
     if (!Array.isArray(state)) return false;
     this.panel?.close();
     this.activeContainerId = null;
-    return this.system.restore(state);
+
+    const retained = [];
+    for (const record of state) {
+      if (!LEGACY_STARTER_STORAGE_IDS.has(record?.id)) {
+        retained.push(record);
+        continue;
+      }
+      for (const [itemId, quantity] of Object.entries(record?.contents ?? {})) {
+        if (!Number.isInteger(quantity) || quantity <= 0 || !this.game.inventory.definitions[itemId]) continue;
+        // Migration intentionally uses add(), not tryAdd(): saved player property must not be
+        // deleted merely because the old starter chest/barrel allowed more than the current pack.
+        this.game.inventory.add(itemId, quantity);
+      }
+    }
+
+    return this.system.restore(retained);
   }
 
   dispose() {
