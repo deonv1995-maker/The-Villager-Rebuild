@@ -85,7 +85,11 @@ for (const [id, fileName] of Object.entries({
   chest: 'icon-storage-chest.svg',
   barrel: 'icon-food-barrel.svg'
 })) {
-  assert.match(assetPathsSource, new RegExp(`${id}: asset\\('ui/mobile/${fileName.replaceAll('.', '\\.')}\\)`), `${id} must resolve through shared mobile assets`);
+  assert.match(
+    assetPathsSource,
+    new RegExp(`${id}: asset\\('ui/mobile/${fileName.replaceAll('.', '\\.')}'+\\)`),
+    `${id} must resolve through shared mobile assets`
+  );
   assert.ok(fs.existsSync(new URL(`../public/assets/ui/mobile/${fileName}`, import.meta.url)), `${id} SVG must exist`);
 }
 const runtimeAssetPaths = assetPathsSource.split('export const ASSET_PATHS = Object.freeze({')[1] ?? '';
