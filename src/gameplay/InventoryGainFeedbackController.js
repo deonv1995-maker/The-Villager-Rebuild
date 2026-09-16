@@ -72,30 +72,31 @@ export class InventoryGainFeedbackController {
     }
 
     for (const [itemId, amount] of this.pending) {
-      const row = inventoryElement.querySelector(`[data-resource="${itemId}"]`);
-      if (!row) continue;
-      row.dataset.gain = `+${amount}`;
-      row.classList.remove('inventory-gain-pulse');
-      void row.offsetWidth;
-      row.classList.add('inventory-gain-pulse');
+      const card = inventoryElement.querySelector(`[data-resource="${itemId}"]`);
+      if (!card) continue;
+      card.dataset.gain = `+${amount}`;
+      card.classList.remove('inventory-gain-pulse');
+      void card.offsetWidth;
+      card.classList.add('inventory-gain-pulse');
 
       const previousTimer = this.cleanupTimers.get(itemId);
       if (previousTimer !== undefined) globalThis.clearTimeout?.(previousTimer);
       const timer = globalThis.setTimeout(() => {
-        row.classList.remove('inventory-gain-pulse');
-        delete row.dataset.gain;
+        card.classList.remove('inventory-gain-pulse');
+        delete card.dataset.gain;
         this.cleanupTimers.delete(itemId);
       }, FEEDBACK_DURATION_MS);
       this.cleanupTimers.set(itemId, timer);
     }
     this.pending.clear();
 
-    inventoryElement.classList.remove('inventory-capacity-pulse');
-    void inventoryElement.offsetWidth;
-    inventoryElement.classList.add('inventory-capacity-pulse');
+    const suitcase = this.game.hud?.inventoryToggle ?? inventoryElement;
+    suitcase.classList.remove('inventory-capacity-pulse');
+    void suitcase.offsetWidth;
+    suitcase.classList.add('inventory-capacity-pulse');
     if (this.capacityTimer !== null) globalThis.clearTimeout?.(this.capacityTimer);
     this.capacityTimer = globalThis.setTimeout(() => {
-      inventoryElement.classList.remove('inventory-capacity-pulse');
+      suitcase.classList.remove('inventory-capacity-pulse');
       this.capacityTimer = null;
     }, FEEDBACK_DURATION_MS);
   }
