@@ -14,15 +14,18 @@ const TOOL_MODEL_PRESENTATION = Object.freeze({
 });
 
 export function hasToolModelAsset(toolId) {
-  return Boolean(TOOL_MODEL_PRESENTATION[toolId] && ASSET_PATHS.tools?.[toolId]);
+  const parts = ASSET_PATHS.tools?.[toolId]?.parts;
+  return Boolean(TOOL_MODEL_PRESENTATION[toolId] && Array.isArray(parts) && parts.length > 0);
 }
 
 export async function createToolModelAsset(toolId) {
   const presentation = TOOL_MODEL_PRESENTATION[toolId];
-  const modelPath = ASSET_PATHS.tools?.[toolId];
-  if (!presentation || !modelPath) throw new Error(`No FBX tool presentation for ${toolId}`);
+  const parts = ASSET_PATHS.tools?.[toolId]?.parts;
+  if (!presentation || !Array.isArray(parts) || parts.length === 0) {
+    throw new Error(`No FBX tool presentation for ${toolId}`);
+  }
 
-  const template = await loadTemplate(modelPath);
+  const template = await loadTemplate(toolId, parts);
   const model = template.clone(true);
   model.name = `${toolId}-fbx-presentation`;
   prepareModel(model);
@@ -30,11 +33,52 @@ export async function createToolModelAsset(toolId) {
   return model;
 }
 
-async function loadTemplate(modelPath) {
-  if (!MODEL_TEMPLATE_CACHE.has(modelPath)) {
-    MODEL_TEMPLATE_CACHE.set(modelPath, new FBXLoader().loadAsync(modelPath));
+async function loadTemplate(toolId, parts) {
+  if (!MODEL_TEMPLATE_CACHE.has(toolId)) {
+    MODEL_TEMPLATE_CACHE.set(toolId, (async () => {
+      const compressedBytes = await fetchCompressedParts(toolId, parts);
+      const fbxBuffer = await decompressGzip(compressedBytes);
+      return new FBXLoader().parse(fbxBuffer, '');
+    })());
   }
-  return MODEL_TEMPLATE_CACHE.get(modelPath);
+  return MODEL_TEMPLATE_CACHE.get(toolId);
+}
+
+async function fetchCompressedParts(toolId, parts) {
+  const encodedParts = await Promise.all(parts.map(async path => {
+    const response = await fetch(path);
+    if (!response.ok) {
+      throw new Error(`${toolId} asset part request failed with status ${response.status}: ${path}`);
+    }
+    return response.text();
+  }));
+  return concatenate(encodedParts.map(decodeBase64));
+}
+
+function decodeBase64(text) {
+  const binary = atob(String(text ?? '').trim());
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function concatenate(parts) {
+  const length = parts.reduce((total, part) => total + part.byteLength, 0);
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    bytes.set(part, offset);
+    offset += part.byteLength;
+  }
+  return bytes;
+}
+
+async function decompressGzip(bytes) {
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('FBX tool assets require browser gzip decompression support');
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).arrayBuffer();
 }
 
 function prepareModel(model) {
