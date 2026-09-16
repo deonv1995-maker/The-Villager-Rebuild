@@ -153,7 +153,7 @@ const presentation = new HeroMPresentation({ player, heroMAssetLoader: candidate
 assert.equal(await presentation.heroMLoadPromise, true, presentation.heroMLoadError?.stack);
 await presentation.prismaLoadPromise;
 assert.equal(presentation.heroMReady, true);
-assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v3');
+assert.equal(presentation.visualRoot.userData.visualRevision, 'hero-m-player-v4');
 assert.equal(presentation.visualRoot.userData.actualModelSource, 'user-supplied-hero-m-v1');
 assert.equal(presentation.visualRoot.userData.visibleBody, 'hero-m-playful-low-poly');
 assert.equal(presentation.visualRoot.userData.animationAuthority, 'kaykit-medium-rig');
