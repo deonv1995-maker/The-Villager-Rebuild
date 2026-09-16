@@ -3,6 +3,8 @@ import { createToolModelAsset, hasToolModelAsset } from '../rendering/ToolModelA
 import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+const VISIBLE_SPEAR_FORWARD_OFFSET = 0.86;
+const VISIBLE_SPEAR_GRIP_PROFILE = 'visible-hand-forward-spear-v1';
 
 export class RangerToolPresentation {
   constructor({ player, appearancePresentation = null }) {
@@ -14,6 +16,7 @@ export class RangerToolPresentation {
     this.modelRequestId = 0;
     this.skeletalActionActive = false;
     this.presentationHandMounted = false;
+    this.presentationSpearMounted = false;
     this.root = new THREE.Group();
     this.root.name = 'ranger-tool-presentation';
     this.root.visible = false;
@@ -30,6 +33,7 @@ export class RangerToolPresentation {
     if (toolId === 'spear' || toolId === 'torch') toolId = null;
     if (toolId === this.currentToolId) {
       this.#syncVisibleHandMount();
+      this.#syncVisibleSpearMount();
       this.#syncVisibility();
       return;
     }
@@ -42,6 +46,7 @@ export class RangerToolPresentation {
       this.#upgradeToolModel(toolId, fallback, requestId);
     }
     this.#syncVisibleHandMount();
+    this.#syncVisibleSpearMount();
     this.#syncVisibility();
     this.skeletalActionActive = false;
     this.#applyRestPose();
@@ -78,6 +83,7 @@ export class RangerToolPresentation {
   update(dt) {
     this.appearancePresentation.update(dt);
     this.#syncVisibleHandMount();
+    this.#syncVisibleSpearMount();
     if (this.remaining <= 0) return;
     this.remaining = Math.max(0, this.remaining - dt);
     const progress = 1 - this.remaining / this.duration;
@@ -106,6 +112,30 @@ export class RangerToolPresentation {
       this.handMounted = true;
       this.#applyRestPose();
     }
+    return true;
+  }
+
+  #syncVisibleSpearMount() {
+    const spearMount = this.player?.spearMount;
+    if (!spearMount || !this.player?.spearEquipped) {
+      this.presentationSpearMounted = false;
+      return false;
+    }
+
+    const visibleMount = this.appearancePresentation?.getRightHandToolMount?.();
+    if (!visibleMount) return false;
+    if (spearMount.parent !== visibleMount) visibleMount.add(spearMount);
+
+    // The procedural held spear uses the same +Y long-axis convention as the
+    // normalized FBX hand tools. The visible Hero M hand mount already maps +Y
+    // to character-forward, so keep the spear rotation identity and slide the
+    // shaft forward until only a short butt remains behind the hand. RangerController
+    // continues to own equip/throw/release state; this is presentation only.
+    spearMount.position.set(0, VISIBLE_SPEAR_FORWARD_OFFSET, 0);
+    spearMount.quaternion.identity();
+    spearMount.userData.gripProfile = VISIBLE_SPEAR_GRIP_PROFILE;
+    spearMount.userData.forwardOffset = VISIBLE_SPEAR_FORWARD_OFFSET;
+    this.presentationSpearMounted = true;
     return true;
   }
 
