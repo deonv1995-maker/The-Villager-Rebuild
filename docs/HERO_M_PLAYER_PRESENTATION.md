@@ -36,13 +36,16 @@ This means `DEF_hand_L/R` must be treated as **movable arm endpoints**, not shou
 
 `HeroMArmMotionPresentation` therefore maps the live KayKit **hand trajectories** into the Hero M endpoints. At load time, each side gets one bind-pose correction that aligns the two rigs without inventing a hip anchor. Every frame, after the base Hero M body retarget runs, the final arm layer:
 
-1. reads the live KayKit hand position relative to the KayKit hip;
-2. scales that vector using the shared Hero M pelvis/body proportion scale;
-3. applies it relative to the current Hero M pelvis plus the side-specific bind correction;
-4. translates `DEF_hand_L/R` to that mapped endpoint position;
-5. applies the live KayKit hand orientation delta as a secondary orientation layer.
+1. reads both live KayKit hand positions relative to the KayKit hip;
+2. scales those vectors using the shared Hero M pelvis/body proportion scale;
+3. preserves the bilateral hand midpoint while applying a restrained locomotion-only gain to each hand's opposed vertical/fore-aft displacement;
+4. applies the resulting vector relative to the current Hero M pelvis plus the side-specific bind correction;
+5. translates `DEF_hand_L/R` to that mapped endpoint position;
+6. applies the live KayKit hand orientation delta as a secondary orientation layer.
 
-Because the arm mesh is blended between the torso/spine region and the movable outer endpoint, translating the endpoint deforms the visible arm through space while the inner shoulder region remains attached to the torso. Walking and running therefore use the source animation's real opposed fore/aft hand paths and vertical bounce instead of a hand-authored sine wave or a fake fixed shoulder pivot.
+The current presentation-only travel gain is `1.12` for `Walking_A`, `1.16` for `Running_A`, and `1.0` for idle/other states. Only the opposed Y/Z component is amplified. Lateral X placement and the two-hand midpoint remain source-authored, so the extra energy does not widen the arms or add a second body-bounce authority.
+
+Because the arm mesh is blended between the torso/spine region and the movable outer endpoint, translating the endpoint deforms the visible arm through space while the inner shoulder region remains attached to the torso. Walking and running therefore use the source animation's real opposed fore/aft hand paths and vertical bounce, with a small bounded emphasis for readability, instead of a hand-authored sine wave or a fake fixed shoulder pivot.
 
 The final endpoint layer intentionally writes the endpoint position directly after the base retarget. `HeroMPresentation` restores compact-rig joint positions every frame; smoothing from that freshly reset position would permanently attenuate the source hand travel and recreate the pinned-wrist failure. This direct write is still presentation-only and does not add a second mixer, locomotion state, root-motion source or collision authority.
 
@@ -74,7 +77,7 @@ If Hero M fails to load, lacks required joints, produces invalid bounds or other
 
 ## Stable systems deliberately unchanged
 
-This presentation fix does not change movement speed, jump or double-jump physics, collision, terrain generation, camera behavior, construction, harvesting, ecology, world generation, day/night, save data, UI, PWA/install behavior, spear behavior, tool timing or KayKit animation ownership.
+This presentation tuning does not change movement speed, jump or double-jump physics, collision, terrain generation, camera behavior, construction, harvesting, ecology, world generation, day/night, save data, UI, PWA/install behavior, spear behavior, tool timing or KayKit animation ownership.
 
 ## Automated verification
 
@@ -82,20 +85,13 @@ This presentation fix does not change movement speed, jump or double-jump physic
 
 - `verify:hero-m-arm-rig` loads the shipped production Hero M asset and verifies the compact 16-joint layout, the spine-parented left/right hand endpoints, their lateral authored pivots, their compact outer-arm/hand skin ownership, the central spine-owned torso region and the absence of a conventional shoulder/elbow/forearm deform chain.
 - `verify-hero-m-presentation.mjs` pins the segmented runtime asset, presentation scale, base compact retarget, double-jump presentation, tool transfer, first-person visibility and Prisma fallback.
-- `verify-hero-m-visible-sole-grounding.mjs` protects presentation-local grounding, rendering-only foot contacts, translated hand-endpoint ownership and gameplay-root isolation. It rejects the retired fixed-pivot arm model.
-- `verify-hero-m-arm-motion.mjs` reconstructs the shipped Hero M and KayKit assets and verifies the actual `DEF_hand` endpoint positions, not merely a tool socket or inferred arc. It requires idle endpoints to leave the authored raised source pose, exact mapping from live KayKit hand-relative-to-hip motion, opposed left/right locomotion, measurable fore/aft translation, vertical bounce, finite matrices and zero gameplay-root motion.
+- `verify-hero-m-visible-sole-grounding.mjs` protects presentation-local grounding, rendering-only foot contacts, translated hand-endpoint ownership and gameplay-root isolation. It rejects the retired fixed-pivot arm model and pins the modest `Walking_A`/`Running_A` travel gains.
+- `verify-hero-m-arm-motion.mjs` reconstructs the shipped Hero M and KayKit assets and verifies the actual `DEF_hand` endpoint positions, not merely a tool socket or inferred arc. It requires idle endpoints to leave the authored raised source pose, exact gain-adjusted mapping from both live KayKit hand-relative-to-hip trajectories, opposed left/right locomotion, measurable fore/aft translation, vertical bounce, finite matrices and zero gameplay-root motion.
 
-On the current production assets the endpoint regression measures approximately:
-
-- walking right-hand fore/aft travel: `0.330 m`;
-- running right-hand fore/aft travel: `0.433 m`;
-- walking vertical endpoint travel: `0.082 m`;
-- running vertical endpoint travel: `0.120 m`.
-
-These measurements are from the deform endpoint itself. A wrist-only rotation with a fixed endpoint cannot satisfy this regression.
+The regression explicitly pins the locomotion travel profile at `1.12` for walking and `1.16` for running. Because that gain is applied around the bilateral hand midpoint, a future change cannot silently convert this emphasis into arm widening, extra root/body translation or a new procedural swing authority while still satisfying the endpoint contract.
 
 ## Device verification required after deployment
 
-On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. In idle, both arms should hang below the raised source-pose position and remain attached cleanly through the shoulder/torso blend. While walking, the hands and outer arms should visibly travel forward and backward with opposite phases, not merely rotate at the wrists. Running should show a larger fore/aft swing and stronger vertical bounce than walking.
+On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. In idle, both arms should hang below the raised source-pose position and remain attached cleanly through the shoulder/torso blend. While walking, the hands and outer arms should visibly travel forward and backward with opposite phases, not merely rotate at the wrists. The new motion should read slightly more energetic than the previous pass without looking exaggerated. Running should show a larger fore/aft swing and stronger vertical bounce than walking.
 
 Also verify that the shoulder region does not detach or stretch unnaturally at stride extremes, tools remain attached to and follow the visible right hand, first-person visibility still behaves correctly, and movement/collision/construction behavior is unchanged.

@@ -9,6 +9,10 @@ const SOURCE_HAND_KEYS = Object.freeze({
   left: 'leftHand',
   right: 'rightHand'
 });
+const ARM_TRAVEL_GAIN = Object.freeze({
+  Walking_A: 1.12,
+  Running_A: 1.16
+});
 
 // Hero M does not expose a conventional shoulder/elbow/wrist deform chain. The
 // production asset uses DEF_hand_L/R as movable arm endpoints while the inner arm
@@ -27,6 +31,10 @@ function rootLocalQuaternion(root, object, target, rootInverse, worldQuaternion)
   return target.copy(rootInverse).multiply(worldQuaternion).normalize();
 }
 
+function armTravelGain(animationState) {
+  return ARM_TRAVEL_GAIN[animationState] ?? 1;
+}
+
 /**
  * Final player-facing arm endpoint retarget for Hero M.
  *
@@ -34,8 +42,10 @@ function rootLocalQuaternion(root, object, target, rootInverse, worldQuaternion)
  * HeroMVisibleSoleGroundingPresentation owns rendering-only foot contacts. This
  * layer adapts the unusual Hero M arm skinning by mapping each live KayKit hand
  * position into the corresponding DEF_hand endpoint. The mapping is calibrated
- * from both rigs' bind poses and follows the full source hand trajectory, so walk
- * and run move the visible arm through space instead of only rotating the wrist.
+ * from both rigs' bind poses and follows the full source hand trajectory, with a
+ * restrained locomotion-only gain applied to the opposed vertical/fore-aft hand
+ * travel so the walk/run reads with more energy without shifting the shared arm
+ * center or widening the stance.
  */
 export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresentation {
   constructor(options) {
@@ -46,7 +56,9 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
 
     this.heroMArmSourceHip = new THREE.Vector3();
     this.heroMArmSourceHand = new THREE.Vector3();
+    this.heroMArmSourceOppositeHand = new THREE.Vector3();
     this.heroMArmSourceRelative = new THREE.Vector3();
+    this.heroMArmOppositeRelative = new THREE.Vector3();
     this.heroMArmTargetPelvis = new THREE.Vector3();
     this.heroMArmDesiredRoot = new THREE.Vector3();
     this.heroMArmDesiredWorld = new THREE.Vector3();
@@ -67,10 +79,11 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
       this.#calibrateEndpointMapping();
       this.heroMArmMotionReady = true;
       this.#updateArmEndpoints();
-      this.visualRoot.userData.visualRevision = 'hero-m-player-v7';
+      this.visualRoot.userData.visualRevision = 'hero-m-player-v8';
       this.visualRoot.userData.armPose = 'bind-calibrated-hand-endpoints-v1';
-      this.visualRoot.userData.armMotion = 'kaykit-full-hand-trajectory-v1';
+      this.visualRoot.userData.armMotion = 'kaykit-bilateral-hand-travel-v2';
       this.heroMRoot.userData.armRestProfile = 'source-hand-endpoint-retarget-v1';
+      this.heroMRoot.userData.armTravelGain = { ...ARM_TRAVEL_GAIN };
       return true;
     });
   }
@@ -115,10 +128,12 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
     const parent = bind?.bone?.parent;
     const sourceHip = this.sourceDrivers.get('hip');
     const sourceHand = this.sourceDrivers.get(SOURCE_HAND_KEYS[side]);
+    const oppositeSide = side === 'left' ? 'right' : 'left';
+    const sourceOppositeHand = this.sourceDrivers.get(SOURCE_HAND_KEYS[oppositeSide]);
     const sourceHandBind = this.sourceBind.get(SOURCE_HAND_KEYS[side]);
     const correction = this.heroMArmEndpointCorrection.get(side);
     const pelvis = this.heroMBind.get('pelvis')?.bone;
-    if (!bind?.bone || !parent || !sourceHip || !sourceHand || !sourceHandBind || !correction || !pelvis || !this.heroMRoot) {
+    if (!bind?.bone || !parent || !sourceHip || !sourceHand || !sourceOppositeHand || !sourceHandBind || !correction || !pelvis || !this.heroMRoot) {
       return;
     }
 
@@ -127,12 +142,30 @@ export class HeroMArmMotionPresentation extends HeroMVisibleSoleGroundingPresent
 
     rootLocalPosition(this.player.root, sourceHip, this.heroMArmSourceHip);
     rootLocalPosition(this.player.root, sourceHand, this.heroMArmSourceHand);
+    rootLocalPosition(this.player.root, sourceOppositeHand, this.heroMArmSourceOppositeHand);
     rootLocalPosition(this.heroMRoot, pelvis, this.heroMArmTargetPelvis);
 
+    const scale = this.heroMPelvisMotionScale;
     this.heroMArmSourceRelative
       .copy(this.heroMArmSourceHand)
       .sub(this.heroMArmSourceHip)
-      .multiplyScalar(this.heroMPelvisMotionScale);
+      .multiplyScalar(scale);
+    this.heroMArmOppositeRelative
+      .copy(this.heroMArmSourceOppositeHand)
+      .sub(this.heroMArmSourceHip)
+      .multiplyScalar(scale);
+
+    // Amplify only the opposed Y/Z component between the two live hands. Their
+    // bilateral midpoint remains unchanged, so body bounce/common translation is
+    // still source-authored and the arms do not drift farther from the torso.
+    const travelGain = armTravelGain(this.player.animationState);
+    if (Math.abs(travelGain - 1) > 1e-5) {
+      const midpointY = (this.heroMArmSourceRelative.y + this.heroMArmOppositeRelative.y) * 0.5;
+      const midpointZ = (this.heroMArmSourceRelative.z + this.heroMArmOppositeRelative.z) * 0.5;
+      this.heroMArmSourceRelative.y = midpointY + ((this.heroMArmSourceRelative.y - midpointY) * travelGain);
+      this.heroMArmSourceRelative.z = midpointZ + ((this.heroMArmSourceRelative.z - midpointZ) * travelGain);
+    }
+
     this.heroMArmDesiredRoot
       .copy(this.heroMArmTargetPelvis)
       .add(this.heroMArmSourceRelative)

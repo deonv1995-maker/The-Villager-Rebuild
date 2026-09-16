@@ -12,6 +12,8 @@ The intended visual result is mild independent judgement: Sprout can hesitate fo
 
 The sampled follow target is presentation/intent state only. The Ranger remains the player authority, and Sprout does not predict input or modify Ranger movement.
 
+Automatic loose-resource retrieval remains centered on the Ranger rather than becoming a free-roaming search system. The current `SPROUT_COMPANION.collectionRadius` is **18 m**, doubled from the previous 9 m tuning. The existing collection approach timeout, catch-up thresholds, collision service and reservation/commit boundary remain unchanged, so the larger sensing radius does not grant Sprout a second navigation or harvesting authority.
+
 ## Idle autonomy
 
 After the Ranger has been stationary for a short period, Sprout stops treating the follow offset as a fixed parking spot. If no legitimate collection target needs attention, Sprout chooses collision-safe points around the Ranger, drifts between them at a slower idle speed, pauses and visibly scans the surrounding area.
@@ -45,4 +47,4 @@ Ranger movement immediately cancels an active flourish and resets the extended-i
 
 ## Verification target
 
-Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
+Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
