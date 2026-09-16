@@ -46,6 +46,14 @@ assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"),
 assert.ok(candidate.includes("toolAnchor = 'hero-m-outer-hand-grip-v1'"), 'Hero M must retain its geometry-calibrated visible-hand tool seam');
 assert.ok(armMotion.includes("'steady-upright'"), 'Hero M arm presentation must expose a semantic steady-upright carry profile');
 assert.ok(armMotion.includes('setRightHandCarryProfile(profile = null)'), 'steady item carry must stay behind the Hero M presentation boundary');
+assert.ok(
+  armMotion.includes('positionResponse: 8') && armMotion.includes('rotationResponse: 10'),
+  'steady carry must keep explicit frame-rate-independent position and rotation smoothing responses'
+);
+assert.ok(
+  armMotion.includes('rightHandCarrySmoothedRoot') && armMotion.includes('rightHandCarrySmoothedGlobalQuaternion'),
+  'steady carry smoothing must remain presentation-local and must not move into Ranger gameplay authority'
+);
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
 assert.ok(main.includes("VisibleHandTorchRuntimeController as TorchRuntimeController"), 'game boot must use the visible-hand torch adapter without changing the stable runtime name');
@@ -108,4 +116,4 @@ assert.deepEqual(carryProfiles, ['steady-upright'], 'equipped torch must request
 torch.dispose();
 assert.equal(carryProfiles.at(-1), null, 'disposing the torch runtime must release the steady right-hand carry pose');
 
-console.log('Hero M selected presentation seam, Prisma fallback, visible-hand torch grip/carry profile, and reduced Sprout relative scale verified.');
+console.log('Hero M selected presentation seam, Prisma fallback, temporally smoothed visible-hand torch carry, and reduced Sprout relative scale verified.');
