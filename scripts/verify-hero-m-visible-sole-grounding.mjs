@@ -87,8 +87,13 @@ assert.match(
 );
 assert.match(
   groundingSource,
-  /motionRoot\.position\.y = this\.heroMMotionPivotHalfHeight \+ rootOffset/,
+  /motionRoot\.position\.y = this\.heroMHalfHeight \+ rootOffset/,
   'grounded Hero M must receive one absolute root-relative render-surface anchor each frame'
+);
+assert.match(
+  groundingSource,
+  /heroMRenderedGroundOffsetY/,
+  'the final rendered-ground offset must remain separate from the base analytical support state'
 );
 assert.match(
   groundingSource,
