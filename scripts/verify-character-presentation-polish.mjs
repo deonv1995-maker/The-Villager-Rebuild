@@ -13,6 +13,7 @@ const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const masculine = read('src/player/MasculinePrismaHumanoidPresentation.js');
 const appearance = read('src/player/RangerAppearancePresentation.js');
 const candidate = read('src/player/HeroMPresentation.js');
+const armMotion = read('src/player/HeroMArmMotionPresentation.js');
 const sproutRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
 const main = read('src/main.js');
 
@@ -43,6 +44,8 @@ assert.ok(candidate.includes("actualModelSource = 'user-supplied-hero-m-v1'"), '
 assert.ok(candidate.includes("styleProfile = 'playful-low-poly-hero-v1'"), 'Hero M playful visual style must stay explicit');
 assert.ok(candidate.includes("presentationFallback = 'prisma-rigged-humanoid'"), 'Hero M must keep explicit Prisma fallback ownership');
 assert.ok(candidate.includes("toolAnchor = 'hero-m-outer-hand-grip-v1'"), 'Hero M must retain its geometry-calibrated visible-hand tool seam');
+assert.ok(armMotion.includes("'steady-upright'"), 'Hero M arm presentation must expose a semantic steady-upright carry profile');
+assert.ok(armMotion.includes('setRightHandCarryProfile(profile = null)'), 'steady item carry must stay behind the Hero M presentation boundary');
 assert.ok(sproutRuntime.includes('SPROUT_RELATIVE_PLAYER_SCALE = 0.88'), 'Sprout should remain modestly smaller relative to the player');
 assert.ok(sproutRuntime.includes('effectivePresentationScale'), 'Sprout runtime must record effective relative scale for diagnostics');
 assert.ok(main.includes("VisibleHandTorchRuntimeController as TorchRuntimeController"), 'game boot must use the visible-hand torch adapter without changing the stable runtime name');
@@ -63,6 +66,7 @@ playerRoot.add(legacyHand);
 const visiblePalm = new THREE.Group();
 visiblePalm.name = 'prisma-right-hand-tool-mount';
 playerRoot.add(visiblePalm);
+const carryProfiles = [];
 
 const game = {
   inventory,
@@ -71,7 +75,8 @@ const game = {
   sceneSystem: { scene, renderer: { shadowMap: { needsUpdate: false } } },
   toolPresentation: {
     appearancePresentation: {
-      getRightHandToolMount: () => visiblePalm
+      getRightHandToolMount: () => visiblePalm,
+      setRightHandCarryProfile: profile => carryProfiles.push(profile)
     }
   },
   player: {
@@ -99,6 +104,8 @@ assert.equal(torch.visibleHandMounted, true, 'torch runtime must record visible-
 assert.equal(torch.handMounted, true, 'torch remains hand-mounted for the base presentation contract');
 assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-back-tip-torch-v3', 'torch must use the dedicated back-tip visible-palm grip');
 assert.ok(Math.abs(torch.visualRoot.position.y - 0.27) < 1e-9, 'torch handle back tip must sit at the visible palm origin');
+assert.deepEqual(carryProfiles, ['steady-upright'], 'equipped torch must request the semantic steady right-hand carry pose');
 torch.dispose();
+assert.equal(carryProfiles.at(-1), null, 'disposing the torch runtime must release the steady right-hand carry pose');
 
-console.log('Hero M selected presentation seam, Prisma fallback, visible-hand tool/torch grip, and reduced Sprout relative scale verified.');
+console.log('Hero M selected presentation seam, Prisma fallback, visible-hand torch grip/carry profile, and reduced Sprout relative scale verified.');
