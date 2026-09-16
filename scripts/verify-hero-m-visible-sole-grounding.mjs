@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 const compatibilitySource = readFileSync('src/player/RangerAppearancePresentation.js', 'utf8');
 assert.match(
   compatibilitySource,
-  /HeroMVisibleSoleGroundingPresentation as RangerAppearancePresentation/,
-  'stable player/tool imports must keep resolving through the Hero M compatibility boundary'
+  /HeroMArmMotionPresentation as RangerAppearancePresentation/,
+  'stable player/tool imports must resolve through the final Hero M arm-motion presentation boundary'
 );
 
 const heroSource = readFileSync('src/player/HeroMPresentation.js', 'utf8');
@@ -36,7 +36,7 @@ assert.match(
 assert.match(
   heroSource,
   /const groundingOffsetY = -bounds\.min\.y - HERO_M_GROUND_SETTLE/,
-  'the existing grounding formula must now consume detached presentation-local bounds'
+  'the existing grounding formula must consume detached presentation-local bounds'
 );
 assert.match(
   heroSource,
@@ -58,7 +58,7 @@ const groundingSource = readFileSync('src/player/HeroMVisibleSoleGroundingPresen
 assert.match(
   groundingSource,
   /extends HeroMPresentation/,
-  'production compatibility boundary must use the corrected base Hero M calibration'
+  'production grounding compatibility boundary must use the corrected base Hero M calibration'
 );
 assert.match(
   groundingSource,
@@ -68,26 +68,54 @@ assert.match(
 assert.doesNotMatch(
   groundingSource,
   /applyBoneTransform/,
-  'replacement grounding must not infer final character height from animated skinned boot vertices'
+  'grounding compatibility must not infer final character height from animated skinned boot vertices'
 );
 assert.doesNotMatch(
   groundingSource,
   /heroMSoleSamples|heroMSoleCorrection|visibleBodySettleCorrection/,
-  'replacement grounding must not keep a parallel per-frame sole/body feedback controller'
+  'grounding compatibility must not keep a parallel per-frame sole/body feedback controller'
 );
 assert.doesNotMatch(
   groundingSource,
   /player\.root\.position\.y\s*[+\-=]/,
-  'compatibility/contact layer must never mutate gameplay root height'
+  'ground contact layer must never mutate gameplay root height'
+);
+
+const armSource = readFileSync('src/player/HeroMArmMotionPresentation.js', 'utf8');
+assert.match(
+  armSource,
+  /extends HeroMVisibleSoleGroundingPresentation/,
+  'arm polish must layer above the proven Hero M grounding/contact presentation'
+);
+assert.match(
+  armSource,
+  /visible-grip-hip-anchor-v1/,
+  'arm polish must use the visible hand grip to calibrate a stable hip-level rest anchor'
+);
+assert.match(
+  armSource,
+  /kaykit-opposed-hand-arc-v1/,
+  'walk/run positional arm motion must remain driven by the established KayKit source rig'
+);
+assert.match(
+  armSource,
+  /leftHand|rightHand/,
+  'one-bone Hero M arms must use source hand motion rather than upper-arm rotation alone'
+);
+assert.doesNotMatch(
+  armSource,
+  /player\.root\.position\s*[+\-=]|jumpVelocity\s*[+\-=]/,
+  'arm presentation must not modify gameplay root motion or jump physics'
 );
 
 const islandSource = readFileSync('src/world/TestIslandSystem.js', 'utf8');
 assert.doesNotMatch(
   islandSource,
   /RenderedTerrainSurfaceSampler|visualGroundHeightAt/,
-  'character grounding fix must not introduce a competing world or terrain grounding system'
+  'character presentation fixes must not introduce a competing world or terrain grounding system'
 );
 
 await import('./verify-hero-m-runtime-grounding.mjs');
+await import('./verify-hero-m-arm-motion.mjs');
 
-console.log('Hero M detached presentation-local bounds calibration, nonzero-world runtime grounding, gameplay-root isolation and retirement of sampled-sole feedback verified.');
+console.log('Hero M local grounding, rendering-only foot contacts, hip-level rest hands, source-driven locomotion arm arcs and gameplay-root isolation verified.');
