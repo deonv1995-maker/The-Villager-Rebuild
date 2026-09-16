@@ -53,6 +53,9 @@ export class InventoryCapacityController {
   }
 
   #renderCapacity() {
-    this.game.hud?.setInventoryCapacity?.(this.inventory.getStorageState());
+    const state = this.inventory.getStorageState();
+    const hud = this.game.hud;
+    hud?.setInventoryCapacity?.(state);
+    if (hud?.root) hud.root.dataset.storageMode = state.mode;
   }
 }
