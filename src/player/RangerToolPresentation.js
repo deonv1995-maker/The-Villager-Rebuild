@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createToolModelAsset, hasToolModelAsset } from '../rendering/ToolModelAsset.js';
 import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
@@ -10,6 +11,7 @@ export class RangerToolPresentation {
     this.duration = 0.46;
     this.remaining = 0;
     this.currentToolId = null;
+    this.modelRequestId = 0;
     this.skeletalActionActive = false;
     this.presentationHandMounted = false;
     this.root = new THREE.Group();
@@ -32,8 +34,13 @@ export class RangerToolPresentation {
       return;
     }
     this.currentToolId = toolId;
+    const requestId = ++this.modelRequestId;
     this.root.clear();
-    if (toolId) this.root.add(this.#createTool(toolId));
+    if (toolId) {
+      const fallback = this.#createTool(toolId);
+      this.root.add(fallback);
+      this.#upgradeToolModel(toolId, fallback, requestId);
+    }
     this.#syncVisibleHandMount();
     this.#syncVisibility();
     this.skeletalActionActive = false;
@@ -156,6 +163,18 @@ export class RangerToolPresentation {
 
     this.root.position.set(0.48, 1.36, 0.16);
     this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.24);
+  }
+
+  async #upgradeToolModel(toolId, fallback, requestId) {
+    if (!hasToolModelAsset(toolId)) return;
+    try {
+      const model = await createToolModelAsset(toolId);
+      if (requestId !== this.modelRequestId || this.currentToolId !== toolId) return;
+      if (fallback.parent === this.root) this.root.remove(fallback);
+      this.root.add(model);
+    } catch (error) {
+      console.warn(`[TOOL ASSET FALLBACK] ${toolId}`, error);
+    }
   }
 
   #createTool(toolId) {
