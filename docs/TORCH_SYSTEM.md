@@ -10,6 +10,7 @@ The torch is the first portable and placeable night-lighting item layered onto t
 - Crafted torches are inventory-backed and occupy a normal tool-belt slot.
 - Every real tool-belt slot displays its available quantity. The Hand pseudo-slot is the only slot without a quantity badge.
 - Equipping a torch shows a simple handheld torch prop in third-person view and creates a warm local light whose origin follows the flame itself rather than the Ranger root.
+- While the handheld torch is active, the visible player presentation requests the semantic `steady-upright` right-hand carry profile. Hero M therefore keeps natural common body motion and a free left-arm gait while restraining the right hand's empty-arm swing; selecting/putting away the torch blends this profile in/out instead of popping the pose.
 - Torch illumination radiates in **all directions** from the flame. A burning torch is a local fire source, not a forward-facing flashlight or modern spotlight.
 - The handheld torch is a practical night-navigation tool, not only a close-range glow. Its configured reach is **15 world units**, while base intensity remains **58** and physically natural inverse-square-style decay remains **2**.
 - The flame visibly flutters while held, while emitted light intensity/reach use a damped version of the same bounded fire signal so the environment does not pulse harshly.
@@ -32,6 +33,10 @@ The torch is the first portable and placeable night-lighting item layered onto t
 
 `TorchRuntimeController` remains the single authority for torch burn state, handheld presentation, mounted presentation, fire flicker and torch-owned lights. It does **not** own an animation frame or gameplay wall-clock timer. `WorldTimeRuntime` fans the same authoritative `WorldTimeSystem` snapshot into visual presentations and gameplay time consumers, so handheld and mounted fuel advance from one clock and cannot silently burn while world time is stopped.
 
+`VisibleHandTorchRuntimeController` is the presentation adapter above that runtime. It owns the visible-palm mounting offset and, while the authoritative torch snapshot reports `burning`, requests `steady-upright` through the active appearance presentation's `setRightHandCarryProfile(...)` seam. It releases that request when the torch stops burning or the adapter is disposed. The adapter does not manipulate Hero M bones directly.
+
+`HeroMArmMotionPresentation` owns the meaning of `steady-upright`: it blends down only the carried right hand's opposed locomotion swing/orientation while preserving common body translation and the free left-arm animation. This keeps item semantics and character rig implementation separated. The torch runtime does not become a second animation system, and Hero M does not gain fuel/light/inventory authority.
+
 `TorchPlacementTargetResolver` owns mount discovery. It reads semantic solid-wall geometry from `PanelStructureRegistry.wallPlacementWorld(...)`, allowing wall position, side normal and height to come from the construction source of truth. During the transition from legacy physical construction, it also exposes active physical wall entries and vertical `frame` entries as wall/post mounts. The resolver applies one centralized reach/aim policy and excludes mount ids already occupied by a placed torch.
 
 `EquipmentRuntimeController` owns only the player-facing contextual **PLACE** action. It asks `TorchRuntimeController` for the currently valid mount and delegates placement back to the torch runtime. This keeps HUD interaction, structural target resolution and torch fuel/light state as separate responsibilities.
@@ -50,7 +55,7 @@ Mounted torches intentionally do **not** allocate point-light shadow maps. Perma
 
 While the handheld torch burns, `TorchRuntimeController` temporarily enables `castShadow` on the Ranger's render meshes, excluding the torch prop itself. Existing centralized shadow enrollment keeps static/chunked forest tree batches and ordinary opaque world meshes eligible as casters and receivers. Ranger caster flags are restored when the handheld torch is no longer active.
 
-The generic `RangerToolPresentation` intentionally ignores the `torch` identifier so it cannot create a competing prop. Torch presentation remains owned by `TorchRuntimeController`.
+The generic `RangerToolPresentation` intentionally ignores the `torch` identifier so it cannot create a competing prop. Torch presentation remains owned by `TorchRuntimeController` plus the thin visible-hand adapter; the generic Hero M semantic carry seam is responsible only for arm pose.
 
 `SaveGameController` continues to persist torch state separately from ordinary equipment durability. The same `state.torch` boundary now contains the active inventory unit's remaining minutes plus mounted-torch records. Restore reconstructs mounted visuals/lights without consuming inventory again, then resets the previous-clock sample so save/load or background time is not charged as fuel.
 
@@ -80,6 +85,8 @@ The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity ba
 - Ranger and forest shadow-caster policies remain intact;
 - the eight-slot belt retains its narrow-screen layout contract.
 
+`verify-character-presentation-polish.mjs` additionally verifies that an active torch requests `steady-upright` from the appearance presentation and releases it on disposal. `verify-hero-m-arm-motion.mjs` proves that this semantic profile substantially restrains the carried right-hand walk/run swing while leaving the free left-arm path unchanged and blending back to normal when cleared.
+
 `scripts/verify-placeable-torches.mjs` protects the mounted-light additions:
 
 - vertical frame/support posts and walls resolve as mount targets;
@@ -100,6 +107,8 @@ The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity ba
 After merge/deploy, verify on a physical phone that every crafted tool slot shows the correct available quantity without obscuring the icon, durability/fuel meter or tap target, including the torch slot after mounting one or more torches.
 
 At night, equip a torch and approach several solid building walls and vertical frame/support posts. Confirm that **PLACE** appears only for a sensible nearby aimed mount, that placing consumes exactly one available torch, the mounted flame sits against the expected wall/post side, and the next inventory torch remains usable when available. Confirm that the same mount does not accept a second torch.
+
+While the torch is held, walk, run, turn, stop and start repeatedly. The right arm should read as deliberately carrying an upright torch instead of swinging through the full empty-hand gait; it should still move naturally with the body rather than becoming rigid. The left arm should continue its normal walk/run swing. Putting the torch away should blend smoothly back to normal two-arm locomotion without a visible pose snap.
 
 Build a larger lit workspace/stronghold and place enough torches to exceed the eight-active-light budget. Walk through it and confirm that nearby areas remain warmly illuminated as the nearest active-light set changes without obvious popping, while distant mounted flames remain visible and frame rate stays comfortable on the target Android device.
 
