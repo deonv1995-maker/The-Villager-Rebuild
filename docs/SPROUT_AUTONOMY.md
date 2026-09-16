@@ -8,7 +8,11 @@ Sprout should read as an independent companion rather than a transform mechanica
 
 Sprout does not receive perfect future knowledge of the Ranger's movement. The companion samples the Ranger's position/facing on a short irregular cadence, applies a small reaction delay when the Ranger starts moving, and follows a drifting formation target rather than recomputing the exact same offset every rendered frame.
 
+Those discrete samples are **intent goals**, not direct transform assignments. Once a new Ranger sample or formation-drift sample is available, Sprout eases its perceived position, facing and drift toward the new goal before navigation consumes it. This preserves the intended delayed companion personality without producing stair-step target jumps while Hero M walks or turns.
+
 The intended visual result is mild independent judgement: Sprout can hesitate for a fraction of a second, take a slightly different line, accelerate into a catch-up and settle into a nearby formation instead of matching every Ranger turn immediately. The shared collision service remains authoritative, and the existing catch-up and hard-recovery rules remain in place so personality never strands the companion.
+
+Ordinary Ranger/Sprout overlap is also resolved as bounded collision-aware separation rather than a one-frame positional snap. The hard recovery teleport remains reserved for the existing long-distance `hardCatchUpDistance` safeguard; it is not used as normal close-range movement.
 
 The sampled follow target is presentation/intent state only. The Ranger remains the player authority, and Sprout does not predict input or modify Ranger movement.
 
@@ -38,7 +42,7 @@ Ranger movement immediately cancels an active flourish and resets the extended-i
 
 ## Architecture boundaries
 
-- `SproutCompanionController`: follow sampling, reaction delay, formation drift, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
+- `SproutCompanionController`: sampled/eased follow intent, reaction delay, formation drift, bounded personal-space separation, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
 - `GatherableSystem`: loose-resource identity, reservation/release, capacity re-check and committed removal.
 - `InventorySystem`: the single Ranger/Sprout item-count authority.
 - `RangerController`: Ranger locomotion and existing cinematics remain independent; Sprout's ambient idle flourish does not seize this boundary.
@@ -47,4 +51,4 @@ Ranger movement immediately cancels an active flourish and resets the extended-i
 
 ## Verification target
 
-Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
+Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns **or jerks between sampled follow targets**, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, ordinary close contact separates smoothly rather than popping, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.

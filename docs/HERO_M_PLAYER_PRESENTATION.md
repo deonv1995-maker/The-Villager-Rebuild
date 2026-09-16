@@ -51,11 +51,15 @@ The final endpoint layer intentionally writes the endpoint position directly aft
 
 The fixed-pivot arm model is retired. Do not reintroduce `DEF_hand_L/R` as shoulder joints, a procedural shoulder-pivot swing axis, or a rule that their authored local positions must remain fixed during locomotion.
 
-## Tool grip
+## Tool grip and steady carry
 
 Hero M does not expose a conventional finger/palm chain. The visible right-hand tool socket is calibrated from the actual skinned vertices influenced by `DEF_hand_R` and remains parented to that endpoint. Tools therefore follow the translated right hand automatically. `RangerToolPresentation`, tool-action timing and gameplay ownership are unchanged.
 
 The arm endpoint layer follows the same KayKit hand transform used by the hidden animation authority, so tool orientation remains source-driven rather than being independently synthesized by the Hero M presentation.
+
+For handheld items that should remain visually steady while the Ranger walks or runs, `HeroMArmMotionPresentation` exposes a **semantic right-hand carry profile** rather than allowing each item to rewrite Hero M bones. The current `steady-upright` profile keeps the common pelvis/body motion and the free left-arm gait, but reduces the right hand's opposed fore/aft/vertical locomotion swing to 24% and its orientation delta to 34%. The profile blends in and out exponentially so selecting or putting away an item does not pop the arm pose.
+
+The torch runtime is currently the only consumer of this profile. It requests `steady-upright` only while the torch is actively equipped/burning and releases the profile when the torch is no longer active or its runtime is disposed. This keeps ownership clean: the torch knows **that** a steady carry is required; Hero M presentation knows **how** that semantic carry changes the visible arm. Fuel, light, inventory, player movement, collision and KayKit locomotion remain outside the carry layer.
 
 ## Scale and visual grounding
 
@@ -86,12 +90,14 @@ This presentation tuning does not change movement speed, jump or double-jump phy
 - `verify:hero-m-arm-rig` loads the shipped production Hero M asset and verifies the compact 16-joint layout, the spine-parented left/right hand endpoints, their lateral authored pivots, their compact outer-arm/hand skin ownership, the central spine-owned torso region and the absence of a conventional shoulder/elbow/forearm deform chain.
 - `verify-hero-m-presentation.mjs` pins the segmented runtime asset, presentation scale, base compact retarget, double-jump presentation, tool transfer, first-person visibility and Prisma fallback.
 - `verify-hero-m-visible-sole-grounding.mjs` protects presentation-local grounding, rendering-only foot contacts, translated hand-endpoint ownership and gameplay-root isolation. It rejects the retired fixed-pivot arm model and pins the modest `Walking_A`/`Running_A` travel gains.
-- `verify-hero-m-arm-motion.mjs` reconstructs the shipped Hero M and KayKit assets and verifies the actual `DEF_hand` endpoint positions, not merely a tool socket or inferred arc. It requires idle endpoints to leave the authored raised source pose, exact gain-adjusted mapping from both live KayKit hand-relative-to-hip trajectories, opposed left/right locomotion, measurable fore/aft translation, vertical bounce, finite matrices and zero gameplay-root motion.
+- `verify-hero-m-arm-motion.mjs` reconstructs the shipped Hero M and KayKit assets and verifies the actual `DEF_hand` endpoint positions, not merely a tool socket or inferred arc. It requires idle endpoints to leave the authored raised source pose, exact gain-adjusted mapping from both live KayKit hand-relative-to-hip trajectories, opposed left/right locomotion, measurable fore/aft translation, vertical bounce, finite matrices and zero gameplay-root motion. It also enables `steady-upright`, verifies that the carried right hand has substantially reduced fore/aft/vertical swing while the left arm remains unchanged, then clears the profile and verifies the blend returns to the free-arm gait.
 
 The regression explicitly pins the locomotion travel profile at `1.12` for walking and `1.16` for running. Because that gain is applied around the bilateral hand midpoint, a future change cannot silently convert this emphasis into arm widening, extra root/body translation or a new procedural swing authority while still satisfying the endpoint contract.
 
 ## Device verification required after deployment
 
-On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. In idle, both arms should hang below the raised source-pose position and remain attached cleanly through the shoulder/torso blend. While walking, the hands and outer arms should visibly travel forward and backward with opposite phases, not merely rotate at the wrists. The new motion should read slightly more energetic than the previous pass without looking exaggerated. Running should show a larger fore/aft swing and stronger vertical bounce than walking.
+On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. In idle, both arms should hang below the raised source-pose position and remain attached cleanly through the shoulder/torso blend. While walking with empty/free hands, the hands and outer arms should visibly travel forward and backward with opposite phases, not merely rotate at the wrists. The motion should remain energetic without looking exaggerated. Running should show a larger fore/aft swing and stronger vertical bounce than walking.
+
+Then equip the torch and repeat walking, running, turning and stop/start transitions. The right hand should hold the torch steadily enough to read as a deliberate carry instead of swinging it like an empty arm; it should still inherit natural body motion rather than looking frozen. The left arm should continue its normal gait. Putting the torch away should blend back into the normal two-arm locomotion without a visible pop.
 
 Also verify that the shoulder region does not detach or stretch unnaturally at stride extremes, tools remain attached to and follow the visible right hand, first-person visibility still behaves correctly, and movement/collision/construction behavior is unchanged.

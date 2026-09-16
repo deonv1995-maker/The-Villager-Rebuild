@@ -38,6 +38,8 @@ export class SproutCompanionController {
     this.followDriftRemaining = 0;
     this.followDriftLateral = 0;
     this.followDriftBack = 0;
+    this.followDriftLateralGoal = 0;
+    this.followDriftBackGoal = 0;
     this.currentMoveSpeed = 0;
     this.rangerMoving = false;
     this.rangerIdleElapsed = 0;
@@ -54,6 +56,8 @@ export class SproutCompanionController {
     this.previousPlayerPosition = new THREE.Vector3();
     this.perceivedPlayerPosition = new THREE.Vector3();
     this.perceivedPlayerFacing = new THREE.Vector3(0, 0, 1);
+    this.perceivedPlayerGoalPosition = new THREE.Vector3();
+    this.perceivedPlayerGoalFacing = new THREE.Vector3(0, 0, 1);
     this.followTarget = new THREE.Vector3();
     this.idleTarget = new THREE.Vector3();
     this.resourcePosition = new THREE.Vector3();
@@ -132,7 +136,7 @@ export class SproutCompanionController {
     }
 
     this.#updatePerceivedRanger(dt);
-    this.#separateFromRanger();
+    this.#separateFromRanger(dt);
 
     if (this.compression) {
       this.#settleHover(this.root.position.x, this.root.position.z, dt);
@@ -235,9 +239,11 @@ export class SproutCompanionController {
     this.previousPlayerPosition.copy(this.playerPosition);
     this.perceivedPlayerPosition.copy(this.playerPosition);
     this.perceivedPlayerFacing.copy(this.playerFacing);
+    this.perceivedPlayerGoalPosition.copy(this.playerPosition);
+    this.perceivedPlayerGoalFacing.copy(this.playerFacing);
     this.hasPlayerSample = true;
     this.hasPerceivedRanger = true;
-    this.#sampleFollowDrift();
+    this.#sampleFollowDrift({ immediate: true });
     this.#resolveFollowTarget();
     return true;
   }
@@ -288,8 +294,8 @@ export class SproutCompanionController {
     }
 
     if (!this.hasPerceivedRanger || (this.followSenseRemaining <= 0 && this.followReactionRemaining <= 0)) {
-      this.perceivedPlayerPosition.copy(this.playerPosition);
-      this.perceivedPlayerFacing.copy(this.playerFacing);
+      this.perceivedPlayerGoalPosition.copy(this.playerPosition);
+      this.perceivedPlayerGoalFacing.copy(this.playerFacing);
       this.hasPerceivedRanger = true;
       this.followSenseRemaining = this.#randomBetween(
         SPROUT_COMPANION.followSenseMinSeconds,
@@ -297,18 +303,43 @@ export class SproutCompanionController {
       );
     }
 
+    if (this.hasPerceivedRanger && dt > 0) {
+      const positionBlend = 1 - Math.exp(-SPROUT_COMPANION.followPerceptionResponse * dt);
+      const facingBlend = 1 - Math.exp(-SPROUT_COMPANION.followFacingResponse * dt);
+      const driftBlend = 1 - Math.exp(-SPROUT_COMPANION.followDriftResponse * dt);
+      this.perceivedPlayerPosition.lerp(this.perceivedPlayerGoalPosition, positionBlend);
+      this.perceivedPlayerFacing.lerp(this.perceivedPlayerGoalFacing, facingBlend);
+      this.perceivedPlayerFacing.y = 0;
+      if (this.perceivedPlayerFacing.lengthSq() < 0.0001) this.perceivedPlayerFacing.copy(this.playerFacing);
+      else this.perceivedPlayerFacing.normalize();
+      this.followDriftLateral = THREE.MathUtils.lerp(
+        this.followDriftLateral,
+        this.followDriftLateralGoal,
+        driftBlend
+      );
+      this.followDriftBack = THREE.MathUtils.lerp(
+        this.followDriftBack,
+        this.followDriftBackGoal,
+        driftBlend
+      );
+    }
+
     this.#resolveFollowTarget();
   }
 
-  #sampleFollowDrift() {
-    this.followDriftLateral = this.#randomBetween(
+  #sampleFollowDrift({ immediate = false } = {}) {
+    this.followDriftLateralGoal = this.#randomBetween(
       -SPROUT_COMPANION.followDriftRadius,
       SPROUT_COMPANION.followDriftRadius
     );
-    this.followDriftBack = this.#randomBetween(
+    this.followDriftBackGoal = this.#randomBetween(
       -SPROUT_COMPANION.followDriftBackRadius,
       SPROUT_COMPANION.followDriftBackRadius
     );
+    if (immediate) {
+      this.followDriftLateral = this.followDriftLateralGoal;
+      this.followDriftBack = this.followDriftBackGoal;
+    }
   }
 
   #resolveFollowTarget() {
@@ -508,31 +539,66 @@ export class SproutCompanionController {
     );
     this.perceivedPlayerPosition.copy(this.playerPosition);
     this.perceivedPlayerFacing.copy(this.playerFacing);
+    this.perceivedPlayerGoalPosition.copy(this.playerPosition);
+    this.perceivedPlayerGoalFacing.copy(this.playerFacing);
     this.currentMoveSpeed = 0;
     this.#resolveFollowTarget();
   }
 
-  #separateFromRanger() {
+  #separateFromRanger(dt) {
+    if (!this.root || dt <= 0) return;
     const dx = this.root.position.x - this.playerPosition.x;
     const dz = this.root.position.z - this.playerPosition.z;
     const distance = Math.hypot(dx, dz);
     const radius = SPROUT_COMPANION.rangerPersonalSpace;
     if (distance >= radius) return;
 
-    // Ranger motion can enter Sprout's space even when Sprout is compressing or idle.
+    // Ranger motion can enter Sprout's space even while Sprout is compressing or idle.
+    // Choose a collision-safe escape direction, but move toward it at a bounded speed
+    // instead of teleporting to the personal-space edge in a single frame.
     const angle = distance > 0.001 ? Math.atan2(dz, dx)
       : Math.atan2(-this.playerFacing.z, -this.playerFacing.x);
+    let target = null;
     for (const offset of [0, 0.5, -0.5, 1, -1, Math.PI]) {
       const x = this.playerPosition.x + Math.cos(angle + offset) * (radius + 0.02);
       const z = this.playerPosition.z + Math.sin(angle + offset) * (radius + 0.02);
       if (this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)
         && this.island.isPlayable?.(x, z, 1.2) !== false) {
-        this.root.position.x = x;
-        this.root.position.z = z;
-        return;
+        target = { x, z };
+        break;
       }
     }
-    this.#snapNearRanger();
+    if (!target) return;
+
+    const escapeX = target.x - this.root.position.x;
+    const escapeZ = target.z - this.root.position.z;
+    const escapeDistance = Math.hypot(escapeX, escapeZ);
+    if (escapeDistance <= 0.0001) return;
+    const step = Math.min(escapeDistance, SPROUT_COMPANION.rangerSeparationSpeed * dt);
+    const desired = {
+      x: this.root.position.x + (escapeX / escapeDistance) * step,
+      z: this.root.position.z + (escapeZ / escapeDistance) * step
+    };
+    const from = {
+      x: this.root.position.x,
+      y: this.root.position.y,
+      z: this.root.position.z
+    };
+    const resolved = this.collision.resolveMove(from, desired, {
+      radius: SPROUT_COMPANION.collisionRadius,
+      height: SPROUT_COMPANION.collisionHeight,
+      airborne: true
+    });
+    const previousDistance = distance;
+    const resolvedDistance = Math.hypot(
+      resolved.x - this.playerPosition.x,
+      resolved.z - this.playerPosition.z
+    );
+    if (resolvedDistance <= previousDistance + 0.0001) return;
+
+    this.root.position.x = resolved.x;
+    this.root.position.z = resolved.z;
+    this.currentMoveSpeed = Math.max(this.currentMoveSpeed, step / dt);
   }
 
   #beginCompression(target) {

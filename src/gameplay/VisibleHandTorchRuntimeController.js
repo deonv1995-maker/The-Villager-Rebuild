@@ -6,6 +6,7 @@ import { TorchRuntimeController } from './TorchRuntimeController.js';
 // directly in Hero M's visible palm instead of gripping the handle near center.
 const TORCH_GRIP_POSITION = new THREE.Vector3(0, 0.27, 0);
 const TORCH_GRIP_ROTATION = new THREE.Euler(-0.1, 0.02, 0.08, 'XYZ');
+const TORCH_CARRY_PROFILE = 'steady-upright';
 
 /**
  * Keeps TorchRuntimeController as the fuel/light/placement authority while
@@ -15,12 +16,21 @@ export class VisibleHandTorchRuntimeController extends TorchRuntimeController {
   constructor(options) {
     super(options);
     this.visibleHandMounted = false;
+    this.carryProfileActive = null;
     this.#syncVisibleHandMount();
+    this.#syncCarryProfile(this.snapshot().burning);
   }
 
   apply(worldTimeSnapshot) {
     this.#syncVisibleHandMount();
-    return super.apply(worldTimeSnapshot);
+    const snapshot = super.apply(worldTimeSnapshot);
+    this.#syncCarryProfile(snapshot.burning);
+    return snapshot;
+  }
+
+  dispose() {
+    this.#syncCarryProfile(false, { force: true });
+    super.dispose();
   }
 
   #syncVisibleHandMount() {
@@ -34,5 +44,13 @@ export class VisibleHandTorchRuntimeController extends TorchRuntimeController {
     this.visualRoot.rotation.copy(TORCH_GRIP_ROTATION);
     this.visualRoot.userData.gripProfile = 'visible-palm-back-tip-torch-v3';
     return true;
+  }
+
+  #syncCarryProfile(active, { force = false } = {}) {
+    const requested = Boolean(active);
+    if (!force && this.carryProfileActive === requested) return;
+    const appearance = this.game.toolPresentation?.appearancePresentation;
+    appearance?.setRightHandCarryProfile?.(requested ? TORCH_CARRY_PROFILE : null);
+    this.carryProfileActive = requested;
   }
 }

@@ -139,10 +139,33 @@ for (const resourceId of tuning.collectibleResourceIds) {
     smallest = Math.min(smallest, Math.hypot(f.root.position.x - f.position.x, f.root.position.z - f.position.z));
   }
   assert.ok(smallest >= tuning.rangerPersonalSpace, 'Follow route must go around Ranger');
+
   f.position.copy(f.root.position);
+  const separationStart = f.root.position.clone();
   f.tick();
-  assert.ok(Math.hypot(f.root.position.x - f.position.x, f.root.position.z - f.position.z) >= tuning.rangerPersonalSpace,
-    'Ranger entering Sprout position must cause separation');
+  const firstSeparationStep = Math.hypot(
+    f.root.position.x - separationStart.x,
+    f.root.position.z - separationStart.z
+  );
+  const firstSeparationDistance = Math.hypot(
+    f.root.position.x - f.position.x,
+    f.root.position.z - f.position.z
+  );
+  assert.ok(firstSeparationStep > 0, 'Ranger entering Sprout position must start a separation response');
+  assert.ok(
+    firstSeparationStep <= tuning.rangerSeparationSpeed * 0.05 + 0.002,
+    'ordinary Ranger/Sprout overlap must resolve with a bounded move instead of a one-frame teleport'
+  );
+  assert.ok(
+    firstSeparationDistance < tuning.rangerPersonalSpace,
+    'bounded separation must not snap directly to the personal-space edge on the first frame'
+  );
+  f.tick(Math.ceil((tuning.rangerPersonalSpace / tuning.rangerSeparationSpeed) / 0.05) + 4);
+  assert.ok(
+    Math.hypot(f.root.position.x - f.position.x, f.root.position.z - f.position.z) >= tuning.rangerPersonalSpace,
+    'bounded separation must still restore Ranger personal space promptly'
+  );
+
   const heights = [];
   for (let i = 0; i < 80; i++) { f.tick(); heights.push(f.root.position.y); }
   assert.ok(Math.max(...heights) - Math.min(...heights) > 0.06, 'Idle hover must visibly move');
@@ -157,8 +180,12 @@ for (const resourceId of tuning.collectibleResourceIds) {
   assert.ok(f.controller.perceivedPlayerPosition.distanceTo(perceivedBefore) < 0.01,
     'Sprout must not know an abrupt Ranger move on the same frame');
   f.tick(10);
+  const intermediateError = f.controller.perceivedPlayerPosition.distanceTo(f.position);
+  assert.ok(intermediateError > 0.02 && intermediateError < 2.49,
+    'once sensed, Sprout perception must ease toward Ranger instead of snapping to the newest sample');
+  f.tick(24);
   assert.ok(f.controller.perceivedPlayerPosition.distanceTo(f.position) < 0.01,
-    'Sprout must eventually sample the Ranger after its reaction delay');
+    'Sprout must settle onto the sampled Ranger position after its delayed eased response');
 }
 {
   const f = fixture();
@@ -238,4 +265,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, delayed follow sensing, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, eased delayed follow sensing, bounded Ranger separation, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
