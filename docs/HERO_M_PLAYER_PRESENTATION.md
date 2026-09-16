@@ -2,7 +2,7 @@
 
 ## Status
 
-Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves to `HeroMVisibleSoleGroundingPresentation`, which extends `HeroMPresentation`; despite the retained compatibility class name, the final production grounding seam no longer uses sampled boot vertices as its authority.
+Hero M is the selected player-facing character presentation. The KayKit Ranger remains the sole gameplay and animation authority for traversal, collision, locomotion, camera modes, jump physics, tool actions and combat timing. `RangerAppearancePresentation` resolves to `HeroMArmMotionPresentation`, which layers arm presentation polish above `HeroMVisibleSoleGroundingPresentation` and `HeroMPresentation`. The grounding compatibility class no longer uses sampled boot vertices as an authority; it only exposes rendering-only foot contact anchors.
 
 ## Source and runtime derivative
 
@@ -20,11 +20,19 @@ The original FBX contained its own animation stacks. They are deliberately omitt
 
 ## Rig and retarget boundary
 
-Hero M uses a compact 16-joint deform skeleton. The presentation maps the gameplay-facing body regions onto that authored rig rather than adding another controller or animation mixer. Pelvis, spine, head, both complete arm/hand pieces and the segmented leg chains receive bounded bind-delta rotations derived from the current KayKit pose. In addition, the Hero M pelvis receives the KayKit hip's animated local translation, scaled from source hip-to-head height to Hero M pelvis-to-head height and clamped to the same `0.75–1.35` proportional range already used by the proven Prisma retargeter. All other authored Hero M joint positions and scales remain unchanged.
+Hero M uses a compact 16-joint deform skeleton. The presentation maps the gameplay-facing body regions onto that authored rig rather than adding another controller or animation mixer. Pelvis, spine, head, both complete arm/hand pieces and the segmented leg chains receive bounded bind-delta rotations derived from the current KayKit pose. In addition, the Hero M pelvis receives the KayKit hip's animated local translation, scaled from source hip-to-head height to Hero M pelvis-to-head height and clamped to the same `0.75–1.35` proportional range already used by the proven Prisma retargeter. All other authored Hero M joint positions and scales remain unchanged at the base retarget layer.
 
 That pelvis translation is presentation-only skeletal motion, not gameplay root motion. It preserves the source animation's vertical body bob and small local sway so idle, walk and run move the torso together with the legs instead of making the feet animate underneath a frozen body. The Ranger gameplay root still owns world translation, collision, support height and jump physics.
 
-Hero M does not contain a conventional upper-arm/elbow/forearm/hand chain. Each complete arm is driven by the corresponding KayKit upper-arm motion. A geometry-calibrated rest orientation is applied first so the hands sit naturally down beside the body while idle. Walk and run then apply the existing KayKit arm swing around that relaxed base, with a modest run gain for readability. Tool and jump motions continue through the same retarget seam.
+### One-bone arm adaptation
+
+Hero M does not contain a conventional upper-arm/elbow/forearm/hand chain. Each side has one deform joint that drives the complete visible arm/hand piece. Mapping only KayKit upper-arm rotation to that single joint caused two device-visible problems: the hands stayed too high and too far from the torso in idle, and walk/run read as rigid arm pieces rotating around a fixed distant pivot rather than as a natural arm swing.
+
+`HeroMArmMotionPresentation` is the final presentation-only adapter for that rig limitation. After the base Hero M load finishes, it reconstructs a deterministic authored/rest pose and uses the existing visible right-hand tool grip plus pelvis/spine landmarks to calculate a hip-level hand target. The right arm is translated so the visible grip sits beside the hip instead of at chest/shoulder height. Because the source Hero M is authored symmetrically, the same correction is mirrored to the left arm. The resulting rest anchor is stored in the arm bone's parent-local space, so later torso motion and retargeted rotation continue to work normally.
+
+Walk and run keep the established KayKit rotations, but now receive a second presentation component: the current KayKit left/right hand positions relative to their shoulders are sampled from the already-running source rig. Their opposed fore/aft difference becomes a bounded phase signal that moves the two Hero M arm joints through small opposite position arcs. Walking uses a restrained arc; running uses a larger fore/aft travel and lift. Idle keeps only a very small positional movement. During tool actions the additional locomotion arc decays to zero so tool-action rotation remains authoritative.
+
+This is not a second animation system. No new mixer, locomotion state, root motion, collision authority or gameplay timing is introduced. The adapter consumes the same KayKit pose that already drives the rest of Hero M and only changes the two presentation-bone local positions after the base retarget pass.
 
 ## Scale and visual grounding
 
@@ -36,7 +44,7 @@ The persistent device-reported hover was ultimately traced to the Hero M load pa
 
 That coordinate-space mismatch meant the Ranger's world Y at the exact moment Hero M finished loading could be baked into Hero M's local grounding offset. If the player happened to stand below world Y=0, the negative world elevation was subtracted a second time and the visible character was lifted above the Ranger root by approximately that elevation. The resulting gap was stable across idle, walking and running, which is why repeated per-frame boot/terrain compensation could not reliably eliminate it.
 
-The corrected loader calibrates Hero M while the candidate is still detached from the gameplay/player hierarchy. Its bounds are therefore measured in a neutral presentation-local frame where world Y equals model-local Y. Only after `groundingOffsetY` and presentation height have been calculated is the candidate placed under the centered motion pivot and attached to `visualRoot`. The resulting calibration is explicitly tagged `presentation-local-v1` and the presentation revision is `hero-m-player-v4`.
+The corrected loader calibrates Hero M while the candidate is still detached from the gameplay/player hierarchy. Its bounds are therefore measured in a neutral presentation-local frame where world Y equals model-local Y. Only after `groundingOffsetY` and presentation height have been calculated is the candidate placed under the centered motion pivot and attached to `visualRoot`. The resulting calibration is explicitly tagged `presentation-local-v1`.
 
 This is the authoritative fix for the load-time vertical bias. No second terrain-height model or continuously accumulating sole offset is allowed to compensate for it.
 
@@ -44,7 +52,7 @@ This is the authoritative fix for the load-time vertical bias. No second terrain
 
 After the load-space correction, the existing bounded center-support compensation remains responsible only for the legitimate difference between the gameplay root's footprint support and the walkable support directly beneath the character center. That compensation is presentation-only and never changes the Ranger root, collision, terrain, movement state or jump velocity.
 
-`HeroMVisibleSoleGroundingPresentation` remains as the stable compatibility boundary because other systems already import it. Its former sampled-sole feedback authority has been removed. It now provides foot-local rendering anchors for contact shading while the Hero M base presentation owns the character's actual vertical calibration.
+`HeroMVisibleSoleGroundingPresentation` remains in the inheritance chain because other systems use its rendering contact contract. Its former sampled-sole feedback authority has been removed. It now provides foot-local rendering anchors for contact shading while the Hero M base presentation owns the character's actual vertical calibration.
 
 Contact readability is handled separately by the celestial shadow/contact system. The compatibility presentation exposes two ground-contact anchors from the actual Hero M foot bones, with Y resolved from the same walkable support seam already used by the player world. Those anchors affect only contact shading and never drive character movement or presentation Y.
 
@@ -58,7 +66,7 @@ The flip and tuck are both applied above the authored rig on the centered Hero M
 
 Hero M does not expose a conventional finger/palm bone chain. The visible right-hand tool socket is calibrated from the actual skinned vertices influenced by `DEF_hand_R`. The presentation selects the outer region of that weighted hand geometry, places the mount there, and aligns the tool axis from the arm joint toward the visible grip point.
 
-`RangerToolPresentation` and the existing tool-action timing remain unchanged. They continue to ask the appearance presentation for one right-hand mount, so no competing tool system is introduced.
+The arm-rest correction deliberately uses this same visible grip as its right-hand landmark, so the rest pose is calibrated against what the player actually sees rather than the unusual one-bone joint pivot. `RangerToolPresentation` and the existing tool-action timing remain unchanged. Tools continue to ask the appearance presentation for one right-hand mount and automatically follow the corrected arm position.
 
 ## Fallback and retained comparison assets
 
@@ -72,14 +80,16 @@ This presentation fix does not change movement speed, jump or double-jump physic
 
 `npm run check` includes Hero M verification through `verify:prisma-native`.
 
-The static Hero M presentation verifier pins the segmented runtime asset, validates the compact 16-joint rig and visual scale, requires the `hero-m-player-v4` presentation revision and the `presentation-local-v1` grounding reference-space marker, checks center-support compensation, idle/run arm behavior, the double-jump flip/tuck, finite animated bounds, tool transfer, first-person visibility and Prisma fallback.
+The static Hero M presentation verifier pins the segmented runtime asset, validates the compact 16-joint rig and visual scale, checks presentation-local grounding, center-support compensation, idle/run rotational retargeting, the double-jump flip/tuck, finite animated bounds, tool transfer, first-person visibility and Prisma fallback.
 
-The load-space runtime regression reconstructs the shipped Hero M and Ranger assets and deliberately loads Hero M while the Ranger root is at world Y `-0.34`. It requires the final Hero M local grounding calibration and motion-pivot baseline to match the same values obtained when loaded at world Y `0`. It then checks `Idle_A`, `Walking_A` and `Running_A` after moving the gameplay root to several world elevations. The visible Hero M must move by exactly the same world delta as the Ranger root rather than retaining any bias toward world Y=0. The regression also verifies that airborne motion continues to follow the gameplay root unchanged.
+The load-space runtime regression reconstructs the shipped Hero M and Ranger assets and deliberately loads Hero M while the Ranger root is at world Y `-0.34`. It requires the final Hero M local grounding calibration and motion-pivot baseline to remain independent of world zero, then checks `Idle_A`, `Walking_A`, `Running_A`, elevation changes and airborne root following.
 
-The compatibility-grounding verifier rejects any return of animated-vertex sole sampling or a parallel rendered-terrain grounding authority. It ensures contact anchors remain rendering-only and the gameplay root/jump physics are untouched.
+The arm-motion runtime regression reconstructs the shipped Hero M and KayKit Ranger assets through `HeroMArmMotionPresentation`. It verifies the visible right-hand grip settles near pelvis height and within a bounded lateral distance of the torso, repeated idle updates do not drift, `Walking_A` changes the arm joint position through a measurable fore/aft arc, `Running_A` produces a larger arc, the two sides travel in opposition, tool actions suppress the extra locomotion arc, every Hero M matrix stays finite and the gameplay root never moves because of arm polish.
+
+The compatibility verifier also rejects any return of animated-vertex sole grounding or a parallel rendered-terrain grounding authority, and requires the stable Ranger import to resolve through the final arm-motion layer.
 
 ## Device verification required after deployment
 
-On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. The boots should remain aligned with the terrain while idle, walking and running without the whole character hovering at a fixed distance above the floor. Move across terrain at different world elevations, including the crash-site area and nearby slopes, and confirm that changing elevation moves the complete character with the Ranger root rather than changing the size of the foot gap.
+On a physical phone, verify Hero M at normal gameplay distance from the front, side and rear. The boots should remain aligned with the terrain while idle, walking and running without the whole character hovering at a fixed distance above the floor.
 
-Also verify that idle torso/pelvis motion is still visible, walk/run animation remains natural, the first jump stays normal, the second jump performs the compact forward flip and returns upright, tool grip stays aligned, first-person hides the presentation correctly, and no movement/collision/construction behavior changed.
+For the arms, confirm both hands now rest beside the hips rather than high and wide at chest level. In idle they should look relaxed and remain stable. During walking, the complete arms should travel through a restrained forward/back arc instead of only rotating in place. During running, the same motion should be more pronounced and the two sides should swing in opposition. Then confirm tools still follow the visible right hand, tool actions do not inherit the extra locomotion arc, first-person still hides the presentation correctly, and no movement/collision/construction behavior changed.
