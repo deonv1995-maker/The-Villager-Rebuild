@@ -1,50 +1,21 @@
 import { createHash } from 'node:crypto';
 import { copyFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { deflateSync, inflateRawSync, inflateSync } from 'node:zlib';
+import { inflateSync } from 'node:zlib';
+import { generatePwaIcons } from './generate-pwa-icons.mjs';
 
-const SOURCE_SIZE = 160;
-const PALETTE_COLORS = 128;
 const outputDir = process.argv[2] ?? 'public/icons';
 const installIconAliases = [
-  ['icon-192.png', 'ranger-install-192-v4.png'],
-  ['icon-512.png', 'ranger-install-512-v4.png'],
-  ['icon-maskable-512.png', 'ranger-install-maskable-512-v4.png']
+  ['icon-192.png', 'hero-m-install-192-v1.png'],
+  ['icon-512.png', 'hero-m-install-512-v1.png'],
+  ['icon-maskable-512.png', 'hero-m-install-maskable-512-v1.png']
 ];
 
-const generatorUrl = new URL('./generate-pwa-icons.mjs', import.meta.url);
-const generatorSource = await readFile(generatorUrl, 'utf8');
-const sourceMatch = generatorSource.match(/const RANGER_DATA_B64 = '([^']+)';/);
-
-if (!sourceMatch) {
-  throw new Error('Approved Ranger icon source payload is missing');
+const { triangleCount } = await generatePwaIcons(outputDir);
+if (!Number.isInteger(triangleCount) || triangleCount < 12) {
+  throw new Error(`Hero M launcher generator returned invalid triangle count ${triangleCount}`);
 }
-
-const compressed = Buffer.from(sourceMatch[1], 'base64');
-if (compressed.length < 6) {
-  throw new Error('Approved Ranger icon source payload is too short');
-}
-
-const packed = inflateRawSync(compressed.subarray(2, -4));
-const paletteBytes = PALETTE_COLORS * 3;
-const expectedPackedLength = paletteBytes + (SOURCE_SIZE * SOURCE_SIZE);
-let repairedPacked = packed;
-
-if (packed.length === expectedPackedLength - 2) {
-  const terminalEdge = packed.subarray(packed.length - 18);
-  if (!terminalEdge.every((value) => value === 127)) {
-    throw new Error('Truncated Ranger source no longer ends in the known uniform forest-edge palette index');
-  }
-  repairedPacked = Buffer.concat([packed, Buffer.from([127, 127])]);
-  console.log('Restored two truncated uniform Ranger edge indices');
-} else if (packed.length !== expectedPackedLength) {
-  throw new Error(`Approved Ranger icon payload decoded to ${packed.length} bytes; expected ${expectedPackedLength}`);
-}
-
-const repairedCompressed = deflateSync(repairedPacked, { level: 9 });
-const repairedSource = generatorSource.replace(sourceMatch[1], repairedCompressed.toString('base64'));
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(repairedSource).toString('base64')}`;
-await import(moduleUrl);
+console.log(`Generated launcher artwork from ${triangleCount} Hero M source triangles`);
 
 for (const [sourceName, aliasName] of installIconAliases) {
   await copyFile(path.join(outputDir, sourceName), path.join(outputDir, aliasName));
@@ -90,5 +61,5 @@ function decodeGeneratedRgbPng(data, expectedSize) {
 for (const [name, size] of [['icon-192.png', 192], ['icon-512.png', 512], ['icon-maskable-512.png', 512]]) {
   const png = await readFile(path.join(outputDir, name));
   const pixels = decodeGeneratedRgbPng(png, size);
-  console.log(`${name} pixel sha256 ${createHash('sha256').update(pixels).digest('hex')}`);
+  console.log(`${name} Hero M pixel sha256 ${createHash('sha256').update(pixels).digest('hex')}`);
 }
