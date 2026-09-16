@@ -39,9 +39,9 @@ The extra blade, club, staff, shield, scythe, pitchfork, crossbow and alternate 
 - `src/rendering/ToolModelAsset.js` owns FBX loading, caching, deterministic orientation/scale normalization, segmented-payload decoding and material/shadow preparation.
 - `src/data/AssetPaths.js` remains the single path authority.
 - `src/player/RangerToolPresentation.js` retains its existing primitive geometry as an immediate fallback, then swaps to the FBX only after a successful load.
-- `src/player/HeroMToolGripPresentation.js` is the final Hero M presentation layer. It preserves the geometry-derived visible-hand grip position but calibrates the shared tool axis upright in Hero M hand space, matching the already proven Prisma grip contract.
+- `src/player/HeroMToolGripPresentation.js` is the final Hero M presentation layer. It preserves the geometry-derived visible-hand grip location, defines one forward-facing carry frame for standard hand tools, and applies bounded outward/forward clearance so long props stay outside the body silhouette at rest.
 - Async model loads are request-versioned so changing equipped tools cannot install a stale model after a later selection.
-- Pickaxe continues to use its established presentation because substituting another model would be semantically incorrect.
+- Pickaxe continues to use its established presentation because substituting another model would be semantically incorrect. It still benefits from the shared Hero M forward-facing hand mount because its procedural model uses the same +Y tool-axis convention.
 - Spear remains unchanged in this pass because the held Hero M spear and projectile/embedded spear are currently constructed by separate systems. A later spear model import should first make one presentation source authoritative for both states rather than replacing only one copy.
 
 ## Web delivery
@@ -54,9 +54,11 @@ A previous implementation decoded each tool text segment independently before co
 
 ## Hero M grip correction
 
-Hero M's `DEF_hand_R` is a compact outer-arm/hand endpoint rather than a conventional wrist chain. The original Hero M tool mount used the vector from the endpoint bone to the outer weighted hand geometry as the tool's long-axis direction. That made the axe/hammer axis follow the lateral arm/hand direction, so the handle/head could project sideways through the visible hand instead of reading as an upright held tool.
+Hero M's `DEF_hand_R` is a compact outer-arm/hand endpoint rather than a conventional wrist chain. The first Hero M tool mount used the vector from the endpoint bone to the outer weighted hand geometry as the tool's long-axis direction. That made the axe/hammer axis follow the lateral arm/hand direction. A later upright-only correction removed that lateral orientation but still left the held props in an unnatural carry pose on device.
 
-The grip position remains geometry-derived and follows the translated Hero M endpoint. Only the orientation frame changes: the shared tool +Y axis is calibrated to world-up expressed in the Hero M hand bind space, using the same presentation contract already established by `MasculinePrismaHumanoidPresentation`. Live KayKit hand deltas still rotate the mounted tool during locomotion and actions, so this does not create a second animation authority.
+The production carry contract is now explicit and three-dimensional. The normalized tool **+Y** axis points along Hero M's local **+Z forward** direction, tool **+X** points outward from the right side of the torso, and tool **+Z** stays up. This full basis is converted into the Hero M right-hand bind space, so live KayKit hand deltas remain the only animation authority after calibration.
+
+The geometry-derived hand socket is also shifted by a bounded **0.09 Hero-M-local units outward** and **0.05 units forward**. This clearance is presentation-only: it does not move the gameplay root, alter collision, change reach/range, or affect harvesting/combat logic. Its only purpose is to keep axe, hammer, pickaxe, shovel and sword silhouettes from resting through Hero M's thigh or torso while the character is idle or walking.
 
 ## Production gate
 
@@ -67,6 +69,7 @@ Merge still requires the normal engineering gates:
 - branch synchronized with current `main`;
 - full repository CI/check suite green on the final branch head;
 - segmented FBX payload verification green for both `public` and built `dist`;
+- Hero M grip regression confirming forward tool-axis alignment and bounded body clearance;
 - no unresolved PR review blockers;
 - post-merge GitHub Pages verification for the deployed build;
-- device verification of Hero M hand grip, model orientation/scale, swing readability and mobile runtime loading.
+- device verification that axe, hammer, pickaxe, shovel and sword point forward, remain visibly gripped, stay clear of the torso/thigh at rest, and still read correctly during locomotion and swings.
