@@ -3,6 +3,7 @@ import {
   SPROUT_ARRIVAL,
   SPROUT_ARRIVAL_PHASE as PHASE
 } from '../data/SproutArrivalDefinitions.js';
+import { SproutImpactCinematicEffects } from '../rendering/SproutImpactCinematicEffects.js';
 import { SproutCrashSiteSystem } from '../world/SproutCrashSiteSystem.js';
 
 const clampDt = dt => Math.min(Math.max(0, dt), 0.05);
@@ -16,6 +17,7 @@ export class SproutArrivalController {
     this.player = game.player;
     this.setStatus = typeof setStatus === 'function' ? setStatus : game.setStatus;
     this.crashSite = new SproutCrashSiteSystem({ game });
+    this.impactEffects = new SproutImpactCinematicEffects({ game });
     this.phase = PHASE.DORMANT;
     this.phaseElapsed = 0;
     this.dialogueIndex = 0;
@@ -136,6 +138,7 @@ export class SproutArrivalController {
     this.#clearRescueAction();
     this.#hideDialogue();
     this.#releaseCinematic();
+    this.impactEffects.reset();
     this.phaseElapsed = 0;
     this.dialogueIndex = 0;
     this.noticeShown = false;
@@ -179,6 +182,10 @@ export class SproutArrivalController {
       this.#setObjective('Watch the inland sky');
     } else if (savedPhase === PHASE.IMPACTING) {
       this.crashSite.beginImpact();
+      this.impactEffects.begin({
+        site: this.site,
+        position: this.crashSite.incoming?.position
+      });
       this.#setObjective('Watch the blue object descend inland');
     } else if (savedPhase === PHASE.INVESTIGATE) {
       this.crashSite.restore({ crashed: true, freed: false });
@@ -217,6 +224,7 @@ export class SproutArrivalController {
     this.#clearRescueAction();
     this.#hideDialogue({ remove: true });
     this.#releaseCinematic();
+    this.impactEffects.dispose();
     this.crashSite.dispose();
   }
 
@@ -232,6 +240,7 @@ export class SproutArrivalController {
 
   #tick(dt) {
     this.crashSite.update(dt, { allied: this.phase === PHASE.ALLIED });
+    this.impactEffects.update(dt);
     if (this.phase === PHASE.DORMANT || this.phase === PHASE.LEGACY_SKIPPED) return;
 
     this.player.getPosition(this.playerPosition);
@@ -243,6 +252,10 @@ export class SproutArrivalController {
         this.phase = PHASE.IMPACTING;
         this.phaseElapsed = 0;
         this.crashSite.beginImpact();
+        this.impactEffects.begin({
+          site: this.site,
+          position: this.crashSite.incoming?.position
+        });
         this.setStatus?.('BLUE OBJECT · DESCENDING TOWARD THE ISLAND');
         this.#setObjective('Watch the blue object descend inland');
       }
@@ -256,9 +269,11 @@ export class SproutArrivalController {
         1
       );
       this.crashSite.updateImpact(progress);
+      this.impactEffects.updateDescent(progress, this.crashSite.incoming?.position);
       this.#setObjective('Watch the blue object descend inland');
       if (progress >= 1) {
         this.crashSite.completeImpact();
+        this.impactEffects.triggerImpact();
         this.phase = PHASE.INVESTIGATE;
         this.phaseElapsed = 0;
         this.setStatus?.('IMPACT · SOMETHING CRASHED INLAND');

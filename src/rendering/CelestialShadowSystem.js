@@ -182,9 +182,17 @@ export class CelestialShadowSystem {
     }
   }
 
+  requestLightRefresh(light) {
+    if (!light?.shadow) return false;
+    light.shadow.needsUpdate = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    return true;
+  }
+
   requestRefresh() {
     this.light.shadow.needsUpdate = true;
     this.renderer.shadowMap.needsUpdate = true;
+    return true;
   }
 
   dispose() {

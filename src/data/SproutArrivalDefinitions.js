@@ -22,6 +22,35 @@ export const SPROUT_ARRIVAL = Object.freeze({
     focusHeight: 0.18,
     response: 3.6
   }),
+  impactEffects: Object.freeze({
+    shadowLight: Object.freeze({
+      startIntensity: 8,
+      endIntensity: 30,
+      distance: 58,
+      angle: 0.72,
+      penumbra: 0.58,
+      decay: 1.6,
+      mapSize: 512,
+      refreshHz: 10,
+      near: 0.45,
+      far: 64,
+      bias: -0.00055,
+      normalBias: 0.026
+    }),
+    dust: Object.freeze({
+      particleCount: 58,
+      durationSeconds: 1.45,
+      size: 0.48,
+      opacity: 0.74,
+      gravity: 1.9
+    }),
+    cameraShake: Object.freeze({
+      durationSeconds: 0.62,
+      positionAmplitude: 0.14,
+      rotationAmplitude: 0.009,
+      frequencyHz: 18
+    })
+  }),
   crashSite: Object.freeze({
     clearanceRadius: 4.4,
     relaxedClearanceRadius: 3.25,
