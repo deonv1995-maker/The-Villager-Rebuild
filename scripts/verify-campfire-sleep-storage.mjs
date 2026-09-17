@@ -24,11 +24,11 @@ const earlyWake = resolveCampfireWakeTime({ day: 4, minuteOfDay: 4 * 60 });
 assert(earlyWake.day === 4 && earlyWake.minuteOfDay === 7 * 60, 'Pre-dawn sleep must advance to 07:00 on the same day');
 
 const inventory = new InventorySystem();
-inventory.add('stick', 24);
-inventory.add('stone', 12);
-inventory.add('grass', 14);
+inventory.add('stick', 16);
+inventory.add('stone', 3);
+inventory.add('grass', 7);
 inventory.add('log', 1);
-inventory.add('meat', 2);
+inventory.add('meat', 1);
 const crafting = new CraftingSystem({ inventory });
 
 assert(inventory.get('crafting-bench') === 0, 'Crafting Bench must begin as an unowned inventory item');
@@ -87,6 +87,7 @@ assert(!storage.store('placed-barrel-2', 'stone'), 'Wrong container type must no
 assert(inventory.get('stone') === stoneBeforeStore - 1 && storage.getStored('placed-chest-1', 'stone') === 1, 'Storage deposit must transfer instead of duplicate Stone');
 assert(inventory.get('log') === logBeforeStore - 1 && storage.getStored('placed-chest-1', 'log') === 1, 'Storage deposit must transfer instead of duplicate Log');
 assert(inventory.get('meat') === meatBeforeStore - 1 && storage.getStored('placed-barrel-2', 'meat') === 1, 'Food deposit must transfer instead of duplicate Meat');
+assert(inventory.canAdd('stone', 1), 'Storage withdrawal fixture must leave Ranger pack capacity for the returned item');
 assert(storage.take('placed-chest-1', 'stone'), 'Chest withdrawal must return an item to Ranger inventory');
 assert(inventory.get('stone') === stoneBeforeStore && storage.getStored('placed-chest-1', 'stone') === 0, 'Withdrawal must decrement container state exactly once');
 
