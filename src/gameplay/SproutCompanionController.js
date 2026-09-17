@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
+import { PanelTraversalQuery } from '../world/PanelTraversalQuery.js';
+import { selectSproutDoorRoute } from './SproutDoorRoutePlanner.js';
 
 const BLUE = 0x62cfff;
 const clampDt = dt => Math.min(Math.max(0, dt), 0.05);
@@ -18,6 +20,9 @@ export class SproutCompanionController {
     this.gatherables = game.gatherables;
     this.inventory = game.inventory;
     this.arrival = game.sproutArrival;
+    this.panelTraversal = game.panelConstruction?.entries
+      ? new PanelTraversalQuery({ panelConstruction: game.panelConstruction })
+      : null;
     this.allowedResources = new Set(SPROUT_COMPANION.collectibleResourceIds);
     this.ownerToken = Object.freeze({ id: 'sprout-companion' });
     this.root = null;
@@ -41,6 +46,9 @@ export class SproutCompanionController {
     this.followDriftLateralGoal = 0;
     this.followDriftBackGoal = 0;
     this.currentMoveSpeed = 0;
+    this.followBlockedElapsed = 0;
+    this.doorRoute = null;
+    this.doorRouteCooldown = 0;
     this.rangerMoving = false;
     this.rangerIdleElapsed = 0;
     this.hasPlayerSample = false;
@@ -80,6 +88,7 @@ export class SproutCompanionController {
     this.#endIdleAnimation({ applyCooldown: false });
     this.#cancelCompression();
     this.#clearCollectionTarget();
+    this.#clearDoorRoute();
   }
 
   getPresentationState() {
@@ -116,6 +125,7 @@ export class SproutCompanionController {
     dt = clampDt(dt);
     this.elapsed += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
+    this.doorRouteCooldown = Math.max(0, this.doorRouteCooldown - dt);
     this.idleAnimationCooldown = Math.max(0, this.idleAnimationCooldown - dt);
     this.scanElapsed += dt;
 
@@ -144,6 +154,8 @@ export class SproutCompanionController {
       return;
     }
 
+    if (!this.target && this.doorRoute && this.#updateDoorRoute(dt)) return;
+
     // A selected pickup gets a bounded approach and scan lock; a reserved compression always finishes.
     if (this.target) this.approachElapsed += dt;
     if (this.target && this.approachElapsed >= SPROUT_COMPANION.approachTimeoutSeconds) {
@@ -158,17 +170,25 @@ export class SproutCompanionController {
 
     if (!this.target && rangerDistance >= SPROUT_COMPANION.hardCatchUpDistance) {
       this.#cancelCollectionIntent();
+      if (this.#hasNearbyDoorPortal()) {
+        const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
+        if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
+        return;
+      }
+      this.followBlockedElapsed = 0;
       this.#snapNearRanger();
       return;
     }
 
     if (!this.target && rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
       this.#cancelCollectionIntent();
-      this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
+      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
+      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
       return;
     }
 
     if (this.target) {
+      this.followBlockedElapsed = 0;
       const live = this.gatherables.getLooseResource?.(this.target.id);
       if (!live) {
         this.#clearCollectionTarget();
@@ -219,7 +239,8 @@ export class SproutCompanionController {
     } else {
       this.idleTargetValid = false;
       this.idleScanRemaining = 0;
-      this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
+      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
+      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
     }
   }
 
@@ -403,7 +424,8 @@ export class SproutCompanionController {
       return;
     }
 
-    this.#moveToward(this.idleTarget, SPROUT_COMPANION.idleRoamSpeed, dt);
+    const movement = this.#moveToward(this.idleTarget, SPROUT_COMPANION.idleRoamSpeed, dt);
+    if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
   }
 
   #chooseIdleTarget() {
@@ -432,7 +454,7 @@ export class SproutCompanionController {
   }
 
   #moveToward(target, speed, dt) {
-    if (!this.root || !target || dt <= 0) return;
+    if (!this.root || !target || dt <= 0) return { blocked: false, movedDistance: 0 };
     let dx = target.x - this.root.position.x;
     let dz = target.z - this.root.position.z;
 
@@ -455,7 +477,7 @@ export class SproutCompanionController {
     if (distance < 0.015) {
       this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 6));
       this.#settleHover(target.x, target.z, dt);
-      return;
+      return { blocked: false, movedDistance: 0 };
     }
 
     const braking = THREE.MathUtils.clamp(distance / 1.15, 0.32, 1);
@@ -487,17 +509,111 @@ export class SproutCompanionController {
       < SPROUT_COMPANION.rangerPersonalSpace) {
       this.currentMoveSpeed *= Math.max(0, 1 - dt * 8);
       this.#settleHover(this.root.position.x, this.root.position.z, dt);
-      return;
+      return { blocked: Boolean(resolved.blocked), movedDistance: 0 };
     }
 
     const movedX = resolved.x - this.root.position.x;
     const movedZ = resolved.z - this.root.position.z;
+    const movedDistance = Math.hypot(movedX, movedZ);
     this.root.position.x = resolved.x;
     this.root.position.z = resolved.z;
     this.#settleHover(resolved.x, resolved.z, dt);
-    if (Math.hypot(movedX, movedZ) > 0.001) {
+    if (movedDistance > 0.001) {
       const desiredYaw = Math.atan2(movedX, movedZ);
       this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, desiredYaw, Math.min(1, dt * 6.2));
+    }
+    return { blocked: Boolean(resolved.blocked), movedDistance };
+  }
+
+  #followMovementBlocked(movement, dt) {
+    if (!movement?.blocked) {
+      this.followBlockedElapsed = 0;
+      return false;
+    }
+    this.followBlockedElapsed += dt;
+    return this.followBlockedElapsed >= SPROUT_COMPANION.doorRouteBlockedSeconds;
+  }
+
+  #nearbyDoorPortals() {
+    if (!this.panelTraversal || !this.root) return [];
+    return this.panelTraversal.getDoorPortals().filter(portal => (
+      (portal.storey ?? 0) === 0
+      && Math.hypot(portal.x - this.root.position.x, portal.z - this.root.position.z)
+        <= SPROUT_COMPANION.doorRouteSearchRadius
+    ));
+  }
+
+  #hasNearbyDoorPortal() {
+    return this.#nearbyDoorPortals().length > 0;
+  }
+
+  #beginDoorRoute() {
+    if (this.doorRoute || this.doorRouteCooldown > 0 || !this.root) return false;
+    const portals = this.#nearbyDoorPortals();
+    if (!portals.length) {
+      this.followBlockedElapsed = 0;
+      return false;
+    }
+
+    const route = selectSproutDoorRoute({
+      from: this.root.position,
+      to: this.followTarget,
+      portals,
+      searchRadius: SPROUT_COMPANION.doorRouteSearchRadius,
+      waypointOffset: SPROUT_COMPANION.doorRouteWaypointOffset,
+      maxDetour: SPROUT_COMPANION.doorRouteMaxDetour
+    });
+    if (!route) {
+      this.followBlockedElapsed = 0;
+      return false;
+    }
+
+    this.doorRoute = {
+      ...route,
+      waypointIndex: 0,
+      elapsed: 0
+    };
+    this.followBlockedElapsed = 0;
+    this.idleTargetValid = false;
+    this.idleScanRemaining = 0;
+    return true;
+  }
+
+  #updateDoorRoute(dt) {
+    const state = this.doorRoute;
+    if (!state || !this.root) return false;
+    state.elapsed += dt;
+    if (state.elapsed >= SPROUT_COMPANION.doorRouteTimeoutSeconds) {
+      this.#clearDoorRoute({ applyCooldown: true });
+      return false;
+    }
+
+    while (state.waypointIndex < state.waypoints.length) {
+      const waypoint = state.waypoints[state.waypointIndex];
+      const distance = Math.hypot(
+        waypoint.x - this.root.position.x,
+        waypoint.z - this.root.position.z
+      );
+      if (distance > SPROUT_COMPANION.doorRouteArrivalRadius) break;
+      state.waypointIndex += 1;
+    }
+
+    if (state.waypointIndex >= state.waypoints.length) {
+      this.#clearDoorRoute({ applyCooldown: true });
+      return false;
+    }
+
+    const waypoint = state.waypoints[state.waypointIndex];
+    this.#moveToward(waypoint, SPROUT_COMPANION.catchUpSpeed, dt);
+    return true;
+  }
+
+  #clearDoorRoute({ applyCooldown = false } = {}) {
+    const hadRoute = Boolean(this.doorRoute);
+    this.doorRoute = null;
+    this.followBlockedElapsed = 0;
+    if (applyCooldown && hadRoute) {
+      this.doorRouteCooldown = SPROUT_COMPANION.doorRouteCooldownSeconds;
     }
   }
 
@@ -510,6 +626,7 @@ export class SproutCompanionController {
   }
 
   #snapNearRanger() {
+    this.#clearDoorRoute();
     const rightX = this.playerFacing.z;
     const rightZ = -this.playerFacing.x;
     const actualFollow = new THREE.Vector3(
