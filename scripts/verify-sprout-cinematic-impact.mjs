@@ -53,7 +53,9 @@ assert.ok(descentLight.target.position.distanceTo(new THREE.Vector3(site.x, site
 assert.ok(shadowRefreshes >= 1, 'Starting the descent must request an initial shadow map refresh');
 
 const moved = new THREE.Vector3(2, 17, -10);
-effects.update(0.11);
+effects.update(0.05);
+effects.update(0.05);
+effects.update(0.05);
 effects.updateDescent(0.55, moved);
 assert.ok(descentLight.position.distanceTo(moved) < 1e-9, 'Shadow light must follow the authoritative incoming object position');
 assert.ok(shadowRefreshes >= 2, 'Moving light must refresh through the shared celestial shadow gate');
