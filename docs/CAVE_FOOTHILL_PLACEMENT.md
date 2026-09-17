@@ -2,42 +2,56 @@
 
 ## Decision
 
-The first northern-highlands cave must read as an opening cut into the **base of the mountain**, not as a rock POI placed on top of the mountain surface.
+The first northern-highlands cave must read as an opening cut **under the foothill**, not as a rock POI or a pile of boulders placed on top of the terrain.
 
-`src/data/ExplorationPoiDefinitions.js` remains the authored POI source. `northern-cave-01` is anchored on the southern foothill where the surrounding terrain rises into the northern highlands.
+`src/data/ExplorationPoiDefinitions.js` remains the authored POI source. `northern-cave-01` stays on the southern foothill and keeps its approach facing the mainland route.
 
-`ExpandedIslandTerrainSystem` remains the only terrain-height authority. The cave does not introduce a second terrain mesh, a hidden collision floor, or a separate cave physics system.
+`ExpandedIslandTerrainSystem` remains the only terrain-height and walkable-ground authority. The cave does not introduce a second collision floor or a separate cave physics system.
 
 ## Terrain-cut contract
 
-The cave now owns one data-driven `terrainCut` profile. `CaveTerrainProfile` converts the authored cave transform into a narrow terrain deformation that:
+The cave owns one data-driven `terrainCut` profile. `CaveTerrainProfile` converts the authored cave transform into a narrow terrain deformation that:
 
-- leaves the exterior approach almost unchanged;
-- sinks the threshold below the surrounding shoulders;
-- continues downward through the tunnel instead of following the mountain surface upward;
+- leaves the far exterior approach effectively unchanged;
+- uses a longer traversable descent into the threshold;
+- places the threshold materially below the untouched hillside shoulders;
+- continues downward through the tunnel instead of following the rising mountain surface;
 - fades back into the normal highland terrain behind the authored alcove;
-- leaves the terrain outside the cave corridor unchanged.
+- leaves terrain outside the cave corridor unchanged.
 
-The terrain chunk intersecting the cave receives double the normal terrain tessellation so the cut is visible at the scale of the entrance. Ordinary terrain chunks keep the established mobile mesh density.
+The entrance is intentionally human-scale. An oversized portal cannot be buried convincingly in this foothill without adding artificial mountain volume around it, so the authored mouth is now 6.2 units wide and 3.4 units high while preserving comfortable traversal clearance.
 
-## Presentation contract
+The terrain chunk intersecting the cave keeps the established local refinement. Ordinary terrain chunks retain the normal mobile mesh density.
 
-`ExplorationPoiSystem` still owns the negative-space mouth, tunnel shell, terrain-conforming floor/approach, dark terminus and chunk ownership. Those pieces now sample the carved authoritative terrain, so the entire entrance is lowered into the hillside and the walk-in floor descends beneath the surrounding ground.
+## Underground presentation contract
 
-The visible entrance shell is deliberately only a compact rocky rim around the negative-space aperture. Its outer face stays close to the mouth height and width; the authoritative terrain and terrain-embedded landform masses own the larger hillside silhouette. This prevents the entrance shell from becoming a freestanding stone arch sitting on the ground.
+A single-valued heightfield can provide the cave floor or the hillside roof at a given X/Z position, but not both simultaneously. The authoritative heightfield therefore remains the carved walkable floor, while `ExplorationPoiSystem` owns a tightly scoped **presentation-only terrain overburden** above the rear tunnel.
 
-The surrounding low-poly rock masses remain terrain-embedded and lateral to the aperture. They support the natural rock face without becoming a freestanding boulder arch across the entrance.
+That overburden:
 
-This remains a short overworld alcove rather than a new cave-interior gameplay system. Existing collision ownership and traversal architecture are preserved.
+- reconstructs its vertices from the pre-cave authoritative hillside height, rather than inventing a second terrain profile;
+- starts only after the visible cave mouth, where the natural hillside has risen to the cave brow;
+- overlaps the continuous rock tunnel shell so there is no open trench between the entrance and buried section;
+- continues beyond the alcove until the authored terrain cut fades out;
+- uses the shared terrain surface-colour rules so it reads as continuation of the mountain ground;
+- has no collision or height-authority role. Ranger grounding and cave-floor traversal continue to use `ExpandedIslandTerrainSystem.heightAt()`.
+
+The former large dodecahedron hillside masses are removed. They were substantially embedded but still made the silhouette read as a freestanding pile of rocks because they supplied most of the visible mountain volume. Only two small lateral breakup rocks remain at the portal; they do not define the hillside silhouette.
+
+The visible entrance is a compact negative-space rock shell. It extends far enough under the overburden to make the tunnel visibly enter the hill, while the recessed interior ribs begin behind that continuous shell and cannot contribute to the exterior silhouette.
+
+This remains a short overworld alcove rather than a separate cave-interior gameplay system.
 
 ## Regression contract
 
 `scripts/verify-cave-entrance-readability.mjs` protects these conditions:
 
-- the cave keeps its authored approach/tunnel orientation;
-- the threshold receives a meaningful terrain cut while the exterior approach does not;
-- the tunnel floor descends progressively into the hill;
-- the surrounding hillside shoulders remain materially above the tunnel floor;
-- only cave-influenced terrain chunks receive the higher local tessellation;
-- the visible cave brow stays compact and tucked inside the terrain-embedded side masses so the hillside, not the shell, owns the entrance silhouette;
-- the cave mouth, tunnel depth, terrain-conforming presentation and side-rock collision contract remain intact.
+- the authored approach/tunnel orientation remains correct;
+- the far approach is effectively uncut while the threshold is at least 2.5 units below the original terrain;
+- the exterior descent stays traversable rather than becoming a cliff or decorative flat patch;
+- the tunnel floor keeps descending and untouched shoulders remain several units above it;
+- the old large exterior landform group cannot return;
+- the terrain overburden is presentation-only, samples the pre-cut authoritative terrain, carries terrain-style vertex colour, starts behind the mouth and extends beyond the alcove;
+- the compact shell overlaps the overburden and remains close to the human-scale mouth dimensions;
+- entrance dressing stays lateral and limited to two small rocks;
+- interior depth cues, dark terminus, terrain-conforming floor/approach, local terrain refinement and the established side-wall collision contract remain intact.
