@@ -16,6 +16,12 @@ export const SPROUT_ARRIVAL = Object.freeze({
   rescueDurationSeconds: 1.45,
   investigateNoticeRadius: 7.5,
   rescueRadius: 2.75,
+  cinematicCamera: Object.freeze({
+    dialogueFov: 38,
+    firstLogFov: 48,
+    focusHeight: 0.18,
+    response: 3.6
+  }),
   crashSite: Object.freeze({
     clearanceRadius: 4.4,
     relaxedClearanceRadius: 3.25,
