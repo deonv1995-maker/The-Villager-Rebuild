@@ -7,6 +7,7 @@ const ROCK_COLOR = 0x746f65;
 const ROCK_DARK = 0x393834;
 const CAVE_FLOOR = 0x34302a;
 const CAVE_APPROACH = 0x756650;
+const IMPACT_SOIL = 0x6b533d;
 
 export class ExplorationPoiSystem {
   constructor({ group, terrain, chunks = null, collision = null }) {
@@ -50,22 +51,32 @@ export class ExplorationPoiSystem {
     const darkRockMaterial = new THREE.MeshStandardMaterial({
       color: ROCK_DARK,
       roughness: 1,
-      flatShading: true
+      flatShading: true,
+      side: THREE.DoubleSide
     });
     const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
-    const sideX = definition.mouthWidth * 0.5 + 0.28;
 
-    // The heightfield owns the carved walkable floor. This lightweight surface
-    // restores only the original hillside skin over the rear half of that cut so
-    // the tunnel actually disappears beneath ground instead of needing a mound of
-    // decorative boulders to fake mountain volume.
+    // The impact scar is presentation only. The carved heightfield remains the
+    // authoritative walkable surface beneath it.
+    this.#createImpactScar({ definition, baseY, root });
+
+    // Rebuild the uncut hillside skin over the buried section before adding the
+    // rock lining beneath it. This closes the visible trench without introducing
+    // another collision or grounding authority.
     this.#createTerrainOverburden({ definition, baseY, root });
 
     this.#createEntranceShell({
       definition,
+      baseY,
       root,
       geometry: rockGeometry,
-      rockMaterial,
+      rockMaterial
+    });
+
+    this.#createTunnelLiner({
+      definition,
+      baseY,
+      root,
       darkRockMaterial
     });
 
@@ -74,6 +85,15 @@ export class ExplorationPoiSystem {
       baseY,
       root,
       geometry: rockGeometry,
+      darkRockMaterial
+    });
+
+    this.#createImpactDebris({
+      definition,
+      baseY,
+      root,
+      geometry: rockGeometry,
+      rockMaterial,
       darkRockMaterial
     });
 
@@ -93,32 +113,111 @@ export class ExplorationPoiSystem {
     if (this.collision) {
       const c = Math.cos(definition.yaw);
       const s = Math.sin(definition.yaw);
+      const presentation = definition.presentation ?? {};
+      const portalInset = presentation.portalInset ?? 0;
+      const sideX = definition.mouthWidth * 0.5 + 0.22;
+      const collisionDepths = [
+        portalInset + 0.72,
+        Math.min(definition.depth - 0.85, portalInset + 3.45)
+      ];
+
       for (const side of [-1, 1]) {
-        for (const localZ of [1.2, 4.4]) {
+        for (const localZ of collisionDepths) {
           const localX = side * sideX;
           const x = definition.x + localX * c + localZ * s;
           const z = definition.z - localX * s + localZ * c;
+          const floorY = baseY + this.#terrainRelativeY(definition, baseY, localX, localZ);
           this.collision.addObstacle({
             x,
             z,
-            radius: 1.35,
+            radius: 1.25,
             type: 'cave-rock',
-            label: `${definition.id}-${side < 0 ? 'left' : 'right'}-${localZ}`,
-            bottomY: baseY - 0.2,
-            topY: baseY + definition.mouthHeight + 1.25
+            label: `${definition.id}-${side < 0 ? 'left' : 'right'}-${localZ.toFixed(2)}`,
+            bottomY: floorY - 0.2,
+            topY: floorY + definition.mouthHeight + 0.9
           });
         }
       }
     }
   }
 
+  #createImpactScar({ definition, baseY, root }) {
+    if (!definition.presentation?.impactScar) return;
+
+    const approachLength = definition.terrainCut?.approachLength ?? 4.8;
+    const portalInset = definition.presentation?.portalInset ?? 0;
+    const halfWidth = definition.mouthWidth * 0.78;
+    const boundary = [
+      [-halfWidth * 0.84, portalInset * 0.72],
+      [-halfWidth, 0.35],
+      [-halfWidth * 0.9, -approachLength * 0.38],
+      [-halfWidth * 0.58, -approachLength * 0.78],
+      [0, -approachLength * 0.97],
+      [halfWidth * 0.6, -approachLength * 0.8],
+      [halfWidth * 0.9, -approachLength * 0.42],
+      [halfWidth, 0.28],
+      [halfWidth * 0.82, portalInset * 0.72],
+      [halfWidth * 0.48, portalInset * 0.92],
+      [0, portalInset * 1.02],
+      [-halfWidth * 0.5, portalInset * 0.9]
+    ];
+    const center = [0, -approachLength * 0.24];
+    const vertices = [];
+    const indices = [];
+
+    const pushVertex = ([localX, localZ]) => {
+      vertices.push(
+        localX,
+        this.#terrainRelativeY(definition, baseY, localX, localZ) + 0.018,
+        localZ
+      );
+    };
+
+    pushVertex(center);
+    boundary.forEach(pushVertex);
+    for (let index = 0; index < boundary.length; index += 1) {
+      const current = index + 1;
+      const next = ((index + 1) % boundary.length) + 1;
+      indices.push(0, current, next);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    const scar = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        color: IMPACT_SOIL,
+        roughness: 1,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
+      })
+    );
+    scar.name = `${definition.id}-impact-scar`;
+    scar.receiveShadow = true;
+    scar.userData.presentationOnly = true;
+    scar.userData.terrainConforming = true;
+    scar.userData.craterDressing = true;
+    scar.userData.approachLength = approachLength;
+    scar.userData.portalInset = portalInset;
+    root.add(scar);
+  }
+
   #createTerrainOverburden({ definition, baseY, root }) {
     const profile = definition.terrainCut ?? {};
-    const startZ = Math.min(definition.depth * 0.56, 4.8);
+    const presentation = definition.presentation ?? {};
+    const portalInset = presentation.portalInset ?? 0;
+    const shellDepth = presentation.shellDepth ?? Math.min(definition.depth * 0.72, 6.2);
+    const overburdenLead = presentation.overburdenLead ?? Math.max(0.5, shellDepth * 0.45);
+    const startZ = portalInset + overburdenLead;
     const endZ = definition.depth + (profile.backFadeLength ?? 2.5) * 0.88;
     const length = Math.max(1, endZ - startZ);
-    const width = definition.mouthWidth * 2.05;
-    const geometry = new THREE.PlaneGeometry(width, length, 8, 8);
+    const width = definition.mouthWidth * 1.92;
+    const geometry = new THREE.PlaneGeometry(width, length, 8, 10);
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, 0, startZ + length * 0.5);
 
@@ -178,100 +277,196 @@ export class ExplorationPoiSystem {
     root.add(overburden);
   }
 
-  #createEntranceShell({ definition, root, geometry, rockMaterial, darkRockMaterial }) {
+  #createEntranceShell({ definition, baseY, root, geometry, rockMaterial }) {
     const entrance = new THREE.Group();
     entrance.name = `${definition.id}-entrance-shell`;
 
+    const presentation = definition.presentation ?? {};
+    const portalInset = presentation.portalInset ?? 0;
+    const shellDepth = Math.min(
+      presentation.shellDepth ?? 1.4,
+      Math.max(0.8, definition.depth - portalInset - 0.5)
+    );
+    const portalFloorY = this.#terrainRelativeY(definition, baseY, 0, portalInset);
+
     const face = new THREE.Shape();
-    // The mouth is deliberately smaller than the former boulder arch. Its brow
-    // rises only slightly above the untouched threshold shoulders, then the shell
-    // runs beneath the restored terrain overburden so it visibly enters the hill.
-    const halfWidth = definition.mouthWidth * 0.66;
+    // The portal is a shallow rock reveal, not a long extruded ring. Moving it
+    // into the cut lets its brow sit beneath the real hillside while the separate
+    // liner carries the tunnel farther underground.
+    const halfWidth = definition.mouthWidth * 0.6;
     const height = definition.mouthHeight * 1.08;
-    face.moveTo(-halfWidth * 0.96, -0.5);
-    face.lineTo(-halfWidth, height * 0.34);
+    face.moveTo(-halfWidth * 0.96, -0.28);
+    face.lineTo(-halfWidth, height * 0.32);
     face.lineTo(-halfWidth * 0.76, height * 0.74);
     face.lineTo(-halfWidth * 0.4, height * 0.97);
     face.lineTo(-halfWidth * 0.02, height);
     face.lineTo(halfWidth * 0.36, height * 0.93);
     face.lineTo(halfWidth * 0.74, height * 0.73);
-    face.lineTo(halfWidth, height * 0.38);
-    face.lineTo(halfWidth * 0.94, -0.5);
+    face.lineTo(halfWidth, height * 0.36);
+    face.lineTo(halfWidth * 0.94, -0.28);
     face.closePath();
 
-    const mouth = this.#createMouthPath(definition, 1);
+    const mouthScale = 0.96;
+    const mouth = this.#createMouthPath(definition, mouthScale);
     face.holes.push(mouth);
 
-    const tunnelDepth = Math.min(definition.depth * 0.72, 6.2);
     const shellGeometry = new THREE.ExtrudeGeometry(face, {
-      depth: tunnelDepth,
+      depth: shellDepth,
       steps: 1,
       curveSegments: 1,
-      bevelEnabled: true,
-      bevelSegments: 1,
-      bevelSize: 0.1,
-      bevelThickness: 0.08
+      bevelEnabled: false
     });
     shellGeometry.computeVertexNormals();
 
-    const shell = new THREE.Mesh(shellGeometry, [rockMaterial, darkRockMaterial]);
+    const shell = new THREE.Mesh(shellGeometry, rockMaterial);
     shell.name = `${definition.id}-mouth-shell`;
+    shell.position.set(0, portalFloorY, portalInset);
     shell.castShadow = false;
     shell.receiveShadow = true;
-    shell.userData.clearOpeningWidth = definition.mouthWidth * 0.84;
-    shell.userData.clearOpeningHeight = definition.mouthHeight * 0.98;
-    shell.userData.tunnelDepth = tunnelDepth;
+    shell.userData.clearOpeningWidth = definition.mouthWidth * 0.84 * mouthScale;
+    shell.userData.clearOpeningHeight = definition.mouthHeight * 0.98 * mouthScale;
+    shell.userData.tunnelDepth = shellDepth;
+    shell.userData.portalInset = portalInset;
+    shell.userData.portalFloorY = portalFloorY;
+    shell.userData.tunnelEndLocalZ = portalInset + shellDepth;
     shell.userData.outerFaceHalfWidth = halfWidth;
     shell.userData.outerFaceHeight = height;
     shell.userData.hillsideIntegrated = true;
     shell.userData.entersOverburden = true;
+    shell.userData.shallowPortalReveal = true;
     entrance.add(shell);
 
-    // Keep only two small lateral breakup rocks. The hillside silhouette now comes
-    // from terrain/overburden, never from a freestanding stack of boulders.
+    // Keep only two restrained lateral rocks at the reveal. They break the edge
+    // without rebuilding a boulder mound or blocking the central approach.
     const dressing = new THREE.Group();
     dressing.name = `${definition.id}-entrance-dressing`;
     const sideRocks = [
       {
-        x: -definition.mouthWidth * 0.62,
-        y: definition.mouthHeight * 0.26,
-        z: -0.2,
-        scale: [0.78, 0.9, 0.72],
+        x: -definition.mouthWidth * 0.64,
+        z: portalInset - 0.06,
+        scale: [0.62, 0.72, 0.58],
         rotation: [0.08, -0.18, -0.08]
       },
       {
-        x: definition.mouthWidth * 0.62,
-        y: definition.mouthHeight * 0.28,
-        z: -0.16,
-        scale: [0.76, 0.92, 0.74],
+        x: definition.mouthWidth * 0.64,
+        z: portalInset - 0.02,
+        scale: [0.6, 0.74, 0.6],
         rotation: [-0.05, 0.2, 0.07]
       }
     ];
     sideRocks.forEach((rock, index) => {
+      const terrainY = this.#terrainRelativeY(definition, baseY, rock.x, rock.z);
       this.#addRock({
         parent: dressing,
         geometry,
         material: rockMaterial,
         name: `${definition.id}-entrance-side-dressing-${index}`,
-        position: [rock.x, rock.y, rock.z],
+        position: [rock.x, terrainY + rock.scale[1] * 0.54, rock.z],
         scale: rock.scale,
         rotation: rock.rotation
       });
     });
     entrance.add(dressing);
 
+    entrance.userData.portalInset = portalInset;
+    entrance.userData.portalFloorY = portalFloorY;
     root.add(entrance);
+  }
+
+  #createTunnelLiner({ definition, baseY, root, darkRockMaterial }) {
+    const presentation = definition.presentation ?? {};
+    const portalInset = presentation.portalInset ?? 0;
+    const shellDepth = presentation.shellDepth ?? 1.4;
+    const startZ = portalInset + Math.max(0.58, shellDepth * 0.48);
+    const endZ = definition.depth * 0.97;
+    const halfWidth = definition.mouthWidth * 0.43;
+    const stationCount = 7;
+    const leftVertices = [];
+    const rightVertices = [];
+    const roofVertices = [];
+
+    for (let index = 0; index < stationCount; index += 1) {
+      const t = index / (stationCount - 1);
+      const localZ = THREE.MathUtils.lerp(startZ, endZ, t);
+      const centerFloorY = this.#terrainRelativeY(definition, baseY, 0, localZ);
+      const leftFloorY = this.#terrainRelativeY(definition, baseY, -halfWidth, localZ);
+      const rightFloorY = this.#terrainRelativeY(definition, baseY, halfWidth, localZ);
+      const hillsideRoofY = this.#uncutTerrainRelativeY(definition, baseY, 0, localZ) - 0.18;
+      const roofY = Math.min(
+        hillsideRoofY,
+        centerFloorY + definition.mouthHeight * 0.92
+      );
+
+      leftVertices.push(-halfWidth, leftFloorY - 0.04, localZ);
+      leftVertices.push(-halfWidth, roofY, localZ);
+      rightVertices.push(halfWidth, rightFloorY - 0.04, localZ);
+      rightVertices.push(halfWidth, roofY, localZ);
+      roofVertices.push(-halfWidth, roofY - 0.08, localZ);
+      roofVertices.push(0, roofY + 0.1, localZ);
+      roofVertices.push(halfWidth, roofY - 0.08, localZ);
+    }
+
+    const wallIndices = [];
+    const roofIndices = [];
+    for (let index = 0; index < stationCount - 1; index += 1) {
+      const current = index * 2;
+      const next = (index + 1) * 2;
+      wallIndices.push(current, next, current + 1, current + 1, next, next + 1);
+
+      const row = index * 3;
+      const nextRow = (index + 1) * 3;
+      roofIndices.push(
+        row, nextRow, row + 1,
+        row + 1, nextRow, nextRow + 1,
+        row + 1, nextRow + 1, row + 2,
+        row + 2, nextRow + 1, nextRow + 2
+      );
+    }
+
+    const liner = new THREE.Group();
+    liner.name = `${definition.id}-tunnel-liner`;
+    const leftWall = this.#createIndexedMesh({
+      vertices: leftVertices,
+      indices: wallIndices,
+      material: darkRockMaterial,
+      name: `${definition.id}-tunnel-liner-left`
+    });
+    const rightWall = this.#createIndexedMesh({
+      vertices: rightVertices,
+      indices: wallIndices,
+      material: darkRockMaterial,
+      name: `${definition.id}-tunnel-liner-right`
+    });
+    const roof = this.#createIndexedMesh({
+      vertices: roofVertices,
+      indices: roofIndices,
+      material: darkRockMaterial,
+      name: `${definition.id}-tunnel-liner-roof`
+    });
+    liner.add(leftWall, rightWall, roof);
+    liner.userData.presentationOnly = true;
+    liner.userData.terrainConforming = true;
+    liner.userData.sealedInterior = true;
+    liner.userData.startLocalZ = startZ;
+    liner.userData.endLocalZ = endZ;
+    liner.userData.halfWidth = halfWidth;
+    root.add(liner);
   }
 
   #createTunnelRibs({ definition, baseY, root, geometry, darkRockMaterial }) {
     const tunnel = new THREE.Group();
     tunnel.name = `${definition.id}-tunnel-ribs`;
-    const depths = [6.45, 7.35, 8.05].filter(localZ => localZ < definition.depth);
+    const presentation = definition.presentation ?? {};
+    const portalInset = presentation.portalInset ?? 0;
+    const shellDepth = presentation.shellDepth ?? 1.4;
+    const shellEnd = portalInset + shellDepth;
+    const depths = [shellEnd + 0.82, shellEnd + 2.28, shellEnd + 3.72]
+      .filter(localZ => localZ < definition.depth - 0.35);
 
     depths.forEach((localZ, index) => {
-      const narrowing = 1 - index * 0.07;
-      const sideX = definition.mouthWidth * 0.36 * narrowing;
-      const sideScaleY = definition.mouthHeight * 0.22;
+      const narrowing = 1 - index * 0.06;
+      const sideX = definition.mouthWidth * 0.44 * narrowing;
+      const sideScaleY = definition.mouthHeight * 0.18;
       for (const side of [-1, 1]) {
         const terrainY = this.#terrainRelativeY(definition, baseY, side * sideX, localZ);
         this.#addRock({
@@ -279,27 +474,63 @@ export class ExplorationPoiSystem {
           geometry,
           material: darkRockMaterial,
           name: `${definition.id}-tunnel-rib-${index}-${side < 0 ? 'left' : 'right'}`,
-          position: [side * sideX, terrainY + definition.mouthHeight * 0.3, localZ],
-          scale: [0.44, sideScaleY, 0.58],
-          rotation: [0.06 * (index % 2), side * 0.08, side * 0.07]
+          position: [side * sideX, terrainY + definition.mouthHeight * 0.28, localZ],
+          scale: [0.34, sideScaleY, 0.42],
+          rotation: [0.04 * (index % 2), side * 0.08, side * 0.06]
         });
       }
 
-      const crownTerrainY = this.#terrainRelativeY(definition, baseY, 0, localZ + 0.06);
+      const crownTerrainY = this.#terrainRelativeY(definition, baseY, 0, localZ + 0.04);
       this.#addRock({
         parent: tunnel,
         geometry,
         material: darkRockMaterial,
         name: `${definition.id}-tunnel-rib-${index}-crown`,
-        position: [0, crownTerrainY + definition.mouthHeight * 0.78, localZ + 0.06],
-        scale: [definition.mouthWidth * 0.2 * narrowing, 0.4, 0.58],
-        rotation: [0.03, index % 2 === 0 ? 0.05 : -0.04, 0.02]
+        position: [0, crownTerrainY + definition.mouthHeight * 0.84, localZ + 0.04],
+        scale: [definition.mouthWidth * 0.18 * narrowing, 0.28, 0.42],
+        rotation: [0.02, index % 2 === 0 ? 0.05 : -0.04, 0.02]
       });
     });
 
     tunnel.userData.terrainConforming = true;
     tunnel.userData.recessedBehindContinuousShell = true;
+    tunnel.userData.startsAfterShell = true;
     root.add(tunnel);
+  }
+
+  #createImpactDebris({ definition, baseY, root, geometry, rockMaterial, darkRockMaterial }) {
+    if (!definition.presentation?.impactDebris) return;
+
+    const fragments = [
+      [-4.15, -0.9, [0.46, 0.34, 0.38], [0.1, -0.22, 0.08]],
+      [-3.35, -3.35, [0.34, 0.28, 0.42], [-0.08, 0.34, -0.12]],
+      [-2.72, -5.0, [0.28, 0.22, 0.34], [0.15, -0.3, 0.18]],
+      [4.22, -1.4, [0.42, 0.32, 0.36], [-0.12, 0.18, -0.08]],
+      [3.42, -3.85, [0.32, 0.24, 0.4], [0.06, -0.36, 0.16]],
+      [2.76, -5.18, [0.24, 0.2, 0.3], [-0.12, 0.28, 0.04]],
+      [-3.48, 1.08, [0.36, 0.28, 0.34], [0.08, 0.24, -0.14]],
+      [3.58, 1.2, [0.38, 0.3, 0.36], [-0.06, -0.2, 0.1]]
+    ];
+    const debris = new THREE.Group();
+    debris.name = `${definition.id}-impact-debris`;
+
+    fragments.forEach(([localX, localZ, scale, rotation], index) => {
+      const terrainY = this.#terrainRelativeY(definition, baseY, localX, localZ);
+      this.#addRock({
+        parent: debris,
+        geometry,
+        material: index % 3 === 0 ? darkRockMaterial : rockMaterial,
+        name: `${definition.id}-impact-fragment-${index}`,
+        position: [localX, terrainY + scale[1] * 0.55, localZ],
+        scale,
+        rotation
+      });
+    });
+
+    debris.userData.presentationOnly = true;
+    debris.userData.smallFragmentsOnly = true;
+    debris.userData.clearCentralApproach = true;
+    root.add(debris);
   }
 
   #createMouthPath(definition, scale = 1) {
@@ -321,7 +552,7 @@ export class ExplorationPoiSystem {
 
   #createDarkInterior(definition, baseY) {
     const shape = new THREE.Shape();
-    const mouthPath = this.#createMouthPath(definition, 0.82);
+    const mouthPath = this.#createMouthPath(definition, 0.78);
     const points = mouthPath.getPoints();
     if (points.length > 0) {
       shape.moveTo(points[0].x, points[0].y);
@@ -339,18 +570,21 @@ export class ExplorationPoiSystem {
     darkness.position.set(
       0,
       this.#terrainRelativeY(definition, baseY, 0, definition.depth) + 0.04,
-      definition.depth
+      definition.depth - 0.08
     );
     darkness.userData.terrainConforming = true;
     return darkness;
   }
 
   #createTerrainConformingFloor(definition, baseY) {
+    const portalInset = definition.presentation?.portalInset ?? 0;
+    const startZ = Math.max(0, portalInset - 0.08);
+    const endZ = definition.depth * 0.98;
     const width = definition.mouthWidth * 0.76;
-    const length = definition.depth * 0.96;
-    const geometry = new THREE.PlaneGeometry(width, length, 5, 10);
+    const length = Math.max(0.8, endZ - startZ);
+    const geometry = new THREE.PlaneGeometry(width, length, 5, 9);
     geometry.rotateX(-Math.PI / 2);
-    geometry.translate(0, 0, length * 0.5);
+    geometry.translate(0, 0, startZ + length * 0.5);
 
     const positions = geometry.getAttribute('position');
     for (let index = 0; index < positions.count; index += 1) {
@@ -368,16 +602,21 @@ export class ExplorationPoiSystem {
     floor.name = `${definition.id}-floor`;
     floor.receiveShadow = true;
     floor.userData.terrainConforming = true;
+    floor.userData.startsAtPortal = true;
+    floor.userData.startLocalZ = startZ;
     return floor;
   }
 
   #createTerrainConformingApproach(definition, baseY) {
     const profile = definition.terrainCut ?? {};
     const approachLength = profile.approachLength ?? 4.8;
+    const portalInset = definition.presentation?.portalInset ?? 0;
     const width = definition.mouthWidth * 0.72;
-    const length = approachLength + 0.8;
-    const centerZ = -approachLength * 0.5 + 0.15;
-    const geometry = new THREE.PlaneGeometry(width, length, 4, 8);
+    const minZ = -approachLength - 0.4;
+    const maxZ = portalInset + 0.45;
+    const length = maxZ - minZ;
+    const centerZ = (minZ + maxZ) * 0.5;
+    const geometry = new THREE.PlaneGeometry(width, length, 4, 10);
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, 0, centerZ);
 
@@ -397,6 +636,7 @@ export class ExplorationPoiSystem {
     approach.name = `${definition.id}-approach`;
     approach.receiveShadow = true;
     approach.userData.terrainConforming = true;
+    approach.userData.reachesPortal = true;
     return approach;
   }
 
@@ -428,6 +668,18 @@ export class ExplorationPoiSystem {
       Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX, localZ + distance) - center),
       Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX, localZ - distance) - center)
     ) / distance;
+  }
+
+  #createIndexedMesh({ vertices, indices, material, name }) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = name;
+    mesh.castShadow = false;
+    mesh.receiveShadow = true;
+    return mesh;
   }
 
   #addRock({ parent, geometry, material, name, position, scale, rotation }) {

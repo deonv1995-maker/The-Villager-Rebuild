@@ -11,12 +11,19 @@ export const EXPLORATION_POIS = Object.freeze([
     // Cave-local -Z is the exterior/approach side and +Z is tunnel depth.
     // Face the mouth back toward the southern mainland route players arrive from.
     yaw: 3.32,
-    // The entrance is intentionally human-scale. The previous oversized portal
-    // stood taller than the foothill itself and forced presentation rocks to fake
-    // the missing mountain volume around it.
+    // The authored aperture remains human-scale. Presentation places the visible
+    // portal farther into the terrain cut so its brow can sit under the real hill
+    // instead of becoming a freestanding ring above the threshold.
     mouthWidth: 6.2,
     mouthHeight: 3.4,
     depth: 8.5,
+    presentation: Object.freeze({
+      portalInset: 2.35,
+      shellDepth: 1.35,
+      overburdenLead: 0.78,
+      impactScar: true,
+      impactDebris: true
+    }),
     // The authoritative terrain owns the descending floor. A deeper threshold and
     // longer approach place the walkable tunnel below the untouched shoulders while
     // keeping the descent traversable; the rear presentation overburden then bridges
