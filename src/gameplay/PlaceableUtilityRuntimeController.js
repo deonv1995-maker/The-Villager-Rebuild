@@ -3,12 +3,14 @@ import {
   PLACEABLE_UTILITY_DEFINITIONS,
   PLACEABLE_UTILITY_INTERACTION_RADIUS
 } from '../data/PlaceableUtilityDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { CraftingBenchSystem } from '../world/CraftingBenchSystem.js';
 
 const ANGLE_OFFSETS = Object.freeze([0, 0.5, -0.5, 1, -1, Math.PI]);
 const DISTANCE_OFFSETS = Object.freeze([0, 0.7, 1.4]);
 const PLACE_ACTION_ID = 'utility-place';
 const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
+const HAMMER_MOVE_ACTION_ID = 'utility-hammer-move';
 const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
 
 export class PlaceableUtilityRuntimeController {
@@ -25,6 +27,13 @@ export class PlaceableUtilityRuntimeController {
     this.cancelFrame = cancelFrame;
     this.position = new THREE.Vector3();
     this.facing = new THREE.Vector3();
+    this.demolitionAim = {
+      origin: new THREE.Vector3(),
+      direction: new THREE.Vector3()
+    };
+    this.demolitionRaycaster = new THREE.Raycaster();
+    this.demolitionMeshes = [];
+    this.demolitionOwners = new Map();
     this.benchSystem = new CraftingBenchSystem({
       group: game.island.group,
       terrain: game.island,
@@ -56,6 +65,7 @@ export class PlaceableUtilityRuntimeController {
     this.cancelPlacement();
     this.#endBenchSession();
     this.game.hud?.setExternalAction(BENCH_CRAFT_ACTION_ID, null);
+    this.game.hud?.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
   }
 
   captureState() {
@@ -141,6 +151,7 @@ export class PlaceableUtilityRuntimeController {
     if (!this.running) return;
     this.#ensureHud();
     if (this.selectedItemId) this.#updatePlacement();
+    this.#syncHammerInteraction();
     this.#syncBenchInteraction();
     this.frameId = this.requestFrame?.(this.#frame) ?? null;
   };
@@ -205,6 +216,149 @@ export class PlaceableUtilityRuntimeController {
     const slope = terrain.slopeAt?.(x, z);
     if (Number.isFinite(slope) && slope > definition.maxSlope) return false;
     return collision.isCircleClear?.(x, z, definition.placementRadius) ?? true;
+  }
+
+  #syncHammerInteraction() {
+    const hud = this.game.hud;
+    if (!hud || !this.#isHammerRemoveMode() || this.selectedItemId) {
+      hud?.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
+      return;
+    }
+
+    // PanelConstructionRuntimeController remains the first demolition authority while its
+    // centre-ray/nearest-panel target is valid. Utilities only occupy the action button
+    // when REMOVE mode is active and no semantic panel currently owns the hammer target.
+    if (this.game.currentInteractionTarget) {
+      hud.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
+      return;
+    }
+
+    const target = this.#selectHammerUtilityTarget();
+    hud.setExternalAction(HAMMER_MOVE_ACTION_ID, target ? {
+      available: true,
+      priority: 260,
+      icon: 'hammer',
+      caption: 'MOVE',
+      label: `Move ${target.label}`,
+      onTrigger: () => this.#movePlacedUtility(target)
+    } : null);
+  }
+
+  #isHammerRemoveMode() {
+    const panelRuntime = this.game.panelConstructionRuntime;
+    return this.game.toolbelt?.getEquippedToolId?.() === 'hammer'
+      && Boolean(panelRuntime?.ownsHammerInteraction?.())
+      && !(panelRuntime?.system?.isActive?.() ?? false);
+  }
+
+  #selectHammerUtilityTarget() {
+    if (!this.game.player) return null;
+    this.game.player.getPosition(this.position);
+    const entries = this.#hammerUtilityEntries().filter(entry => (
+      Math.hypot(
+        entry.position.x - this.position.x,
+        entry.position.z - this.position.z
+      ) <= PHYSICAL_LOG.pickupRange
+    ));
+    if (!entries.length) return null;
+
+    if (!this.game.player.isFirstPerson?.()) {
+      return entries.reduce((nearest, entry) => {
+        if (!nearest) return entry;
+        const currentDistance = Math.hypot(
+          nearest.position.x - this.position.x,
+          nearest.position.z - this.position.z
+        );
+        const nextDistance = Math.hypot(
+          entry.position.x - this.position.x,
+          entry.position.z - this.position.z
+        );
+        return nextDistance < currentDistance ? entry : nearest;
+      }, null);
+    }
+
+    const camera = this.game.sceneSystem?.camera;
+    if (!camera) return null;
+    this.demolitionAim.origin.copy(camera.position);
+    camera.getWorldDirection(this.demolitionAim.direction);
+    this.demolitionMeshes.length = 0;
+    this.demolitionOwners.clear();
+
+    for (const entry of entries) {
+      entry.root.updateWorldMatrix(true, true);
+      entry.root.traverseVisible(object => {
+        if (!object.isMesh) return;
+        this.demolitionMeshes.push(object);
+        this.demolitionOwners.set(object, entry);
+      });
+    }
+    if (!this.demolitionMeshes.length) return null;
+
+    this.demolitionRaycaster.set(this.demolitionAim.origin, this.demolitionAim.direction);
+    for (const intersection of this.demolitionRaycaster.intersectObjects(this.demolitionMeshes, false)) {
+      const target = this.demolitionOwners.get(intersection.object);
+      if (target) return target;
+    }
+    return null;
+  }
+
+  #hammerUtilityEntries() {
+    const benches = this.benchSystem.getWorldEntries().map(entry => ({
+      ...entry,
+      type: 'placeable-utility',
+      utilityKind: 'crafting-bench',
+      itemId: 'crafting-bench',
+      actionLabel: `Move ${entry.label}`
+    }));
+    const storage = this.game.storageRuntime.system.getWorldEntries().map(entry => ({
+      ...entry,
+      type: 'placeable-utility',
+      utilityKind: 'storage',
+      itemId: entry.type,
+      actionLabel: `Move ${entry.label}`
+    }));
+    return [...benches, ...storage];
+  }
+
+  #movePlacedUtility(target) {
+    if (!target || this.game.toolPresentation?.isBusy()) return false;
+    if (target.utilityKind === 'storage') {
+      const current = this.game.storageRuntime.system.describe(target.id);
+      if (!current) return false;
+      const storedQuantity = Object.values(current.contents ?? {})
+        .reduce((total, quantity) => total + (Number.isInteger(quantity) ? quantity : 0), 0);
+      if (storedQuantity > 0) {
+        this.game.setStatus?.(`${current.label.toUpperCase()} · EMPTY IT BEFORE MOVING`);
+        return false;
+      }
+    } else if (!this.benchSystem.describe(target.id)) {
+      return false;
+    }
+
+    if (!this.game.inventory.canAdd(target.itemId, 1)) {
+      this.game.setStatus?.(`${target.label.toUpperCase()} · PACK FULL · FREE SPACE BEFORE MOVING`);
+      return false;
+    }
+
+    if (target.position) this.game.player.faceWorldPoint(target.position);
+    if (!this.game.toolPresentation?.playSwing('hammer')) return false;
+
+    const removed = target.utilityKind === 'storage'
+      ? this.game.storageRuntime.system.removeContainer(target.id)
+      : Boolean(this.benchSystem.removeBench(target.id));
+    if (!removed) return false;
+
+    this.game.inventory.add(target.itemId, 1);
+    this.game.equipmentRuntime?.recordUse?.('hammer');
+    this.game.equipmentRuntime?.syncHud?.();
+    this.game.saveController?.saveNow?.('move-placeable-utility');
+    const replacing = this.selectInventoryItem(target.itemId);
+    this.game.setStatus?.(
+      replacing
+        ? `${target.label.toUpperCase()} DISASSEMBLED · CHOOSE NEW PLACEMENT`
+        : `${target.label.toUpperCase()} DISASSEMBLED · RETURNED TO INVENTORY`
+    );
+    return true;
   }
 
   #syncBenchInteraction() {
