@@ -6,6 +6,7 @@ import { TITLE_SCENE } from './TitleSceneConfig.js';
 const NIGHT_SKY = new THREE.Color(0x071729);
 const BLUE_FLASH = new THREE.Color(0x8de9ff);
 const FLIGHT_AXIS = new THREE.Vector3(0, 1, 0);
+const ENTRY_RING_AXIS = new THREE.Vector3(0, 0, 1);
 
 const createRandom = seed => {
   let state = seed >>> 0;
@@ -48,6 +49,7 @@ export class TitleCelestialEvent {
     this.shootingStarPosition.copy(this.shootingStarStart);
     this.#createStars();
     this.#createShootingStar();
+    this.#createAtmosphereEntryRing();
   }
 
   update(dt, { active = false, introProgress = 0 } = {}) {
@@ -56,6 +58,7 @@ export class TitleCelestialEvent {
       this.starField.visible = false;
       this.shootingStar.visible = false;
       this.shootingStarTrail.visible = false;
+      this.atmosphereEntryRing.visible = false;
       this.shootingStarLight.intensity = 0;
       return { night: 0, flash: 0, shootingStarProgress: 0 };
     }
@@ -219,6 +222,44 @@ export class TitleCelestialEvent {
     this.scene.add(this.shootingStar);
   }
 
+  #createAtmosphereEntryRing() {
+    this.atmosphereEntryRing = new THREE.Group();
+    this.atmosphereEntryRing.name = 'title-sprout-atmosphere-entry-ring';
+    this.atmosphereEntryRing.position.copy(this.shootingStarStart);
+    this.atmosphereEntryRing.quaternion.setFromUnitVectors(ENTRY_RING_AXIS, this.travelDirection);
+    this.atmosphereEntryRing.visible = false;
+
+    this.atmosphereEntryRingCore = new THREE.Mesh(
+      new THREE.TorusGeometry(1.08, 0.095, 8, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0xbff6ff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false
+      })
+    );
+    this.atmosphereEntryRingCore.name = 'title-sprout-atmosphere-entry-ring-core';
+    this.atmosphereEntryRing.add(this.atmosphereEntryRingCore);
+
+    this.atmosphereEntryRingHaze = new THREE.Mesh(
+      new THREE.RingGeometry(0.72, 1.38, 48),
+      new THREE.MeshBasicMaterial({
+        color: 0x62dfff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        fog: false
+      })
+    );
+    this.atmosphereEntryRingHaze.name = 'title-sprout-atmosphere-entry-haze';
+    this.atmosphereEntryRing.add(this.atmosphereEntryRingHaze);
+    this.scene.add(this.atmosphereEntryRing);
+  }
+
   #updateNight(night, flash) {
     this.starField.visible = night > 0.02;
     this.starField.material.opacity = THREE.MathUtils.clamp(night * 0.9, 0, 0.9);
@@ -249,6 +290,9 @@ export class TitleCelestialEvent {
     this.shootingStarTrail.visible = visible;
     if (!visible) {
       this.shootingStarPosition.copy(this.shootingStarStart);
+      this.atmosphereEntryRing.visible = false;
+      this.atmosphereEntryRingCore.material.opacity = 0;
+      this.atmosphereEntryRingHaze.material.opacity = 0;
       this.shootingStarLight.intensity = 0;
       return;
     }
@@ -261,6 +305,15 @@ export class TitleCelestialEvent {
     );
     this.shootingStar.position.copy(this.shootingStarPosition);
     this.shootingStar.rotation.z = Math.sin(this.elapsed * 7.5) * 0.035;
+
+    const entryProgress = THREE.MathUtils.clamp(progress / 0.58, 0, 1);
+    const entrySpread = THREE.MathUtils.smootherstep(entryProgress, 0, 1);
+    const entryFade = 1 - THREE.MathUtils.smoothstep(progress, 0.12, 0.58);
+    const entryScale = THREE.MathUtils.lerp(0.68, 6.4, entrySpread);
+    this.atmosphereEntryRing.visible = entryFade > 0.01;
+    this.atmosphereEntryRing.scale.setScalar(entryScale);
+    this.atmosphereEntryRingCore.material.opacity = 0.72 * entryFade;
+    this.atmosphereEntryRingHaze.material.opacity = 0.2 * entryFade;
 
     const plasmaFlicker = 1 + Math.sin(this.elapsed * 24) * 0.08;
     const heatPulse = 1 + Math.sin(this.elapsed * 18 + 0.6) * 0.06;
