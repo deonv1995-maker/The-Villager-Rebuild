@@ -44,6 +44,12 @@ First person is an optional view over the same Ranger state:
 
 Switching back to third person restores the existing Ranger/body/tool presentation, clamps any near-vertical first-person pitch back into the established third-person orbit envelope, and resumes follow-camera behavior.
 
+## Story cinematic framing
+
+Story scenes may temporarily request an owner-scoped presentation frame from `SceneSystem`. This frame is applied at the render boundary on top of the Ranger-authored base camera, so story presentation can smoothly blend the look target and field of view without creating a second movement controller, mutating world state or replacing the normal camera-mode rules. Releasing the frame blends back toward the live Ranger camera and its original field of view.
+
+The Sprout rescue introduction uses this boundary deliberately. When the fallen rescue logs finish moving and boot dialogue begins, the existing Ranger cinematic lock remains active and the camera dynamically tightens onto the actual Sprout presentation. After the final dialogue line, the same camera target continues following Sprout but widens slightly so the first Log approach/compression is readable. Ranger control is not returned on the dialogue button itself; the story waits for the authoritative shared `InventorySystem` Log count to increase after Sprout's real collection transaction commits, then releases both the temporary frame and the Ranger cinematic lock. The first-Log pending flag and its baseline Log count are additive Sprout-story save fields so Continue can resume this beat without changing the save-state version.
+
 ## Controls
 
 - Mobile/PWA: tap the compact `3P / 1P VIEW` button near the top-right HUD controls.
@@ -52,11 +58,13 @@ Switching back to third person restores the existing Ranger/body/tool presentati
 
 ## Persistence
 
-Camera mode is presentation/session state, not gameplay progression, and is not added to the save schema. A new gameplay session starts in third person.
+Camera mode is presentation/session state, not gameplay progression, and is not added to the save schema. A new gameplay session starts in third person. Story-camera framing itself is also presentation-only; only the owning story checkpoint (such as Sprout's pending first-Log demonstration) is persisted when continuity requires it.
 
 ## Verification
 
 `scripts/verify-camera-modes.mjs` verifies the forward-biased third-person composition and established follow distance, default third-person behavior, first-person eye placement, near-vertical sky/ground pitch without camera roll, restoration of the third-person pitch envelope, resolved-motion walk bob, relaxed/non-metronomic walking cadence, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
+
+`scripts/verify-sprout-arrival.mjs` additionally verifies the owner-scoped render-boundary camera frame, Sprout dialogue/first-Log framing beats, save continuity for a pending first-Log demonstration, and the authoritative Log-inventory completion boundary that returns normal Ranger control.
 
 `scripts/verify-first-person-floor-targeting.mjs` verifies exact reticle acquisition of a demolished lower split-log floor strip, release when the white dot leaves its footprint, completed-roof upper-floor lockout, and preserved upper-floor targeting while a roof is still incomplete.
 
