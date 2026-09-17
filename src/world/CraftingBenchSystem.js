@@ -19,21 +19,21 @@ export class CraftingBenchSystem {
     this.nextId = 1;
   }
 
-  createBench({ x, z, yaw = 0 } = {}) {
-    return this.addBench({ id: `crafting-bench-${this.nextId++}`, x, z, yaw });
+  createBench({ x, y = null, z, yaw = 0 } = {}) {
+    return this.addBench({ id: `crafting-bench-${this.nextId++}`, x, y, z, yaw });
   }
 
-  addBench({ id, x, z, yaw = 0 } = {}) {
+  addBench({ id, x, y = null, z, yaw = 0 } = {}) {
     if (!id || this.benches.has(id)) throw new Error(`Crafting bench id must be unique: ${id}`);
     if (![x, z, yaw].every(Number.isFinite)) throw new Error('Crafting bench placement requires finite x, z and yaw');
 
     const match = String(id).match(PLACED_ID);
     if (match) this.nextId = Math.max(this.nextId, Number(match[1]) + 1);
 
-    const y = this.terrain.heightAt(x, z);
+    const placementY = Number.isFinite(y) ? y : this.terrain.heightAt(x, z);
     const root = this.#createVisual();
     root.name = id;
-    root.position.set(x, y, z);
+    root.position.set(x, placementY, z);
     root.rotation.y = yaw;
     this.group.add(root);
 
@@ -43,8 +43,8 @@ export class CraftingBenchSystem {
       radius: BENCH.collisionRadius,
       type: 'crafting-bench',
       label: id,
-      bottomY: y,
-      topY: y + BENCH.collisionHeight
+      bottomY: placementY,
+      topY: placementY + BENCH.collisionHeight
     });
 
     const bench = { id, root, collisionHandle };
@@ -96,6 +96,7 @@ export class CraftingBenchSystem {
     return Array.from(this.benches.values()).map(bench => ({
       id: bench.id,
       x: Number(bench.root.position.x.toFixed(3)),
+      y: Number(bench.root.position.y.toFixed(3)),
       z: Number(bench.root.position.z.toFixed(3)),
       yaw: Number(bench.root.rotation.y.toFixed(4))
     }));
