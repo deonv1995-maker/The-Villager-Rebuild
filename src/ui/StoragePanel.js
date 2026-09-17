@@ -24,7 +24,7 @@ export class StoragePanel {
         <header class="storage-panel-header">
           <div>
             <strong data-role="storage-title">STORAGE</strong>
-            <span>Tap an item for quantity · double tap to move all</span>
+            <span>Tap for quantity · one item moves instantly · double tap to move all</span>
           </div>
           <button type="button" data-role="storage-close" aria-label="Close storage">×</button>
         </header>
@@ -156,9 +156,11 @@ export class StoragePanel {
         'aria-label',
         `${resource?.label ?? itemId}: ${quantity}. ${action === 'store' ? 'Store' : 'Take'} item.`
       );
-      card.title = transferable > 0
-        ? `${resource?.label ?? itemId}: ${quantity} · tap for quantity · double tap for all`
-        : `${resource?.label ?? itemId}: ${quantity} · no pack capacity`;
+      card.title = transferable === 1
+        ? `${resource?.label ?? itemId}: ${quantity} · tap to move`
+        : transferable > 0
+          ? `${resource?.label ?? itemId}: ${quantity} · tap for quantity · double tap for all`
+          : `${resource?.label ?? itemId}: ${quantity} · no pack capacity`;
 
       const icon = document.createElement('img');
       icon.className = 'storage-item-icon';
@@ -194,6 +196,12 @@ export class StoragePanel {
   }
 
   #queueItemTap(action, itemId) {
+    if (this.#getTransferLimit(action, itemId) === 1) {
+      this.#clearPendingTap();
+      this.#transfer(action, itemId, 1);
+      return;
+    }
+
     const now = Date.now();
     const key = `${action}:${itemId}`;
     if (
