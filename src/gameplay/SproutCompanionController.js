@@ -105,7 +105,7 @@ export class SproutCompanionController {
       ? 0
       : clampDt((timestamp - this.lastTimestamp) / 1000);
     this.lastTimestamp = timestamp;
-    this.update(dt);
+    if (!this.game.isPaused?.()) this.update(dt);
     this.frameId = window.requestAnimationFrame(this.#frame);
   };
 
