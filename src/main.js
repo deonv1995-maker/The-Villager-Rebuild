@@ -80,6 +80,7 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     game.celestialShadows = celestialShadows;
     game.torchRuntime = torchRuntime;
     game.worldTimeRuntime = worldTimeRuntime;
+    game.onPauseChange(paused => worldTimeRuntime.setPaused(paused));
     worldTimeRuntime.sync();
 
     const campfireSleepRuntime = new CampfireSleepRuntimeController({ game });

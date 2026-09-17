@@ -27,6 +27,7 @@ export class WorldTimeRuntime {
     this.requestFrame = requestFrame;
     this.cancelFrame = cancelFrame;
     this.running = false;
+    this.paused = false;
     this.frameId = null;
     this.lastTimestamp = null;
   }
@@ -35,6 +36,13 @@ export class WorldTimeRuntime {
     const snapshot = this.worldTime.getSnapshot();
     for (const presentation of this.presentations) presentation.apply(snapshot);
     for (const consumer of this.consumers) consumer.apply(snapshot);
+  }
+
+  setPaused(paused) {
+    this.paused = Boolean(paused);
+    this.lastTimestamp = null;
+    if (this.running) this.sync();
+    return this.paused;
   }
 
   start() {
@@ -61,7 +69,7 @@ export class WorldTimeRuntime {
   #frame = timestamp => {
     if (!this.running) return;
 
-    if (this.lastTimestamp !== null) {
+    if (this.lastTimestamp !== null && !this.paused) {
       const elapsedSeconds = Math.max(0, (timestamp - this.lastTimestamp) / 1000);
       const deltaSeconds = Math.min(elapsedSeconds, WORLD_TIME.maxFrameDeltaSeconds);
       this.worldTime.update(deltaSeconds);

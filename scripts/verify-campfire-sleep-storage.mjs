@@ -126,6 +126,7 @@ assert(restoredBenches.snapshot().length === 1, 'Crafting Bench restore must pre
 
 const [
   mainSource,
+  gameAppSource,
   saveSource,
   sleepSource,
   storageRuntimeSource,
@@ -133,11 +134,15 @@ const [
   placeableRuntimeSource,
   equipmentRuntimeSource,
   hudSource,
+  inventoryMenuSource,
   inventoryCapacitySource,
   resourceSource,
+  sproutArrivalSource,
+  sproutCompanionSource,
   indexSource
 ] = await Promise.all([
   readFile('src/main.js', 'utf8'),
+  readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/persistence/SaveGameController.js', 'utf8'),
   readFile('src/gameplay/CampfireSleepRuntimeController.js', 'utf8'),
   readFile('src/gameplay/StorageRuntimeController.js', 'utf8'),
@@ -145,8 +150,11 @@ const [
   readFile('src/gameplay/PlaceableUtilityRuntimeController.js', 'utf8'),
   readFile('src/gameplay/EquipmentRuntimeController.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
+  readFile('src/inventory-menu.css', 'utf8'),
   readFile('src/gameplay/InventoryCapacityController.js', 'utf8'),
   readFile('src/data/ResourceDefinitions.js', 'utf8'),
+  readFile('src/gameplay/SproutArrivalController.js', 'utf8'),
+  readFile('src/gameplay/SproutCompanionController.js', 'utf8'),
   readFile('index.html', 'utf8')
 ]);
 
@@ -174,7 +182,18 @@ assert(hudSource.includes('class="inventory-menu-toggle"'), 'HUD must expose one
 assert(hudSource.includes('class="inventory-grid"'), 'Suitcase must expose an inventory grid');
 assert(hudSource.includes('data-inventory-tab="craft"'), 'Crafting must live inside the suitcase panel');
 assert(!hudSource.includes('class="craft-menu-toggle"'), 'Standalone crafting button must not return to the HUD');
+assert(hudSource.includes('onInventoryVisibilityChange'), 'Suitcase visibility must keep an explicit HUD callback boundary');
 assert(hudSource.includes('onInventoryItemSelect'), 'Placeable inventory selection must route through an explicit HUD callback');
+assert(gameAppSource.includes("onInventoryVisibilityChange: open => this.setPaused(open, 'inventory-menu')"), 'Suitcase visibility must route into centralized GameApp pause state');
+assert(gameAppSource.includes('this.pauseReasons = new Set()'), 'GameApp pause authority must remain reason-based for future overlays');
+assert(gameAppSource.includes('if (this.isPaused()) {'), 'The central gameplay frame must stop world simulation while paused');
+assert(gameAppSource.includes('event.repeat || this.isPaused()'), 'Keyboard gameplay input must be blocked while the suitcase is open');
+assert(inventoryMenuSource.includes('.inventory-menu {') && inventoryMenuSource.includes('inset: 0;'), 'Suitcase must remain a full-screen overlay');
+assert(inventoryMenuSource.includes('width: 100%;') && inventoryMenuSource.includes('height: 100%;'), 'Suitcase must fill the available HUD surface');
+assert(inventoryMenuSource.includes('env(safe-area-inset-top)') && inventoryMenuSource.includes('env(safe-area-inset-bottom)'), 'Suitcase must respect mobile safe areas');
+assert(inventoryMenuSource.includes('min-height: 48px;'), 'Primary suitcase touch targets must retain enlarged mobile sizing');
+assert(sproutArrivalSource.includes('if (!this.game.isPaused?.()) this.#tick(dt);'), 'Sprout story progression must freeze under the shared pause authority');
+assert(sproutCompanionSource.includes('if (!this.game.isPaused?.()) this.update(dt);'), 'Sprout companion movement and collection must freeze under the shared pause authority');
 assert(inventoryCapacitySource.includes('setInventoryCapacity'), 'Capacity presentation must route through the suitcase HUD boundary');
 assert(saveSource.includes('state.storage = this.game.storageRuntime?.captureState?.() ?? null;'), 'Placed storage contents must enter autosave state');
 assert(saveSource.includes('state.placeableUtilities = this.game.placeableUtilityRuntime?.captureState?.() ?? null;'), 'Crafting Bench placement must enter autosave state');
@@ -183,4 +202,4 @@ assert(resourceSource.includes("storageCategory: 'food'"), 'Food routing must re
 assert(indexSource.includes('./src/inventory-menu.css'), 'Combined suitcase UI stylesheet must be loaded by the app shell');
 assert(indexSource.includes('./src/storage.css'), 'Storage panel stylesheet must remain loaded');
 
-console.log('Campfire sleep, suitcase inventory, bench-gated placeable storage, transfers, migration and persistence verified');
+console.log('Campfire sleep, full-screen paused suitcase inventory, bench-gated placeable storage, transfers, migration and persistence verified');
