@@ -64,6 +64,7 @@ const toolbelt = new ToolbeltSystem({ inventory, crafting });
 inventory.add('stick', 1);
 inventory.add('grass', 2);
 assert.ok(crafting.craft('torch'));
+inventory.add('torch', 1);
 assert.equal(toolbelt.select('torch').equipped, true);
 
 const scene = new THREE.Scene();
@@ -113,7 +114,28 @@ assert.equal(torch.handMounted, true, 'torch remains hand-mounted for the base p
 assert.equal(torch.visualRoot.userData.gripProfile, 'visible-palm-back-tip-torch-v3', 'torch must use the dedicated back-tip visible-palm grip');
 assert.ok(Math.abs(torch.visualRoot.position.y - 0.27) < 1e-9, 'torch handle back tip must sit at the visible palm origin');
 assert.deepEqual(carryProfiles, ['steady-upright'], 'equipped torch must request the semantic steady right-hand carry pose');
+assert.equal(torch.light.parent, null, 'handheld torch point light must stay detached from the world scene');
+assert.equal(torch.light.visible, false, 'handheld torch must not illuminate while carried');
+assert.equal(torch.light.castShadow, false, 'handheld torch must not allocate active local shadow work');
+assert.equal(game.sceneSystem.renderer.shadowMap.needsUpdate, false, 'suppressing handheld light must not force a shadow-map redraw');
+
+torch.apply({ day: 1, minuteOfDay: 20 * 60 });
+assert.equal(torch.light.parent, null, 'world-time updates must not reattach the handheld light');
+assert.equal(torch.light.visible, false, 'world-time updates must keep handheld illumination disabled');
+
+const placed = torch.place({
+  kind: 'post',
+  id: 'presentation-test-post',
+  label: 'post',
+  position: { x: 0, y: 1.4, z: 2 },
+  yaw: 0
+});
+assert.ok(placed, 'equipped torch must still place through the existing mounted-light authority');
+assert.equal(torch.light.parent, null, 'placing one torch must not re-enable the carried point light');
+assert.equal(torch.placedTorches[0].light.parent, scene, 'placed torch light must attach to the world scene');
+assert.equal(torch.placedTorches[0].light.visible, true, 'placed torch must illuminate after mounting');
+
 torch.dispose();
 assert.equal(carryProfiles.at(-1), null, 'disposing the torch runtime must release the steady right-hand carry pose');
 
-console.log('Hero M selected presentation seam, Prisma fallback, temporally smoothed visible-hand torch carry, and reduced Sprout relative scale verified.');
+console.log('Hero M selected presentation seam, Prisma fallback, placed-only torch lighting, temporally smoothed visible-hand carry, and reduced Sprout relative scale verified.');
