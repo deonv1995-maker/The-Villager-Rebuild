@@ -4,6 +4,7 @@ import {
   PLACEABLE_UTILITY_INTERACTION_RADIUS
 } from '../data/PlaceableUtilityDefinitions.js';
 import { CraftingBenchSystem } from '../world/CraftingBenchSystem.js';
+import { selectFirstPersonUtilityTarget } from '../world/UtilityInteractionTargetingRules.js';
 
 const ANGLE_OFFSETS = Object.freeze([0, 0.5, -0.5, 1, -1, Math.PI]);
 const DISTANCE_OFFSETS = Object.freeze([0, 0.7, 1.4]);
@@ -212,7 +213,9 @@ export class PlaceableUtilityRuntimeController {
     const player = this.game.player;
     if (!hud || !player) return;
     player.getPosition(this.position);
-    const nearby = this.benchSystem.getNearestBench(this.position, PLACEABLE_UTILITY_INTERACTION_RADIUS);
+    const nearby = player.isFirstPerson?.()
+      ? this.#getFirstPersonBenchTarget()
+      : this.benchSystem.getNearestBench(this.position, PLACEABLE_UTILITY_INTERACTION_RADIUS);
     const carryingLog = this.game.physicalLogs?.isCarrying?.() ?? false;
 
     if (this.activeBenchSessionId) {
@@ -229,6 +232,16 @@ export class PlaceableUtilityRuntimeController {
       label: 'Use Crafting Bench',
       onTrigger: () => this.#openBenchCrafting(nearby.id)
     } : null);
+  }
+
+  #getFirstPersonBenchTarget() {
+    const target = selectFirstPersonUtilityTarget({
+      benchSystem: this.benchSystem,
+      storageSystem: this.game.storageRuntime?.system,
+      playerPosition: this.position,
+      camera: this.game.sceneSystem?.camera
+    });
+    return target?.kind === 'crafting-bench' ? this.benchSystem.describe(target.id) : null;
   }
 
   #openBenchCrafting(benchId) {
