@@ -12,6 +12,7 @@ const PLACE_ACTION_ID = 'utility-place';
 const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
 const HAMMER_MOVE_ACTION_ID = 'utility-hammer-move';
 const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
+const PLACEMENT_VERTICAL_EPSILON = 0.03;
 
 export class PlaceableUtilityRuntimeController {
   constructor({
@@ -108,7 +109,12 @@ export class PlaceableUtilityRuntimeController {
     const itemId = this.selectedItemId;
     const definition = PLACEABLE_UTILITY_DEFINITIONS[itemId];
     if (!definition || !this.previewPlacement || !this.game.inventory.has(itemId, 1)) return null;
-    if (!this.#isPlacementClear(definition, this.previewPlacement.x, this.previewPlacement.z)) {
+    if (!this.#isPlacementClear(
+      definition,
+      this.previewPlacement.x,
+      this.previewPlacement.z,
+      this.previewPlacement.y
+    )) {
       this.#updatePlacement();
       return null;
     }
@@ -190,10 +196,11 @@ export class PlaceableUtilityRuntimeController {
         const angle = baseAngle + angleOffset;
         const x = playerPosition.x + Math.sin(angle) * distance;
         const z = playerPosition.z + Math.cos(angle) * distance;
-        if (!this.#isPlacementClear(definition, x, z)) continue;
+        const y = this.#resolvePlacementHeight(x, z, playerPosition.y);
+        if (!this.#isPlacementClear(definition, x, z, y)) continue;
         return {
           x,
-          y: this.game.island.heightAt(x, z),
+          y,
           z,
           yaw: baseAngle
         };
@@ -202,13 +209,33 @@ export class PlaceableUtilityRuntimeController {
     return null;
   }
 
-  #isPlacementClear(definition, x, z) {
+  #resolvePlacementHeight(x, z, referenceY) {
+    const terrain = this.game.island;
+    const terrainY = terrain.heightAt(x, z);
+    const supportedY = terrain.collision.supportHeightAt?.(x, z, terrainY, { referenceY });
+    return Number.isFinite(supportedY) ? supportedY : terrainY;
+  }
+
+  #isPlacementClear(definition, x, z, y = null) {
     const terrain = this.game.island;
     const collision = terrain.collision;
     if (terrain.isPlayable?.(x, z, definition.placementRadius + 0.25) === false) return false;
-    const slope = terrain.slopeAt?.(x, z);
-    if (Number.isFinite(slope) && slope > definition.maxSlope) return false;
-    return collision.isCircleClear?.(x, z, definition.placementRadius) ?? true;
+
+    const terrainY = terrain.heightAt(x, z);
+    const surfaceY = Number.isFinite(y) ? y : terrainY;
+    const usesConstructedSupport = Math.abs(surfaceY - terrainY) > PLACEMENT_VERTICAL_EPSILON;
+    if (!usesConstructedSupport) {
+      const slope = terrain.slopeAt?.(x, z);
+      if (Number.isFinite(slope) && slope > definition.maxSlope) return false;
+    }
+
+    const objectTopY = surfaceY + definition.collisionHeight;
+    return collision.isCircleClear?.(x, z, definition.placementRadius, {
+      ignore: obstacle => (
+        (Number.isFinite(obstacle?.topY) && obstacle.topY <= surfaceY + PLACEMENT_VERTICAL_EPSILON)
+        || (Number.isFinite(obstacle?.bottomY) && obstacle.bottomY >= objectTopY - PLACEMENT_VERTICAL_EPSILON)
+      )
+    }) ?? true;
   }
 
   #syncHammerInteraction() {
