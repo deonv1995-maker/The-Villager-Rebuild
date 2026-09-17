@@ -22,6 +22,7 @@ function fixture() {
   root.position.set(0, tuning.hoverHeight, -2);
   scene.add(root);
   const collision = new WorldCollisionSystem({ heightAt: () => 0, isPlayable: () => true });
+  const panelConstruction = { entries: new Map() };
   const externalActions = new Map();
   const statuses = [];
   const player = {
@@ -55,6 +56,7 @@ function fixture() {
     island: { heightAt: () => 0, isPlayable: () => true, collision },
     gatherables,
     inventory,
+    panelConstruction,
     hud,
     setStatus: message => statuses.push(message),
     sceneSystem: { scene },
@@ -80,6 +82,7 @@ function fixture() {
     inventory,
     gatherables,
     collision,
+    panelConstruction,
     scene,
     player,
     externalActions,
@@ -128,6 +131,68 @@ for (const resourceId of tuning.collectibleResourceIds) {
   f.tick(180);
   assert.equal(f.controller.target, null, 'Unreachable approach must time out');
   assert.ok(f.root.position.distanceTo(f.position) < 4, 'Unreachable target cannot strand Sprout');
+}
+{
+  const f = fixture();
+  const doorRoot = new THREE.Group();
+  doorRoot.position.set(0, 0, 0);
+  f.scene.add(doorRoot);
+  f.panelConstruction.entries.set('test-door', {
+    id: 'test-door',
+    active: true,
+    kind: 'wall',
+    variant: 'door',
+    structureId: 'test-cabin',
+    storey: 0,
+    root: doorRoot
+  });
+  f.collision.addBox({
+    x: -5,
+    z: 0,
+    halfX: 4.05,
+    halfZ: 0.28,
+    yaw: 0,
+    type: 'panel-wall',
+    bottomY: -1,
+    topY: 3
+  });
+  f.collision.addBox({
+    x: 5,
+    z: 0,
+    halfX: 4.05,
+    halfZ: 0.28,
+    yaw: 0,
+    type: 'panel-wall',
+    bottomY: -1,
+    topY: 3
+  });
+  f.root.position.set(2.2, tuning.hoverHeight, -2);
+  f.position.set(2.2, 0, 14);
+
+  let crossedAtDoor = false;
+  let maxFrameTravel = 0;
+  const previous = f.root.position.clone();
+  for (let i = 0; i < 260; i += 1) {
+    f.tick();
+    const frameTravel = Math.hypot(
+      f.root.position.x - previous.x,
+      f.root.position.z - previous.z
+    );
+    maxFrameTravel = Math.max(maxFrameTravel, frameTravel);
+    if (previous.z < 0 && f.root.position.z >= 0) {
+      crossedAtDoor = Math.abs(f.root.position.x)
+        <= 0.95 - tuning.collisionRadius + 0.05;
+    }
+    previous.copy(f.root.position);
+    if (crossedAtDoor && f.root.position.z > 1.2) break;
+  }
+
+  assert.ok(crossedAtDoor, 'Blocked Sprout follow must cross the wall plane through the semantic door opening');
+  assert.ok(f.root.position.z > 1.2, 'Sprout must finish the doorway route on the Ranger side of the wall');
+  assert.ok(
+    maxFrameTravel <= tuning.catchUpSpeed * 0.05 + 0.03,
+    'constructed-door recovery must stay bounded and must not use the hard catch-up teleport through the wall'
+  );
 }
 {
   const f = fixture();
@@ -265,4 +330,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, eased delayed follow sensing, bounded Ranger separation, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, semantic-door exit routing, eased delayed follow sensing, bounded Ranger separation, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
