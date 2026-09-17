@@ -26,6 +26,8 @@ export class GameApp {
     this.setStatus = setStatus;
     this.clock = new THREE.Clock();
     this.running = false;
+    this.pauseReasons = new Set();
+    this.pauseListeners = new Set();
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3();
     this.constructionAim = {
@@ -112,7 +114,8 @@ export class GameApp {
           onCampfire: () => this.#tryBuildCampfire(),
           onAttack: () => this.#tryAttack(),
           onToolSelect: toolId => this.#trySelectTool(toolId),
-          onBuildOption: mode => this.#tryLogBuildOption(mode)
+          onBuildOption: mode => this.#tryLogBuildOption(mode),
+          onInventoryVisibilityChange: open => this.setPaused(open, 'inventory-menu')
         });
         this.player.getPosition(this.playerPosition);
         this.player.getFacingDirection(this.playerFacing);
@@ -122,9 +125,47 @@ export class GameApp {
       .catch(error => console.error('[OPTIONAL HUD]', error));
   }
 
+  setPaused(paused, reason = 'external') {
+    const key = String(reason || 'external');
+    const wasPaused = this.isPaused();
+    if (paused) this.pauseReasons.add(key);
+    else this.pauseReasons.delete(key);
+    const isPaused = this.isPaused();
+
+    if (isPaused) {
+      this.player?.setMove?.(0, 0);
+      this.player?.setSprint?.(false);
+      this.player?.endCameraLook?.();
+    }
+    this.clock.getDelta();
+
+    if (isPaused !== wasPaused) {
+      for (const listener of this.pauseListeners) listener(isPaused);
+    }
+    return isPaused;
+  }
+
+  isPaused() {
+    return this.pauseReasons.size > 0;
+  }
+
+  onPauseChange(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.pauseListeners.add(listener);
+    listener(this.isPaused());
+    return () => this.pauseListeners.delete(listener);
+  }
+
   #frame = () => {
     if (!this.running) return;
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
+
+    if (this.isPaused()) {
+      this.sceneSystem.render();
+      requestAnimationFrame(this.#frame);
+      return;
+    }
+
     this.player?.update(dt);
     this.toolPresentation?.update(dt);
     this.demolitionPreview?.update(dt);
@@ -639,7 +680,7 @@ export class GameApp {
 
   #bindGameplayInput() {
     window.addEventListener('keydown', event => {
-      if (event.repeat) return;
+      if (event.repeat || this.isPaused()) return;
 
       if (event.code === 'KeyE') {
         event.preventDefault();
