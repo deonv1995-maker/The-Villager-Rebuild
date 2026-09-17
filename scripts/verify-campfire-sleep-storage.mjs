@@ -177,7 +177,7 @@ assert(storageRuntimeSource.includes("setExternalAction('storage-open'"), 'Place
 assert(placeableRuntimeSource.includes("setExternalAction(BENCH_CRAFT_ACTION_ID"), 'Approaching a placed Crafting Bench must expose a contextual CRAFT action');
 assert(placeableRuntimeSource.includes('system.addContainer({ id, type: definition.storageType'), 'Placed Chest and Barrel must enter the existing storage backend rather than a duplicate system');
 assert(equipmentRuntimeSource.includes("setCraftingStation(station = 'hand')"), 'Crafting station access must remain explicit in the equipment/crafting runtime');
-assert(equipmentRuntimeSource.includes("BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel'])"), 'Chest and Barrel recipes must remain bench-gated');
+assert(equipmentRuntimeSource.includes("BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel', 'bed'])"), 'Chest, Barrel and Bed recipes must remain bench-gated');
 assert(hudSource.includes('class="inventory-menu-toggle"'), 'HUD must expose one suitcase inventory entry point');
 assert(hudSource.includes('class="inventory-grid"'), 'Suitcase must expose an inventory grid');
 assert(hudSource.includes('data-inventory-tab="craft"'), 'Crafting must live inside the suitcase panel');

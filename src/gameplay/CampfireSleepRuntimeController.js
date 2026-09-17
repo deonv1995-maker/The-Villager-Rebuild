@@ -54,41 +54,50 @@ export class CampfireSleepRuntimeController {
   };
 
   #syncAction() {
-    const campfireState = this.game.campfire?.getState?.();
     const time = this.game.worldTime?.getSnapshot?.();
-    if (!campfireState?.built || !campfireState.position || !canSleepAtCampfire(time)) {
-      this.game.hud?.setExternalAction('campfire-sleep', null);
-      return;
-    }
-    if (this.game.physicalLogs?.isCarrying?.()) {
+    if (!canSleepAtCampfire(time) || this.game.physicalLogs?.isCarrying?.()) {
       this.game.hud?.setExternalAction('campfire-sleep', null);
       return;
     }
 
     this.game.player?.getPosition(this.position);
-    const distance = Math.hypot(
-      this.position.x - campfireState.position.x,
-      this.position.z - campfireState.position.z
-    );
-    this.game.hud?.setExternalAction('campfire-sleep', distance <= CAMPFIRE_SLEEP_RADIUS ? {
+    const bedSystem = this.game.beds ?? this.game.placeableUtilityRuntime?.bedSystem;
+    const bed = bedSystem?.getNearestBed?.(this.position, CAMPFIRE_SLEEP_RADIUS) ?? null;
+    const campfireState = this.game.campfire?.getState?.();
+    let campfireInRange = false;
+    if (campfireState?.built && campfireState.position) {
+      const distance = Math.hypot(
+        this.position.x - campfireState.position.x,
+        this.position.z - campfireState.position.z
+      );
+      campfireInRange = distance <= CAMPFIRE_SLEEP_RADIUS;
+    }
+
+    const source = bed ? 'bed' : campfireInRange ? 'campfire' : null;
+    this.game.hud?.setExternalAction('campfire-sleep', source ? {
       available: true,
-      priority: 18,
-      icon: 'campfire',
+      priority: source === 'bed' ? 20 : 18,
+      icon: source === 'bed' ? 'bed' : 'campfire',
       caption: 'SLEEP',
-      label: 'Sleep at campfire until morning',
-      onTrigger: () => this.#sleep()
+      label: source === 'bed' ? 'Sleep in bed until morning' : 'Sleep at campfire until morning',
+      onTrigger: () => this.#sleep(source)
     } : null);
   }
 
-  #sleep() {
+  #sleep(source = 'campfire') {
     const current = this.game.worldTime?.getSnapshot?.();
     if (!canSleepAtCampfire(current)) return false;
     const wake = resolveCampfireWakeTime(current);
     if (!wake) return false;
     const next = this.game.worldTime.setTime(wake);
     this.game.worldTimeRuntime?.sync?.();
-    this.game.saveController?.saveNow?.('campfire-sleep');
-    this.game.setStatus?.(`DAY ${next.day} · ${next.displayTime} · RESTED AT CAMPFIRE`);
+    if (source === 'bed') this.game.saveController?.saveNow?.('bed-sleep');
+    else this.game.saveController?.saveNow?.('campfire-sleep');
+    this.game.setStatus?.(
+      source === 'bed'
+        ? `DAY ${next.day} · ${next.displayTime} · RESTED IN BED`
+        : `DAY ${next.day} · ${next.displayTime} · RESTED AT CAMPFIRE`
+    );
     this.game.hud?.setObjective('Morning has arrived · continue exploring or return home');
     this.#syncAction();
     return true;

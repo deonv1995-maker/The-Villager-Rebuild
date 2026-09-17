@@ -3,6 +3,7 @@ import {
   PLACEABLE_UTILITY_DEFINITIONS,
   PLACEABLE_UTILITY_INTERACTION_RADIUS
 } from '../data/PlaceableUtilityDefinitions.js';
+import { BedSystem } from '../world/BedSystem.js';
 import { CraftingBenchSystem } from '../world/CraftingBenchSystem.js';
 import { selectFirstPersonUtilityTarget } from '../world/UtilityInteractionTargetingRules.js';
 
@@ -29,6 +30,11 @@ export class PlaceableUtilityRuntimeController {
     this.position = new THREE.Vector3();
     this.facing = new THREE.Vector3();
     this.benchSystem = new CraftingBenchSystem({
+      group: game.island.group,
+      terrain: game.island,
+      collision: game.island.collision
+    });
+    this.bedSystem = new BedSystem({
       group: game.island.group,
       terrain: game.island,
       collision: game.island.collision
@@ -64,7 +70,8 @@ export class PlaceableUtilityRuntimeController {
 
   captureState() {
     return {
-      craftingBenches: this.benchSystem.snapshot()
+      craftingBenches: this.benchSystem.snapshot(),
+      beds: this.bedSystem.snapshot()
     };
   }
 
@@ -73,7 +80,9 @@ export class PlaceableUtilityRuntimeController {
     this.#endBenchSession();
     this.nextStorageId = this.#resolveNextStorageId();
     if (!state || !Array.isArray(state.craftingBenches)) return false;
-    return this.benchSystem.restore(state.craftingBenches);
+    const benchesRestored = this.benchSystem.restore(state.craftingBenches);
+    const bedsRestored = this.bedSystem.restore(Array.isArray(state.beds) ? state.beds : []);
+    return benchesRestored && bedsRestored;
   }
 
   selectInventoryItem(itemId) {
@@ -132,6 +141,8 @@ export class PlaceableUtilityRuntimeController {
         id = `placed-${definition.storageType}-${this.nextStorageId++}`;
       } while (system.describe(id));
       placed = system.addContainer({ id, type: definition.storageType, ...placement });
+    } else if (definition.kind === 'bed') {
+      placed = this.bedSystem.createBed(placement);
     }
 
     if (!placed) {
@@ -278,6 +289,7 @@ export class PlaceableUtilityRuntimeController {
 
     if (player.isFirstPerson?.()) {
       return this.#describeHammerUtilityTarget(selectFirstPersonUtilityTarget({
+        bedSystem: this.bedSystem,
         benchSystem: this.benchSystem,
         storageSystem,
         playerPosition: this.position,
@@ -285,6 +297,10 @@ export class PlaceableUtilityRuntimeController {
       }));
     }
 
+    const bed = this.bedSystem.getNearestBed(
+      this.position,
+      PLACEABLE_UTILITY_INTERACTION_RADIUS
+    );
     const bench = this.benchSystem.getNearestBench(
       this.position,
       PLACEABLE_UTILITY_INTERACTION_RADIUS
@@ -294,6 +310,7 @@ export class PlaceableUtilityRuntimeController {
       PLACEABLE_UTILITY_INTERACTION_RADIUS
     );
     const targets = [
+      bed ? this.#describeHammerUtilityTarget({ kind: 'bed', id: bed.id }) : null,
       bench ? this.#describeHammerUtilityTarget({ kind: 'crafting-bench', id: bench.id }) : null,
       container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null
     ].filter(Boolean);
@@ -306,6 +323,14 @@ export class PlaceableUtilityRuntimeController {
   }
 
   #describeHammerUtilityTarget(target) {
+    if (target?.kind === 'bed') {
+      const bed = this.bedSystem.describe(target.id);
+      return bed ? {
+        ...bed,
+        utilityKind: 'bed',
+        itemId: 'bed'
+      } : null;
+    }
     if (target?.kind === 'crafting-bench') {
       const bench = this.benchSystem.describe(target.id);
       return bench ? {
@@ -336,6 +361,8 @@ export class PlaceableUtilityRuntimeController {
         this.game.setStatus?.(`${current.label.toUpperCase()} · EMPTY IT BEFORE MOVING`);
         return false;
       }
+    } else if (target.utilityKind === 'bed') {
+      if (!this.bedSystem.describe(target.id)) return false;
     } else if (!this.benchSystem.describe(target.id)) {
       return false;
     }
@@ -350,7 +377,9 @@ export class PlaceableUtilityRuntimeController {
 
     const removed = target.utilityKind === 'storage'
       ? this.game.storageRuntime.system.removeContainer(target.id)
-      : Boolean(this.benchSystem.removeBench(target.id));
+      : target.utilityKind === 'bed'
+        ? Boolean(this.bedSystem.removeBed(target.id))
+        : Boolean(this.benchSystem.removeBench(target.id));
     if (!removed) return false;
 
     this.game.inventory.add(target.itemId, 1);
@@ -394,6 +423,7 @@ export class PlaceableUtilityRuntimeController {
 
   #getFirstPersonBenchTarget() {
     const target = selectFirstPersonUtilityTarget({
+      bedSystem: this.bedSystem,
       benchSystem: this.benchSystem,
       storageSystem: this.game.storageRuntime?.system,
       playerPosition: this.position,
@@ -462,6 +492,13 @@ export class PlaceableUtilityRuntimeController {
       const body = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.62, 0.72), material);
       body.position.y = 0.34;
       root.add(body);
+    } else if (definition.id === 'bed') {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.42, 1.94), material);
+      frame.position.y = 0.31;
+      root.add(frame);
+      const headboard = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.82, 0.12), material);
+      headboard.position.set(0, 0.45, -0.91);
+      root.add(headboard);
     } else {
       const top = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.16, 0.76), material);
       top.position.y = 0.88;
