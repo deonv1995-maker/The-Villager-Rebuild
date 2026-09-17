@@ -37,7 +37,7 @@ export class StorageRuntimeController {
         system: this.system,
         inventory: this.game.inventory,
         onClose: () => { this.activeContainerId = null; },
-        onTransfer: ({ action, itemId }) => this.#afterTransfer(action, itemId)
+        onTransfer: ({ action, itemId, quantity }) => this.#afterTransfer(action, itemId, quantity)
       });
     }
     if (typeof this.requestFrame === 'function') this.frameId = this.requestFrame(this.#frame);
@@ -114,10 +114,11 @@ export class StorageRuntimeController {
     this.game.setStatus?.(`${container?.label?.toUpperCase() ?? 'STORAGE'} · OPEN`);
   }
 
-  #afterTransfer(action, itemId) {
+  #afterTransfer(action, itemId, quantity = 1) {
     this.game.hud?.setInventory(this.game.inventory.snapshot());
     const verb = action === 'store' ? 'STORED' : 'TOOK';
-    this.game.setStatus?.(`${verb} ${itemId.replaceAll('-', ' ').toUpperCase()}`);
+    const amount = quantity > 1 ? `${quantity} ` : '';
+    this.game.setStatus?.(`${verb} ${amount}${itemId.replaceAll('-', ' ').toUpperCase()}`);
   }
 
   #distanceTo(position) {
