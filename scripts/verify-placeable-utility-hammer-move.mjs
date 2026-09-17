@@ -10,6 +10,9 @@ function assert(condition, message) {
 
 const world = new THREE.Group();
 const collisionHandles = new Set();
+let supportHeight = null;
+let lastClearanceOptions = null;
+let terrainSlope = 0;
 const collision = {
   addObstacle(record) {
     const handle = { ...record };
@@ -19,7 +22,11 @@ const collision = {
   removeObstacle(handle) {
     return collisionHandles.delete(handle);
   },
-  isCircleClear() {
+  supportHeightAt(x, z, baseHeight) {
+    return Number.isFinite(supportHeight) ? supportHeight : baseHeight;
+  },
+  isCircleClear(x, z, radius, options = {}) {
+    lastClearanceOptions = options;
     return true;
   }
 };
@@ -28,7 +35,7 @@ const island = {
   collision,
   heightAt: () => 0,
   isPlayable: () => true,
-  slopeAt: () => 0
+  slopeAt: () => terrainSlope
 };
 const inventory = new InventorySystem();
 const storage = new StorageContainerSystem({
@@ -147,6 +154,52 @@ assert(inventory.get('crafting-bench') === 1, 'Moving a Crafting Bench must recl
 assert(externalActions.get('utility-place')?.caption === 'PLACE', 'Bench movement must reuse the shared placement confirmation action');
 runtime.cancelPlacement();
 
+supportHeight = 2.8;
+terrainSlope = 1;
+assert(runtime.selectInventoryItem('chest'), 'A reclaimed Chest must enter placement mode on a constructed floor');
+const chestPlaceAction = externalActions.get('utility-place');
+assert(chestPlaceAction?.available, 'Constructed floor support must keep Chest placement available even above steep terrain');
+const indoorChest = chestPlaceAction.onTrigger();
+assert(indoorChest?.position.y === supportHeight, 'Chest placement must use the standable floor support height');
+const clearanceIgnore = lastClearanceOptions?.ignore;
+assert(typeof clearanceIgnore === 'function', 'Indoor utility clearance must provide vertical obstacle filtering');
+assert(
+  clearanceIgnore({ bottomY: 2.5, topY: supportHeight }),
+  'The supporting floor and lower-storey geometry must not block utility placement above them'
+);
+assert(
+  !clearanceIgnore({ bottomY: supportHeight, topY: supportHeight + 0.9 }),
+  'Same-storey obstacles must continue to block utility placement'
+);
+assert(
+  clearanceIgnore({ bottomY: supportHeight + 0.9, topY: supportHeight + 1.1 }),
+  'Geometry entirely above a utility must not create a false horizontal placement collision'
+);
+const chestSnapshot = storage.snapshot();
+const indoorChestRecord = chestSnapshot.find(record => record.id === indoorChest.id);
+assert(indoorChestRecord?.y === supportHeight, 'Chest save data must persist its indoor floor elevation');
+storage.restore(chestSnapshot);
+assert(storage.describe(indoorChest.id)?.position.y === supportHeight, 'Chest restore must retain its indoor floor elevation');
+storage.removeContainer(indoorChest.id);
+
+assert(runtime.selectInventoryItem('crafting-bench'), 'A reclaimed Crafting Bench must enter indoor placement mode');
+const indoorBench = externalActions.get('utility-place')?.onTrigger();
+assert(indoorBench?.position.y === supportHeight, 'Crafting Bench placement must use the standable floor support height');
+const benchState = runtime.captureState();
+assert(benchState.craftingBenches[0]?.y === supportHeight, 'Crafting Bench save data must persist its indoor floor elevation');
+runtime.restoreState(benchState);
+assert(runtime.benchSystem.describe(indoorBench.id)?.position.y === supportHeight, 'Crafting Bench restore must retain its indoor floor elevation');
+runtime.benchSystem.removeBench(indoorBench.id);
+
+inventory.add('barrel', 1);
+assert(runtime.selectInventoryItem('barrel'), 'Food Barrel must enter indoor placement mode');
+const indoorBarrel = externalActions.get('utility-place')?.onTrigger();
+assert(indoorBarrel?.position.y === supportHeight, 'Food Barrel placement must use the standable floor support height');
+assert(storage.snapshot().find(record => record.id === indoorBarrel.id)?.y === supportHeight, 'Food Barrel save data must persist its indoor floor elevation');
+storage.removeContainer(indoorBarrel.id);
+supportHeight = null;
+terrainSlope = 0;
+
 inventory.add('stick', 1000);
 storage.addContainer({ id: 'placed-barrel-3', type: 'barrel', x: 1, z: 0 });
 runFrame();
@@ -162,6 +215,7 @@ const runtimeSource = await readFile('src/gameplay/PlaceableUtilityRuntimeContro
 assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility movement must reuse the shared first-person reticle selector');
 assert(!runtimeSource.includes('new THREE.Raycaster()'), 'Placeable utility runtime must not introduce a competing first-person raycaster');
 assert(runtimeSource.includes('if (this.game.currentInteractionTarget)'), 'Semantic panel demolition must retain first ownership of REMOVE-mode hammer targets');
+assert(runtimeSource.includes('collision.supportHeightAt?.('), 'Utility placement must reuse the shared standable-surface resolver');
 
 runtime.dispose();
-console.log('Hammer removal/replacement of Chest, Barrel and Crafting Bench verified');
+console.log('Hammer movement and indoor floor placement of Chest, Barrel and Crafting Bench verified');
