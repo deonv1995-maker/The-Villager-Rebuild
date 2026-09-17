@@ -159,7 +159,11 @@ assert.ok(gatherables.includes("definition.storage !== 'inventory' || definition
 assert.ok(gatherables.includes('this.#canStore(item.resourceId, quantity)'), 'Loose pickup selection must obey capacity before removal');
 assert.ok(gatherables.includes('item.reservedBy = null;\n      item.root.visible = true;\n      return null;'), 'Sprout reservation commit must restore the world pickup if capacity changes before transfer');
 assert.ok(contextPolicy.includes("? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')") && contextPolicy.includes(": 'FULL'"), 'Full storage must disable the unified mobile pickup action visibly');
-assert.ok(capacityControllerSource.includes('this.game.hud?.setInventoryCapacity?.(this.inventory.getStorageState())'), 'Capacity runtime must render through the suitcase HUD API');
+assert.ok(
+  capacityControllerSource.includes('const state = this.inventory.getStorageState();')
+    && capacityControllerSource.includes('hud?.setInventoryCapacity?.(state);'),
+  'Capacity runtime must render the authoritative storage state through the inventory HUD API'
+);
 assert.ok(hudSource.includes('setInventoryCapacity(state)'), 'Mobile HUD must own suitcase capacity presentation');
 assert.ok(main.includes('new InventoryCapacityController({ game })'), 'Gameplay boot must install one shared capacity runtime');
 assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual Log pickup'), 'Companion architecture must preserve human-pack limits while documenting inventory-backed Log pickup');
