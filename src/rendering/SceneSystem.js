@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 
+const CAMERA_FRAME_DT_MAX = 0.05;
+const CAMERA_FRAME_MIN_WEIGHT = 0.001;
+
 export class SceneSystem {
   constructor(canvas) {
     this.canvas = canvas;
@@ -9,6 +12,12 @@ export class SceneSystem {
 
     this.camera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
     this.camera.position.set(0, 5, 8);
+    this.cameraFrame = null;
+    this.cameraFrameWeight = 0;
+    this.cameraFrameLastTime = null;
+    this.cameraFrameBaseDirection = new THREE.Vector3();
+    this.cameraFrameBaseTarget = new THREE.Vector3();
+    this.cameraFrameBlendedTarget = new THREE.Vector3();
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -54,12 +63,94 @@ export class SceneSystem {
     this.renderer.setSize(width, height, false);
   }
 
+  setCameraFrame(owner, {
+    target,
+    fov = this.camera.fov,
+    response = 4
+  } = {}) {
+    if (!owner || !target) return false;
+    const x = Number(target.x);
+    const y = Number(target.y);
+    const z = Number(target.z);
+    if (![x, y, z].every(Number.isFinite)) return false;
+
+    if (!this.cameraFrame || this.cameraFrame.owner !== owner) {
+      this.cameraFrame = {
+        owner,
+        target: new THREE.Vector3(x, y, z),
+        fov: THREE.MathUtils.clamp(Number(fov) || this.camera.fov, 20, 90),
+        baseFov: this.camera.fov,
+        response: Math.max(0.1, Number(response) || 4),
+        active: true
+      };
+      this.cameraFrameWeight = 0;
+      return true;
+    }
+
+    this.cameraFrame.target.set(x, y, z);
+    this.cameraFrame.fov = THREE.MathUtils.clamp(Number(fov) || this.cameraFrame.fov, 20, 90);
+    this.cameraFrame.response = Math.max(0.1, Number(response) || this.cameraFrame.response);
+    this.cameraFrame.active = true;
+    return true;
+  }
+
+  clearCameraFrame(owner) {
+    if (!this.cameraFrame || (owner && this.cameraFrame.owner !== owner)) return false;
+    this.cameraFrame.active = false;
+    return true;
+  }
+
+  #applyCameraFrame() {
+    const now = globalThis.performance?.now?.() ?? Date.now();
+    const dt = this.cameraFrameLastTime === null
+      ? 1 / 60
+      : Math.min(CAMERA_FRAME_DT_MAX, Math.max(0, (now - this.cameraFrameLastTime) / 1000));
+    this.cameraFrameLastTime = now;
+
+    const frame = this.cameraFrame;
+    if (!frame) return;
+
+    const blend = 1 - Math.exp(-frame.response * dt);
+    const targetWeight = frame.active ? 1 : 0;
+    this.cameraFrameWeight = THREE.MathUtils.lerp(this.cameraFrameWeight, targetWeight, blend);
+
+    const targetFov = frame.active ? frame.fov : frame.baseFov;
+    const nextFov = THREE.MathUtils.lerp(this.camera.fov, targetFov, blend);
+    if (Math.abs(nextFov - this.camera.fov) > 0.0001) {
+      this.camera.fov = nextFov;
+      this.camera.updateProjectionMatrix();
+    }
+
+    if (this.cameraFrameWeight > CAMERA_FRAME_MIN_WEIGHT) {
+      this.camera.getWorldDirection(this.cameraFrameBaseDirection);
+      this.cameraFrameBaseTarget.copy(this.camera.position).addScaledVector(
+        this.cameraFrameBaseDirection,
+        Math.max(1, this.camera.position.distanceTo(frame.target))
+      );
+      this.cameraFrameBlendedTarget.lerpVectors(
+        this.cameraFrameBaseTarget,
+        frame.target,
+        this.cameraFrameWeight
+      );
+      this.camera.lookAt(this.cameraFrameBlendedTarget);
+    }
+
+    if (!frame.active && this.cameraFrameWeight <= CAMERA_FRAME_MIN_WEIGHT) {
+      this.camera.fov = frame.baseFov;
+      this.camera.updateProjectionMatrix();
+      this.cameraFrame = null;
+      this.cameraFrameWeight = 0;
+    }
+  }
+
   render() {
+    this.#applyCameraFrame();
     this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
     window.removeEventListener('resize', this.resize);
+    this.cameraFrame = null;
     this.renderer.dispose();
   }
 }
