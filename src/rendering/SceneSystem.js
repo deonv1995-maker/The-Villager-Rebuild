@@ -18,6 +18,9 @@ export class SceneSystem {
     this.cameraFrameBaseDirection = new THREE.Vector3();
     this.cameraFrameBaseTarget = new THREE.Vector3();
     this.cameraFrameBlendedTarget = new THREE.Vector3();
+    this.cameraShake = null;
+    this.cameraShakeBasePosition = new THREE.Vector3();
+    this.cameraShakeBaseQuaternion = new THREE.Quaternion();
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
@@ -100,6 +103,25 @@ export class SceneSystem {
     return true;
   }
 
+  triggerCameraShake({
+    durationSeconds = 0.5,
+    positionAmplitude = 0.1,
+    rotationAmplitude = 0.006,
+    frequencyHz = 16
+  } = {}) {
+    const duration = Math.max(0, Number(durationSeconds) || 0);
+    if (duration <= 0) return false;
+
+    this.cameraShake = {
+      startedAtMs: globalThis.performance?.now?.() ?? Date.now(),
+      duration,
+      positionAmplitude: Math.max(0, Number(positionAmplitude) || 0),
+      rotationAmplitude: Math.max(0, Number(rotationAmplitude) || 0),
+      frequencyHz: Math.max(1, Number(frequencyHz) || 16)
+    };
+    return true;
+  }
+
   #applyCameraFrame() {
     const now = globalThis.performance?.now?.() ?? Date.now();
     const dt = this.cameraFrameLastTime === null
@@ -143,14 +165,50 @@ export class SceneSystem {
     }
   }
 
+  #applyCameraShake() {
+    const shake = this.cameraShake;
+    if (!shake) return false;
+
+    const nowMs = globalThis.performance?.now?.() ?? Date.now();
+    const age = Math.max(0, (nowMs - shake.startedAtMs) / 1000);
+    if (age >= shake.duration) {
+      this.cameraShake = null;
+      return false;
+    }
+
+    const progress = THREE.MathUtils.clamp(age / shake.duration, 0, 1);
+    const envelope = (1 - progress) ** 2;
+    const phase = age * shake.frequencyHz * Math.PI * 2;
+    const position = shake.positionAmplitude * envelope;
+    const rotation = shake.rotationAmplitude * envelope;
+
+    this.cameraShakeBasePosition.copy(this.camera.position);
+    this.cameraShakeBaseQuaternion.copy(this.camera.quaternion);
+    this.camera.position.x += Math.sin(phase * 1.03) * position;
+    this.camera.position.y += Math.cos(phase * 1.31 + 0.4) * position * 0.56;
+    this.camera.position.z += Math.sin(phase * 0.79 + 1.4) * position * 0.34;
+    this.camera.rotateX(Math.sin(phase * 1.41 + 0.2) * rotation);
+    this.camera.rotateZ(Math.cos(phase * 0.93 + 0.7) * rotation);
+    return true;
+  }
+
   render() {
     this.#applyCameraFrame();
-    this.renderer.render(this.scene, this.camera);
+    const shaken = this.#applyCameraShake();
+    try {
+      this.renderer.render(this.scene, this.camera);
+    } finally {
+      if (shaken) {
+        this.camera.position.copy(this.cameraShakeBasePosition);
+        this.camera.quaternion.copy(this.cameraShakeBaseQuaternion);
+      }
+    }
   }
 
   dispose() {
     window.removeEventListener('resize', this.resize);
     this.cameraFrame = null;
+    this.cameraShake = null;
     this.renderer.dispose();
   }
 }
