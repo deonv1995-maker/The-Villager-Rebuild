@@ -127,8 +127,18 @@ assert.match(indexSource, /inventory-menu\.css/, 'The suitcase inventory stylesh
 assert.match(indexSource, /cosy-icons\.css/, 'The cosy icon stylesheet must be loaded');
 assert.doesNotMatch(indexSource, /survival-icons\.css/, 'The retired survival icon stylesheet must not be loaded');
 assert.match(inventoryMenuStyles, /\.inventory-menu-toggle\s*\{[\s\S]*?width: 46px;[\s\S]*?height: 46px;/, 'Suitcase toggle must keep a compact mobile footprint');
-assert.match(inventoryMenuStyles, /\.inventory-grid\s*\{[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/, 'Suitcase contents must use a compact inventory grid');
+assert.match(
+  inventoryMenuStyles,
+  /\.inventory-grid\s*\{[\s\S]*?grid-template-columns: repeat\(auto-fill, minmax\(82px, 96px\)\);[\s\S]*?justify-content: start;/,
+  'Suitcase contents must use a compact non-stretching inventory grid'
+);
+assert.match(inventoryMenuStyles, /\.inventory-card\s*\{[\s\S]*?min-height: 82px;/, 'Suitcase item blocks must stay compact enough to expose more inventory at once');
 assert.match(inventoryMenuStyles, /\.inventory-card \.inventory-resource-icon\s*\{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/, 'Inventory item icons must remain readable inside the opened suitcase');
+assert.match(
+  inventoryMenuStyles,
+  /\.inventory-menu \.craft-menu-list\[hidden\]\s*\{\s*display: none;\s*\}/,
+  'Inactive Craft tab must not leak crafting recipes into the Items view'
+);
 assert.match(
   cosyIconStyles,
   /src\*="\/ui\/cosy\/"[\s\S]*?image-rendering: auto;[\s\S]*?filter: none;/,
