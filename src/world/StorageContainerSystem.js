@@ -107,6 +107,13 @@ export class StorageContainerSystem {
     return nearest ? this.describe(nearest) : null;
   }
 
+  getWorldEntries() {
+    return Array.from(this.containers.values()).map(container => ({
+      ...this.describe(container),
+      root: container.root
+    }));
+  }
+
   getAcceptedItemIds(containerId) {
     const container = this.containers.get(containerId);
     if (!container) return [];
