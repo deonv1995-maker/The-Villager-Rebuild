@@ -9,28 +9,75 @@ const TORCH_GRIP_ROTATION = new THREE.Euler(-0.1, 0.02, 0.08, 'XYZ');
 const TORCH_CARRY_PROFILE = 'steady-upright';
 
 /**
- * Keeps TorchRuntimeController as the fuel/light/placement authority while
- * adapting only the handheld prop to the active visible player presentation.
+ * Keeps TorchRuntimeController as the fuel/placement/mounted-light authority while
+ * adapting the handheld prop to the active visible player presentation. The carried
+ * torch deliberately has no world light; illumination begins only after placement.
  */
 export class VisibleHandTorchRuntimeController extends TorchRuntimeController {
   constructor(options) {
+    const shadowMap = options?.game?.sceneSystem?.renderer?.shadowMap;
+    const shadowNeedsUpdateBefore = shadowMap?.needsUpdate;
     super(options);
     this.visibleHandMounted = false;
     this.carryProfileActive = null;
+    this.#suppressHandheldIllumination();
+    if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
+      shadowMap.needsUpdate = shadowNeedsUpdateBefore;
+    }
     this.#syncVisibleHandMount();
     this.#syncCarryProfile(this.snapshot().burning);
   }
 
   apply(worldTimeSnapshot) {
     this.#syncVisibleHandMount();
+    const shadowMap = this.game.sceneSystem.renderer?.shadowMap;
+    const shadowNeedsUpdateBefore = shadowMap?.needsUpdate;
     const snapshot = super.apply(worldTimeSnapshot);
+    this.#suppressHandheldIllumination();
+    if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
+      shadowMap.needsUpdate = shadowNeedsUpdateBefore;
+    }
     this.#syncCarryProfile(snapshot.burning);
     return snapshot;
+  }
+
+  place(target) {
+    const shadowMap = this.game.sceneSystem.renderer?.shadowMap;
+    const shadowNeedsUpdateBefore = shadowMap?.needsUpdate;
+    const placed = super.place(target);
+    this.#suppressHandheldIllumination();
+    if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
+      shadowMap.needsUpdate = shadowNeedsUpdateBefore;
+    }
+    return placed;
+  }
+
+  restoreState(state) {
+    const shadowMap = this.game.sceneSystem.renderer?.shadowMap;
+    const shadowNeedsUpdateBefore = shadowMap?.needsUpdate;
+    const restored = super.restoreState(state);
+    this.#suppressHandheldIllumination();
+    if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
+      shadowMap.needsUpdate = shadowNeedsUpdateBefore;
+    }
+    return restored;
   }
 
   dispose() {
     this.#syncCarryProfile(false, { force: true });
     super.dispose();
+  }
+
+  #suppressHandheldIllumination() {
+    this.light.visible = false;
+    this.light.castShadow = false;
+    this.light.shadow.needsUpdate = false;
+    this.light.parent?.remove(this.light);
+
+    for (const [object, previousCastShadow] of this.playerShadowState) {
+      object.castShadow = previousCastShadow;
+    }
+    this.playerShadowState.clear();
   }
 
   #syncVisibleHandMount() {
