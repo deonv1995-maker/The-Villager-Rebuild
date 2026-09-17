@@ -65,6 +65,15 @@ The suitcase contains two tabs:
 - **Items** — a compact grid for collected resources and crafted placeables. Resources are view-only. A placeable with quantity above zero exposes a PLACE affordance that delegates to `PlaceableUtilityRuntimeController`.
 - **Craft** — the existing recipe list, now embedded inside the same panel. Away from a bench it shows portable recipes; during a bench session it also shows Chest and Barrel.
 
+Opening the suitcase is also a gameplay pause boundary. `MobileHud` reports visibility through its existing `onInventoryVisibilityChange` callback; `GameApp` owns the resulting reason-based pause state rather than allowing individual gameplay systems to invent their own menu flags. While the suitcase is open:
+
+- the main gameplay frame keeps rendering the frozen world but does not advance Ranger movement, wildlife, projectiles, harvesting, construction previews, campfire updates or world streaming;
+- `WorldTimeRuntime` keeps its existing lifecycle but does not advance the authoritative clock, preventing time-of-day catch-up when the menu closes;
+- independent Sprout story and companion loops respect the same `GameApp.isPaused()` authority, so story timers, movement and automatic resource collection cannot continue behind the menu;
+- opening the menu immediately clears Ranger movement/sprint/look input so a held touch cannot continue driving the character underneath the overlay.
+
+The suitcase itself is a safe-area-aware full-screen surface with internal Items/Craft scrolling, larger touch targets and no dependency on the gameplay HUD behind it. Closing it removes only the `inventory-menu` pause reason and resumes normal simulation. Inventory and crafting actions inside the suitcase remain available because they are deliberate menu actions, not background world simulation.
+
 Campfire placement and placeable utility placement both use the existing unified contextual Action button for confirmation. This avoids adding a new placement button while preserving the existing action-routing boundary.
 
 `InventoryCapacityController` publishes carrying capacity through `MobileHud.setInventoryCapacity()` so the suitcase header/toggle owns inventory presentation. It no longer writes directly into the retired inventory-strip DOM.
@@ -104,7 +113,10 @@ The current Sword, Spear and Torch presentation remains unchanged.
 - Crafting Bench proximity and persistence;
 - legacy starter-container content migration;
 - suitcase Items/Craft consolidation and removal of the standalone Craft button;
+- full-screen suitcase layout and centralized pause wiring;
 - save-controller and mobile context-action wiring;
 - data-defined food categorization.
 
-Device verification remains required for suitcase ergonomics, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel, storage-panel usability and the visible night-to-morning transition.
+`verify:day-night` also protects the paused world-time contract so opening a menu cannot advance the clock or create a resume-time jump.
+
+Device verification remains required for full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel, storage-panel usability and the visible night-to-morning transition.
