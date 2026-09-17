@@ -11,10 +11,20 @@ import { TorchRuntimeController } from '../src/gameplay/TorchRuntimeController.j
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const nearlyEqual = (left, right, epsilon = 0.11) => Math.abs(left - right) <= epsilon;
+const mountedTorchAxis = entry => new THREE.Vector3(0, 1, 0).applyQuaternion(entry.root.quaternion);
+const mountOutwardNormal = entry => new THREE.Vector3(Math.sin(entry.yaw), 0, Math.cos(entry.yaw));
 
 assert.ok(TORCH.placement.maxDistance > 0, 'Torch placement must use a bounded interaction range');
 assert.ok(TORCH.placement.maxActiveLights >= 4, 'Placed torches need a useful local lighting budget');
 assert.ok(TORCH.placement.maxActiveLights <= 8, 'Placed torch point-light budget must remain mobile bounded');
+assert.ok(
+  TORCH.placement.outwardTiltDegrees >= 25 && TORCH.placement.outwardTiltDegrees <= 50,
+  'Mounted torches must keep a readable outward/upward lean instead of standing flat in the mount plane'
+);
+assert.ok(
+  TORCH.placement.wallVisualOutwardOffset > 0,
+  'Wall-mounted torch presentation needs positive clearance in front of the wall surface'
+);
 assert.equal(TORCH.placement.light.decay, 2, 'Placed torch ambient light must keep natural inverse-square decay');
 assert.ok(
   TORCH.placement.light.intensity < TORCH.light.intensity,
@@ -114,6 +124,14 @@ assert.ok(
 assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, TORCH.burnDurationGameMinutes));
 assert.equal(torch.placedTorches[0].light.castShadow, false, 'Placed ambient torches must not allocate point-light shadow maps');
 assert.equal(torch.placedTorches[0].light.visible, true, 'A nearby placed torch must emit ambient light');
+const postEntry = torch.placedTorches[0];
+const postAxis = mountedTorchAxis(postEntry);
+const postOutwardNormal = mountOutwardNormal(postEntry);
+assert.ok(postAxis.y > 0.7, 'Mounted post torches must still point predominantly upward');
+assert.ok(
+  postAxis.dot(postOutwardNormal) > 0.5,
+  'Mounted post torches must lean toward the resolved outward side of the mount'
+);
 
 const nextTarget = torch.getPlacementTarget();
 assert.equal(nextTarget?.kind, 'wall', 'An occupied post mount must be skipped in favor of the next aimed wall');
@@ -121,6 +139,21 @@ assert.equal(nextTarget?.id, 'physical-wall:4');
 const wallTorch = torch.place(nextTarget);
 assert.ok(wallTorch, 'Wall target must accept a torch');
 assert.equal(torch.getPlacementTarget(), null, 'One wall/post mount cannot stack duplicate torches');
+const wallEntry = torch.placedTorches[1];
+const wallAxis = mountedTorchAxis(wallEntry);
+const wallOutwardNormal = mountOutwardNormal(wallEntry);
+assert.ok(wallAxis.y > 0.7, 'Wall-mounted torches must remain angled upward');
+assert.ok(
+  wallAxis.dot(wallOutwardNormal) > 0.5,
+  'Wall-mounted torches must angle out from the wall instead of leaning into it'
+);
+const wallPresentationClearance =
+  (wallEntry.root.position.x - wallTorch.position.x) * wallOutwardNormal.x +
+  (wallEntry.root.position.z - wallTorch.position.z) * wallOutwardNormal.z;
+assert.ok(
+  nearlyEqual(wallPresentationClearance, TORCH.placement.wallVisualOutwardOffset, 0.001),
+  'Wall-mounted torch visuals must be pulled forward by the configured anti-clipping clearance'
+);
 
 nowMs += 100;
 torch.apply({ day: 1, minuteOfDay: 20 * 60 + 90 });
@@ -161,6 +194,12 @@ assert.ok(saved.placedTorches.every(entry => entry.remainingGameMinutes > 0));
 assert.equal(torch.restoreState(saved), true, 'Placed torches must restore through the existing torch save section');
 assert.equal(torch.placedTorches.length, saved.placedTorches.length);
 assert.equal(inventory.get('torch'), savedInventoryQuantity, 'Restore must not consume inventory again for already-placed torches');
+const restoredWallEntry = torch.placedTorches.find(entry => entry.mountKind === 'wall');
+assert.ok(restoredWallEntry, 'Restored torch state must retain the wall-mounted entry');
+assert.ok(
+  mountedTorchAxis(restoredWallEntry).dot(mountOutwardNormal(restoredWallEntry)) > 0.5,
+  'Restored wall torches must reconstruct the same outward mounting angle'
+);
 torch.apply({ day: 1, minuteOfDay: 20 * 60 + 90 });
 assert.equal(
   torch.placedTorches.filter(entry => entry.light.visible).length,

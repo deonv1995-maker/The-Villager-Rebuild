@@ -22,6 +22,7 @@ The torch is a carried placeable item whose world illumination begins only after
 - The repository currently has no independent fence-post subsystem. Existing vertical frame/support posts provide the current post-mount contract. A future fence system should expose compatible wall/post mount targets instead of adding torch-specific fence logic.
 - Mounting transfers the currently active inventory unit into the world, preserving that unit's remaining fuel and reducing the available tool-belt quantity by one. If another inventory torch remains, it becomes the next full handheld unit.
 - Once mounted, the torch becomes an actual local fire light. Mounted illumination radiates in all directions from the flame using the centralized fixed-light tuning.
+- Mounted torches use a fixed **38° outward/upward lean** relative to the resolved mount normal instead of remaining vertical in the wall plane. Wall-mounted visuals receive an additional **0.14 world-unit presentation clearance** in front of the canonical wall mount so the handle and flame stay visibly outside the wall rather than clipping into it.
 - Mounted torches burn continuously on the same authoritative world clock even when the player equips another tool or leaves the area. Each mounted torch has independent remaining fuel.
 - When a mounted torch burns out, its visual and local light are removed. It does not silently consume a second inventory torch.
 - Mounted torches persist through Save/Continue inside the existing dedicated torch save state, including position, mount identity, orientation and remaining fuel.
@@ -35,6 +36,8 @@ The torch is a carried placeable item whose world illumination begins only after
 `HeroMArmMotionPresentation` owns the meaning of `steady-upright`: it blends down only the carried right hand's opposed locomotion swing/orientation while preserving common body translation and the free left-arm animation. This keeps item semantics and character rig implementation separated. The torch runtime does not become a second animation system, and Hero M does not gain fuel/inventory authority.
 
 `TorchPlacementTargetResolver` owns mount discovery. It reads semantic solid-wall geometry from `PanelStructureRegistry.wallPlacementWorld(...)`, allowing wall position, side normal and height to come from the construction source of truth. During the transition from legacy physical construction, it also exposes active physical wall entries and vertical `frame` entries as wall/post mounts. The resolver applies one centralized reach/aim policy and excludes mount ids already occupied by a placed torch.
+
+The resolver's returned position remains the canonical gameplay/save anchor. `TorchRuntimeController` derives the mounted presentation from that anchor: the saved yaw reconstructs the outward horizontal normal, the shared `TORCH.placement.outwardTiltDegrees` rotates the torch's local up axis toward that normal using explicit `YXZ` Euler order, and wall visuals alone receive `wallVisualOutwardOffset` along the same normal. This keeps anti-clipping presentation tuning out of target selection and means existing saves automatically receive the corrected wall presentation without changing their persisted coordinates.
 
 `EquipmentRuntimeController` owns only the player-facing contextual **PLACE** action. It asks `TorchRuntimeController` for the currently valid mount and delegates placement back to the torch runtime. This keeps HUD interaction, structural target resolution and torch fuel/light state as separate responsibilities.
 
@@ -79,10 +82,12 @@ The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity ba
 - vertical frame/support posts and walls resolve as mount targets;
 - occupied mounts cannot stack duplicate torches;
 - placement transfers exactly one inventory torch and preserves the active unit's remaining fuel;
+- mounted post and wall torches keep a bounded upward/outward angle toward their resolved mount normal;
+- wall-mounted visuals receive the configured anti-clipping clearance while the canonical saved mount position remains unchanged;
 - mounted torches burn independently on the shared game clock;
 - fixed torches do not allocate shadow maps;
 - only the nearest configured number of mounted point lights are active;
-- mounted torch state survives capture/restore without consuming inventory again;
+- mounted torch state survives capture/restore without consuming inventory again and reconstructs the same outward wall angle;
 - semantic wall targeting remains tied to `PanelStructureRegistry`;
 - all actual tool slots display their available quantity;
 - mounted state stays inside the dedicated torch persistence boundary.
@@ -95,7 +100,7 @@ After merge/deploy, verify on a physical phone that every crafted tool slot show
 
 At night, equip a torch before placing it. Confirm that Hero M still visibly carries the torch and uses the steady upright carry pose, but the carried torch does **not** brighten the ground, nearby walls, vegetation or the Ranger and does not create a moving local torch shadow.
 
-Approach several solid building walls and vertical frame/support posts. Confirm that **PLACE** appears only for a sensible nearby aimed mount, that placing consumes exactly one available torch, and that illumination begins immediately from the mounted flame. Confirm that the mounted flame sits against the expected wall/post side and that the same mount does not accept a second torch.
+Approach several solid building walls and vertical frame/support posts. Confirm that **PLACE** appears only for a sensible nearby aimed mount, that placing consumes exactly one available torch, and that illumination begins immediately from the mounted flame. Confirm that each mounted torch clearly leans outward and upward from the wall/post, that the handle is not buried inside the wall surface, that the flame stays visibly in front of the wall, and that the same mount does not accept a second torch.
 
 While the torch is held, walk, run, turn, stop and start repeatedly. The right arm should read as deliberately carrying an upright torch instead of swinging through the full empty-hand gait; it should still move naturally with the body rather than becoming rigid. The left arm should continue its normal walk/run swing. Putting the torch away should blend smoothly back to normal two-arm locomotion without a visible pose snap.
 

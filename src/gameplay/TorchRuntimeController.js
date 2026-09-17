@@ -248,8 +248,21 @@ export class TorchRuntimeController {
 
   #createPlacedTorch({ id, mountKind, mountId, position, yaw, remainingGameMinutes }) {
     const visual = this.#createVisual(id);
-    visual.root.position.set(position.x, position.y, position.z);
-    visual.root.rotation.y = yaw;
+    const resolvedYaw = Number.isFinite(yaw) ? yaw : 0;
+    const wallVisualOutwardOffset = mountKind === 'wall'
+      ? Math.max(0, Number(this.definition.placement.wallVisualOutwardOffset) || 0)
+      : 0;
+    visual.root.position.set(
+      position.x + Math.sin(resolvedYaw) * wallVisualOutwardOffset,
+      position.y,
+      position.z + Math.cos(resolvedYaw) * wallVisualOutwardOffset
+    );
+    visual.root.rotation.set(
+      THREE.MathUtils.degToRad(Number(this.definition.placement.outwardTiltDegrees) || 0),
+      resolvedYaw,
+      0,
+      'YXZ'
+    );
     this.game.sceneSystem.scene.add(visual.root);
 
     const lightDefinition = this.definition.placement.light;
@@ -270,7 +283,7 @@ export class TorchRuntimeController {
       mountKind,
       mountId,
       position: { x: position.x, y: position.y, z: position.z },
-      yaw,
+      yaw: resolvedYaw,
       remainingGameMinutes,
       root: visual.root,
       flame: visual.flame,

@@ -41,6 +41,8 @@ export const TORCH = Object.freeze({
     aimPenalty: 1.6,
     wallSurfaceOffset: 0.18,
     postSurfaceOffset: 0.31,
+    outwardTiltDegrees: 38,
+    wallVisualOutwardOffset: 0.14,
     mountHeight: 1.55,
     minimumMountHeight: 0.72,
     topClearance: 0.32,
