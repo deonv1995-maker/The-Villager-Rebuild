@@ -14,6 +14,8 @@ The intended visual result is mild independent judgement: Sprout can hesitate fo
 
 Ordinary Ranger/Sprout overlap is also resolved as bounded collision-aware separation rather than a one-frame positional snap. The hard recovery teleport remains reserved for the existing long-distance `hardCatchUpDistance` safeguard; it is not used as normal close-range movement.
 
+Constructed semantic doors are now an explicit traversal boundary for companion egress. `PanelTraversalQuery` exposes read-only world-space snapshots of active Door panels, while `SproutDoorRoutePlanner` only chooses an approach/door-centre/exit waypoint sequence. Sprout still executes every waypoint through the shared `WorldCollisionSystem`; the traversal query and planner do not move the companion or create a second collision authority. When follow movement is repeatedly blocked near a ground-floor constructed door, Sprout routes through that opening before resuming the normal formation target. While a nearby semantic door can provide this egress path, the long-distance hard catch-up teleport is suppressed so Sprout cannot visibly jump through a cabin wall. Outside that constructed-door context, the established hard-recovery safeguard remains available.
+
 The sampled follow target is presentation/intent state only. The Ranger remains the player authority, and Sprout does not predict input or modify Ranger movement.
 
 Automatic loose-resource retrieval remains centered on the Ranger rather than becoming a free-roaming search system. The current `SPROUT_COMPANION.collectionRadius` is **18 m**, doubled from the previous 9 m tuning. The existing collection approach timeout, catch-up thresholds, collision service and reservation/commit boundary remain unchanged, so the larger sensing radius does not grant Sprout a second navigation or harvesting authority.
@@ -42,7 +44,9 @@ Ranger movement immediately cancels an active flourish and resets the extended-i
 
 ## Architecture boundaries
 
-- `SproutCompanionController`: sampled/eased follow intent, reaction delay, formation drift, bounded personal-space separation, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
+- `SproutCompanionController`: sampled/eased follow intent, reaction delay, formation drift, bounded personal-space separation, semantic-door route execution, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
+- `PanelTraversalQuery`: read-only active semantic Door portal snapshots in world space; no movement or collision authority.
+- `SproutDoorRoutePlanner`: pure ground-floor door waypoint selection; no world mutation.
 - `GatherableSystem`: loose-resource identity, reservation/release, capacity re-check and committed removal.
 - `InventorySystem`: the single Ranger/Sprout item-count authority.
 - `RangerController`: Ranger locomotion and existing cinematics remain independent; Sprout's ambient idle flourish does not seize this boundary.
@@ -51,4 +55,4 @@ Ranger movement immediately cancels an active flourish and resets the extended-i
 
 ## Verification target
 
-Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns **or jerks between sampled follow targets**, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, ordinary close contact separates smoothly rather than popping, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
+Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns **or jerks between sampled follow targets**, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, ordinary close contact separates smoothly rather than popping, a Sprout left inside a completed cabin follows the Ranger out through the actual Door opening instead of waiting and then clipping through a wall, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
