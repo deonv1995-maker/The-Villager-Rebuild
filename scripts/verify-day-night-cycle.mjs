@@ -178,6 +178,27 @@ const beforeFrame = runtimeTime.getSnapshot().minuteOfDay;
 scheduledFrame(1050);
 assert.ok(runtimeTime.getSnapshot().minuteOfDay > beforeFrame, 'Runtime frames must advance shared world time');
 assert.equal(lightingApplyCount, celestialApplyCount, 'One world-time frame must fan out to all presentation systems');
+
+runtime.setPaused(true);
+const beforePausedFrames = runtimeTime.getSnapshot().minuteOfDay;
+scheduledFrame(1100);
+scheduledFrame(1150);
+assert.equal(
+  runtimeTime.getSnapshot().minuteOfDay,
+  beforePausedFrames,
+  'Paused runtime frames must not advance shared world time'
+);
+assert.equal(lightingApplyCount, celestialApplyCount, 'Paused runtime frames must keep presentations synchronized');
+
+runtime.setPaused(false);
+scheduledFrame(1200);
+const beforeResumedFrame = runtimeTime.getSnapshot().minuteOfDay;
+scheduledFrame(1250);
+assert.ok(
+  runtimeTime.getSnapshot().minuteOfDay > beforeResumedFrame,
+  'Resuming the runtime must advance from a fresh frame baseline without paused-time catch-up'
+);
+
 runtime.stop();
 assert.equal(cancelledFrame, 77, 'Runtime stop must release its animation frame');
 
@@ -191,6 +212,7 @@ const checks = [
   ['day/night presentation reuses SceneSystem lighting', main.includes('new DayNightLightingSystem({') && main.includes('sceneSystem: game.sceneSystem')],
   ['gameplay boot creates one clock-driven celestial presentation system', main.includes('new CelestialBodySystem({ sceneSystem: game.sceneSystem })')],
   ['world time runtime fans one snapshot into lighting, celestial bodies, and shadows', main.includes('presentations: [dayNightLighting, celestialBodies, celestialShadows]')],
+  ['gameplay pause authority controls the shared world-time runtime', main.includes('game.onPauseChange(paused => worldTimeRuntime.setPaused(paused))')],
   ['new game clock starts after beach arrival rather than consuming tutorial time during the intro', main.includes('onComplete: () => {\n          worldTimeRuntime.start();')],
   ['continue restores before the clock resumes', main.indexOf('const restored = saveController.restore()') < main.indexOf('worldTimeRuntime.start();')],
   ['scene exposes existing lights instead of creating a second lighting rig', sceneSource.includes('this.lighting = this.#createLighting()') && sceneSource.includes('return Object.freeze({ hemi, sun, skyFill, ambient })')],
