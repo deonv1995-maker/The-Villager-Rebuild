@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
+import { caveTerrainOffsetAt } from './CaveTerrainProfile.js';
+import { terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const ROCK_COLOR = 0x746f65;
 const ROCK_DARK = 0x393834;
-const ROCK_EARTH = 0x666052;
 const CAVE_FLOOR = 0x34302a;
 const CAVE_APPROACH = 0x756650;
-const LANDFORM_EMBED_RATIO = 0.14;
 
 export class ExplorationPoiSystem {
   constructor({ group, terrain, chunks = null, collision = null }) {
@@ -52,22 +52,14 @@ export class ExplorationPoiSystem {
       roughness: 1,
       flatShading: true
     });
-    const earthRockMaterial = new THREE.MeshStandardMaterial({
-      color: ROCK_EARTH,
-      roughness: 1,
-      flatShading: true
-    });
     const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
     const sideX = definition.mouthWidth * 0.5 + 0.28;
 
-    this.#createCaveLandform({
-      definition,
-      baseY,
-      root,
-      geometry: rockGeometry,
-      rockMaterial,
-      earthRockMaterial
-    });
+    // The heightfield owns the carved walkable floor. This lightweight surface
+    // restores only the original hillside skin over the rear half of that cut so
+    // the tunnel actually disappears beneath ground instead of needing a mound of
+    // decorative boulders to fake mountain volume.
+    this.#createTerrainOverburden({ definition, baseY, root });
 
     this.#createEntranceShell({
       definition,
@@ -109,52 +101,81 @@ export class ExplorationPoiSystem {
           this.collision.addObstacle({
             x,
             z,
-            radius: 1.55,
+            radius: 1.35,
             type: 'cave-rock',
             label: `${definition.id}-${side < 0 ? 'left' : 'right'}-${localZ}`,
             bottomY: baseY - 0.2,
-            topY: baseY + definition.mouthHeight + 1.5
+            topY: baseY + definition.mouthHeight + 1.25
           });
         }
       }
     }
   }
 
-  #createCaveLandform({ definition, baseY, root, geometry, rockMaterial, earthRockMaterial }) {
-    const landform = new THREE.Group();
-    landform.name = `${definition.id}-landform`;
-    landform.userData.terrainEmbedded = true;
-    landform.userData.embedRatio = LANDFORM_EMBED_RATIO;
+  #createTerrainOverburden({ definition, baseY, root }) {
+    const profile = definition.terrainCut ?? {};
+    const startZ = Math.min(definition.depth * 0.56, 4.8);
+    const endZ = definition.depth + (profile.backFadeLength ?? 2.5) * 0.88;
+    const length = Math.max(1, endZ - startZ);
+    const width = definition.mouthWidth * 2.05;
+    const geometry = new THREE.PlaneGeometry(width, length, 8, 8);
+    geometry.rotateX(-Math.PI / 2);
+    geometry.translate(0, 0, startZ + length * 0.5);
 
-    // Keep the front-centre aperture empty. The broad masses live beside and behind
-    // the entrance so the cave reads as negative space cut into a hillside, not a
-    // pile of boulders stacked across the player's view. Their centres sit close to
-    // the terrain surface so roughly two fifths of each mass is buried in the
-    // authoritative ground instead of reading as loose rocks placed on top of it.
-    const masses = [
-      { x: -5.35, z: 3.25, scale: [3.45, 2.55, 4.15], rotation: [0.02, -0.2, -0.08] },
-      { x: 5.25, z: 3.4, scale: [3.4, 2.6, 4.2], rotation: [-0.04, 0.24, 0.08] },
-      { x: -4.05, z: 6.65, scale: [3.6, 2.65, 3.65], rotation: [0.08, 0.18, -0.04] },
-      { x: 3.95, z: 6.8, scale: [3.55, 2.7, 3.75], rotation: [-0.05, -0.16, 0.06] },
-      { x: -2.35, z: 9.0, scale: [3.85, 2.55, 3.45], rotation: [0.03, 0.12, -0.04] },
-      { x: 2.25, z: 9.15, scale: [3.8, 2.5, 3.5], rotation: [-0.04, -0.11, 0.05] },
-      { x: 0.1, z: 10.7, scale: [5.25, 2.7, 3.35], rotation: [-0.03, -0.08, 0.03] }
-    ];
+    const positions = geometry.getAttribute('position');
+    const colors = [];
+    const color = new THREE.Color();
 
-    masses.forEach((mass, index) => {
-      const terrainY = this.#terrainRelativeY(definition, baseY, mass.x, mass.z);
-      this.#addRock({
-        parent: landform,
-        geometry,
-        material: index < 2 ? rockMaterial : earthRockMaterial,
-        name: `${definition.id}-landform-rock-${index}`,
-        position: [mass.x, terrainY + mass.scale[1] * LANDFORM_EMBED_RATIO, mass.z],
-        scale: mass.scale,
-        rotation: mass.rotation
-      });
-    });
+    for (let index = 0; index < positions.count; index += 1) {
+      const localX = positions.getX(index);
+      const localZ = positions.getZ(index);
+      const world = this.#localToWorld(definition, localX, localZ);
+      const uncutRelativeY = this.#uncutTerrainRelativeY(definition, baseY, localX, localZ);
+      const worldY = baseY + uncutRelativeY;
+      const slope = this.#uncutTerrainSlopeAt(definition, baseY, localX, localZ);
+      const sand = this.terrain.isSandAt?.(world.x, world.z) ?? false;
+      const region = sand ? null : this.terrain.regionAt?.(world.x, world.z);
+      const jungleSoilStrength = region?.biome === 'jungle'
+        ? (region.strength ?? 0) * (region.ground?.soilStrength ?? 0)
+        : 0;
 
-    root.add(landform);
+      positions.setY(index, uncutRelativeY + 0.035);
+      terrainSurfaceColorAt({
+        x: world.x,
+        z: world.z,
+        y: worldY,
+        slope,
+        sand,
+        forestCover: sand ? 0 : (this.terrain.forestCoverAt?.(world.x, world.z) ?? 0),
+        grassPatchStrength: sand ? 0 : (this.terrain.grassPatchStrengthAt?.(world.x, world.z) ?? 0),
+        jungleSoilStrength
+      }, color);
+      colors.push(color.r, color.g, color.b);
+    }
+
+    positions.needsUpdate = true;
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.computeVertexNormals();
+
+    const overburden = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.97,
+        side: THREE.DoubleSide,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1
+      })
+    );
+    overburden.name = `${definition.id}-terrain-overburden`;
+    overburden.receiveShadow = true;
+    overburden.userData.presentationOnly = true;
+    overburden.userData.bridgesTerrainCut = true;
+    overburden.userData.startLocalZ = startZ;
+    overburden.userData.endLocalZ = endZ;
+    overburden.userData.surfaceSource = 'pre-cave-authoritative-terrain';
+    root.add(overburden);
   }
 
   #createEntranceShell({ definition, root, geometry, rockMaterial, darkRockMaterial }) {
@@ -162,12 +183,12 @@ export class ExplorationPoiSystem {
     entrance.name = `${definition.id}-entrance-shell`;
 
     const face = new THREE.Shape();
-    // Keep the visible face tight to the aperture. The surrounding terrain and
-    // terrain-embedded landform masses provide the hillside volume; an oversized
-    // face would read as a freestanding stone arch sitting on the ground.
-    const halfWidth = definition.mouthWidth * 0.72;
-    const height = definition.mouthHeight * 1.1;
-    face.moveTo(-halfWidth * 0.96, -0.62);
+    // The mouth is deliberately smaller than the former boulder arch. Its brow
+    // rises only slightly above the untouched threshold shoulders, then the shell
+    // runs beneath the restored terrain overburden so it visibly enters the hill.
+    const halfWidth = definition.mouthWidth * 0.66;
+    const height = definition.mouthHeight * 1.08;
+    face.moveTo(-halfWidth * 0.96, -0.5);
     face.lineTo(-halfWidth, height * 0.34);
     face.lineTo(-halfWidth * 0.76, height * 0.74);
     face.lineTo(-halfWidth * 0.4, height * 0.97);
@@ -175,21 +196,21 @@ export class ExplorationPoiSystem {
     face.lineTo(halfWidth * 0.36, height * 0.93);
     face.lineTo(halfWidth * 0.74, height * 0.73);
     face.lineTo(halfWidth, height * 0.38);
-    face.lineTo(halfWidth * 0.94, -0.62);
+    face.lineTo(halfWidth * 0.94, -0.5);
     face.closePath();
 
     const mouth = this.#createMouthPath(definition, 1);
     face.holes.push(mouth);
 
-    const tunnelDepth = Math.min(definition.depth * 0.56, 4.7);
+    const tunnelDepth = Math.min(definition.depth * 0.72, 6.2);
     const shellGeometry = new THREE.ExtrudeGeometry(face, {
       depth: tunnelDepth,
       steps: 1,
       curveSegments: 1,
       bevelEnabled: true,
       bevelSegments: 1,
-      bevelSize: 0.12,
-      bevelThickness: 0.1
+      bevelSize: 0.1,
+      bevelThickness: 0.08
     });
     shellGeometry.computeVertexNormals();
 
@@ -203,17 +224,28 @@ export class ExplorationPoiSystem {
     shell.userData.outerFaceHalfWidth = halfWidth;
     shell.userData.outerFaceHeight = height;
     shell.userData.hillsideIntegrated = true;
+    shell.userData.entersOverburden = true;
     entrance.add(shell);
 
-    // Small side dressing breaks up the planar cliff face without putting any
-    // freestanding rocks back into the opening itself.
+    // Keep only two small lateral breakup rocks. The hillside silhouette now comes
+    // from terrain/overburden, never from a freestanding stack of boulders.
     const dressing = new THREE.Group();
     dressing.name = `${definition.id}-entrance-dressing`;
     const sideRocks = [
-      { x: -4.65, y: 1.35, z: -0.28, scale: [1.35, 1.55, 1.0], rotation: [0.08, -0.18, -0.08] },
-      { x: 4.62, y: 1.45, z: -0.24, scale: [1.3, 1.62, 1.02], rotation: [-0.05, 0.2, 0.07] },
-      { x: -4.55, y: 4.45, z: -0.16, scale: [1.18, 1.25, 0.9], rotation: [0.12, -0.14, -0.04] },
-      { x: 4.5, y: 4.55, z: -0.12, scale: [1.16, 1.2, 0.92], rotation: [-0.09, 0.16, 0.05] }
+      {
+        x: -definition.mouthWidth * 0.62,
+        y: definition.mouthHeight * 0.26,
+        z: -0.2,
+        scale: [0.78, 0.9, 0.72],
+        rotation: [0.08, -0.18, -0.08]
+      },
+      {
+        x: definition.mouthWidth * 0.62,
+        y: definition.mouthHeight * 0.28,
+        z: -0.16,
+        scale: [0.76, 0.92, 0.74],
+        rotation: [-0.05, 0.2, 0.07]
+      }
     ];
     sideRocks.forEach((rock, index) => {
       this.#addRock({
@@ -234,12 +266,12 @@ export class ExplorationPoiSystem {
   #createTunnelRibs({ definition, baseY, root, geometry, darkRockMaterial }) {
     const tunnel = new THREE.Group();
     tunnel.name = `${definition.id}-tunnel-ribs`;
-    const depths = [4.95, 6.2, 7.35];
+    const depths = [6.45, 7.35, 8.05].filter(localZ => localZ < definition.depth);
 
     depths.forEach((localZ, index) => {
       const narrowing = 1 - index * 0.07;
       const sideX = definition.mouthWidth * 0.36 * narrowing;
-      const sideScaleY = definition.mouthHeight * 0.25;
+      const sideScaleY = definition.mouthHeight * 0.22;
       for (const side of [-1, 1]) {
         const terrainY = this.#terrainRelativeY(definition, baseY, side * sideX, localZ);
         this.#addRock({
@@ -247,8 +279,8 @@ export class ExplorationPoiSystem {
           geometry,
           material: darkRockMaterial,
           name: `${definition.id}-tunnel-rib-${index}-${side < 0 ? 'left' : 'right'}`,
-          position: [side * sideX, terrainY + definition.mouthHeight * 0.33, localZ],
-          scale: [0.58, sideScaleY, 0.78],
+          position: [side * sideX, terrainY + definition.mouthHeight * 0.3, localZ],
+          scale: [0.44, sideScaleY, 0.58],
           rotation: [0.06 * (index % 2), side * 0.08, side * 0.07]
         });
       }
@@ -259,13 +291,14 @@ export class ExplorationPoiSystem {
         geometry,
         material: darkRockMaterial,
         name: `${definition.id}-tunnel-rib-${index}-crown`,
-        position: [0, crownTerrainY + definition.mouthHeight * 0.82, localZ + 0.06],
-        scale: [definition.mouthWidth * 0.24 * narrowing, 0.54, 0.76],
+        position: [0, crownTerrainY + definition.mouthHeight * 0.78, localZ + 0.06],
+        scale: [definition.mouthWidth * 0.2 * narrowing, 0.4, 0.58],
         rotation: [0.03, index % 2 === 0 ? 0.05 : -0.04, 0.02]
       });
     });
 
     tunnel.userData.terrainConforming = true;
+    tunnel.userData.recessedBehindContinuousShell = true;
     root.add(tunnel);
   }
 
@@ -339,10 +372,12 @@ export class ExplorationPoiSystem {
   }
 
   #createTerrainConformingApproach(definition, baseY) {
-    const width = definition.mouthWidth * 0.68;
-    const length = 5.4;
-    const centerZ = -2.15;
-    const geometry = new THREE.PlaneGeometry(width, length, 4, 6);
+    const profile = definition.terrainCut ?? {};
+    const approachLength = profile.approachLength ?? 4.8;
+    const width = definition.mouthWidth * 0.72;
+    const length = approachLength + 0.8;
+    const centerZ = -approachLength * 0.5 + 0.15;
+    const geometry = new THREE.PlaneGeometry(width, length, 4, 8);
     geometry.rotateX(-Math.PI / 2);
     geometry.translate(0, 0, centerZ);
 
@@ -365,12 +400,34 @@ export class ExplorationPoiSystem {
     return approach;
   }
 
-  #terrainRelativeY(definition, baseY, localX, localZ) {
+  #localToWorld(definition, localX, localZ) {
     const c = Math.cos(definition.yaw);
     const s = Math.sin(definition.yaw);
-    const worldX = definition.x + localX * c + localZ * s;
-    const worldZ = definition.z - localX * s + localZ * c;
-    return this.terrain.heightAt(worldX, worldZ) - baseY;
+    return {
+      x: definition.x + localX * c + localZ * s,
+      z: definition.z - localX * s + localZ * c
+    };
+  }
+
+  #terrainRelativeY(definition, baseY, localX, localZ) {
+    const world = this.#localToWorld(definition, localX, localZ);
+    return this.terrain.heightAt(world.x, world.z) - baseY;
+  }
+
+  #uncutTerrainRelativeY(definition, baseY, localX, localZ) {
+    const world = this.#localToWorld(definition, localX, localZ);
+    const carvedHeight = this.terrain.heightAt(world.x, world.z);
+    return carvedHeight - caveTerrainOffsetAt(definition, world.x, world.z) - baseY;
+  }
+
+  #uncutTerrainSlopeAt(definition, baseY, localX, localZ, distance = 0.75) {
+    const center = this.#uncutTerrainRelativeY(definition, baseY, localX, localZ);
+    return Math.max(
+      Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX + distance, localZ) - center),
+      Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX - distance, localZ) - center),
+      Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX, localZ + distance) - center),
+      Math.abs(this.#uncutTerrainRelativeY(definition, baseY, localX, localZ - distance) - center)
+    ) / distance;
   }
 
   #addRock({ parent, geometry, material, name, position, scale, rotation }) {
