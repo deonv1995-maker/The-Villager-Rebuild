@@ -39,7 +39,7 @@ export class SproutArrivalController {
       onTrigger: () => this.#beginRescue()
     };
     this.onKeyDown = event => {
-      if (event.repeat) return;
+      if (event.repeat || this.game.isPaused?.()) return;
       if (this.phase === PHASE.INVESTIGATE && event.code === 'KeyE' && this.rescueAction.available) {
         event.preventDefault();
         this.#beginRescue();
@@ -186,7 +186,7 @@ export class SproutArrivalController {
       ? 0
       : clampDt((timestamp - this.lastTimestamp) / 1000);
     this.lastTimestamp = timestamp;
-    this.#tick(dt);
+    if (!this.game.isPaused?.()) this.#tick(dt);
     this.frameId = window.requestAnimationFrame(this.#frame);
   };
 
