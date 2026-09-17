@@ -11,6 +11,7 @@ This milestone keeps the established campfire, inventory, crafting and storage a
 - Approaching a placed Crafting Bench exposes the existing unified Action button as **CRAFT**.
 - A bench crafting session unlocks the **Storage Chest** and **Food Barrel** recipes.
 - Crafted Chest/Barrel outputs are inventory placeables. Only explicit placement creates a `StorageContainerSystem` world instance.
+- Hammer **REMOVE** mode can disassemble an empty placed Chest, Barrel or Crafting Bench and immediately return it to the established placement flow for repositioning.
 - The old always-visible inventory strip and separate craft button are replaced by one suitcase button containing **Items** and **Craft** tabs.
 
 This player-storage layer is not the later settlement Storage Flag or villager drop-off authority. Future settlement logistics should consume or extend these container/resource boundaries rather than create a parallel economy.
@@ -44,6 +45,19 @@ Sleeping advances the existing clock to 07:00. At or after dusk this means 07:00
 6. Chest/Barrel placement calls the existing `StorageContainerSystem.addContainer()` boundary.
 
 Placement uses the existing terrain/collision authority and does not introduce another construction grid.
+
+### Hammer removal/replacement contract
+
+The hammer construction menu remains the player-facing authority for demolition intent. When **REMOVE** mode is active, semantic building panels keep first ownership of the current hammer target. If no panel owns the aim target, `PlaceableUtilityRuntimeController` may resolve a nearby Crafting Bench, Storage Chest or Food Barrel through the same hammer interaction state.
+
+- First-person utility targeting uses the centre-camera ray and the existing hammer reach. Third-person targeting chooses the nearest utility within that reach.
+- A successful hammer action removes the utility through its owning world system, records one hammer use, returns exactly one matching placeable item to Ranger inventory, checkpoints the save, and immediately re-enters the existing utility placement preview. No second replacement/placement system is allowed.
+- Chest and Barrel instances must be empty before they can be moved. Their contents belong to the container instance, not the inventory placeable item, so disassembly is rejected before mutation when contents remain.
+- Ranger inventory must have capacity for the returned placeable before disassembly. A full pack leaves the world instance untouched.
+- Crafting Benches have no contained inventory and can be disassembled directly once Ranger capacity allows it.
+- Cancelling the replacement preview leaves the reclaimed placeable safely in Ranger inventory for later placement.
+
+`CraftingBenchSystem.removeBench()` and `StorageContainerSystem.removeContainer()` remain the owning removal boundaries so their collision handles and world roots are removed with the instance. Both systems expose read-only world-entry views for hammer targeting; storage contents and crafting state remain owned by their existing systems.
 
 ## Storage architecture
 
@@ -114,7 +128,7 @@ The current Sword, Spear and Torch presentation remains unchanged.
 
 ## Verification
 
-`scripts/verify-campfire-sleep-storage.mjs` protects the broader campfire/crafting/storage milestone. `scripts/verify-storage-transfer-ui.mjs` is part of `npm run check` and specifically protects the split-grid transfer interaction.
+`scripts/verify-campfire-sleep-storage.mjs` protects the broader campfire/crafting/storage milestone. `scripts/verify-storage-transfer-ui.mjs` protects the split-grid transfer interaction. `scripts/verify-placeable-utility-hammer-move.mjs` protects hammer removal/replacement of player-placed utilities. All three run through `npm run check`.
 
 Together they protect:
 
@@ -130,6 +144,10 @@ Together they protect:
 - immediate single-tap transfer when only one unit can move, plus double-tap full-stack transfer and capacity-aware withdrawal limits;
 - multiple independent placed storage instances and persistence;
 - Crafting Bench proximity and persistence;
+- Hammer REMOVE targeting for Chest, Barrel and Crafting Bench;
+- empty-storage and Ranger-capacity guards before world mutation;
+- one-for-one placeable reclamation followed by the established placement preview;
+- collision/world-root removal through the owning storage/bench systems and hammer-use/save hooks on successful movement;
 - legacy starter-container content migration;
 - suitcase Items/Craft consolidation and removal of the standalone Craft button;
 - full-screen suitcase layout and centralized pause wiring;
@@ -138,4 +156,4 @@ Together they protect:
 
 `verify:day-night` also protects the paused world-time contract so opening a menu cannot advance the clock or create a resume-time jump.
 
-Device verification remains required for storage split-grid sizing in landscape and portrait, instant one-item transfer, multi-item quantity selection, double-tap responsiveness, safe handling of full Ranger capacity, full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel and the visible night-to-morning transition.
+Device verification remains required for storage split-grid sizing in landscape and portrait, instant one-item transfer, multi-item quantity selection, double-tap responsiveness, safe handling of full Ranger capacity, full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel, Hammer REMOVE targeting and replacement of the Bench/Chest/Barrel, blocked movement of non-empty storage, cancel-and-replace behavior, and the visible night-to-morning transition.
