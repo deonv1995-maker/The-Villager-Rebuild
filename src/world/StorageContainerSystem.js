@@ -31,15 +31,15 @@ export class StorageContainerSystem {
     for (const record of initialContainers) this.addContainer(record);
   }
 
-  addContainer({ id, type, x, z, yaw = 0, contents = {} } = {}) {
+  addContainer({ id, type, x, y = null, z, yaw = 0, contents = {} } = {}) {
     if (!id || this.containers.has(id)) throw new Error(`Storage container id must be unique: ${id}`);
     const definition = this.definitions[type];
     if (!definition) throw new Error(`Unknown storage container type: ${type}`);
     if (![x, z, yaw].every(Number.isFinite)) throw new Error('Storage container placement requires finite x, z and yaw');
 
     const root = this.#createVisual(type);
-    const y = this.terrain.heightAt(x, z);
-    root.position.set(x, y, z);
+    const placementY = Number.isFinite(y) ? y : this.terrain.heightAt(x, z);
+    root.position.set(x, placementY, z);
     root.rotation.y = yaw;
     root.name = `storage-${type}-${id}`;
     this.group.add(root);
@@ -50,8 +50,8 @@ export class StorageContainerSystem {
       radius: definition.collisionRadius,
       type: 'storage-container',
       label: id,
-      bottomY: y,
-      topY: y + (type === 'barrel' ? 1.05 : 0.9)
+      bottomY: placementY,
+      topY: placementY + (type === 'barrel' ? 1.05 : 0.9)
     });
 
     const container = {
@@ -165,6 +165,7 @@ export class StorageContainerSystem {
       id: container.id,
       type: container.type,
       x: Number(container.root.position.x.toFixed(3)),
+      y: Number(container.root.position.y.toFixed(3)),
       z: Number(container.root.position.z.toFixed(3)),
       yaw: Number(container.root.rotation.y.toFixed(4)),
       contents: Object.fromEntries(container.contents)
