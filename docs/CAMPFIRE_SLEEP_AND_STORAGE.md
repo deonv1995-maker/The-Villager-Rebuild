@@ -56,6 +56,20 @@ The storage routing rules remain:
 
 Transfers use `InventorySystem.consume()` and `InventorySystem.tryAdd()` so Ranger capacity remains authoritative when taking items back. Container contents never become a second inventory system.
 
+### Storage transfer UI contract
+
+The opened storage panel is a two-pane transfer surface rather than a row of one-item Store/Take buttons:
+
+- **ON HAND** on the left shows accepted item stacks currently carried by the Ranger.
+- **CHEST** or **BARREL** on the right shows stacks currently inside that specific container.
+- Both sides reuse `ASSET_PATHS.ui.mobile.resources` for item artwork and show the current stack quantity as a badge on each grid card.
+- A single tap opens a quantity selector with decrement, direct numeric entry, increment, **ALL**, and the direction-specific **STORE**/**TAKE** confirmation.
+- A double tap on a stack bypasses the selector and transfers the full currently transferable quantity in that direction.
+- Deposits may move the whole carried stack because containers currently have no stack-capacity ceiling. Withdrawals cap the offered quantity through `InventorySystem.canAdd()` so the existing Ranger carrying-capacity authority is never bypassed.
+- A selected quantity is passed once to `StorageContainerSystem.store()` or `StorageContainerSystem.take()`. The presentation layer must not loop one-item transactions, which keeps transfer conservation and future persistence hooks inside the established storage boundary.
+
+The panel remains generic for both Chest and Food Barrel. Accepted item types still come from `StorageContainerDefinitions`; the UI must not hard-code a second list of valid resources.
+
 ## Suitcase HUD contract
 
 `MobileHud` exposes one `inventory-menu-toggle` using the suitcase icon. When closed, the former inventory strip and independent Craft button do not occupy screen space.
@@ -100,7 +114,9 @@ The current Sword, Spear and Torch presentation remains unchanged.
 
 ## Verification
 
-`scripts/verify-campfire-sleep-storage.mjs`, invoked by the existing verification path, protects:
+`scripts/verify-campfire-sleep-storage.mjs` protects the broader campfire/crafting/storage milestone. `scripts/verify-storage-transfer-ui.mjs` is part of `npm run check` and specifically protects the split-grid transfer interaction.
+
+Together they protect:
 
 - dusk/night/pre-dawn sleep availability and daytime exclusion;
 - next-morning day rollover at 07:00;
@@ -109,6 +125,9 @@ The current Sword, Spear and Torch presentation remains unchanged.
 - portable Crafting Bench recipe and bench-gated Chest/Barrel recipes;
 - inventory output before placement;
 - Chest/Barrel resource-routing and transfer semantics;
+- atomic multi-quantity deposit/withdrawal behavior and rejection without partial mutation;
+- the two-pane ON HAND/container grid, shared resource icons, quantity badges and quantity selector;
+- double-tap full-stack transfer and capacity-aware withdrawal limits;
 - multiple independent placed storage instances and persistence;
 - Crafting Bench proximity and persistence;
 - legacy starter-container content migration;
@@ -119,4 +138,4 @@ The current Sword, Spear and Torch presentation remains unchanged.
 
 `verify:day-night` also protects the paused world-time contract so opening a menu cannot advance the clock or create a resume-time jump.
 
-Device verification remains required for full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel, storage-panel usability and the visible night-to-morning transition.
+Device verification remains required for storage split-grid sizing in landscape and portrait, single-tap quantity selection, double-tap responsiveness, safe handling of full Ranger capacity, full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel and the visible night-to-morning transition.
