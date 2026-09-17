@@ -91,7 +91,8 @@ export class CampfireSleepRuntimeController {
     if (!wake) return false;
     const next = this.game.worldTime.setTime(wake);
     this.game.worldTimeRuntime?.sync?.();
-    this.game.saveController?.saveNow?.(source === 'bed' ? 'bed-sleep' : 'campfire-sleep');
+    if (source === 'bed') this.game.saveController?.saveNow?.('bed-sleep');
+    else this.game.saveController?.saveNow?.('campfire-sleep');
     this.game.setStatus?.(
       source === 'bed'
         ? `DAY ${next.day} · ${next.displayTime} · RESTED IN BED`
