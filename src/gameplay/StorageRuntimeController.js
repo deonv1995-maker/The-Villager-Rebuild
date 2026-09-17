@@ -5,6 +5,7 @@ import {
 } from '../data/StorageContainerDefinitions.js';
 import { StoragePanel } from '../ui/StoragePanel.js';
 import { StorageContainerSystem } from '../world/StorageContainerSystem.js';
+import { selectFirstPersonUtilityTarget } from '../world/UtilityInteractionTargetingRules.js';
 
 export class StorageRuntimeController {
   constructor({
@@ -86,7 +87,9 @@ export class StorageRuntimeController {
   #syncInteraction() {
     if (!this.game.player) return;
     this.game.player.getPosition(this.position);
-    const nearby = this.system.getNearestContainer(this.position, STORAGE_INTERACTION_RADIUS);
+    const nearby = this.game.player.isFirstPerson?.()
+      ? this.#getFirstPersonStorageTarget()
+      : this.system.getNearestContainer(this.position, STORAGE_INTERACTION_RADIUS);
 
     if (this.panel?.isOpen) {
       const openContainer = this.system.describe(this.activeContainerId);
@@ -104,6 +107,16 @@ export class StorageRuntimeController {
       label: `Open ${nearby.label}`,
       onTrigger: () => this.#open(nearby.id)
     } : null);
+  }
+
+  #getFirstPersonStorageTarget() {
+    const target = selectFirstPersonUtilityTarget({
+      benchSystem: this.game.craftingBenches ?? this.game.placeableUtilityRuntime?.benchSystem,
+      storageSystem: this.system,
+      playerPosition: this.position,
+      camera: this.game.sceneSystem?.camera
+    });
+    return target?.kind === 'storage' ? this.system.describe(target.id) : null;
   }
 
   #open(containerId) {
