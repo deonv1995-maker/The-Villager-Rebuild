@@ -74,16 +74,29 @@ const pickup = resolveContextAction({
 assert.equal(pickup.source, 'interaction');
 assert.equal(pickup.caption, 'PICK UP');
 
-const campfireDoesNotOwnAction = resolveContextAction({
+const legacyCampfireInput = resolveContextAction({
   campfireAction: { available: true, previewing: true, label: 'Confirm campfire placement' },
   interactionTarget: { type: 'resource', label: 'Stone', actionLabel: 'Pick up Stone' }
 });
 assert.equal(
-  campfireDoesNotOwnAction.source,
+  legacyCampfireInput.source,
   'interaction',
-  'Campfire placement belongs to crafting and must never take ownership of the unified Action button'
+  'ContextActionPolicy must not reintroduce a special campfire source; placement is an ordinary external action'
 );
-assert.equal(campfireDoesNotOwnAction.caption, 'PICK UP');
+
+const craftedPlacement = resolveContextAction({
+  externalActions: [{
+    id: 'craft-placement',
+    priority: 1125,
+    available: true,
+    icon: 'campfire',
+    label: 'Confirm campfire placement',
+    caption: 'PLACE'
+  }]
+});
+assert.equal(craftedPlacement.source, 'external', 'Crafted placement must reuse the one unified Action surface');
+assert.equal(craftedPlacement.externalId, 'craft-placement');
+assert.equal(craftedPlacement.caption, 'PLACE');
 
 const thatch = resolveContextAction({
   externalActions: [{
@@ -102,8 +115,10 @@ assert.equal(thatch.caption, 'ROOF · THATCH');
 const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import.meta.url), 'utf8');
 const contextActionSource = fs.readFileSync(new URL('../src/ui/ContextActionPolicy.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+const inventoryMenuStyles = fs.readFileSync(new URL('../src/inventory-menu.css', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
 const equipmentRuntimeSource = fs.readFileSync(new URL('../src/gameplay/EquipmentRuntimeController.js', import.meta.url), 'utf8');
+const placeableRuntimeSource = fs.readFileSync(new URL('../src/gameplay/PlaceableUtilityRuntimeController.js', import.meta.url), 'utf8');
 const thatchControllerSource = fs.readFileSync(new URL('../src/gameplay/RoofThatchController.js', import.meta.url), 'utf8');
 const rangerControllerSource = fs.readFileSync(new URL('../src/player/RangerController.js', import.meta.url), 'utf8');
 
@@ -112,19 +127,21 @@ assert.doesNotMatch(mobileHudSource, /class="hud-button interact"/, 'Legacy inte
 assert.doesNotMatch(mobileHudSource, /class="hud-button attack"/, 'Legacy attack round button must be removed');
 assert.doesNotMatch(mobileHudSource, /class="hud-button craft"/, 'Legacy campfire round button must be removed');
 assert.match(mobileHudSource, /setExternalAction\(id, action = null\)/, 'External construction actions must use the same Action surface');
-assert.match(mobileHudSource, /setCraftPlacementAction\(action\)/, 'Crafted world placement must have a dedicated crafting-control state');
-assert.match(mobileHudSource, /data-role="craft-toggle-icon"/, 'Craft control must be able to show the active crafted placement icon');
-assert.match(mobileHudSource, /data-role="craft-toggle-label"/, 'Craft control must be able to switch from CRAFT to PLACE');
-assert.match(mobileHudSource, /currentCraftPlacementAction\?\.previewing/, 'Active crafted placement must be confirmed from the crafting control');
-assert.doesNotMatch(mobileHudSource, /if \(action\.source === 'campfire'\)/, 'Unified Action trigger must not contain a campfire construction branch');
-assert.doesNotMatch(contextActionSource, /source: 'campfire'/, 'Context action policy must not expose campfire construction');
+assert.match(mobileHudSource, /setCraftPlacementAction\(action\)/, 'Crafted world placement must keep a dedicated crafting-control state');
+assert.match(mobileHudSource, /CRAFT_PLACEMENT_ACTION_ID = 'craft-placement'/, 'Crafted placement must have a stable unified-action id');
+assert.match(mobileHudSource, /this\.setExternalAction\(CRAFT_PLACEMENT_ACTION_ID/, 'Active crafted placement must publish into the unified Action surface');
+assert.match(mobileHudSource, /this\.onCraft\?\.\(placement\.recipeId \?\? 'campfire'\)/, 'Unified PLACE must delegate confirmation back to the existing crafting handler');
+assert.doesNotMatch(mobileHudSource, /if \(action\.source === 'campfire'\)/, 'Unified Action trigger must not contain a special campfire branch');
+assert.doesNotMatch(contextActionSource, /source: 'campfire'/, 'Context action policy must not expose a special campfire source');
 assert.match(contextActionSource, /STUMP_ACTION_ID = 'shovel-stump'/, 'Context action policy must reserve the shovel stump action ahead of incidental pickups');
 assert.match(equipmentRuntimeSource, /#wrapToolUse\(this\.game\.treeHarvest, 'removeStump', 'shovel'\)/, 'Shovel stump removal must consume standard tool durability');
 assert.match(equipmentRuntimeSource, /caption: 'DIG'/, 'Shovel must route through the unified Action button as DIG');
+assert.match(placeableRuntimeSource, /caption: 'CRAFT'/, 'Approaching a Crafting Bench must expose CRAFT through the unified Action button');
+assert.match(placeableRuntimeSource, /caption: 'PLACE'/, 'Inventory placeables must confirm through the unified Action button');
 assert.match(mobileHudSource, /shovel: ui\.shovel/, 'Mobile HUD must render a dedicated shovel icon');
 assert.match(assetPathsSource, /shovel: asset\('ui\/cosy\/icon-shovel\.webp'\)/, 'Shovel icon path must remain centralized');
 assert.ok(fs.existsSync(new URL('../public/assets/ui/cosy/icon-shovel.webp', import.meta.url)), 'Shovel icon asset must exist in public assets');
-assert.match(mobileHudSource, /!TOOL_ORDER\.includes\(entry\.id\)/, 'Resource strip must exclude all current and future toolbelt tools from the shared tool order');
+assert.match(mobileHudSource, /entry\.kind !== 'tool' && entry\.kind !== 'weapon'/, 'Suitcase item grid must keep equipped tools in the existing toolbelt instead of duplicating them');
 assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
@@ -168,10 +185,11 @@ assert.match(
   'Collapsed build menu must hide only its mode options while leaving the toggle accessible'
 );
 assert.match(
-  stylesSource,
-  /\.inventory-strip\s*\{[\s\S]*?left: max\(10px,[\s\S]*?right: auto;[\s\S]*?flex-direction: column/,
-  'Inventory must remain a vertical stack on the left side'
+  inventoryMenuStyles,
+  /\.inventory-menu-toggle\s*\{[\s\S]*?left: max\(10px,[\s\S]*?width: 46px;/,
+  'Closed inventory must be represented by one compact suitcase button on the left safe area'
 );
+assert.match(inventoryMenuStyles, /\.inventory-grid\s*\{[\s\S]*?display: grid;/, 'Opened suitcase must expose a grid rather than a permanent resource stack');
 assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button needs a dedicated mobile layout');
 
 assert.doesNotMatch(mobileHudSource, /data-role="joystick"/, 'The visible fixed walking thumb grip must be removed');
@@ -201,4 +219,4 @@ assert.match(rangerControllerSource, /CAMERA_RETURN_RESPONSE = 0\.5/, 'Manual ca
 assert.match(rangerControllerSource, /CAMERA_PITCH_RESPONSE = 0\.7/, 'Manual camera pitch recovery must remain relaxed rather than snapping back');
 assert.match(rangerControllerSource, /CAMERA_POSITION_RESPONSE = 4\.2/, 'Camera position must use relaxed positional damping instead of tight snapping');
 
-console.log('Unified mobile actions, shovel stump digging, crafting-owned campfire placement, cosy icon-grid building, hidden all-speed movement, hidden sprint gesture and relaxed follow camera verified');
+console.log('Unified mobile actions, suitcase HUD, bench crafting, one-button placement, cosy building grid, hidden all-speed movement and relaxed follow camera verified');

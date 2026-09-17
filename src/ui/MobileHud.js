@@ -9,6 +9,7 @@ const MOVE_DEADZONE_PX = 7;
 const SPRINT_TARGET_OFFSET_PX = 145;
 const SPRINT_TARGET_RADIUS_PX = 34;
 const SPRINT_TARGET_EDGE_PADDING_PX = 42;
+const CRAFT_PLACEMENT_ACTION_ID = 'craft-placement';
 
 export class MobileHud {
   constructor({
@@ -19,7 +20,9 @@ export class MobileHud {
     onAttack,
     onToolSelect,
     onCraft,
-    onBuildOption
+    onBuildOption,
+    onInventoryItemSelect = null,
+    onInventoryVisibilityChange = null
   }) {
     this.player = player;
     this.canvas = canvas;
@@ -29,10 +32,13 @@ export class MobileHud {
     this.onToolSelect = onToolSelect;
     this.onCraft = onCraft;
     this.onBuildOption = onBuildOption;
+    this.onInventoryItemSelect = onInventoryItemSelect;
+    this.onInventoryVisibilityChange = onInventoryVisibilityChange;
     this.carryingLog = false;
     this.buildPreviewValid = false;
     this.buildTrayCollapsed = false;
-    this.craftMenuOpen = false;
+    this.inventoryMenuOpen = false;
+    this.inventoryTab = 'items';
     this.currentBuildMode = 'raw';
     this.currentToolId = null;
     this.currentInteractionTarget = null;
@@ -55,8 +61,12 @@ export class MobileHud {
       shovel: ui.shovel,
       sword: ui.sword,
       torch: ui.torch,
-      campfire: ui.campfire
+      campfire: ui.campfire,
+      'crafting-bench': ui.craftingBench,
+      chest: ui.chest,
+      barrel: ui.barrel
     });
+    this.itemIcons = Object.freeze({ ...this.resourceIcons, ...this.toolIcons });
 
     const toolButtons = ['hand', ...TOOL_ORDER].map(toolId => `
       <button class="tool-slot" type="button" data-tool="${toolId}" aria-label="${toolId}">
@@ -69,23 +79,27 @@ export class MobileHud {
     `).join('');
 
     this.root.innerHTML = `
-      <div class="inventory-strip" data-role="inventory"></div>
+      <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open inventory" aria-expanded="false">
+        <img src="${ui.suitcase}" alt="" aria-hidden="true">
+      </button>
+      <section class="inventory-menu" data-role="inventory-menu" aria-label="Inventory and crafting" hidden>
+        <div class="inventory-menu-header">
+          <div>
+            <strong>SUITCASE</strong>
+            <span data-role="inventory-capacity">PACK</span>
+          </div>
+          <button class="inventory-menu-close" type="button" data-role="inventory-close" aria-label="Close inventory">×</button>
+        </div>
+        <nav class="inventory-tabs" aria-label="Inventory sections">
+          <button class="inventory-tab active" type="button" data-inventory-tab="items" aria-pressed="true">ITEMS</button>
+          <button class="inventory-tab" type="button" data-inventory-tab="craft" aria-pressed="false">CRAFT</button>
+        </nav>
+        <div class="inventory-tab-context" data-role="craft-context" hidden>Portable crafting</div>
+        <div class="inventory-grid" data-role="inventory"></div>
+        <div class="craft-menu-list" data-role="craft-list" hidden></div>
+      </section>
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
-      <button class="craft-menu-toggle" type="button" data-role="craft-toggle" aria-label="Open crafting menu" aria-expanded="false">
-        <img data-role="craft-toggle-icon" src="${ui.hammer}" alt="" aria-hidden="true">
-        <span data-role="craft-toggle-label">CRAFT</span>
-      </button>
-      <section class="craft-menu" data-role="craft-menu" aria-label="Crafting menu" hidden>
-        <div class="craft-menu-header">
-          <div>
-            <strong>CRAFTING</strong>
-            <span>Tools wear 3–6% per use</span>
-          </div>
-          <button class="craft-menu-close" type="button" data-role="craft-close" aria-label="Close crafting menu">×</button>
-        </div>
-        <div class="craft-menu-list" data-role="craft-list"></div>
-      </section>
       <div class="log-build-tray" data-role="log-build" hidden>
         <button class="build-tray-toggle" type="button" data-role="build-toggle" aria-expanded="true" aria-label="Collapse build menu, Raw log selected">
           <img class="build-tray-current-icon" data-role="build-toggle-icon" src="${this.buildIcons.raw}" alt="" aria-hidden="true">
@@ -113,19 +127,19 @@ export class MobileHud {
       <button class="hud-button jump" type="button" aria-label="Jump"><img class="button-bg" src="${ui.buttonCircle}" alt=""><img class="button-icon" src="${ui.jump}" alt=""></button>
     `;
     document.body.appendChild(this.root);
+    this.inventoryToggle = this.root.querySelector('[data-role="inventory-toggle"]');
+    this.inventoryMenu = this.root.querySelector('[data-role="inventory-menu"]');
+    this.inventoryClose = this.root.querySelector('[data-role="inventory-close"]');
+    this.inventoryCapacity = this.root.querySelector('[data-role="inventory-capacity"]');
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
+    this.craftContext = this.root.querySelector('[data-role="craft-context"]');
+    this.craftList = this.root.querySelector('[data-role="craft-list"]');
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.actionButton = this.root.querySelector('.action');
     this.actionIcon = this.root.querySelector('[data-role="action-icon"]');
     this.actionCaption = this.root.querySelector('[data-role="action-caption"]');
     this.attackButton = this.actionButton;
     this.attackIcon = this.actionIcon;
-    this.craftToggle = this.root.querySelector('[data-role="craft-toggle"]');
-    this.craftToggleIcon = this.root.querySelector('[data-role="craft-toggle-icon"]');
-    this.craftToggleLabel = this.root.querySelector('[data-role="craft-toggle-label"]');
-    this.craftMenu = this.root.querySelector('[data-role="craft-menu"]');
-    this.craftClose = this.root.querySelector('[data-role="craft-close"]');
-    this.craftList = this.root.querySelector('[data-role="craft-list"]');
     this.buildTray = this.root.querySelector('[data-role="log-build"]');
     this.buildTrayToggle = this.root.querySelector('[data-role="build-toggle"]');
     this.buildTrayToggleIcon = this.root.querySelector('[data-role="build-toggle-icon"]');
@@ -136,7 +150,8 @@ export class MobileHud {
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
     this.#setBuildTrayCollapsed(false);
-    this.#setCraftMenuOpen(false);
+    this.#setInventoryTab('items');
+    this.#setInventoryMenuOpen(false, { notify: false });
     this.#bindMovement();
     this.#bindButtons();
     this.#bindLook();
@@ -147,26 +162,75 @@ export class MobileHud {
   setInventory(entries) {
     const alwaysVisible = new Set(['stick', 'stone', 'grass']);
     const visible = entries
-      .filter(entry => entry.quantity > 0 || alwaysVisible.has(entry.id))
-      .filter(entry => !TOOL_ORDER.includes(entry.id));
+      .filter(entry => entry.kind !== 'tool' && entry.kind !== 'weapon')
+      .filter(entry => entry.quantity > 0 || (entry.kind === 'resource' && alwaysVisible.has(entry.id)));
 
     this.inventoryElement.replaceChildren(...visible.map(entry => {
-      const row = document.createElement('div');
-      row.className = 'inventory-row';
-      row.dataset.resource = entry.id;
-      row.setAttribute('aria-label', `${entry.label}: ${entry.quantity}`);
-      row.title = `${entry.label}: ${entry.quantity}`;
+      const selectable = entry.kind === 'placeable' && entry.quantity > 0;
+      const card = document.createElement(selectable ? 'button' : 'div');
+      card.className = 'inventory-card';
+      card.dataset.resource = entry.id;
+      if (selectable) {
+        card.type = 'button';
+        card.dataset.inventorySelect = entry.id;
+      }
+      card.classList.toggle('placeable', selectable);
+      card.setAttribute('aria-label', `${entry.label}: ${entry.quantity}${selectable ? ', tap to place' : ''}`);
+      card.title = selectable ? `${entry.label}: ${entry.quantity} · Tap to place` : `${entry.label}: ${entry.quantity}`;
+
       const icon = document.createElement('img');
       icon.className = 'inventory-resource-icon';
-      icon.src = this.resourceIcons[entry.id] ?? this.toolIcons.hand;
+      icon.src = this.itemIcons[entry.id] ?? this.toolIcons.hand;
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
+
+      const label = document.createElement('span');
+      label.className = 'inventory-card-label';
+      label.textContent = entry.label;
+
       const quantity = document.createElement('strong');
+      quantity.className = 'inventory-card-quantity';
       quantity.textContent = String(entry.quantity);
       quantity.setAttribute('aria-hidden', 'true');
-      row.append(icon, quantity);
-      return row;
+
+      card.append(icon, label, quantity);
+      if (selectable) {
+        const hint = document.createElement('small');
+        hint.textContent = 'PLACE';
+        hint.setAttribute('aria-hidden', 'true');
+        card.append(hint);
+      }
+      return card;
     }));
+  }
+
+  setInventoryCapacity(state) {
+    if (!state) return;
+    if (this.inventoryCapacity) {
+      this.inventoryCapacity.textContent = `${state.hudLabel} ${state.used}/${state.capacity}`;
+      this.inventoryCapacity.dataset.overCapacity = state.overCapacity ? 'true' : 'false';
+    }
+    if (this.inventoryToggle) {
+      this.inventoryToggle.dataset.overCapacity = state.overCapacity ? 'true' : 'false';
+      this.inventoryToggle.title = `${state.label}: ${state.used}/${state.capacity} bulk units`;
+      this.inventoryToggle.setAttribute(
+        'aria-label',
+        `${this.inventoryMenuOpen ? 'Close' : 'Open'} inventory, ${state.used} of ${state.capacity} bulk used`
+      );
+    }
+  }
+
+  openInventory(tab = 'items') {
+    this.#setInventoryTab(tab);
+    this.#setInventoryMenuOpen(true);
+  }
+
+  closeInventory() {
+    this.#setInventoryMenuOpen(false);
+  }
+
+  isInventoryOpen() {
+    return this.inventoryMenuOpen;
   }
 
   setObjective(message) {
@@ -220,7 +284,13 @@ export class MobileHud {
     this.#renderAction();
   }
 
-  setCrafting(entries) {
+  setCrafting(entries, { station = 'hand' } = {}) {
+    if (this.craftContext) {
+      this.craftContext.textContent = station === 'bench'
+        ? 'Crafting Bench · storage recipes unlocked'
+        : 'Portable crafting · place a bench for storage recipes';
+    }
+
     const fragment = document.createDocumentFragment();
     for (const entry of entries) {
       const row = document.createElement('article');
@@ -229,7 +299,7 @@ export class MobileHud {
 
       const icon = document.createElement('img');
       icon.className = 'craft-recipe-icon';
-      icon.src = this.toolIcons[entry.icon] ?? this.toolIcons.hand;
+      icon.src = this.itemIcons[entry.icon] ?? this.toolIcons.hand;
       icon.alt = '';
       icon.setAttribute('aria-hidden', 'true');
 
@@ -310,11 +380,21 @@ export class MobileHud {
 
   setCraftPlacementAction(action) {
     this.currentCraftPlacementAction = action ? { ...action } : null;
-    if (this.currentCraftPlacementAction?.previewing) {
-      this.#setCraftMenuOpen(false);
+    const placement = this.currentCraftPlacementAction;
+    if (!placement?.previewing) {
+      this.setExternalAction(CRAFT_PLACEMENT_ACTION_ID, null);
       return;
     }
-    this.#renderCraftToggle();
+
+    this.closeInventory();
+    this.setExternalAction(CRAFT_PLACEMENT_ACTION_ID, {
+      available: Boolean(placement.available),
+      priority: 1125,
+      icon: placement.icon ?? 'campfire',
+      caption: placement.caption ?? 'PLACE',
+      label: placement.label ?? 'Confirm crafted placement',
+      onTrigger: () => this.onCraft?.(placement.recipeId ?? 'campfire')
+    });
   }
 
   setAttackTarget(target, toolId = null) {
@@ -330,29 +410,25 @@ export class MobileHud {
     this.#renderAction();
   }
 
-  #setCraftMenuOpen(open) {
-    const placementPreviewing = Boolean(this.currentCraftPlacementAction?.previewing);
-    this.craftMenuOpen = Boolean(open) && !placementPreviewing;
-    this.craftMenu.hidden = !this.craftMenuOpen;
-    this.craftToggle.classList.toggle('open', this.craftMenuOpen);
-    this.#renderCraftToggle();
+  #setInventoryMenuOpen(open, { notify = true } = {}) {
+    this.inventoryMenuOpen = Boolean(open);
+    this.inventoryMenu.hidden = !this.inventoryMenuOpen;
+    this.inventoryToggle.classList.toggle('open', this.inventoryMenuOpen);
+    this.inventoryToggle.setAttribute('aria-expanded', this.inventoryMenuOpen ? 'true' : 'false');
+    if (notify) this.onInventoryVisibilityChange?.(this.inventoryMenuOpen);
   }
 
-  #renderCraftToggle() {
-    if (!this.craftToggle || !this.craftToggleIcon || !this.craftToggleLabel) return;
-    const placement = this.currentCraftPlacementAction;
-    const previewing = Boolean(placement?.previewing);
-    const iconId = previewing ? placement.icon ?? 'campfire' : 'hammer';
-    this.craftToggleIcon.src = this.toolIcons[iconId] ?? this.toolIcons.hammer;
-    this.craftToggleLabel.textContent = previewing ? placement.caption ?? 'PLACE' : 'CRAFT';
-    this.craftToggle.classList.toggle('placement', previewing);
-    this.craftToggle.setAttribute('aria-expanded', this.craftMenuOpen ? 'true' : 'false');
-    this.craftToggle.setAttribute(
-      'aria-label',
-      previewing
-        ? placement.label ?? 'Confirm crafted placement'
-        : this.craftMenuOpen ? 'Close crafting menu' : 'Open crafting menu'
-    );
+  #setInventoryTab(tab) {
+    this.inventoryTab = tab === 'craft' ? 'craft' : 'items';
+    const crafting = this.inventoryTab === 'craft';
+    this.inventoryElement.hidden = crafting;
+    this.craftList.hidden = !crafting;
+    if (this.craftContext) this.craftContext.hidden = !crafting;
+    for (const button of this.root.querySelectorAll('[data-inventory-tab]')) {
+      const active = button.dataset.inventoryTab === this.inventoryTab;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
   }
 
   #setBuildTrayCollapsed(collapsed) {
@@ -384,7 +460,7 @@ export class MobileHud {
     this.attackButton.hidden = !available && !action.externalId;
     this.attackButton.disabled = !available;
     this.attackButton.setAttribute('aria-label', action.label);
-    this.attackIcon.src = this.toolIcons[equippedTool] ?? this.toolIcons.hand;
+    this.attackIcon.src = this.toolIcons[equippedTool] ?? this.itemIcons[equippedTool] ?? this.toolIcons.hand;
     this.actionCaption.textContent = action.caption ?? 'ACTION';
     this.actionButton.dataset.actionSource = action.source ?? 'none';
     this.actionButton.classList.toggle('work-tool', WORK_ACTION_TOOLS.has(equippedTool));
@@ -485,18 +561,28 @@ export class MobileHud {
       this.player.toggleCameraMode?.();
     });
 
-    this.craftToggle.addEventListener('pointerdown', event => {
+    this.inventoryToggle.addEventListener('pointerdown', event => {
       event.preventDefault();
-      if (this.currentCraftPlacementAction?.previewing) {
-        this.onCraft?.(this.currentCraftPlacementAction.recipeId ?? 'campfire');
-        return;
-      }
-      this.#setCraftMenuOpen(!this.craftMenuOpen);
+      this.#setInventoryMenuOpen(!this.inventoryMenuOpen);
     });
 
-    this.craftClose.addEventListener('pointerdown', event => {
+    this.inventoryClose.addEventListener('pointerdown', event => {
       event.preventDefault();
-      this.#setCraftMenuOpen(false);
+      this.closeInventory();
+    });
+
+    for (const button of this.root.querySelectorAll('[data-inventory-tab]')) {
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        this.#setInventoryTab(button.dataset.inventoryTab);
+      });
+    }
+
+    this.inventoryElement.addEventListener('pointerdown', event => {
+      const button = event.target.closest?.('[data-inventory-select]');
+      if (!button) return;
+      event.preventDefault();
+      this.onInventoryItemSelect?.(button.dataset.inventorySelect);
     });
 
     this.craftList.addEventListener('pointerdown', event => {
@@ -504,7 +590,7 @@ export class MobileHud {
       if (!button || button.disabled) return;
       event.preventDefault();
       this.onCraft?.(button.dataset.craft);
-      if (button.dataset.craftKind === 'structure') this.#setCraftMenuOpen(false);
+      if (button.dataset.craftKind === 'structure') this.closeInventory();
     });
 
     this.buildTrayToggle.addEventListener('pointerdown', event => {

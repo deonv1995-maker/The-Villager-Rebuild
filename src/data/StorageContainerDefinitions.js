@@ -17,9 +17,9 @@ export const STORAGE_CONTAINER_DEFINITIONS = Object.freeze({
   })
 });
 
-// Starter salvage storage proves the shared container loop without introducing a second
-// construction grid or inventing recipes before storage placement becomes a later milestone.
-export const STARTER_STORAGE_CONTAINERS = Object.freeze([
-  Object.freeze({ id: 'starter-chest', type: 'chest', x: -3.6, z: 86.4, yaw: 0.12 }),
-  Object.freeze({ id: 'starter-barrel', type: 'barrel', x: 3.8, z: 86.2, yaw: -0.18 })
-]);
+// New worlds start with no free containers. Chest and Barrel now enter the world only after
+// being crafted at a placed Crafting Bench, carried in inventory and explicitly placed.
+export const STARTER_STORAGE_CONTAINERS = Object.freeze([]);
+
+// Saves created by the short-lived starter-salvage pass are migrated by StorageRuntimeController.
+export const LEGACY_STARTER_STORAGE_IDS = Object.freeze(new Set(['starter-chest', 'starter-barrel']));

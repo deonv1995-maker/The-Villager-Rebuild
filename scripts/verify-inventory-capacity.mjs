@@ -21,12 +21,18 @@ assert.equal(INVENTORY_STORAGE_PROFILES.sprout.capacity, 96, 'Sprout compressed 
 assert.equal(INVENTORY_STORAGE_PROFILES.sprout.compressionRatio, 4, 'Sprout compression ratio must stay explicit');
 assert.equal(RESOURCE_DEFINITIONS.log.storage, 'inventory', 'Logs must use the shared inventory authority');
 assert.equal(RESOURCE_DEFINITIONS.log.manualPickup, undefined, 'Manual Log pickup must not divert into the legacy physical-carry path');
+assert.equal(INVENTORY_DEFINITIONS['crafting-bench'].kind, 'placeable', 'Crafting Bench must use the same inventory authority as other carried items');
+assert.equal(INVENTORY_DEFINITIONS.chest.kind, 'placeable', 'Chest must remain an inventory placeable before world placement');
+assert.equal(INVENTORY_DEFINITIONS.barrel.kind, 'placeable', 'Barrel must remain an inventory placeable before world placement');
 
 const ranger = new InventorySystem();
 assert.equal(ranger.getStorageState().mode, INVENTORY_STORAGE_MODE.RANGER);
 assert.equal(ranger.getItemStorageCost('stick'), 1);
 assert.equal(ranger.getItemStorageCost('stone'), 2);
 assert.equal(ranger.getItemStorageCost('log'), 8);
+assert.equal(ranger.getItemStorageCost('crafting-bench'), 8);
+assert.equal(ranger.getItemStorageCost('chest'), 6);
+assert.equal(ranger.getItemStorageCost('barrel'), 6);
 assert.equal(ranger.canAdd('stone', 12), true);
 assert.equal(ranger.tryAdd('stone', 12).added, true);
 assert.equal(ranger.getStorageState().used, 24);
@@ -61,7 +67,7 @@ let allied = false;
 let capacitySource = undefined;
 let intervalTick = null;
 let clearedTimer = null;
-const hudElement = { dataset: {}, title: '' };
+let hudCapacityState = null;
 const runtimeInventory = new InventorySystem();
 const controller = new InventoryCapacityController({
   game: {
@@ -71,7 +77,11 @@ const controller = new InventoryCapacityController({
         capacitySource = source;
       }
     },
-    hud: { inventoryElement: hudElement },
+    hud: {
+      setInventoryCapacity(state) {
+        hudCapacityState = state;
+      }
+    },
     sproutArrival: { isAllied: () => allied }
   },
   setIntervalFn(callback) {
@@ -84,11 +94,14 @@ const controller = new InventoryCapacityController({
 });
 assert.equal(controller.start(), true);
 assert.equal(capacitySource, runtimeInventory, 'World pickup boundary must use the same authoritative inventory capacity');
-assert.equal(hudElement.dataset.capacity, 'PACK 0/24');
+assert.equal(hudCapacityState.hudLabel, 'PACK');
+assert.equal(hudCapacityState.used, 0);
+assert.equal(hudCapacityState.capacity, 24);
 allied = true;
 intervalTick();
 assert.equal(runtimeInventory.getStorageState().mode, INVENTORY_STORAGE_MODE.SPROUT, 'Sprout allegiance must unlock compression without a second inventory');
-assert.equal(hudElement.dataset.capacity, 'SPROUT 0/96');
+assert.equal(hudCapacityState.hudLabel, 'SPROUT');
+assert.equal(hudCapacityState.capacity, 96);
 controller.dispose();
 assert.equal(clearedTimer, 17);
 assert.equal(capacitySource, null);
@@ -118,7 +131,7 @@ try {
     game: {
       inventory: browserInventory,
       gatherables: { setInventoryCapacitySource() {} },
-      hud: { inventoryElement: { dataset: {}, title: '' } },
+      hud: { setInventoryCapacity() {} },
       sproutArrival: { isAllied: () => false }
     }
   });
@@ -134,6 +147,8 @@ try {
 const resources = read('src/data/ResourceDefinitions.js');
 const gatherables = read('src/world/GatherableSystem.js');
 const contextPolicy = read('src/ui/ContextActionPolicy.js');
+const capacityControllerSource = read('src/gameplay/InventoryCapacityController.js');
+const hudSource = read('src/ui/MobileHud.js');
 const main = read('src/main.js');
 const docs = read('docs/SPROUT_COMPANION.md');
 const packageJson = JSON.parse(read('package.json'));
@@ -144,8 +159,14 @@ assert.ok(gatherables.includes("definition.storage !== 'inventory' || definition
 assert.ok(gatherables.includes('this.#canStore(item.resourceId, quantity)'), 'Loose pickup selection must obey capacity before removal');
 assert.ok(gatherables.includes('item.reservedBy = null;\n      item.root.visible = true;\n      return null;'), 'Sprout reservation commit must restore the world pickup if capacity changes before transfer');
 assert.ok(contextPolicy.includes("? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')") && contextPolicy.includes(": 'FULL'"), 'Full storage must disable the unified mobile pickup action visibly');
+assert.ok(
+  capacityControllerSource.includes('const state = this.inventory.getStorageState();')
+    && capacityControllerSource.includes('hud?.setInventoryCapacity?.(state);'),
+  'Capacity runtime must render the authoritative storage state through the inventory HUD API'
+);
+assert.ok(hudSource.includes('setInventoryCapacity(state)'), 'Mobile HUD must own suitcase capacity presentation');
 assert.ok(main.includes('new InventoryCapacityController({ game })'), 'Gameplay boot must install one shared capacity runtime');
 assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual Log pickup'), 'Companion architecture must preserve human-pack limits while documenting inventory-backed Log pickup');
 assert.ok(packageJson.scripts.check.includes('npm run verify:inventory-capacity'), 'Full repository check must include capacity regression coverage');
 
-console.log('Human carrying limits, inventory-backed manual Log pickup, Sprout compression capacity, browser-safe timer binding, HUD state and save-safe shared inventory verified');
+console.log('Human carrying limits, placeable utility bulk, Sprout compression, browser-safe timers, suitcase HUD state and save-safe shared inventory verified');

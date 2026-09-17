@@ -53,12 +53,9 @@ export class InventoryCapacityController {
   }
 
   #renderCapacity() {
-    const element = this.game.hud?.inventoryElement ?? null;
-    if (!element) return;
     const state = this.inventory.getStorageState();
-    element.dataset.capacity = `${state.hudLabel} ${state.used}/${state.capacity}`;
-    element.dataset.storageMode = state.mode;
-    element.dataset.overCapacity = state.overCapacity ? 'true' : 'false';
-    element.title = `${state.label}: ${state.used}/${state.capacity} bulk units`;
+    const hud = this.game.hud;
+    hud?.setInventoryCapacity?.(state);
+    if (hud?.root) hud.root.dataset.storageMode = state.mode;
   }
 }

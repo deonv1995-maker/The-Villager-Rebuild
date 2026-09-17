@@ -76,5 +76,38 @@ export const CRAFTING_RECIPES = Object.freeze({
       Object.freeze({ itemId: 'stone', quantity: 3 })
     ]),
     output: null
+  }),
+  'crafting-bench': Object.freeze({
+    id: 'crafting-bench',
+    label: 'Crafting Bench',
+    kind: 'placeable',
+    ingredients: Object.freeze([
+      Object.freeze({ itemId: 'stick', quantity: 4 }),
+      Object.freeze({ itemId: 'stone', quantity: 2 }),
+      Object.freeze({ itemId: 'grass', quantity: 2 })
+    ]),
+    output: Object.freeze({ itemId: 'crafting-bench', quantity: 1 })
+  }),
+  chest: Object.freeze({
+    id: 'chest',
+    label: 'Storage Chest',
+    kind: 'placeable',
+    station: 'bench',
+    ingredients: Object.freeze([
+      Object.freeze({ itemId: 'stick', quantity: 6 }),
+      Object.freeze({ itemId: 'grass', quantity: 2 })
+    ]),
+    output: Object.freeze({ itemId: 'chest', quantity: 1 })
+  }),
+  barrel: Object.freeze({
+    id: 'barrel',
+    label: 'Food Barrel',
+    kind: 'placeable',
+    station: 'bench',
+    ingredients: Object.freeze([
+      Object.freeze({ itemId: 'stick', quantity: 5 }),
+      Object.freeze({ itemId: 'grass', quantity: 3 })
+    ]),
+    output: Object.freeze({ itemId: 'barrel', quantity: 1 })
   })
 });

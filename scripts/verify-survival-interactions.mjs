@@ -240,9 +240,10 @@ assert.ok(
 for (const requirement of [
   'class="toolbelt"',
   "['hand', ...TOOL_ORDER]",
-  'class="craft-menu-toggle"',
-  'class="craft-menu"',
-  'setCrafting(entries)',
+  'class="inventory-menu-toggle"',
+  'class="inventory-menu"',
+  'data-inventory-tab="craft"',
+  "setCrafting(entries, { station = 'hand' } = {})",
   'class="log-build-tray"',
   'data-build="floor"',
   'data-build="wall"',
@@ -252,6 +253,7 @@ for (const requirement of [
 ]) {
   assert.ok(hudSource.includes(requirement), `Mobile HUD is missing shared survival/build contract: ${requirement}`);
 }
+assert.ok(!hudSource.includes('class="craft-menu-toggle"'), 'Standalone Craft button must stay retired inside the suitcase flow');
 assert.ok(!hudSource.includes('class="hud-button interact"'));
 assert.ok(!hudSource.includes('class="hud-button attack"'));
 assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'panel-construction', 'campfire']))"), 'Hammer must route semantic panels through the unified Action policy');
@@ -316,4 +318,4 @@ assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpea
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"));
 assert.ok(!floorSupportSource.includes('FoundationTerrainSystem'));
 
-console.log('Inventory Logs, Hammer-owned semantic Floor/Wall/Door/Window/Stairs/Roof construction, seven crafted tools including timed torch fuel, durability, campfire, harvesting and retrievable spear survival contracts verified');
+console.log('Inventory Logs, suitcase-integrated crafting, Hammer-owned semantic Floor/Wall/Door/Window/Stairs/Roof construction, seven crafted tools including timed torch fuel, durability, campfire, harvesting and retrievable spear survival contracts verified');

@@ -13,17 +13,23 @@ export class CraftingSystem {
     return recipe;
   }
 
-  canCraft(recipeId) {
+  canUseStation(recipeId, station = 'hand') {
     const recipe = this.getRecipe(recipeId);
+    return recipe.station !== 'bench' || station === 'bench';
+  }
+
+  canCraft(recipeId, { station = 'hand' } = {}) {
+    const recipe = this.getRecipe(recipeId);
+    if (!this.canUseStation(recipeId, station)) return false;
     return recipe.ingredients.every(ingredient =>
       this.inventory.has(ingredient.itemId, ingredient.quantity)
     );
   }
 
-  craft(recipeId) {
+  craft(recipeId, { station = 'hand' } = {}) {
     const recipe = this.getRecipe(recipeId);
     if (!recipe.output) return null;
-    if (!this.canCraft(recipeId)) return null;
+    if (!this.canCraft(recipeId, { station })) return null;
 
     this.inventory.consume(recipe.ingredients);
     this.inventory.add(recipe.output.itemId, recipe.output.quantity);
@@ -31,6 +37,7 @@ export class CraftingSystem {
     return {
       recipeId: recipe.id,
       label: recipe.label,
+      station: recipe.station ?? 'hand',
       output: { ...recipe.output }
     };
   }
