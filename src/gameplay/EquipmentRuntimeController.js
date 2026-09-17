@@ -7,7 +7,7 @@ const STUMP_ACTION_ID = 'shovel-stump';
 const TORCH_PLACEMENT_ACTION_ID = 'torch-place';
 const CAMPFIRE_RECIPE_ID = 'campfire';
 const PORTABLE_PLACEABLE_RECIPE_IDS = Object.freeze(['crafting-bench']);
-const BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel']);
+const BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel', 'bed']);
 
 export class EquipmentRuntimeController {
   constructor({ game, random = Math.random }) {

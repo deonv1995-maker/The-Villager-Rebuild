@@ -51,7 +51,7 @@ export class StorageContainerSystem {
       type: 'storage-container',
       label: id,
       bottomY: placementY,
-      topY: placementY + (type === 'barrel' ? 1.05 : 0.9)
+      topY: placementY + definition.collisionHeight
     });
 
     const container = {
@@ -207,44 +207,92 @@ export class StorageContainerSystem {
 
   #createChestVisual() {
     const root = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ color: 0x7a4f2a, roughness: 0.92 });
-    const darkWood = new THREE.MeshStandardMaterial({ color: 0x5e391f, roughness: 0.96 });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x403b35, roughness: 0.72 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x80532d, roughness: 0.9 });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x58351f, roughness: 0.96 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x3f3a34, roughness: 0.7, metalness: 0.08 });
 
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.18, 0.48, 0.72), wood);
-    body.position.y = 0.28;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    root.add(body);
+    const addBox = (size, position, material, rotationX = 0) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
+      mesh.position.set(...position);
+      mesh.rotation.x = rotationX;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      root.add(mesh);
+      return mesh;
+    };
 
-    const lid = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.18, 0.76), darkWood);
-    lid.position.y = 0.61;
-    lid.castShadow = true;
-    root.add(lid);
+    addBox([1.18, 0.46, 0.72], [0, 0.28, 0], wood);
+    addBox([1.22, 0.1, 0.76], [0, 0.55, 0], darkWood);
 
+    const lidProfile = [
+      { z: -0.3, y: 0.62, tilt: -0.34 },
+      { z: -0.15, y: 0.68, tilt: -0.17 },
+      { z: 0, y: 0.705, tilt: 0 },
+      { z: 0.15, y: 0.68, tilt: 0.17 },
+      { z: 0.3, y: 0.62, tilt: 0.34 }
+    ];
+    for (const plank of lidProfile) {
+      addBox([1.2, 0.09, 0.19], [0, plank.y, plank.z], wood, plank.tilt);
+    }
+
+    for (const z of [-0.365, 0.365]) {
+      addBox([1.22, 0.08, 0.055], [0, 0.31, z], darkWood);
+    }
     for (const x of [-0.43, 0.43]) {
-      const band = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.72, 0.78), metal);
-      band.position.set(x, 0.39, 0);
-      root.add(band);
+      addBox([0.085, 0.72, 0.79], [x, 0.38, 0], metal);
+    }
+
+    addBox([0.18, 0.2, 0.055], [0, 0.47, 0.395], metal);
+    addBox([0.07, 0.1, 0.045], [0, 0.42, 0.43], darkWood);
+
+    for (const x of [-0.48, 0.48]) {
+      for (const z of [-0.27, 0.27]) {
+        addBox([0.14, 0.1, 0.14], [x, 0.05, z], darkWood);
+      }
     }
     return root;
   }
 
   #createBarrelVisual() {
     const root = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5b31, roughness: 0.94 });
-    const metal = new THREE.MeshStandardMaterial({ color: 0x48433d, roughness: 0.76 });
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.47, 0.94, 12), wood);
-    body.position.y = 0.47;
-    body.castShadow = true;
-    body.receiveShadow = true;
-    root.add(body);
-    for (const y of [0.16, 0.47, 0.78]) {
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.035, 6, 18), metal);
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x8a5b31,
+      roughness: 0.92,
+      flatShading: true
+    });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x674224, roughness: 0.97 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x46413b, roughness: 0.72, metalness: 0.08 });
+
+    const addCylinder = (topRadius, bottomRadius, height, y, material, segments = 14) => {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(topRadius, bottomRadius, height, segments, 1, false),
+        material
+      );
+      mesh.position.y = y;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      root.add(mesh);
+      return mesh;
+    };
+
+    addCylinder(0.465, 0.41, 0.22, 0.11, wood);
+    addCylinder(0.49, 0.49, 0.52, 0.48, wood);
+    addCylinder(0.41, 0.465, 0.22, 0.85, wood);
+    addCylinder(0.39, 0.39, 0.055, 0.985, darkWood, 14);
+
+    for (const y of [0.17, 0.39, 0.66, 0.87]) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.472, 0.032, 6, 20), metal);
       band.position.y = y;
       band.rotation.x = Math.PI / 2;
+      band.castShadow = true;
       root.add(band);
     }
+
+    const bung = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.035, 10), darkWood);
+    bung.position.set(0.16, 1.025, 0.05);
+    bung.castShadow = true;
+    root.add(bung);
+
     return root;
   }
 }

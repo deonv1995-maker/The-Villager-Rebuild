@@ -23,11 +23,20 @@ export class FirstPersonUtilityTargeting {
     this.targetByMesh = new Map();
   }
 
-  select({ benchSystem, storageSystem, playerPosition, camera } = {}) {
+  select({ bedSystem, benchSystem, storageSystem, playerPosition, camera } = {}) {
     if (!hasFinitePoint(playerPosition) || !camera?.getWorldPosition || !camera?.getWorldDirection) return null;
 
     this.meshes.length = 0;
     this.targetByMesh.clear();
+
+    for (const bed of bedSystem?.beds?.values?.() ?? []) {
+      if (!withinHorizontalReach(bed.root, playerPosition, PLACEABLE_UTILITY_INTERACTION_RADIUS)) continue;
+      this.#appendTarget({
+        kind: 'bed',
+        id: bed.id,
+        root: bed.root
+      });
+    }
 
     for (const bench of benchSystem?.benches?.values?.() ?? []) {
       if (!withinHorizontalReach(bench.root, playerPosition, PLACEABLE_UTILITY_INTERACTION_RADIUS)) continue;

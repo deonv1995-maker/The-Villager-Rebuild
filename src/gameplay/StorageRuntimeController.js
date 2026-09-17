@@ -111,6 +111,7 @@ export class StorageRuntimeController {
 
   #getFirstPersonStorageTarget() {
     const target = selectFirstPersonUtilityTarget({
+      bedSystem: this.game.beds ?? this.game.placeableUtilityRuntime?.bedSystem,
       benchSystem: this.game.craftingBenches ?? this.game.placeableUtilityRuntime?.benchSystem,
       storageSystem: this.system,
       playerPosition: this.position,

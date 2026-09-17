@@ -32,6 +32,16 @@ export const PLACEABLE_UTILITY_DEFINITIONS = Object.freeze({
     maxSlope: 0.34,
     collisionRadius: 0.52,
     collisionHeight: 1.05
+  }),
+  bed: Object.freeze({
+    id: 'bed',
+    label: 'Bed',
+    kind: 'bed',
+    preferredDistance: 2.4,
+    placementRadius: 1.1,
+    maxSlope: 0.28,
+    collisionRadius: 1.05,
+    collisionHeight: 0.8
   })
 });
 

@@ -109,5 +109,16 @@ export const CRAFTING_RECIPES = Object.freeze({
       Object.freeze({ itemId: 'grass', quantity: 3 })
     ]),
     output: Object.freeze({ itemId: 'barrel', quantity: 1 })
+  }),
+  bed: Object.freeze({
+    id: 'bed',
+    label: 'Bed',
+    kind: 'placeable',
+    station: 'bench',
+    ingredients: Object.freeze([
+      Object.freeze({ itemId: 'stick', quantity: 6 }),
+      Object.freeze({ itemId: 'grass', quantity: 6 })
+    ]),
+    output: Object.freeze({ itemId: 'bed', quantity: 1 })
   })
 });
