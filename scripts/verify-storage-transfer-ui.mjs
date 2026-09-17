@@ -44,7 +44,9 @@ assert(panelSource.includes("import { ASSET_PATHS } from '../data/AssetPaths.js'
 assert(panelSource.includes('data-role="storage-pack-grid"'), 'Storage panel must expose an on-hand grid');
 assert(panelSource.includes('data-role="storage-container-grid"'), 'Storage panel must expose a separate container grid');
 assert(panelSource.includes('storage-item-quantity'), 'Storage item cards must show stack quantities on the grid');
-assert(panelSource.includes('storage-quantity-stepper'), 'Single-tap transfer flow must expose a quantity selector');
+assert(panelSource.includes('storage-quantity-stepper'), 'Multi-item single-tap transfer flow must expose a quantity selector');
+assert(panelSource.includes('if (this.#getTransferLimit(action, itemId) === 1)'), 'Single transferable items must bypass the quantity selector');
+assert(panelSource.includes('this.#transfer(action, itemId, 1)'), 'Single transferable items must move immediately in one transaction');
 assert(panelSource.includes('DOUBLE_TAP_DELAY_MS'), 'Storage panel must retain explicit double-tap stack-transfer handling');
 assert(panelSource.includes('this.#transferAll(action, itemId)'), 'Double-tap handling must route through full-stack transfer');
 assert(panelSource.includes('this.system.store(this.containerId, itemId, quantity)'), 'Quantity deposits must use one storage-system transaction rather than UI-side item loops');
@@ -57,4 +59,4 @@ assert(assetSource.includes("stick: asset('ui/cosy/icon-resource-stick.webp')"),
 assert(runtimeSource.includes('onTransfer: ({ action, itemId, quantity })'), 'Storage runtime must receive transfer quantity metadata from the panel');
 assert(runtimeSource.includes('#afterTransfer(action, itemId, quantity = 1)'), 'Storage runtime status reporting must preserve quantity-aware transfer feedback');
 
-console.log('Split storage grids, quantity selection, double-tap stack transfer and atomic quantity transactions verified');
+console.log('Split storage grids, instant single-item transfer, quantity selection, double-tap stack transfer and atomic quantity transactions verified');

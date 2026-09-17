@@ -63,8 +63,8 @@ The opened storage panel is a two-pane transfer surface rather than a row of one
 - **ON HAND** on the left shows accepted item stacks currently carried by the Ranger.
 - **CHEST** or **BARREL** on the right shows stacks currently inside that specific container.
 - Both sides reuse `ASSET_PATHS.ui.mobile.resources` for item artwork and show the current stack quantity as a badge on each grid card.
-- A single tap opens a quantity selector with decrement, direct numeric entry, increment, **ALL**, and the direction-specific **STORE**/**TAKE** confirmation.
-- A double tap on a stack bypasses the selector and transfers the full currently transferable quantity in that direction.
+- A single tap immediately transfers the item when exactly one unit is currently transferable. When more than one unit can transfer, the single tap opens a quantity selector with decrement, direct numeric entry, increment, **ALL**, and the direction-specific **STORE**/**TAKE** confirmation.
+- A double tap on a multi-item stack bypasses the selector and transfers the full currently transferable quantity in that direction.
 - Deposits may move the whole carried stack because containers currently have no stack-capacity ceiling. Withdrawals cap the offered quantity through `InventorySystem.canAdd()` so the existing Ranger carrying-capacity authority is never bypassed.
 - A selected quantity is passed once to `StorageContainerSystem.store()` or `StorageContainerSystem.take()`. The presentation layer must not loop one-item transactions, which keeps transfer conservation and future persistence hooks inside the established storage boundary.
 
@@ -127,7 +127,7 @@ Together they protect:
 - Chest/Barrel resource-routing and transfer semantics;
 - atomic multi-quantity deposit/withdrawal behavior and rejection without partial mutation;
 - the two-pane ON HAND/container grid, shared resource icons, quantity badges and quantity selector;
-- double-tap full-stack transfer and capacity-aware withdrawal limits;
+- immediate single-tap transfer when only one unit can move, plus double-tap full-stack transfer and capacity-aware withdrawal limits;
 - multiple independent placed storage instances and persistence;
 - Crafting Bench proximity and persistence;
 - legacy starter-container content migration;
@@ -138,4 +138,4 @@ Together they protect:
 
 `verify:day-night` also protects the paused world-time contract so opening a menu cannot advance the clock or create a resume-time jump.
 
-Device verification remains required for storage split-grid sizing in landscape and portrait, single-tap quantity selection, double-tap responsiveness, safe handling of full Ranger capacity, full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel and the visible night-to-morning transition.
+Device verification remains required for storage split-grid sizing in landscape and portrait, instant one-item transfer, multi-item quantity selection, double-tap responsiveness, safe handling of full Ranger capacity, full-screen suitcase ergonomics and safe-area coverage, touch scrolling, pause/resume behavior, placement-preview readability, Bench CRAFT interaction range, Chest/Barrel collision feel and the visible night-to-morning transition.
