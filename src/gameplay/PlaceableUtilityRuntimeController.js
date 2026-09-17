@@ -10,6 +10,7 @@ const ANGLE_OFFSETS = Object.freeze([0, 0.5, -0.5, 1, -1, Math.PI]);
 const DISTANCE_OFFSETS = Object.freeze([0, 0.7, 1.4]);
 const PLACE_ACTION_ID = 'utility-place';
 const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
+const HAMMER_MOVE_ACTION_ID = 'utility-hammer-move';
 const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
 
 export class PlaceableUtilityRuntimeController {
@@ -57,6 +58,7 @@ export class PlaceableUtilityRuntimeController {
     this.cancelPlacement();
     this.#endBenchSession();
     this.game.hud?.setExternalAction(BENCH_CRAFT_ACTION_ID, null);
+    this.game.hud?.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
   }
 
   captureState() {
@@ -142,6 +144,7 @@ export class PlaceableUtilityRuntimeController {
     if (!this.running) return;
     this.#ensureHud();
     if (this.selectedItemId) this.#updatePlacement();
+    this.#syncHammerInteraction();
     this.#syncBenchInteraction();
     this.frameId = this.requestFrame?.(this.#frame) ?? null;
   };
@@ -206,6 +209,134 @@ export class PlaceableUtilityRuntimeController {
     const slope = terrain.slopeAt?.(x, z);
     if (Number.isFinite(slope) && slope > definition.maxSlope) return false;
     return collision.isCircleClear?.(x, z, definition.placementRadius) ?? true;
+  }
+
+  #syncHammerInteraction() {
+    const hud = this.game.hud;
+    if (!hud || !this.#isHammerRemoveMode() || this.selectedItemId) {
+      hud?.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
+      return;
+    }
+
+    // Semantic building panels keep first ownership of REMOVE-mode hammer interaction.
+    // A placeable utility can use the shared Action button only when no panel is targeted.
+    if (this.game.currentInteractionTarget) {
+      hud.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
+      return;
+    }
+
+    const target = this.#selectHammerUtilityTarget();
+    hud.setExternalAction(HAMMER_MOVE_ACTION_ID, target ? {
+      available: true,
+      priority: 260,
+      icon: 'hammer',
+      caption: 'MOVE',
+      label: `Move ${target.label}`,
+      onTrigger: () => this.#movePlacedUtility(target)
+    } : null);
+  }
+
+  #isHammerRemoveMode() {
+    const panelRuntime = this.game.panelConstructionRuntime;
+    return this.game.toolbelt?.getEquippedToolId?.() === 'hammer'
+      && Boolean(panelRuntime?.ownsHammerInteraction?.())
+      && !(panelRuntime?.system?.isActive?.() ?? false);
+  }
+
+  #selectHammerUtilityTarget() {
+    const player = this.game.player;
+    const storageSystem = this.game.storageRuntime?.system;
+    if (!player || !storageSystem) return null;
+    player.getPosition(this.position);
+
+    if (player.isFirstPerson?.()) {
+      return this.#describeHammerUtilityTarget(selectFirstPersonUtilityTarget({
+        benchSystem: this.benchSystem,
+        storageSystem,
+        playerPosition: this.position,
+        camera: this.game.sceneSystem?.camera
+      }));
+    }
+
+    const bench = this.benchSystem.getNearestBench(
+      this.position,
+      PLACEABLE_UTILITY_INTERACTION_RADIUS
+    );
+    const container = storageSystem.getNearestContainer(
+      this.position,
+      PLACEABLE_UTILITY_INTERACTION_RADIUS
+    );
+    const targets = [
+      bench ? this.#describeHammerUtilityTarget({ kind: 'crafting-bench', id: bench.id }) : null,
+      container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null
+    ].filter(Boolean);
+    return targets.reduce((nearest, target) => {
+      if (!nearest) return target;
+      return this.#distanceTo(target.position) < this.#distanceTo(nearest.position)
+        ? target
+        : nearest;
+    }, null);
+  }
+
+  #describeHammerUtilityTarget(target) {
+    if (target?.kind === 'crafting-bench') {
+      const bench = this.benchSystem.describe(target.id);
+      return bench ? {
+        ...bench,
+        utilityKind: 'crafting-bench',
+        itemId: 'crafting-bench'
+      } : null;
+    }
+    if (target?.kind === 'storage') {
+      const container = this.game.storageRuntime?.system?.describe(target.id);
+      return container ? {
+        ...container,
+        utilityKind: 'storage',
+        itemId: container.type
+      } : null;
+    }
+    return null;
+  }
+
+  #movePlacedUtility(target) {
+    if (!target || this.game.toolPresentation?.isBusy()) return false;
+    if (target.utilityKind === 'storage') {
+      const current = this.game.storageRuntime.system.describe(target.id);
+      if (!current) return false;
+      const storedQuantity = Object.values(current.contents ?? {})
+        .reduce((total, quantity) => total + (Number.isInteger(quantity) ? quantity : 0), 0);
+      if (storedQuantity > 0) {
+        this.game.setStatus?.(`${current.label.toUpperCase()} · EMPTY IT BEFORE MOVING`);
+        return false;
+      }
+    } else if (!this.benchSystem.describe(target.id)) {
+      return false;
+    }
+
+    if (!this.game.inventory.canAdd(target.itemId, 1)) {
+      this.game.setStatus?.(`${target.label.toUpperCase()} · PACK FULL · FREE SPACE BEFORE MOVING`);
+      return false;
+    }
+
+    if (target.position) this.game.player.faceWorldPoint(target.position);
+    if (!this.game.toolPresentation?.playSwing('hammer')) return false;
+
+    const removed = target.utilityKind === 'storage'
+      ? this.game.storageRuntime.system.removeContainer(target.id)
+      : Boolean(this.benchSystem.removeBench(target.id));
+    if (!removed) return false;
+
+    this.game.inventory.add(target.itemId, 1);
+    this.game.equipmentRuntime?.recordUse?.('hammer');
+    this.game.equipmentRuntime?.syncHud?.();
+    this.game.saveController?.saveNow?.('move-placeable-utility');
+    const replacing = this.selectInventoryItem(target.itemId);
+    this.game.setStatus?.(
+      replacing
+        ? `${target.label.toUpperCase()} DISASSEMBLED · CHOOSE NEW PLACEMENT`
+        : `${target.label.toUpperCase()} DISASSEMBLED · RETURNED TO INVENTORY`
+    );
+    return true;
   }
 
   #syncBenchInteraction() {

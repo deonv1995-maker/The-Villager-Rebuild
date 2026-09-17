@@ -52,6 +52,16 @@ export class CraftingBenchSystem {
     return this.describe(bench);
   }
 
+  removeBench(id) {
+    const bench = this.benches.get(id);
+    if (!bench) return null;
+    const removed = this.describe(bench);
+    if (bench.collisionHandle) this.collision.removeObstacle(bench.collisionHandle);
+    bench.root.parent?.remove(bench.root);
+    this.benches.delete(id);
+    return removed;
+  }
+
   getNearestBench(position, maxDistance = PLACEABLE_UTILITY_INTERACTION_RADIUS) {
     if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
     let nearest = null;
