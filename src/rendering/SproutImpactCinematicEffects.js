@@ -77,7 +77,6 @@ export class SproutImpactCinematicEffects {
   }
 
   triggerImpact() {
-    if (!this.site) return false;
     this.descentActive = false;
     this.descentLight.visible = false;
     this.descentLight.intensity = 0;
@@ -206,10 +205,10 @@ export class SproutImpactCinematicEffects {
     this.dust.geometry.attributes.position.needsUpdate = true;
   }
 
-  #updateDust() {
+  #updateDust(dt) {
     if (!Number.isFinite(this.dustAge)) return;
     const config = this.config.dust;
-    this.dustAge += Math.min(0.05, Math.max(0, arguments[0] ?? 0));
+    this.dustAge += dt;
     const progress = clamp01(this.dustAge / config.durationSeconds);
 
     if (progress >= 1) {
