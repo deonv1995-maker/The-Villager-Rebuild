@@ -28,7 +28,10 @@ export class SproutArrivalController {
     this.lastObjectiveHud = null;
     this.playerPosition = new THREE.Vector3();
     this.sitePosition = new THREE.Vector3();
+    this.sproutFocusPosition = new THREE.Vector3();
     this.rescueCinematicOwned = false;
+    this.introCinematicBeat = 'none';
+    this.firstLogInventoryCount = 0;
     this.companionPresentation = null;
     this.rescueAction = {
       available: false,
@@ -77,6 +80,23 @@ export class SproutArrivalController {
     return true;
   }
 
+  update() {
+    if (!this.rescueCinematicOwned || this.introCinematicBeat === 'none') return;
+    const sprout = this.companionPresentation ?? this.crashSite.sprout;
+    if (!sprout) return;
+
+    sprout.getWorldPosition(this.sproutFocusPosition);
+    this.sproutFocusPosition.y += SPROUT_ARRIVAL.cinematicCamera.focusHeight;
+    const fov = this.introCinematicBeat === 'dialogue'
+      ? SPROUT_ARRIVAL.cinematicCamera.dialogueFov
+      : SPROUT_ARRIVAL.cinematicCamera.firstLogFov;
+    this.game.sceneSystem?.setCameraFrame?.(this, {
+      target: this.sproutFocusPosition,
+      fov,
+      response: SPROUT_ARRIVAL.cinematicCamera.response
+    });
+  }
+
   isAllied() {
     return this.phase === PHASE.ALLIED;
   }
@@ -100,11 +120,15 @@ export class SproutArrivalController {
 
   captureState() {
     const stablePhase = this.phase === PHASE.RESCUE ? PHASE.DIALOGUE : this.phase;
+    const firstLogCinematicPending = stablePhase === PHASE.ALLIED
+      && this.introCinematicBeat === 'first-log';
     return {
       version: SPROUT_ARRIVAL.stateVersion,
       phase: stablePhase,
       site: this.site ? { x: this.site.x, y: this.site.y, z: this.site.z } : null,
-      dialogueIndex: stablePhase === PHASE.DIALOGUE ? this.dialogueIndex : 0
+      dialogueIndex: stablePhase === PHASE.DIALOGUE ? this.dialogueIndex : 0,
+      firstLogCinematicPending,
+      firstLogInventoryCount: firstLogCinematicPending ? this.firstLogInventoryCount : 0
     };
   }
 
@@ -118,6 +142,8 @@ export class SproutArrivalController {
     this.lastObjective = '';
     this.lastObjectiveHud = null;
     this.site = null;
+    this.introCinematicBeat = 'none';
+    this.firstLogInventoryCount = 0;
 
     if (!state || Number(state.version) !== SPROUT_ARRIVAL.stateVersion) {
       // Saves created before the Sprout story slice remain playable and are not forced
@@ -163,7 +189,21 @@ export class SproutArrivalController {
       this.#enterDialogue({ restored: true });
     } else if (savedPhase === PHASE.ALLIED) {
       this.crashSite.restore({ crashed: true, freed: true });
-      this.#setObjective('Day 1 · Gather sticks, stones and grass');
+      if (state.firstLogCinematicPending) {
+        this.firstLogInventoryCount = Math.max(0, Math.floor(Number(state.firstLogInventoryCount) || 0));
+        this.crashSite.getWorldPosition(this.sitePosition);
+        this.player.faceWorldPoint(this.sitePosition);
+        this.rescueCinematicOwned = this.player.beginCinematic(this);
+        if (this.rescueCinematicOwned) {
+          this.introCinematicBeat = 'first-log';
+          this.player.playCinematicAnimation(['Idle_A'], { loop: true, timeScale: 0.82 });
+          this.#setObjective('Watch Sprout store the first log');
+        } else {
+          this.#setObjective('Day 1 · Gather sticks, stones and grass');
+        }
+      } else {
+        this.#setObjective('Day 1 · Gather sticks, stones and grass');
+      }
     }
 
     return { restored: true, phase: this.phase };
@@ -256,6 +296,12 @@ export class SproutArrivalController {
 
     if (this.phase === PHASE.ALLIED) {
       this.#clearRescueAction();
+      if (this.introCinematicBeat === 'first-log') {
+        this.#setObjective('Watch Sprout store the first log');
+        const logCount = this.game.inventory?.get?.('log') ?? this.firstLogInventoryCount;
+        if (logCount > this.firstLogInventoryCount) this.#completeFirstLogCinematic();
+        return;
+      }
       this.#setObjective('Day 1 · Gather sticks, stones and grass');
     }
   }
@@ -318,6 +364,7 @@ export class SproutArrivalController {
       this.rescueCinematicOwned = this.player.beginCinematic(this);
     }
     if (this.rescueCinematicOwned) {
+      this.introCinematicBeat = 'dialogue';
       this.player.playCinematicAnimation(['Idle_A'], { loop: true, timeScale: 0.82 });
     }
 
@@ -365,10 +412,24 @@ export class SproutArrivalController {
     this.phase = PHASE.ALLIED;
     this.phaseElapsed = 0;
     this.#hideDialogue();
-    this.#releaseCinematic();
+    this.firstLogInventoryCount = this.game.inventory?.get?.('log') ?? 0;
+    this.introCinematicBeat = this.rescueCinematicOwned ? 'first-log' : 'none';
     this.setStatus?.('SPROUT · ALLIED');
-    this.#setObjective('Day 1 · Gather sticks, stones and grass');
+    this.#setObjective(
+      this.introCinematicBeat === 'first-log'
+        ? 'Watch Sprout store the first log'
+        : 'Day 1 · Gather sticks, stones and grass'
+    );
     this.game.saveController?.saveNow?.('sprout-allied');
+  }
+
+  #completeFirstLogCinematic() {
+    if (this.introCinematicBeat !== 'first-log') return false;
+    this.introCinematicBeat = 'none';
+    this.#releaseCinematic();
+    this.#setObjective('Day 1 · Gather sticks, stones and grass');
+    this.game.saveController?.saveNow?.('sprout-first-log-stored');
+    return true;
   }
 
   #setObjective(message) {
@@ -386,6 +447,8 @@ export class SproutArrivalController {
   }
 
   #releaseCinematic() {
+    this.game.sceneSystem?.clearCameraFrame?.(this);
+    this.introCinematicBeat = 'none';
     if (!this.rescueCinematicOwned) return;
     this.player.endCinematic(this);
     this.rescueCinematicOwned = false;
