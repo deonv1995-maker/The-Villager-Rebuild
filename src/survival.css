@@ -1,0 +1,70 @@
+.survival-vitals {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  top: max(58px, calc(env(safe-area-inset-top) + 54px));
+  width: min(164px, 42vw);
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 11px;
+  background: rgba(15, 34, 25, .72);
+  border: 1px solid rgba(225, 207, 151, .34);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.survival-vital {
+  display: grid;
+  grid-template-columns: 46px 1fr 28px;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.survival-vital-label,
+.survival-vital-value {
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .045em;
+  line-height: 1;
+}
+
+.survival-vital-label { color: #fff0cb; }
+.survival-vital-value {
+  color: #fff8e8;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.survival-vital-track {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(5, 12, 9, .72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .08) inset;
+}
+
+.survival-vital-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: width 120ms linear;
+}
+
+.survival-vital.health .survival-vital-fill { background: #c84e49; }
+.survival-vital.hunger .survival-vital-fill { background: #d5a74f; }
+.survival-vital.critical .survival-vital-value { color: #ffd2c7; }
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .survival-vitals {
+    width: min(150px, 44vw);
+    padding: 6px 7px;
+  }
+
+  .survival-vital {
+    grid-template-columns: 42px 1fr 26px;
+    gap: 4px;
+  }
+}

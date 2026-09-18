@@ -14,6 +14,7 @@ import { SpearProjectileSystem } from '../world/SpearProjectileSystem.js';
 import { RangerController } from '../player/RangerController.js';
 import { RangerToolPresentation } from '../player/RangerToolPresentation.js';
 import { InventorySystem } from '../gameplay/InventorySystem.js';
+import { PlayerSurvivalSystem } from '../gameplay/PlayerSurvivalSystem.js';
 import { CraftingSystem } from '../gameplay/CraftingSystem.js';
 import { ToolbeltSystem } from '../gameplay/ToolbeltSystem.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../data/ToolDefinitions.js';
@@ -56,6 +57,7 @@ export class GameApp {
     await this.player.load();
 
     this.inventory = new InventorySystem();
+    this.survival = new PlayerSurvivalSystem();
     this.crafting = new CraftingSystem({ inventory: this.inventory });
     this.toolbelt = new ToolbeltSystem({ inventory: this.inventory, crafting: this.crafting });
     this.gatherables = new GatherableSystem({
@@ -170,6 +172,14 @@ export class GameApp {
     this.toolPresentation?.update(dt);
     this.demolitionPreview?.update(dt);
     this.campfire?.update(dt);
+
+    const survivalEvent = this.survival?.advanceWorldMinutes?.(
+      dt * (this.worldTime?.gameMinutesPerRealSecond ?? 1)
+    );
+    if (survivalEvent?.changed) this.#syncSurvivalHud();
+    if (this.survival?.isDefeated?.()) {
+      this.#recoverPlayerFromDefeat(survivalEvent?.source ?? 'starvation');
+    }
 
     const projectileEvent = this.spearProjectiles?.update(dt);
     if (projectileEvent) {
@@ -552,8 +562,48 @@ export class GameApp {
 
   #handleWildlifeAttack(event) {
     this.player?.receiveWildlifeImpact(event.position, { distance: 1.2 });
-    this.setStatus(`${event.label.toUpperCase()} ATTACK · CREATE DISTANCE`);
+    const result = this.survival?.applyDamage?.(event.damage ?? 0, { source: event.animalId });
+    this.#syncSurvivalHud();
+    if (result?.defeated) {
+      this.#recoverPlayerFromDefeat(event.animalId);
+      return;
+    }
+
+    const damage = Math.max(0, Math.round(result?.damage ?? 0));
+    this.setStatus(`${event.label.toUpperCase()} ATTACK · -${damage} HP · CREATE DISTANCE`);
     this.hud?.setObjective('Wolf attack · move away or fight back');
+  }
+
+  #syncSurvivalHud() {
+    this.hud?.setSurvivalVitals?.(this.survival?.getSnapshot?.());
+  }
+
+  #recoverPlayerFromDefeat(source = 'damage') {
+    const recovery = this.survival?.recoverAfterDefeat?.();
+    const driver = { id: 'player-survival-recovery' };
+    const spawn = this.island?.getSpawnPoint?.() ?? { x: 0, z: 91 };
+    if (this.player?.beginCinematic?.(driver)) {
+      this.player.setCinematicPose?.({
+        x: Number(spawn.x) || 0,
+        z: Number(spawn.z) || 91,
+        yaw: Math.PI,
+        snapCamera: true
+      });
+      this.player.endCinematic?.(driver);
+    }
+
+    this.currentHuntTarget = null;
+    this.currentInteractionTarget = null;
+    this.hud?.setInteractionTarget?.(null);
+    this.hud?.setAttackTarget?.(null, this.toolbelt?.getEquippedToolId?.() ?? null);
+    this.#syncSurvivalHud();
+    this.saveController?.saveNow?.('player-recovery');
+
+    const cause = source === 'starvation' ? 'STARVATION' : 'DAMAGE';
+    this.setStatus(`${cause} · RECOVERED AT SHORE`);
+    this.hud?.setObjective(
+      `Recovered with ${Math.round(recovery?.health ?? 0)} HP · hunger ${Math.round(recovery?.hunger ?? 0)}`
+    );
   }
 
   #handleCombatResult(hit) {
@@ -579,6 +629,7 @@ export class GameApp {
 
   #syncProgress() {
     if (!this.inventory || !this.toolbelt) return;
+    this.#syncSurvivalHud();
     const toolId = this.toolbelt.getEquippedToolId();
     const carryingLog = this.physicalLogs?.isCarrying() ?? false;
     const logBuildState = this.physicalLogs?.getBuildState() ?? null;

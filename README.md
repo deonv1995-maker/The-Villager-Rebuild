@@ -27,7 +27,7 @@ The current `main` branch has moved beyond the original 0.3.8 construction pass 
 - third person remains the default Ranger camera, with optional first person reusing the same movement, interaction and construction systems rather than creating a parallel controller;
 - first person has a small non-interactive center reticle, hides third-person Ranger/tool presentation to prevent clipping and disables the third-person building-occlusion presentation while active;
 - the 0.3.11 device-regression contract locks RAW-frame traversal, continuous floor support, geometric roof occupancy and near-player tree interaction visibility;
-- `npm run check` includes camera, construction, terrain-fit, upper-storey, stairs, stacked placement/roof/wall, roof topology/orientation/runtime/sequence, platform traversal, save, survival, PWA and production-build verification.
+- `npm run check` includes camera, construction, terrain-fit, upper-storey, stairs, stacked placement/roof/wall, roof topology/orientation/runtime/sequence, platform traversal, player health/hunger, save, survival, PWA and production-build verification.
 
 The established 0.3.8 physical-construction rules still remain intact:
 

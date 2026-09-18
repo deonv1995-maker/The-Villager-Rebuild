@@ -382,6 +382,7 @@ export class WildAnimalActor {
       instanceId: this.instanceId,
       animalId: this.definition.id,
       label: this.definition.label,
+      damage: Math.max(0, Number(aggression.damage) || 0),
       position: this.group.position.clone()
     };
   }

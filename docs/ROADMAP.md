@@ -76,6 +76,8 @@ Current playable survival sequence:
 
 Gather stick -> gather stone -> craft spear -> hunt animal -> gather meat -> chop first tree -> gather logs -> build first campfire.
 
+Health and hunger are now active Day-1 runtime systems: wolf attacks apply data-driven player damage, hunger follows world-time progression (including sleep), starvation can damage health, and survival state persists through Continue. A temporary no-item-loss shoreline recovery prevents 0-HP soft-locks until a later death/penalty design is intentionally defined.
+
 The construction foundation now extends beyond what the Day 1 sequence strictly requires, but it does not replace the unfinished Day 1 progression work below.
 
 Next playable milestone after the current acceptance gate: **cook the gathered meat at the campfire.**
@@ -88,7 +90,7 @@ Required supporting systems:
 
 - player locomotion and camera;
 - interaction targeting;
-- health, hunger and stamina;
+- health and hunger (implemented); stamina remains deferred;
 - resource pickup/harvesting;
 - simple inventory/material carrying as required;
 - simple crafting;

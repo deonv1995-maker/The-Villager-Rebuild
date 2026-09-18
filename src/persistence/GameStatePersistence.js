@@ -624,6 +624,7 @@ export function captureGameState(game) {
   }
   return {
     player: capturePlayer(game),
+    survival: game.survival?.captureState?.() ?? null,
     inventory: captureInventory(game),
     equipment: captureEquipment(game),
     harvest: captureHarvest(game),
@@ -638,6 +639,7 @@ export function captureGameState(game) {
 
 export function restoreGameState(game, state) {
   if (!isRecord(state)) throw new Error('Saved gameplay state is invalid');
+  game.survival?.restoreState?.(state.survival);
   restoreInventory(game, state.inventory);
   restoreHarvest(game, state.harvest);
   restoreGatherables(game, state.gatherables);
