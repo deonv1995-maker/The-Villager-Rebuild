@@ -166,12 +166,33 @@ export class WorldCollisionSystem {
     return true;
   }
 
-  isCircleClear(x, z, radius, { ignore = null } = {}) {
+  isCircleClear(x, z, radius, {
+    ignore = null,
+    bottomY = null,
+    topY = null
+  } = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) {
       throw new Error('Collision clearance requires finite x, z and a positive radius');
     }
+    if (
+      bottomY !== null && bottomY !== undefined && !Number.isFinite(bottomY) ||
+      topY !== null && topY !== undefined && !Number.isFinite(topY)
+    ) {
+      throw new Error('Collision clearance vertical bounds must be finite when provided');
+    }
+    const queryBottomY = Number.isFinite(bottomY) ? bottomY : -Infinity;
+    const queryTopY = Number.isFinite(topY) ? topY : Infinity;
+    if (queryTopY < queryBottomY) {
+      throw new Error('Collision clearance topY must be greater than or equal to bottomY');
+    }
+
     const shouldIgnore = typeof ignore === 'function' ? ignore : () => false;
-    return this.obstacles.every(obstacle => shouldIgnore(obstacle) || !this.#overlapsObstacle(obstacle, x, z, radius));
+    return this.obstacles.every(obstacle => (
+      shouldIgnore(obstacle) ||
+      obstacle.topY <= queryBottomY ||
+      obstacle.bottomY >= queryTopY ||
+      !this.#overlapsObstacle(obstacle, x, z, radius)
+    ));
   }
 
   /**
