@@ -233,7 +233,7 @@ function runRestSequence(source) {
     const lyingPose = poses.find(pose => pose.y === 5 && pose.modelPitch > 1.4);
     assert(lyingPose, 'Bed sleep must preserve constructed-floor support height while lying on the mattress');
     assert(
-      Math.hypot(lyingPose.x - bed.position.x, lyingPose.z - bed.position.z) >= 0.8,
+      Math.hypot(lyingPose.x - bed.position.x, lyingPose.z - bed.position.z) >= 1.45,
       'Bed sleep must keep the gameplay root at a safe standing point outside the Bed collider'
     );
     assert(
