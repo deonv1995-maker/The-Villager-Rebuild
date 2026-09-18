@@ -82,6 +82,14 @@ export class WildAnimalActor {
     this.harvestRing = this.#createRing(0xffe29a, 0.9, 1.12);
     this.harvestRing.name = `hunt-harvest-target-${instanceId}`;
     this.scene.add(this.harvestRing);
+
+    this.healthBar = this.#createHealthBar();
+    if (this.healthBar) {
+      this.healthBar.name = `wild-animal-health-${instanceId}`;
+      this.scene.add(this.healthBar);
+      this.#refreshHealthBar();
+      this.#syncHealthBarPosition();
+    }
   }
 
   async load() {
@@ -153,6 +161,7 @@ export class WildAnimalActor {
     const harvestTarget = this.getHarvestTarget(playerPosition);
     this.harvestRing.visible = Boolean(harvestTarget);
     if (harvestTarget) this.#positionRing(this.harvestRing);
+    this.#syncHealthBarPosition();
     return target;
   }
 
@@ -218,10 +227,59 @@ export class WildAnimalActor {
     return this.group.position;
   }
 
+  getMeleeHitTarget(playerPosition, direction = null, {
+    range = 2.35,
+    arcDegrees = 118
+  } = {}) {
+    if (this.defeated || !this.#isFinitePosition(playerPosition) || !Number.isFinite(range) || range <= 0) {
+      return null;
+    }
+
+    const configuredRadius = Number(this.definition.combat?.meleeHitboxRadius);
+    const presentationLength = Number(this.definition.presentation?.targetLength) || 1.5;
+    const hitboxRadius = Number.isFinite(configuredRadius) && configuredRadius > 0
+      ? configuredRadius
+      : THREE.MathUtils.clamp(presentationLength * 0.28, 0.35, 1.1);
+    const dx = this.group.position.x - playerPosition.x;
+    const dz = this.group.position.z - playerPosition.z;
+    const centerDistance = Math.hypot(dx, dz);
+    const hitDistance = Math.max(0, centerDistance - hitboxRadius);
+    if (hitDistance > range) return null;
+
+    const facingLength = direction
+      ? Math.hypot(Number(direction.x) || 0, Number(direction.z) || 0)
+      : 0;
+    if (facingLength > 0.001 && centerDistance > 0.001) {
+      const halfArc = THREE.MathUtils.degToRad(THREE.MathUtils.clamp(arcDegrees, 1, 360) * 0.5);
+      const angularPadding = centerDistance <= hitboxRadius
+        ? Math.PI
+        : Math.asin(THREE.MathUtils.clamp(hitboxRadius / centerDistance, 0, 1));
+      const allowedAngle = Math.min(Math.PI, halfArc + angularPadding);
+      const facingDot = (
+        (direction.x / facingLength) * (dx / centerDistance)
+        + (direction.z / facingLength) * (dz / centerDistance)
+      );
+      if (facingDot < Math.cos(allowedAngle)) return null;
+    }
+
+    return {
+      instanceId: this.instanceId,
+      animalId: this.definition.id,
+      label: this.definition.label,
+      health: this.health,
+      maxHealth: this.definition.maxHealth,
+      distance: centerDistance,
+      hitDistance,
+      hitboxRadius,
+      position: this.group.position
+    };
+  }
+
   applyDamage(damage = 1, threatPosition = null) {
     if (this.defeated || !Number.isFinite(damage) || damage <= 0) return null;
     this.health = Math.max(0, this.health - damage);
     this.hitFlash = 0.16;
+    this.#refreshHealthBar();
     let resultPosition = this.group.position;
 
     if (this.health === 0) {
@@ -232,6 +290,10 @@ export class WildAnimalActor {
       this.behavior = 'defeated';
       this.targetRing.visible = false;
       this.harvestRing.visible = false;
+      if (this.healthBar) {
+        this.healthBar.visible = false;
+        this.scene.remove(this.healthBar);
+      }
       this.scene.remove(this.group);
       this.lootSpawned = this.#spawnLoot(deathPosition);
     } else {
@@ -252,8 +314,13 @@ export class WildAnimalActor {
     };
   }
 
-  meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
-    const target = this.getAttackTarget(playerPosition, range);
+  meleeAttack(playerPosition, {
+    range = 2.35,
+    damage = 1,
+    direction = null,
+    arcDegrees = 118
+  } = {}) {
+    const target = this.getMeleeHitTarget(playerPosition, direction, { range, arcDegrees });
     if (!target) return null;
     return this.applyDamage(damage, playerPosition);
   }
@@ -508,6 +575,78 @@ export class WildAnimalActor {
 
   #isFinitePosition(position) {
     return Boolean(position && Number.isFinite(position.x) && Number.isFinite(position.y) && Number.isFinite(position.z));
+  }
+
+  #createHealthBar() {
+    const config = this.definition.combat?.healthBar;
+    if (!config) return null;
+
+    const width = 64;
+    const height = 8;
+    const pixels = new Uint8Array(width * height * 4);
+    const texture = new THREE.DataTexture(pixels, width, height, THREE.RGBAFormat);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+
+    this.healthBarPixels = pixels;
+    this.healthBarTexture = texture;
+    this.healthBarTextureWidth = width;
+    this.healthBarTextureHeight = height;
+
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false
+    }));
+    sprite.scale.set(config.width ?? 1.7, config.height ?? 0.16, 1);
+    sprite.renderOrder = 9;
+    sprite.userData.combatHealthBar = true;
+    return sprite;
+  }
+
+  #refreshHealthBar() {
+    if (!this.healthBarTexture || !this.healthBarPixels) return;
+    const width = this.healthBarTextureWidth;
+    const height = this.healthBarTextureHeight;
+    const ratio = THREE.MathUtils.clamp(this.health / Math.max(1, this.definition.maxHealth), 0, 1);
+    const innerWidth = Math.max(1, width - 2);
+    const fillWidth = Math.round(innerWidth * ratio);
+    const fillColor = ratio > 0.5
+      ? [92, 202, 105]
+      : ratio > 0.25
+        ? [227, 178, 68]
+        : [214, 82, 70];
+
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const offset = (y * width + x) * 4;
+        const border = x === 0 || x === width - 1 || y === 0 || y === height - 1;
+        const filled = !border && x <= fillWidth;
+        const color = border
+          ? [28, 24, 22]
+          : filled
+            ? fillColor
+            : [63, 53, 48];
+        this.healthBarPixels[offset] = color[0];
+        this.healthBarPixels[offset + 1] = color[1];
+        this.healthBarPixels[offset + 2] = color[2];
+        this.healthBarPixels[offset + 3] = 235;
+      }
+    }
+    this.healthBarTexture.needsUpdate = true;
+  }
+
+  #syncHealthBarPosition() {
+    if (!this.healthBar || this.defeated) return;
+    const offsetY = this.definition.combat?.healthBar?.offsetY ?? 2;
+    this.healthBar.position.set(
+      this.group.position.x,
+      this.group.position.y + offsetY,
+      this.group.position.z
+    );
+    this.healthBar.visible = true;
   }
 
   #createRing(color, innerRadius, outerRadius) {
