@@ -107,7 +107,10 @@ export class WorldCollisionSystem {
     supportY = null,
     supportOverridesBase = false,
     supportOverrideTolerance = 0,
-    stepHeight = 0.58
+    stepHeight = 0.58,
+    constructionHalfX = 0,
+    constructionHalfZ = 0,
+    constructionYaw = 0
   }) {
     if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) {
       throw new Error('World collision obstacles require finite x, z and a positive radius');
@@ -126,7 +129,10 @@ export class WorldCollisionSystem {
       supportY: Number.isFinite(supportY) ? supportY : null,
       supportOverridesBase: Boolean(supportOverridesBase),
       supportOverrideTolerance: Math.max(0, supportOverrideTolerance),
-      stepHeight: Math.max(0, stepHeight)
+      stepHeight: Math.max(0, stepHeight),
+      constructionHalfX: Number.isFinite(constructionHalfX) ? Math.max(0, constructionHalfX) : 0,
+      constructionHalfZ: Number.isFinite(constructionHalfZ) ? Math.max(0, constructionHalfZ) : 0,
+      constructionYaw: Number.isFinite(constructionYaw) ? constructionYaw : 0
     };
     this.obstacles.push(obstacle);
     this.revision += 1;
