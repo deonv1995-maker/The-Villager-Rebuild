@@ -3,6 +3,7 @@ import {
   PLACEABLE_UTILITY_DEFINITIONS,
   PLACEABLE_UTILITY_INTERACTION_RADIUS
 } from '../data/PlaceableUtilityDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { BedSystem } from '../world/BedSystem.js';
 import { CraftingBenchSystem } from '../world/CraftingBenchSystem.js';
 import { resolvePlaceableUtilityWallSnap } from '../world/PlaceableUtilityWallSnapRules.js';
@@ -15,6 +16,7 @@ const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
 const HAMMER_MOVE_ACTION_ID = 'utility-hammer-move';
 const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
 const PLACEMENT_VERTICAL_EPSILON = 0.03;
+const PLACEMENT_LEVEL_TOLERANCE = PHYSICAL_LOG.stairMaxStepRise + PLACEMENT_VERTICAL_EPSILON;
 
 export class PlaceableUtilityRuntimeController {
   constructor({
@@ -202,16 +204,22 @@ export class PlaceableUtilityRuntimeController {
   #findPlacement(definition, playerPosition, facingDirection) {
     const baseAngle = Math.atan2(facingDirection.x, facingDirection.z);
     const wallSurfaces = this.game.panelConstructionRuntime?.system?.getPlacementWallSurfaces?.() ?? [];
+    const placementLevelY = this.#resolvePlacementHeight(
+      playerPosition.x,
+      playerPosition.z,
+      playerPosition.y
+    );
+
     for (const extraDistance of DISTANCE_OFFSETS) {
       const distance = definition.preferredDistance + extraDistance;
       for (const angleOffset of ANGLE_OFFSETS) {
         const angle = baseAngle + angleOffset;
         const x = playerPosition.x + Math.sin(angle) * distance;
         const z = playerPosition.z + Math.cos(angle) * distance;
-        const y = this.#resolvePlacementHeight(x, z, playerPosition.y);
+        const resolvedY = this.#resolvePlacementHeight(x, z, placementLevelY);
         const candidate = {
           x,
-          y,
+          y: placementLevelY,
           z,
           yaw: baseAngle
         };
@@ -223,8 +231,8 @@ export class PlaceableUtilityRuntimeController {
           wallSurfaces
         });
         if (snapped) {
-          const snappedY = this.#resolvePlacementHeight(snapped.x, snapped.z, playerPosition.y);
-          const sameSurfaceLevel = Math.abs(snappedY - y) <= 0.35;
+          const snappedY = this.#resolvePlacementHeight(snapped.x, snapped.z, placementLevelY);
+          const sameSurfaceLevel = Math.abs(snappedY - placementLevelY) <= PLACEMENT_LEVEL_TOLERANCE;
           if (sameSurfaceLevel && this.#isPlacementClear(
             definition,
             snapped.x,
@@ -239,7 +247,9 @@ export class PlaceableUtilityRuntimeController {
           }
         }
 
-        if (!this.#isPlacementClear(definition, x, z, y)) continue;
+        if (Math.abs(resolvedY - placementLevelY) > PLACEMENT_LEVEL_TOLERANCE) continue;
+        candidate.y = resolvedY;
+        if (!this.#isPlacementClear(definition, x, z, resolvedY)) continue;
         return candidate;
       }
     }
