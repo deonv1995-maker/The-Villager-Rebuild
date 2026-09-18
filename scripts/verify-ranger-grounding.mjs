@@ -66,9 +66,16 @@ const multistoreyTerrain = {
     referenceY: Number.MAX_SAFE_INTEGER,
     maxStepUp: Number.MAX_SAFE_INTEGER
   }),
-  walkableHeightAt: (x, z) => collision.supportHeightAt(x, z, 0, {
-    referenceY: collision.getSupportReferenceY() ?? 0,
-    maxStepUp: 0.58
+  walkableHeightAt: (x, z, {
+    referenceY = null,
+    maxStepUp = 0.58,
+    airborne = false
+  } = {}) => collision.supportHeightAt(x, z, 0, {
+    referenceY: Number.isFinite(referenceY)
+      ? referenceY
+      : collision.getSupportReferenceY() ?? 0,
+    maxStepUp,
+    airborne
   })
 };
 
