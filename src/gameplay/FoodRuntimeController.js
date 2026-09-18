@@ -59,7 +59,7 @@ export class FoodRuntimeController {
 
     const before = this.game.survival.getSnapshot();
     if (before.hunger >= before.maxHunger) {
-      this.game.setStatus?.(\`\${definition.label.toUpperCase()} · NOT HUNGRY\`);
+      this.game.setStatus?.(`${definition.label.toUpperCase()} · NOT HUNGRY`);
       return true;
     }
 
@@ -69,7 +69,7 @@ export class FoodRuntimeController {
     this.game.equipmentRuntime?.syncHud?.();
     this.game.hud?.closeInventory?.();
     this.game.saveController?.saveNow?.('eat-food');
-    this.game.setStatus?.(\`ATE \${definition.label.toUpperCase()} · +\${Math.round(restored)} HUNGER\`);
+    this.game.setStatus?.(`ATE ${definition.label.toUpperCase()} · +${Math.round(restored)} HUNGER`);
     this.game.hud?.setObjective?.('Hunger restored · keep cooked food for later');
     return true;
   }
@@ -97,7 +97,7 @@ export class FoodRuntimeController {
     this.#createCookingVisual();
     this.game.equipmentRuntime?.syncHud?.();
     this.game.saveController?.saveNow?.('campfire-cook-start');
-    this.game.setStatus?.(\`\${definition.label.toUpperCase()} · COOKING\`);
+    this.game.setStatus?.(`${definition.label.toUpperCase()} · COOKING`);
     this.game.hud?.setObjective?.('Meat is roasting over the campfire');
     this.#syncCookingAction();
     return true;
@@ -154,7 +154,7 @@ export class FoodRuntimeController {
     const output = RESOURCE_DEFINITIONS[cooking.outputId];
     this.game.equipmentRuntime?.syncHud?.();
     this.game.saveController?.saveNow?.('campfire-cook-complete');
-    this.game.setStatus?.(\`\${output?.label?.toUpperCase() ?? 'FOOD'} · READY\`);
+    this.game.setStatus?.(`${output?.label?.toUpperCase() ?? 'FOOD'} · READY`);
     this.game.hud?.setObjective?.('Open the suitcase and tap Cooked Meat to eat');
     this.#syncCookingAction();
   }
@@ -180,7 +180,7 @@ export class FoodRuntimeController {
         priority: 40,
         icon: 'meat',
         caption: 'COOKING',
-        label: \`Cooking meat · \${Math.ceil(remaining)}s remaining\`
+        label: `Cooking meat · ${Math.ceil(remaining)}s remaining`
       });
       return;
     }
@@ -198,7 +198,7 @@ export class FoodRuntimeController {
       priority: 40,
       icon: 'meat',
       caption: 'COOK',
-      label: \`Cook \${rawDefinition.label} at campfire\`,
+      label: `Cook ${rawDefinition.label} at campfire`,
       onTrigger: () => this.startCooking('meat')
     } : null);
   }
