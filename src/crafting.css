@@ -139,13 +139,28 @@
   gap: 3px;
 }
 .craft-cost {
-  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 20px;
+  padding: 2px 5px 2px 3px;
   border-radius: 999px;
   background: rgba(23, 46, 33, .9);
   color: rgba(255, 240, 203, .86);
   font-size: 7px;
   font-weight: 800;
   white-space: nowrap;
+}
+.craft-cost-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.craft-cost-count {
+  line-height: 1;
+  pointer-events: none;
 }
 .craft-cost.missing {
   background: rgba(90, 45, 40, .88);
