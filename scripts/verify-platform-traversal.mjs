@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { PANEL_GRID, PANEL_STAIR } from '../src/data/PanelConstructionDefinitions.js';
 import { CONSTRUCTION_DIMENSIONS, PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { rangerGroundHeightAt } from '../src/player/RangerGrounding.js';
+import { semanticStairColliderSpecs } from '../src/world/SemanticStairPanelGeometry.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
 const PLAYER_RADIUS = 0.42;
@@ -186,4 +188,109 @@ assert.equal(
   'A wall on the Ranger current storey must still block traversal'
 );
 
-console.log('Ranger platform entry, overhang seam traversal and elevated-floor blocking verified.');
+// A two-cell semantic Stair may sit against a normal perimeter Wall at its low/source
+// end. The Ranger footprint must step completely down to the lower Floor before the
+// capsule reaches that Wall; otherwise the highest-footprint grounding rule pins the
+// Ranger on tread one and the wall makes the foot of the stairs feel invisible-blocked.
+const stairCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  baseHeightAt: () => 0,
+  isPlayable: () => true
+});
+const stairFloorTop = PHYSICAL_LOG.floorGroundClearance + 0.028;
+for (const z of [-PANEL_GRID.cellSize * 0.5, PANEL_GRID.cellSize * 0.5]) {
+  stairCollision.addBox({
+    x: 0,
+    z,
+    halfX: PANEL_GRID.cellSize * 0.5,
+    halfZ: PANEL_GRID.cellSize * 0.5,
+    yaw: 0,
+    type: 'panel-floor',
+    label: `stair-lower-floor-${z}`,
+    bottomY: stairFloorTop - PHYSICAL_LOG.floorUndersideDepth - 0.02,
+    topY: stairFloorTop,
+    standable: true,
+    supportHalfX: PANEL_GRID.cellSize * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
+    supportHalfZ: PANEL_GRID.cellSize * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
+    supportY: stairFloorTop,
+    supportOverridesBase: true,
+    supportOverrideTolerance: PHYSICAL_LOG.floorSurfaceOverrideTolerance,
+    stepHeight: 0.18
+  });
+}
+stairCollision.addBox({
+  x: 0,
+  z: -PANEL_GRID.cellSize,
+  halfX: PANEL_GRID.cellSize * 0.5,
+  halfZ: CONSTRUCTION_DIMENSIONS.wallThickness,
+  yaw: 0,
+  type: 'panel-wall',
+  label: 'stair-low-end-perimeter-wall',
+  bottomY: stairFloorTop - 0.02,
+  topY: stairFloorTop + PANEL_GRID.storeyHeight
+});
+const stairSpecs = semanticStairColliderSpecs({
+  x: 0,
+  z: 0,
+  yaw: 0,
+  baseY: stairFloorTop,
+  topY: stairFloorTop + PANEL_GRID.storeyHeight
+});
+for (const [index, spec] of stairSpecs.entries()) {
+  const { role = 'tread', ...collider } = spec;
+  stairCollision.addBox({
+    ...collider,
+    type: 'panel-stair',
+    label: role === 'landing' ? 'stair-top-landing' : `stair-tread-${index}`
+  });
+}
+const bottomTread = stairSpecs
+  .filter(spec => spec.role === 'tread')
+  .sort((left, right) => left.supportY - right.supportY)[0];
+assert.ok(
+  PANEL_STAIR.lowLanding > PANEL_STAIR.highLanding,
+  'Semantic Stair geometry must reserve extra real landing depth at the low/source end'
+);
+
+const stairTerrain = {
+  heightAt: () => 0,
+  walkableHeightAt: (x, z, options = {}) => stairCollision.supportHeightAt(x, z, 0, options)
+};
+const stairActor = {
+  x: bottomTread.x,
+  y: bottomTread.supportY,
+  z: bottomTread.z
+};
+let reachedLowerFloor = false;
+for (let step = 0; step < 80; step += 1) {
+  const next = stairCollision.resolveMove(
+    stairActor,
+    { x: stairActor.x, z: stairActor.z - 0.04 },
+    { radius: PLAYER_RADIUS, airborne: false }
+  );
+  stairActor.x = next.x;
+  stairActor.z = next.z;
+  const ground = rangerGroundHeightAt(
+    stairTerrain,
+    stairActor.x,
+    stairActor.z,
+    RANGER_FOOTPRINT_RADIUS,
+    { referenceY: stairActor.y, airborne: false }
+  );
+  stairActor.y = ground;
+  if (Math.abs(ground - stairFloorTop) <= 0.000001) {
+    reachedLowerFloor = true;
+    break;
+  }
+}
+assert.equal(
+  reachedLowerFloor,
+  true,
+  'Descending the semantic Stair must hand the Ranger onto the lower Floor before the perimeter Wall blocks forward travel'
+);
+assert.ok(
+  stairActor.z > -PANEL_GRID.cellSize + CONSTRUCTION_DIMENSIONS.wallThickness + PLAYER_RADIUS,
+  'The lower-floor handoff must happen with physical capsule clearance still available before the Wall'
+);
+
+console.log('Ranger platform entry, overhang seam traversal, stair-foot egress and elevated-floor blocking verified.');
