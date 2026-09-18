@@ -316,7 +316,7 @@ export class TitleSceneApp {
       <div class="title-menu-actions">
         <button class="title-play" type="button">
           <span class="title-play-mark" aria-hidden="true">◆</span>
-          <span>PLAY</span>
+          <span>NEW GAME</span>
         </button>
         <p>Explore · Gather · Build · Rebuild</p>
       </div>
