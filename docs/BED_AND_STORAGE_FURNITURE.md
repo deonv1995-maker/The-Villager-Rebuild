@@ -28,7 +28,7 @@ Crafted placeables reuse semantic construction walls as optional placement ancho
 - `PanelConstructionSystem.getPlacementWallSurfaces()` exposes read-only geometry for active **solid** wall panels. Door and Window panels are deliberately excluded so furniture does not auto-block openings.
 - `PlaceableUtilityWallSnapRules.js` is the single geometry rule for wall alignment. It keeps furniture on the player's side of the wall, clamps it within the wall segment, turns the item's usable/front side back into the room, and leaves only a 0.04-unit visual clearance behind the item.
 - `PlaceableUtilityDefinitions.js` owns each item's wall footprint. Bed, Storage Chest, Food Barrel and Crafting Bench therefore use one generic snap algorithm instead of item-specific placement code.
-- The established standable-surface resolver still owns vertical placement. Wall snapping changes only horizontal position/yaw, then re-resolves support height and requires the snapped position to remain on the same floor level.
+- The established standable-surface resolver still owns vertical placement. `PlaceableUtilityRuntimeController` resolves the Ranger's current support level once per placement search, then rejects free or wall-snapped candidates that fall outside the shared stair-step tolerance. A preview that projects through an upstairs opening or beyond an upper-floor edge therefore keeps searching the Ranger's active storey instead of silently falling back to terrain or a lower storey. Wall snapping changes only horizontal position/yaw and re-resolves support at the snapped point.
 - Collision validation ignores only the **specific solid wall that owns the snap**. Other walls, furniture and same-storey obstacles still block placement.
 - Snap identity is preview-only. Save records continue storing the established `x/y/z/yaw` values, so there is no save-schema change and no second furniture persistence system.
 - When no eligible wall is nearby, the original free-placement search remains the fallback. Existing exterior placement remains available.
@@ -63,6 +63,7 @@ The existing `verify-placeable-utility-hammer-move.mjs` regression path now addi
 - Bed inventory/placeable integration;
 - Bed Hammer REMOVE/replacement behavior;
 - Bed placement and saved elevation on constructed floors;
+- active-storey placement for Bed, Chest, Barrel and Crafting Bench when an earlier preview candidate resolves to terrain/lower-storey support;
 - data-driven Bed/Chest/Barrel/Bench wall-snap footprints;
 - semantic solid-wall snapping with the furniture back edge held 0.04 units off the wall;
 - snapped-wall-only collision filtering while neighboring walls remain blocking;
@@ -79,6 +80,7 @@ The full repository `npm run check` remains the merge gate.
 After deployment, verify on a physical phone in both first- and third-person:
 
 - craft Bed from a Crafting Bench and place it outdoors and on an indoor constructed floor;
+- from an upper floor, place Bed, Chest, Barrel and Crafting Bench near floor edges/stair openings and confirm previews remain on that upper level rather than appearing below;
 - aim Bed, Chest, Barrel and Crafting Bench near an interior solid wall and confirm each snaps tightly against it with its usable/front side facing into the room;
 - confirm Door/Window openings do not attract furniture snapping and neighboring walls still prevent corner clipping;
 - confirm the tighter wall placement leaves noticeably more walking space without trapping the Ranger;
