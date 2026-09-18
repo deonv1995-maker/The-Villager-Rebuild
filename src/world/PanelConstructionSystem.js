@@ -658,10 +658,11 @@ export class PanelConstructionSystem {
           const runX = dx / length;
           const runZ = dz / length;
           const yaw = Math.atan2(runX, runZ);
+          const lowPointOffset = PANEL_STAIR.runOffset - PANEL_STAIR.runLength * 0.42;
           const lowPoint = {
-            x: x - runX * PANEL_STAIR.runLength * 0.42,
+            x: x + runX * lowPointOffset,
             y: floor.levelY + FLOOR_TOP_LIFT,
-            z: z - runZ * PANEL_STAIR.runLength * 0.42
+            z: z + runZ * lowPointOffset
           };
           const placement = {
             kind: 'stairs',
