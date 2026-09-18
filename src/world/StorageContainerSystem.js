@@ -118,6 +118,73 @@ export class StorageContainerSystem {
     return container?.contents.get(itemId) ?? 0;
   }
 
+  getStoredTotal(itemId) {
+    let total = 0;
+    for (const container of this.containers.values()) {
+      total += container.contents.get(itemId) ?? 0;
+    }
+    return total;
+  }
+
+  getAvailable(itemId) {
+    return this.inventory.get(itemId) + this.getStoredTotal(itemId);
+  }
+
+  hasAvailable(itemId, quantity = 1) {
+    if (!positiveInteger(quantity)) return false;
+    return this.getAvailable(itemId) >= quantity;
+  }
+
+  consumeAvailable(requirements) {
+    if (!Array.isArray(requirements) || requirements.length === 0) return false;
+
+    const totals = new Map();
+    for (const requirement of requirements) {
+      const itemId = requirement?.itemId;
+      const quantity = requirement?.quantity;
+      if (!this.inventory.definitions[itemId] || !positiveInteger(quantity)) return false;
+      totals.set(itemId, (totals.get(itemId) ?? 0) + quantity);
+    }
+
+    for (const [itemId, quantity] of totals) {
+      if (!this.hasAvailable(itemId, quantity)) return false;
+    }
+
+    const inventoryRequirements = [];
+    const storagePlan = [];
+    for (const [itemId, quantity] of totals) {
+      const carried = Math.min(this.inventory.get(itemId), quantity);
+      if (carried > 0) inventoryRequirements.push({ itemId, quantity: carried });
+
+      let remaining = quantity - carried;
+      if (remaining <= 0) continue;
+      for (const container of this.containers.values()) {
+        const stored = container.contents.get(itemId) ?? 0;
+        if (stored <= 0) continue;
+        const take = Math.min(stored, remaining);
+        storagePlan.push({ container, itemId, quantity: take });
+        remaining -= take;
+        if (remaining <= 0) break;
+      }
+      if (remaining > 0) return false;
+    }
+
+    if (inventoryRequirements.length > 0 && !this.inventory.consume(inventoryRequirements)) {
+      return false;
+    }
+
+    let storageChanged = false;
+    for (const step of storagePlan) {
+      const stored = step.container.contents.get(step.itemId) ?? 0;
+      const remaining = stored - step.quantity;
+      if (remaining > 0) step.container.contents.set(step.itemId, remaining);
+      else step.container.contents.delete(step.itemId);
+      storageChanged = true;
+    }
+    if (storageChanged) this.#emit();
+    return true;
+  }
+
   store(containerId, itemId, quantity = 1) {
     const container = this.containers.get(containerId);
     if (!container || !positiveInteger(quantity) || !this.acceptsItem(container, itemId)) return false;
