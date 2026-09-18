@@ -11,7 +11,10 @@ import { panelCellKey } from './PanelConstructionGrid.js';
 import { PanelConstructionSystem } from './PanelConstructionSystem.js';
 import { collectPanelUpperFloorExpansionSupports } from './PanelFloorSupportRules.js';
 import { createPanelPreview } from './PanelConstructionVisual.js';
-import { collectPanelUpperWallSupports } from './PanelUpperStoreyRules.js';
+import {
+  collectPanelSameStoreyWallGapSupports,
+  collectPanelUpperWallSupports
+} from './PanelUpperStoreyRules.js';
 
 const PREVIEW_VALID = 0x65d879;
 const PREVIEW_INVALID = 0xd85d57;
@@ -212,10 +215,18 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
     let best = null;
 
     for (const structure of this.registry.structures.values()) {
-      const supports = collectPanelUpperWallSupports(
-        [...structure.grid.walls.values()],
-        { levelTolerance: LEVEL_TOLERANCE }
-      );
+      const walls = [...structure.grid.walls.values()];
+      const supports = [
+        ...collectPanelUpperWallSupports(
+          walls,
+          { levelTolerance: LEVEL_TOLERANCE }
+        ),
+        ...collectPanelSameStoreyWallGapSupports(
+          walls,
+          [...structure.grid.floors.values()],
+          { levelTolerance: LEVEL_TOLERANCE }
+        )
+      ];
       for (const support of supports) {
         const ownerCellKey = panelCellKey({
           x: support.x,
