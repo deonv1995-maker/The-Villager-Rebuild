@@ -85,6 +85,82 @@ assert.ok(
   'grass presentation should suppress between-patch scatter so grass reads as grouped clumps'
 );
 
+const starterGrassItems = gatherables.items.filter(item => item.resourceId === 'grass');
+const sproutGrassPatch = gatherables.grassPatches.find(patch => (
+  patch.active
+  && patch.entries.length > 0
+  && starterGrassItems.every(item => Math.hypot(
+    patch.x - item.root.position.x,
+    patch.z - item.root.position.z
+  ) > 12)
+));
+assert.ok(sproutGrassPatch, 'island grass should include a non-tutorial patch for companion collection coverage');
+
+const sproutGrassTarget = gatherables.findNearestLooseResource(
+  new THREE.Vector3(
+    sproutGrassPatch.x,
+    ecology.heightAt(sproutGrassPatch.x, sproutGrassPatch.z),
+    sproutGrassPatch.z
+  ),
+  0.5,
+  resourceId => resourceId === 'grass'
+);
+assert.equal(
+  sproutGrassTarget?.id,
+  sproutGrassPatch.id,
+  'normal island grass patches should be exposed through the loose-resource query used by Sprout'
+);
+assert.equal(
+  sproutGrassTarget?.resourceId,
+  'grass',
+  'normal island grass should use the same grass resource identity as tutorial grass'
+);
+assert.ok(
+  sproutGrassTarget?.root?.children?.filter(child => child.isMesh).length >= 5,
+  'normal island grass should expose the same grass-clump presentation shape for Sprout compression'
+);
+
+const sproutOwner = Object.freeze({ id: 'sprout-grass-regression' });
+const reservedGrass = gatherables.reserveLooseResource(sproutGrassPatch.id, sproutOwner);
+assert.equal(
+  reservedGrass?.id,
+  sproutGrassPatch.id,
+  'Sprout should reserve a normal island grass patch through the shared loose-resource transaction'
+);
+assert.equal(
+  sproutGrassPatch.entries.every(entry => entry.collectionHidden),
+  true,
+  'grass reservation should temporarily hide the authoritative instanced patch during compression'
+);
+assert.equal(
+  gatherables.releaseLooseResource(sproutGrassPatch.id, sproutOwner),
+  true,
+  'cancelled Sprout grass collection should release the patch reservation'
+);
+assert.equal(
+  sproutGrassPatch.entries.every(entry => !entry.collectionHidden),
+  true,
+  'released grass reservations should restore the visible island patch'
+);
+
+assert.ok(
+  gatherables.reserveLooseResource(sproutGrassPatch.id, sproutOwner),
+  'normal island grass should be reservable again after a cancelled collection'
+);
+const storedGrass = gatherables.takeReservedLooseResource(sproutGrassPatch.id, sproutOwner);
+assert.equal(storedGrass?.resourceId, 'grass', 'committed Sprout grass collection should return Grass');
+assert.equal(
+  storedGrass?.quantity,
+  sproutGrassPatch.quantity,
+  'Sprout should store the same patch quantity the Ranger would hand-gather'
+);
+assert.equal(sproutGrassPatch.active, false, 'committed Sprout collection should deplete the authoritative grass patch');
+assert.equal(
+  sproutGrassPatch.entries.every(entry => entry.scaleX === 0 && entry.scaleY === 0 && entry.scaleZ === 0),
+  true,
+  'committed Sprout collection should permanently remove the collected grass clump'
+);
+
 const firstPatch = gatherables.grassPatches.find(patch => patch.active && patch.entries.length > 0);
 assert.ok(firstPatch, 'at least one harvestable grass patch should be available');
 const harvestPoint = firstPatch.entries[0];
