@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WORLD_TIME } from '../data/WorldTimeDefinitions.js';
+import { WORLD_DAY_MINUTES, WORLD_TIME } from '../data/WorldTimeDefinitions.js';
 import { RangerSeatedPose } from '../player/RangerSeatedPose.js';
 
 export const CAMPFIRE_SLEEP_RADIUS = 2.8;
@@ -438,6 +438,13 @@ export class CampfireSleepRuntimeController {
       this.#abortRest();
       return;
     }
+
+    const skippedMinutes = Math.max(
+      0,
+      (wake.day - current.day) * WORLD_DAY_MINUTES + wake.minuteOfDay - current.minuteOfDay
+    );
+    this.game.survival?.advanceWorldMinutes?.(skippedMinutes);
+    this.game.hud?.setSurvivalVitals?.(this.game.survival?.getSnapshot?.());
 
     const next = this.game.worldTime.setTime(wake);
     this.game.worldTimeRuntime?.sync?.();
