@@ -73,9 +73,14 @@ assert.equal(
   'A Stair flight must own its shared opening edge instead of competing with a Wall Panel'
 );
 assert.equal(
+  stairGrid.placeFloor({ x: 0, z: 0, storey: 1, levelY: PANEL_GRID.storeyHeight + 0.08 }).reason,
+  'stair-opening',
+  'Upper-storey Floor state must not cover the Stair source cell and block descent headroom'
+);
+assert.equal(
   stairGrid.placeFloor({ x: 0, z: 1, storey: 1, levelY: PANEL_GRID.storeyHeight + 0.08 }).reason,
   'stair-opening',
-  'Upper-storey Floor state must not silently seal the Stair opening cell'
+  'Upper-storey Floor state must not cover the Stair target cell and seal its top opening'
 );
 assert.equal(
   stairGrid.removeFloor({ x: 0, z: 0 }),
@@ -88,6 +93,46 @@ assert.deepEqual(
   stairSnapshot,
   'Semantic Stair direction/pair identity must round-trip without transform inference'
 );
+
+const legacyBlockedStairSnapshot = structuredClone(stairSnapshot);
+legacyBlockedStairSnapshot.floors.push({
+  key: panelCellKey({ x: 0, z: 0, storey: 1 }),
+  x: 0,
+  z: 0,
+  storey: 1,
+  levelY: PANEL_GRID.storeyHeight + 0.08
+});
+legacyBlockedStairSnapshot.floors.sort((left, right) => left.key.localeCompare(right.key));
+const normalizedLegacyStairGrid = PanelConstructionGrid.restore(legacyBlockedStairSnapshot);
+assert.equal(
+  normalizedLegacyStairGrid.floors.has(panelCellKey({ x: 0, z: 0, storey: 1 })),
+  false,
+  'Continue must remove a legacy upper Floor that overlaps the Stair source half'
+);
+assert.equal(
+  normalizedLegacyStairGrid.stairs.has(stairResult.stair.key),
+  true,
+  'Legacy stairwell normalization must preserve the Stair flight itself'
+);
+
+const blockedStairGrid = new PanelConstructionGrid();
+assert.equal(blockedStairGrid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok, true);
+assert.equal(blockedStairGrid.placeFloor({ x: 0, z: 1, levelY: 0.08 }).ok, true);
+assert.equal(
+  blockedStairGrid.placeFloor({
+    x: 0,
+    z: 0,
+    storey: 1,
+    levelY: PANEL_GRID.storeyHeight + 0.08
+  }).ok,
+  true
+);
+assert.equal(
+  blockedStairGrid.placeStair({ x: 0, z: 0, direction: 'south' }).reason,
+  'upper-floor-opening-conflict',
+  'A new Stair must not be built into an existing upper Floor over either half of its flight'
+);
+
 assert.equal(stairGrid.removeStair(stairResult.stair.key), true);
 assert.equal(stairGrid.placeWall({ x: 0, z: 0, direction: 'south' }).ok, true);
 

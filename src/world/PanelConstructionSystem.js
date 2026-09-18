@@ -451,7 +451,8 @@ export class PanelConstructionSystem {
         });
         if (this.#roofCellOccupied(structure, lowerKey)) continue;
         const reservedByStair = [...structure.grid.stairs.values()].some(stair => (
-          stair.storey === support.supportingStorey && stair.targetCellKey === lowerKey
+          stair.storey === support.supportingStorey &&
+          (stair.sourceCellKey === lowerKey || stair.targetCellKey === lowerKey)
         ));
         if (reservedByStair) continue;
 
@@ -634,6 +635,20 @@ export class PanelConstructionSystem {
           if (structure.grid.walls.has(edge.key)) continue;
 
           const targetCenter = this.registry.cellCenterWorld(structure, targetFloor);
+          const upperSourceKey = panelCellKey({
+            x: floor.x,
+            z: floor.z,
+            storey: floor.storey + 1
+          });
+          const upperTargetKey = panelCellKey({
+            x: targetFloor.x,
+            z: targetFloor.z,
+            storey: targetFloor.storey + 1
+          });
+          const upperFloorConflict = (
+            structure.grid.floors.has(upperSourceKey) ||
+            structure.grid.floors.has(upperTargetKey)
+          );
           const x = (sourceCenter.x + targetCenter.x) * 0.5;
           const z = (sourceCenter.z + targetCenter.z) * 0.5;
           if (Math.hypot(x - playerPosition.x, z - playerPosition.z) > PANEL_GRID.placementReach) continue;
@@ -664,7 +679,8 @@ export class PanelConstructionSystem {
             yaw,
             baseY: floor.levelY + FLOOR_TOP_LIFT,
             topY: floor.levelY + FLOOR_TOP_LIFT + PANEL_GRID.storeyHeight,
-            valid: this.#stairClear(x, z),
+            valid: !upperFloorConflict && this.#stairClear(x, z),
+            invalidReason: upperFloorConflict ? 'upper-floor-opening-conflict' : null,
             score: this.#candidateScore(lowPoint, lowPoint, constructionAim)
           };
           if (!best || placement.score < best.score) best = placement;

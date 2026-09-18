@@ -8,6 +8,7 @@ import {
 } from '../src/data/PanelConstructionDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { ComplexRoofPanelConstructionSystem } from '../src/world/ComplexRoofPanelConstructionSystem.js';
+import { panelCellKey } from '../src/world/PanelConstructionGrid.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
 import { constructionFloorCoversVegetation } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
@@ -418,6 +419,33 @@ assert.ok(
   'The Ranger must remain supported at the far edge of the Stair opening instead of falling before reaching the upper Floor'
 );
 const stairSnapshot = stairRuntime.system.snapshot();
+
+// Older saves could contain an upper Floor over the Stair source cell because only the
+// target cell was reserved. That slab intersects Ranger headroom during descent. Continue
+// must normalize the stale Floor away before runtime colliders are materialized.
+const legacyBlockedStairSnapshot = structuredClone(stairSnapshot);
+const legacyStairGrid = legacyBlockedStairSnapshot.registry.structures[0].grid;
+legacyStairGrid.floors.push({
+  key: panelCellKey({ x: 0, z: 0, storey: 1 }),
+  x: 0,
+  z: 0,
+  storey: 1,
+  levelY: 0.08 + PANEL_GRID.storeyHeight
+});
+legacyStairGrid.floors.sort((left, right) => left.key.localeCompare(right.key));
+const normalizedLegacyStairRuntime = makeRuntime(0);
+assert.equal(normalizedLegacyStairRuntime.system.restore(legacyBlockedStairSnapshot), true);
+assert.equal(
+  normalizedLegacyStairRuntime.collision.getObstaclesByType('panel-floor').length,
+  2,
+  'Continue must not rematerialize the legacy source-cell Floor that blocks Stair descent'
+);
+assert.equal(
+  normalizedLegacyStairRuntime.collision.getObstaclesByType('panel-stair').length,
+  7,
+  'Legacy stairwell normalization must preserve all Stair traversal supports'
+);
+
 const restoredStairRuntime = makeRuntime(0);
 assert.equal(restoredStairRuntime.system.restore(stairSnapshot), true);
 assert.deepEqual(restoredStairRuntime.system.snapshot(), stairSnapshot, 'Stairs must round-trip through semantic persistence');
