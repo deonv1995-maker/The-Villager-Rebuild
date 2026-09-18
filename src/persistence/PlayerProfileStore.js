@@ -35,6 +35,31 @@ export class PlayerProfileStore {
     return this.list().length > 0;
   }
 
+  assertWritable() {
+    const storage = this.#resolveStorage();
+    if (!storage) throw new Error('Profile storage is unavailable');
+    const probeKey = `${PROFILE_STORAGE_KEY}.probe`;
+    try {
+      storage.setItem(probeKey, '1');
+      storage.removeItem(probeKey);
+      return true;
+    } catch {
+      throw new Error('Profile storage is unavailable');
+    }
+  }
+
+  remove(profileId) {
+    const storage = this.#resolveStorage();
+    if (!storage) return false;
+    const index = this.#readIndex();
+    if (!index) return false;
+    const nextProfiles = index.profiles.filter(profile => profile.id !== profileId);
+    if (nextProfiles.length === index.profiles.length) return false;
+    index.profiles = nextProfiles;
+    storage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(index));
+    return true;
+  }
+
   findByName(name) {
     const normalized = normalizeProfileName(name).toLocaleLowerCase();
     if (!normalized) return null;
