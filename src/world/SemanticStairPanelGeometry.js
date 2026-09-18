@@ -103,7 +103,7 @@ export function semanticStairColliderSpecs({ x, z, yaw, baseY, topY = null }) {
     PANEL_STAIR.stepRun * (PANEL_STAIR.stepCount - 0.5);
   const lastTreadSupportEnd = lastTreadLocalZ + PANEL_STAIR.stepRun * 0.56;
   const landingStart = lastTreadSupportEnd - PHYSICAL_LOG.floorSupportSeamPadding;
-  const landingEnd = PANEL_GRID.cellSize + PHYSICAL_LOG.floorSupportSeamPadding;
+  const landingEnd = PANEL_GRID.cellSize;
   if (landingEnd > landingStart) {
     const localZ = (landingStart + landingEnd) * 0.5;
     const world = localToWorld({ x, z, yaw }, 0, localZ);
@@ -118,8 +118,8 @@ export function semanticStairColliderSpecs({ x, z, yaw, baseY, topY = null }) {
       bottomY: resolvedTopY - Math.max(0.1, PHYSICAL_LOG.floorUndersideDepth * 0.5),
       topY: resolvedTopY + 0.035,
       standable: true,
-      supportHalfX: PANEL_STAIR.width * 0.5,
-      supportHalfZ: halfZ,
+      supportHalfX: PANEL_STAIR.width * 0.5 + PHYSICAL_LOG.floorSupportSeamPadding,
+      supportHalfZ: halfZ + PHYSICAL_LOG.floorSupportSeamPadding,
       supportY: resolvedTopY,
       supportOverridesBase: true,
       supportOverrideTolerance: PANEL_GRID.storeyHeight,
