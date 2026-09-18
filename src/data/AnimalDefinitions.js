@@ -132,6 +132,14 @@ const WOLF = Object.freeze({
   fleeDuration: 0,
   maxRoamRadius: 24,
   harvestRange: 2.6,
+  combat: Object.freeze({
+    meleeHitboxRadius: 1.05,
+    healthBar: Object.freeze({
+      width: 1.7,
+      height: 0.16,
+      offsetY: 2.15
+    })
+  }),
   ecology: Object.freeze({
     playerResponse: 'aggressive',
     idleBehavior: 'prowl',
