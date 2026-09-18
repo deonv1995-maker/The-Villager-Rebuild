@@ -25,7 +25,24 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     label: 'Raw Meat',
     pickupQuantity: 1,
     storage: 'inventory',
-    storageCategory: 'food'
+    storageCategory: 'food',
+    food: Object.freeze({
+      edible: false,
+      cookAt: 'campfire',
+      cookSeconds: 3.2,
+      cookedItemId: 'cooked_meat'
+    })
+  }),
+  cooked_meat: Object.freeze({
+    id: 'cooked_meat',
+    label: 'Cooked Meat',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'food',
+    food: Object.freeze({
+      edible: true,
+      hungerRestore: 45
+    })
   }),
   log: Object.freeze({
     id: 'log',
