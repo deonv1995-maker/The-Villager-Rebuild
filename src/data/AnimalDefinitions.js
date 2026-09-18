@@ -140,7 +140,8 @@ const WOLF = Object.freeze({
       chaseSpeed: 5.4,
       standOffRange: 1.9,
       attackRange: 2.05,
-      attackCooldown: 1.85
+      attackCooldown: 1.85,
+      damage: 18
     })
   }),
   presentation: Object.freeze({
