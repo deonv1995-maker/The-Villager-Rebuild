@@ -14,6 +14,27 @@ const validWall = wall => (
   Number.isFinite(wall?.topY)
 );
 
+const PANEL_DIRECTIONS_FOR_AXIS = Object.freeze({
+  x: new Set(['north', 'south']),
+  z: new Set(['east', 'west'])
+});
+
+const bridgeOwnerForEdge = ({ axis, edgeX, edgeZ, direction }) => {
+  if (axis === 'x' && direction === 'north') {
+    return { x: edgeX, z: edgeZ, direction };
+  }
+  if (axis === 'x' && direction === 'south') {
+    return { x: edgeX, z: edgeZ - 1, direction };
+  }
+  if (axis === 'z' && direction === 'west') {
+    return { x: edgeX, z: edgeZ, direction };
+  }
+  if (axis === 'z' && direction === 'east') {
+    return { x: edgeX - 1, z: edgeZ, direction };
+  }
+  return null;
+};
+
 const wallGroups = (walls, levelTolerance) => {
   const groups = [];
   const ordered = (walls ?? [])
@@ -236,6 +257,111 @@ export function collectPanelUpperWallSupports(walls, {
   }
 
   return supports.sort((left, right) => (
+    left.storey - right.storey ||
+    left.axis.localeCompare(right.axis) ||
+    left.edgeX - right.edgeX ||
+    left.edgeZ - right.edgeZ
+  ));
+}
+
+/**
+ * Returns a missing one-panel wall edge that is bridged by two independently supported,
+ * collinear wall-family panels on the same storey and structural level.
+ *
+ * This is intentionally narrower than generic adjacency. It exists for canonical voids
+ * such as a Stair opening where no upper Floor owns the missing perimeter edge. Both
+ * flanking walls must already be structural roots themselves (Floor-backed or supported
+ * by a completed lower wall enclosure), so bridge panels cannot recursively cantilever
+ * from other bridge panels.
+ */
+export function collectPanelSameStoreyWallGapSupports(walls, floors, {
+  levelTolerance = 0.001
+} = {}) {
+  const tolerance = Math.max(0.000001, levelTolerance);
+  const wallList = (walls ?? []).filter(wall => (
+    validWall(wall) &&
+    Number.isFinite(wall?.baseY) &&
+    Number.isInteger(wall?.x) &&
+    Number.isInteger(wall?.z) &&
+    typeof wall?.key === 'string' &&
+    typeof wall?.ownerCellKey === 'string' &&
+    PANEL_DIRECTIONS_FOR_AXIS[wall.axis]?.has(wall.direction)
+  ));
+  if (wallList.length < 2) return [];
+
+  const floorKeys = new Set(
+    (floors ?? [])
+      .map(floor => floor?.key)
+      .filter(key => typeof key === 'string')
+  );
+  const verticalSupportKeys = new Set(
+    collectPanelUpperWallSupports(wallList, {
+      levelTolerance: tolerance
+    }).map(support => support.key)
+  );
+  const rootWalls = wallList.filter(wall => (
+    floorKeys.has(wall.ownerCellKey) || verticalSupportKeys.has(wall.key)
+  ));
+  const supports = new Map();
+
+  for (let leftIndex = 0; leftIndex < rootWalls.length; leftIndex += 1) {
+    const left = rootWalls[leftIndex];
+    for (let rightIndex = leftIndex + 1; rightIndex < rootWalls.length; rightIndex += 1) {
+      const right = rootWalls[rightIndex];
+      if (
+        left.storey !== right.storey ||
+        left.axis !== right.axis ||
+        left.direction !== right.direction ||
+        Math.abs(left.baseY - right.baseY) > tolerance ||
+        Math.abs(left.topY - right.topY) > tolerance
+      ) continue;
+
+      let edgeX = null;
+      let edgeZ = null;
+      if (
+        left.axis === 'x' &&
+        left.edgeZ === right.edgeZ &&
+        Math.abs(left.edgeX - right.edgeX) === 2
+      ) {
+        edgeX = Math.min(left.edgeX, right.edgeX) + 1;
+        edgeZ = left.edgeZ;
+      } else if (
+        left.axis === 'z' &&
+        left.edgeX === right.edgeX &&
+        Math.abs(left.edgeZ - right.edgeZ) === 2
+      ) {
+        edgeX = left.edgeX;
+        edgeZ = Math.min(left.edgeZ, right.edgeZ) + 1;
+      } else {
+        continue;
+      }
+
+      const key = `edge:${left.storey}:${left.axis}:${edgeX}:${edgeZ}`;
+      if (supports.has(key)) continue;
+
+      const owner = bridgeOwnerForEdge({
+        axis: left.axis,
+        edgeX,
+        edgeZ,
+        direction: left.direction
+      });
+      if (!owner) continue;
+
+      supports.set(key, {
+        key,
+        ...owner,
+        storey: left.storey,
+        axis: left.axis,
+        edgeX,
+        edgeZ,
+        levelY: (left.baseY + right.baseY) * 0.5,
+        supportingWallKeys: [left.key, right.key].sort(),
+        snapKind: 'same-storey-wall-gap'
+      });
+    }
+  }
+
+  return [...supports.values()].sort((left, right) => (
     left.storey - right.storey ||
     left.axis.localeCompare(right.axis) ||
     left.edgeX - right.edgeX ||

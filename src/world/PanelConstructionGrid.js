@@ -6,6 +6,7 @@ import {
   PANEL_WALL_VARIANTS
 } from '../data/PanelConstructionDefinitions.js';
 import {
+  collectPanelSameStoreyWallGapSupports,
   collectPanelUpperStoreySupports,
   collectPanelUpperWallSupports,
   collectPanelWallEnclosureCells
@@ -219,7 +220,14 @@ export class PanelConstructionGrid {
       : collectPanelUpperWallSupports([...this.walls.values()], {
           levelTolerance: PANEL_GRID.snapTolerance + 0.001
         }).find(support => support.key === edge.key);
-    if (!floor && !wallSupport) {
+    const sameStoreyGapSupport = floor || wallSupport
+      ? null
+      : collectPanelSameStoreyWallGapSupports(
+          [...this.walls.values()],
+          [...this.floors.values()],
+          { levelTolerance: PANEL_GRID.snapTolerance + 0.001 }
+        ).find(support => support.key === edge.key);
+    if (!floor && !wallSupport && !sameStoreyGapSupport) {
       return { ok: false, reason: 'missing-floor', ownerCellKey };
     }
 
@@ -227,7 +235,7 @@ export class PanelConstructionGrid {
     const stairOnEdge = [...this.stairs.values()].some(stair => stair.sharedEdgeKey === edge.key);
     if (stairOnEdge) return { ok: false, reason: 'stair-edge', key: edge.key };
 
-    const baseY = floor?.levelY ?? wallSupport.levelY;
+    const baseY = floor?.levelY ?? wallSupport?.levelY ?? sameStoreyGapSupport.levelY;
     const wall = {
       key: edge.key,
       ownerCellKey,
@@ -262,28 +270,36 @@ export class PanelConstructionGrid {
     const dependentRoof = [...this.roofZones.values()].some(zone => roofZoneUsesEdge(zone, edgeKey));
     if (dependentRoof) return false;
 
+    const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
     const upperFloors = [...this.floors.values()]
       .filter(floor => floor.storey === wall.storey + 1);
-    const floorlessUpperWalls = [...this.walls.values()].filter(candidate => (
-      candidate.storey === wall.storey + 1 &&
-      !this.floors.has(candidate.ownerCellKey)
-    ));
-    if (upperFloors.length || floorlessUpperWalls.length) {
-      const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
+    if (upperFloors.length) {
       const upperFloorSupportKeys = new Set(
         collectPanelUpperStoreySupports(remainingWalls, {
           levelTolerance: PANEL_GRID.snapTolerance + 0.001
         }).map(support => panelCellKey(support))
       );
       if (upperFloors.some(floor => !upperFloorSupportKeys.has(floor.key))) return false;
-
-      const upperWallSupportKeys = new Set(
-        collectPanelUpperWallSupports(remainingWalls, {
-          levelTolerance: PANEL_GRID.snapTolerance + 0.001
-        }).map(support => support.key)
-      );
-      if (floorlessUpperWalls.some(candidate => !upperWallSupportKeys.has(candidate.key))) return false;
     }
+
+    const verticalWallSupportKeys = new Set(
+      collectPanelUpperWallSupports(remainingWalls, {
+        levelTolerance: PANEL_GRID.snapTolerance + 0.001
+      }).map(support => support.key)
+    );
+    const sameStoreyGapSupportKeys = new Set(
+      collectPanelSameStoreyWallGapSupports(
+        remainingWalls,
+        [...this.floors.values()],
+        { levelTolerance: PANEL_GRID.snapTolerance + 0.001 }
+      ).map(support => support.key)
+    );
+    const unsupportedFloorlessWall = remainingWalls.some(candidate => (
+      !this.floors.has(candidate.ownerCellKey) &&
+      !verticalWallSupportKeys.has(candidate.key) &&
+      !sameStoreyGapSupportKeys.has(candidate.key)
+    ));
+    if (unsupportedFloorlessWall) return false;
 
     return this.walls.delete(edgeKey);
   }
@@ -430,13 +446,29 @@ export class PanelConstructionGrid {
       const result = grid.placeStair(stair);
       if (!result.ok) throw new Error(`Invalid persisted stair: ${stair.key ?? 'unknown'}`);
     }
-    const persistedWalls = [...(snapshot.walls ?? [])].sort((left, right) => (
+    let persistedWalls = [...(snapshot.walls ?? [])].sort((left, right) => (
       (left.storey ?? 0) - (right.storey ?? 0) ||
       String(left.key ?? '').localeCompare(String(right.key ?? ''))
     ));
-    for (const wall of persistedWalls) {
-      const result = grid.placeWall(wall);
-      if (!result.ok) throw new Error(`Invalid persisted wall: ${wall.key ?? 'unknown'}`);
+    while (persistedWalls.length) {
+      let progressed = false;
+      const deferred = [];
+      for (const wall of persistedWalls) {
+        const result = grid.placeWall(wall);
+        if (result.ok) {
+          progressed = true;
+          continue;
+        }
+        if (result.reason === 'missing-floor') {
+          deferred.push(wall);
+          continue;
+        }
+        throw new Error(`Invalid persisted wall: ${wall.key ?? 'unknown'}`);
+      }
+      if (!progressed) {
+        throw new Error(`Invalid persisted wall: ${deferred[0]?.key ?? 'unknown'}`);
+      }
+      persistedWalls = deferred;
     }
     for (const zone of snapshot.roofZones ?? []) {
       const cells = (zone.cellKeys ?? []).map(cellKey => {
