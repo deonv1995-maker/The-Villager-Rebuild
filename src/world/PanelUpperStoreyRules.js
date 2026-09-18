@@ -302,7 +302,6 @@ export function collectPanelSameStoreyWallGapSupports(walls, floors, {
   const rootWalls = wallList.filter(wall => (
     floorKeys.has(wall.ownerCellKey) || verticalSupportKeys.has(wall.key)
   ));
-  const occupied = new Set(wallList.map(wall => wall.key));
   const supports = new Map();
 
   for (let leftIndex = 0; leftIndex < rootWalls.length; leftIndex += 1) {
@@ -338,7 +337,7 @@ export function collectPanelSameStoreyWallGapSupports(walls, floors, {
       }
 
       const key = `edge:${left.storey}:${left.axis}:${edgeX}:${edgeZ}`;
-      if (occupied.has(key) || supports.has(key)) continue;
+      if (supports.has(key)) continue;
 
       const owner = bridgeOwnerForEdge({
         axis: left.axis,
