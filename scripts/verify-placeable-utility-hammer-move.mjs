@@ -14,6 +14,8 @@ function assert(condition, message) {
 const world = new THREE.Group();
 const collisionHandles = new Set();
 let supportHeight = null;
+let supportResolver = null;
+let playerHeight = 0;
 let lastClearanceOptions = null;
 let terrainSlope = 0;
 let placementWallSurfaces = [];
@@ -26,7 +28,8 @@ const collision = {
   removeObstacle(handle) {
     return collisionHandles.delete(handle);
   },
-  supportHeightAt(x, z, baseHeight) {
+  supportHeightAt(x, z, baseHeight, options = {}) {
+    if (typeof supportResolver === 'function') return supportResolver(x, z, baseHeight, options);
     return Number.isFinite(supportHeight) ? supportHeight : baseHeight;
   },
   isCircleClear(x, z, radius, options = {}) {
@@ -70,7 +73,7 @@ const game = {
   physicalLogs: { isCarrying: () => false },
   player: {
     getPosition(target) {
-      target.set(0, 0, 0);
+      target.set(0, playerHeight, 0);
     },
     getFacingDirection(target) {
       target.set(0, 0, 1);
@@ -172,6 +175,7 @@ assert(externalActions.get('utility-place')?.caption === 'PLACE', 'Bed movement 
 runtime.cancelPlacement();
 
 supportHeight = 2.8;
+playerHeight = supportHeight;
 terrainSlope = 1;
 assert(runtime.selectInventoryItem('chest'), 'A reclaimed Chest must enter placement mode on a constructed floor');
 const chestPlaceAction = externalActions.get('utility-place');
@@ -223,6 +227,39 @@ const indoorBarrel = externalActions.get('utility-place')?.onTrigger();
 assert(indoorBarrel?.position.y === supportHeight, 'Food Barrel placement must use the standable floor support height');
 assert(storage.snapshot().find(record => record.id === indoorBarrel.id)?.y === supportHeight, 'Food Barrel save data must persist its indoor floor elevation');
 storage.removeContainer(indoorBarrel.id);
+
+// A preview candidate can project beyond the edge/opening of the Ranger's current
+// upper floor. It must skip the lower-storey/terrain fallback and keep searching for
+// a supported point on the active level instead of silently placing downstairs.
+const upperFloorY = supportHeight;
+supportHeight = null;
+terrainSlope = 0;
+supportResolver = (x, z, baseHeight) => {
+  if (Math.hypot(x, z) <= 0.1) return upperFloorY;
+  return x > 0.75 ? upperFloorY : baseHeight;
+};
+for (const itemId of ['crafting-bench', 'chest', 'barrel', 'bed']) {
+  const quantityBefore = inventory.get(itemId);
+  inventory.add(itemId, 1);
+  assert(runtime.selectInventoryItem(itemId), `${itemId} must enter upper-storey placement mode`);
+  assert(
+    runtime.previewPlacement?.y === upperFloorY,
+    `${itemId} placement must remain on the Ranger's current upper-storey support`
+  );
+  assert(
+    runtime.previewPlacement?.x > 0.75,
+    `${itemId} placement must skip a lower-storey candidate and search the active storey`
+  );
+  runtime.cancelPlacement();
+  assert(
+    inventory.consume([{ itemId, quantity: 1 }]),
+    `${itemId} regression cleanup must remove its temporary inventory item`
+  );
+  assert(inventory.get(itemId) === quantityBefore, `${itemId} regression cleanup must restore inventory quantity`);
+}
+supportResolver = null;
+supportHeight = upperFloorY;
+terrainSlope = 1;
 
 for (const itemId of ['crafting-bench', 'chest', 'barrel', 'bed']) {
   const wallSnap = PLACEABLE_UTILITY_DEFINITIONS[itemId]?.wallSnap;
