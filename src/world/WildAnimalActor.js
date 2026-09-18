@@ -362,6 +362,20 @@ export class WildAnimalActor {
     };
   }
 
+  dispose() {
+    this.scene.remove(this.group);
+    this.scene.remove(this.targetRing);
+    this.scene.remove(this.harvestRing);
+    if (this.healthBar) {
+      this.scene.remove(this.healthBar);
+      this.healthBar.material?.map?.dispose?.();
+      this.healthBar.material?.dispose?.();
+      this.healthBar = null;
+      this.healthBarTexture = null;
+      this.healthBarPixels = null;
+    }
+  }
+
   getState() {
     return {
       instanceId: this.instanceId,
