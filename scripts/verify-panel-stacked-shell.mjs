@@ -298,6 +298,28 @@ const gapRuntime = makeRuntime(3);
 const gapStructure = gapRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
 const liveGap = seedUpperStairWallGap(gapStructure.grid);
 gapRuntime.system.restore(gapRuntime.system.snapshot());
+
+// The upper Wall shares X/Z with the storey below. A lower-storey utility is allowed
+// underneath that elevated Wall because its collision volume ends before the Wall base.
+// Clearance must therefore use both horizontal footprint and vertical overlap instead of
+// treating the world as one flat 2D obstacle map.
+const liveGapStructure = [...gapRuntime.system.registry.structures.values()][0];
+const liveGapEdge = gapRuntime.system.registry.edgePlacementWorld(liveGapStructure, {
+  x: 1,
+  z: 0,
+  storey: 1,
+  direction: 'north'
+});
+gapRuntime.collision.addObstacle({
+  x: liveGapEdge.x,
+  z: liveGapEdge.z,
+  radius: 0.38,
+  type: 'crafting-bench',
+  label: 'lower-storey-gap-clearance-regression',
+  bottomY: groundLevel,
+  topY: firstWallTop - 0.18
+});
+
 gapRuntime.system.setActive(true);
 gapRuntime.system.setBuildMode('wall');
 const gapTargetDistance = PHYSICAL_LOG.placeDistance + PANEL_GRID.cellSize * 0.12;
@@ -308,7 +330,11 @@ const upperGapPlayer = new THREE.Vector3(
 );
 const gapFacing = new THREE.Vector3(0, 0, 1);
 const gapState = gapRuntime.system.update(upperGapPlayer, gapFacing);
-assert.equal(gapState.previewValid, true, 'Upper Stair-gap Wall preview must be green');
+assert.equal(
+  gapState.previewValid,
+  true,
+  'Upper Stair-gap Wall preview must stay green above a lower-storey utility collision volume'
+);
 assert.equal(gapRuntime.system.previewPlacement?.storey, 1);
 assert.equal(gapRuntime.system.previewPlacement?.stateKey, liveGap.gapWallKey);
 assert.equal(gapRuntime.system.previewPlacement?.snapKind, 'same-storey-wall-gap');

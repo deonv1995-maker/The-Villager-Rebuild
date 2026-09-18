@@ -583,7 +583,7 @@ export class PanelConstructionSystem {
             yaw: edge.yaw,
             baseY: floor.levelY,
             topY: floor.levelY + PANEL_GRID.storeyHeight,
-            valid: this.#wallClear(edge, floor.levelY),
+            valid: this.isWallPlacementClear(edge, floor.levelY),
             score: this.#candidateScore(
               { x: edge.x, y: floor.levelY + PANEL_GRID.storeyHeight * 0.5, z: edge.z },
               target,
@@ -863,8 +863,10 @@ export class PanelConstructionSystem {
     });
   }
 
-  #wallClear(edge, baseY) {
+  isWallPlacementClear(edge, baseY) {
     return this.collision.isCircleClear(edge.x, edge.z, CONSTRUCTION_DIMENSIONS.wallThickness * 0.8, {
+      bottomY: baseY,
+      topY: baseY + PANEL_GRID.storeyHeight,
       ignore: obstacle => (
         obstacle.type === 'panel-floor' ||
         obstacle.type === 'panel-stair' ||

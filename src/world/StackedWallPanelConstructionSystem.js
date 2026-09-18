@@ -3,10 +3,7 @@ import {
   PANEL_GRID,
   panelBuildCost
 } from '../data/PanelConstructionDefinitions.js';
-import {
-  CONSTRUCTION_DIMENSIONS,
-  PHYSICAL_LOG
-} from '../data/PhysicalLogDefinitions.js';
+import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { panelCellKey } from './PanelConstructionGrid.js';
 import { PanelConstructionSystem } from './PanelConstructionSystem.js';
 import { collectPanelUpperFloorExpansionSupports } from './PanelFloorSupportRules.js';
@@ -191,7 +188,7 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
             baseY: floor.levelY,
             topY: floor.levelY + PANEL_GRID.storeyHeight,
             snapKind: 'floor-backed-wall',
-            valid: this.#wallClear(edge, floor.levelY),
+            valid: this.isWallPlacementClear(edge, floor.levelY),
             score: this.#candidateScore(
               {
                 x: edge.x,
@@ -258,7 +255,7 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
           baseY: support.levelY,
           topY: support.levelY + PANEL_GRID.storeyHeight,
           snapKind: support.snapKind,
-          valid: this.#wallClear(edge, support.levelY),
+          valid: this.isWallPlacementClear(edge, support.levelY),
           score: this.#candidateScore(
             {
               x: edge.x,
@@ -339,16 +336,6 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
   #floorClear(x, z) {
     return this.collision.isCircleClear(x, z, FLOOR_CLEARANCE_RADIUS, {
       ignore: obstacle => obstacle.type === 'panel-floor'
-    });
-  }
-
-  #wallClear(edge, baseY) {
-    return this.collision.isCircleClear(edge.x, edge.z, CONSTRUCTION_DIMENSIONS.wallThickness * 0.8, {
-      ignore: obstacle => (
-        obstacle.type === 'panel-floor' ||
-        obstacle.type === 'panel-stair' ||
-        (obstacle.type === 'panel-wall' && obstacle.topY <= baseY + 0.02)
-      )
     });
   }
 
