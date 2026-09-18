@@ -139,9 +139,13 @@ With **Wall**, **Door** or **Window** selected, an upper floorless edge is valid
 
 The upper module is placed at the exact `topY` of the supporting lower wall and retains the normal 3-Log Wall/Door/Window cost. It remains the same semantic wall record type and the same variant system as a Floor-backed wall; there is no competing "tall wall" subsystem.
 
-This support is recursive. Once all required floorless upper wall-family edges close the next interior section, that completed ring can expose the same edges one storey higher again. Save/Continue restores those wall tiers in numeric storey order so tall shells are not dependent on lexicographic key ordering.
+This support is recursive. Once all required floorless upper wall-family edges close the next interior section, that completed ring can expose the same edges one storey higher again.
 
-Reverse dependencies protect the chain. A lower wall-family edge cannot be removed if opening that enclosure would invalidate an existing floorless upper wall. Remove the dependent upper module first. If an upper Wall has a real Floor owner instead, the established Floor dependency remains authoritative.
+A Stair opening may intentionally leave one upper canonical Floor cell absent while valid upper Wall panels continue on both sides of that opening. Wall/Door/Window placement may close **one missing wall-width edge** between two collinear, same-facing wall-family panels on the same storey and structural level when both flanking panels are independently supported by either a real Floor or the completed lower-wall enclosure. This bridge rule is deliberately narrow: it does not create a hidden Floor, does not allow a Wall to cantilever from only one neighbor, and a bridge panel cannot become the structural root for another bridge panel.
+
+Save/Continue restores wall-family state through dependency passes rather than relying only on lexicographic edge order. Floor-backed and vertically supported roots are restored first; a same-storey bridge can then restore once both of its flanking roots exist.
+
+Reverse dependencies protect the chain. A lower wall-family edge cannot be removed if opening that enclosure would invalidate an existing floorless upper wall. A flanking same-storey support Wall also cannot be removed while a bridge panel depends on it. Remove the dependent upper/bridge module first. If an upper Wall has a real Floor owner instead, the established Floor dependency remains authoritative.
 
 This rule deliberately permits buildings with higher wall shells and higher Roofs while keeping interior Floors optional. A player may therefore create a tall hall, loft void or high-roofed room without covering the interior with a hidden walkable Floor.
 
@@ -232,7 +236,7 @@ The Hammer remains the only player-facing entry point for semantic construction.
 
 Selecting Hammer opens the compact semantic build dock. The live choices are Floor, Wall, Door, Window, Stairs, Roof and Remove. Choosing any live construction mode collapses the expanded selector so the world preview remains visible.
 
-Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. For Wall/Door/Window mode, a floorless stacked edge from a completed lower enclosure may replace an otherwise invalid ground/Floor-backed fallback. For Roof mode, vertically aligned valid supports prefer the highest completed ring when their horizontal score is effectively tied. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Large Roofs use the nearest covered cell for reach/scoring rather than forcing interaction through the aggregate centre.
+Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. For Wall/Door/Window mode, a floorless stacked edge from a completed lower enclosure or a supported one-panel same-storey gap between two upper wall sections may replace an otherwise invalid ground/Floor-backed fallback. For Roof mode, vertically aligned valid supports prefer the highest completed ring when their horizontal score is effectively tied. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Large Roofs use the nearest covered cell for reach/scoring rather than forcing interaction through the aggregate centre.
 
 Green means the candidate and combined build-material cost are valid; red means support/occupancy/clearance/material requirements are not satisfied. The Hammer material count represents the construction pool available across the Ranger pack and placed storage, not only what fits in the pack.
 
@@ -311,6 +315,9 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - recursive exposure of another wall tier when the upper ring becomes complete;
 - open lower sections refusing floating upper-wall support;
 - reverse demolition protection while a floorless upper wall depends on the lower enclosure;
+- a Stair-reserved upper Floor opening exposing a one-panel same-storey Wall gap only when two independently supported collinear upper Walls flank it;
+- live Hammer targeting/building of that upper gap at the Ranger's active storey without synthesizing a Floor;
+- save/Continue reconstruction of the bridged edge after its two support roots and demolition protection for those flanking Walls;
 - a completed floorless upper ring exposing a high Roof support cell at its exact wall-top elevation;
 - third-person Roof targeting choosing that highest completed ring instead of the lower aligned support;
 - the existing 5-Log-per-cell Roof cost on the high Roof;
@@ -349,7 +356,9 @@ Using the same style of build shown in the report, verify:
 - a completed floorless upper ring allows Roof placement at the **top of that upper ring**, not at the lower storey;
 - the high Roof does not create an invisible or walkable Floor underneath it and keeps the existing Roof cost;
 - existing Floor-backed upper-storey construction still behaves as before, including Stair openings and optional unbuilt Floor cells;
-- save -> close -> Continue restores the same stacked Wall/Door/Window tiers and high Roof at the same heights;
+- beside a Stair/open Floor void, a Wall can fill a single wall-width gap between two aligned upper-level wall sections while the opening itself remains un-floored and traversable;
+- removing either flanking upper Wall is blocked until that bridge Wall is removed;
+- save -> close -> Continue restores the same stacked Wall/Door/Window tiers, same-storey bridge Walls and high Roof at the same heights;
 - third-person and first-person targeting both select the intended elevated module without introducing a competing construction controller.
 
 Player-selected mono-pitch roofs remain outside this gate.
