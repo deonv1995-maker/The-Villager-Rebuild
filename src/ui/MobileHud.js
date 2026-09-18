@@ -358,7 +358,21 @@ export class MobileHud {
         const cost = document.createElement('span');
         cost.className = 'craft-cost';
         cost.classList.toggle('missing', ingredient.available < ingredient.quantity);
-        cost.textContent = `${ingredient.label} ${ingredient.available}/${ingredient.quantity}`;
+        cost.setAttribute('aria-label', `${ingredient.label} ${ingredient.available} of ${ingredient.quantity}`);
+        cost.title = `${ingredient.label}: ${ingredient.available}/${ingredient.quantity}`;
+
+        const costIcon = document.createElement('img');
+        costIcon.className = 'craft-cost-icon';
+        costIcon.src = this.itemIcons[ingredient.itemId] ?? this.toolIcons.hand;
+        costIcon.alt = '';
+        costIcon.setAttribute('aria-hidden', 'true');
+
+        const costCount = document.createElement('span');
+        costCount.className = 'craft-cost-count';
+        costCount.textContent = `${ingredient.available}/${ingredient.quantity}`;
+        costCount.setAttribute('aria-hidden', 'true');
+
+        cost.append(costIcon, costCount);
         costs.appendChild(cost);
       }
       details.append(title, costs);
