@@ -51,6 +51,36 @@ assert.ok(
   'Third-person Ranger must sit below screen centre so more forward landscape stays visible'
 );
 
+// Stair treads legitimately raise the Ranger in discrete steps. Third-person framing must
+// absorb that vertical step instead of snapping the look target upward in one frame.
+let steppedGroundY = 0;
+const steppedTerrain = {
+  getSpawnPoint: () => ({ x: 0, z: 0 }),
+  heightAt: () => steppedGroundY
+};
+const steppedCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const steppedPlayer = new RangerController({ scene, camera: steppedCamera, terrain: steppedTerrain });
+steppedPlayer.model = new THREE.Group();
+steppedPlayer.root.add(steppedPlayer.model);
+steppedPlayer.assetMode = 'kaykit';
+for (let frame = 0; frame < 120; frame += 1) steppedPlayer.update(1 / 60);
+const stepDirectionBefore = new THREE.Vector3();
+steppedCamera.getWorldDirection(stepDirectionBefore);
+const stepCameraYBefore = steppedCamera.position.y;
+steppedGroundY = 0.5;
+steppedPlayer.update(1 / 60);
+const stepDirectionAfter = new THREE.Vector3();
+steppedCamera.getWorldDirection(stepDirectionAfter);
+assert.ok(
+  Math.abs(stepDirectionAfter.y - stepDirectionBefore.y) < 0.01,
+  'A stair-height change must not kick the third-person camera aim vertically in one frame'
+);
+for (let frame = 0; frame < 90; frame += 1) steppedPlayer.update(1 / 60);
+assert.ok(
+  steppedCamera.position.y - stepCameraYBefore > 0.48,
+  'Third-person vertical damping must still converge to the Ranger new floor height'
+);
+
 const notifiedModes = [];
 const unsubscribe = player.onCameraModeChange(mode => notifiedModes.push(mode));
 assert.deepEqual(notifiedModes, ['third-person'], 'Camera mode listeners must receive the current mode immediately');

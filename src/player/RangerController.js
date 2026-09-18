@@ -21,6 +21,7 @@ const CAMERA_PITCH_RESPONSE = 0.7;
 const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
 const THIRD_PERSON_LOOK_AHEAD = 2;
+const THIRD_PERSON_TARGET_HEIGHT = 1.35;
 const FIRST_PERSON_EYE_HEIGHT = 1.72;
 const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 2.4;
 const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 1.75;
@@ -62,6 +63,7 @@ export class RangerController {
     this.manualLookActive = false;
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
+    this.thirdPersonLookTargetY = this.root.position.y + THIRD_PERSON_TARGET_HEIGHT;
     this.jumpVelocity = 0;
     this.grounded = true;
     this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
@@ -998,7 +1000,7 @@ export class RangerController {
       }
     }
 
-    const target = this.root.position.clone().add(new THREE.Vector3(0, 1.35, 0));
+    const target = this.root.position.clone().add(new THREE.Vector3(0, THIRD_PERSON_TARGET_HEIGHT, 0));
     const distance = 6.5;
     const horizontal = Math.cos(this.pitch) * distance;
     const desired = new THREE.Vector3(
@@ -1009,12 +1011,29 @@ export class RangerController {
     if (immediate) this.camera.position.copy(desired);
     else this.camera.position.lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
 
+    // The Ranger's feet legitimately rise one tread at a time, but aiming the camera at
+    // that raw stepped Y makes each tread read as a camera kick. Keep horizontal tracking
+    // exact while damping only the third-person look height. Camera position already uses
+    // the same response, so the view follows stairs/platforms smoothly without changing
+    // locomotion, collision, jump physics or first-person presentation.
+    if (immediate || this.cinematicDriver || !Number.isFinite(this.thirdPersonLookTargetY)) {
+      this.thirdPersonLookTargetY = target.y;
+    } else {
+      this.thirdPersonLookTargetY = THREE.MathUtils.lerp(
+        this.thirdPersonLookTargetY,
+        target.y,
+        1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt)
+      );
+    }
+
     const lookAhead = this.cinematicDriver ? 0 : THIRD_PERSON_LOOK_AHEAD;
-    const lookTarget = this.tempThirdPersonLookTarget.copy(target).add(
-      this.tempThirdPersonViewForward
-        .set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
-        .multiplyScalar(lookAhead)
-    );
+    const lookTarget = this.tempThirdPersonLookTarget
+      .set(target.x, this.thirdPersonLookTargetY, target.z)
+      .add(
+        this.tempThirdPersonViewForward
+          .set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
+          .multiplyScalar(lookAhead)
+      );
     this.camera.lookAt(lookTarget);
   }
 

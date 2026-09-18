@@ -381,8 +381,12 @@ assert.equal(stairRuntime.inventory.get('log'), 0, 'Semantic Stairs must consume
 const stairEntry = stairRuntime.system.getDemolitionEntries().find(entry => entry.kind === 'stairs');
 assert.ok(stairEntry?.root.userData.semanticStairs, 'Stair runtime must materialize the semantic flight visual');
 const stairColliders = stairRuntime.collision.getObstaclesByType('panel-stair');
-assert.equal(stairColliders.length, 6, 'Semantic Stairs must own six deterministic standable tread colliders');
-const orderedTreads = [...stairColliders].sort((a, b) => a.supportY - b.supportY);
+assert.equal(stairColliders.length, 7, 'Semantic Stairs must own six tread supports plus one top landing handoff support');
+const stairTreads = stairColliders.filter(obstacle => obstacle.label.includes(':step:'));
+const stairLanding = stairColliders.find(obstacle => obstacle.label.endsWith(':landing'));
+assert.equal(stairTreads.length, 6, 'Semantic Stairs must retain exactly six deterministic tread supports');
+assert.ok(stairLanding, 'Semantic Stairs must bridge the reserved upper-floor opening at the head of the flight');
+const orderedTreads = [...stairTreads].sort((a, b) => a.supportY - b.supportY);
 let stairReferenceY = stairRuntime.collision.getObstaclesByType('panel-floor')[0].supportY;
 for (const tread of orderedTreads) {
   assert.ok(tread.supportY - stairReferenceY <= 0.58 + 0.000001, 'Every semantic Stair rise must stay within Ranger step height');
@@ -393,11 +397,31 @@ for (const tread of orderedTreads) {
   assert.ok(Math.abs(support - tread.supportY) < 0.000001, 'Each Stair tread must resolve as the next walkable support');
   stairReferenceY = tread.supportY;
 }
+const stairTopY = stairEntry.root.position.y + PANEL_GRID.storeyHeight;
+assert.ok(
+  Math.abs(orderedTreads.at(-1).supportY - stairTopY) < 0.000001,
+  'Tread six must finish on the exact upper-floor walking surface'
+);
+assert.ok(
+  Math.abs(stairLanding.supportY - stairTopY) < 0.000001,
+  'The top landing handoff must stay level with the upper floor'
+);
+const stairRunX = Math.sin(stairEntry.root.rotation.y);
+const stairRunZ = Math.cos(stairEntry.root.rotation.y);
+const stairHandoffX = stairEntry.root.position.x + stairRunX * (PANEL_GRID.cellSize - 0.01);
+const stairHandoffZ = stairEntry.root.position.z + stairRunZ * (PANEL_GRID.cellSize - 0.01);
+assert.ok(
+  Math.abs(stairRuntime.collision.supportHeightAt(stairHandoffX, stairHandoffZ, 0, {
+    referenceY: stairTopY,
+    maxStepUp: 0.58
+  }) - stairTopY) < 0.000001,
+  'The Ranger must remain supported at the far edge of the Stair opening instead of falling before reaching the upper Floor'
+);
 const stairSnapshot = stairRuntime.system.snapshot();
 const restoredStairRuntime = makeRuntime(0);
 assert.equal(restoredStairRuntime.system.restore(stairSnapshot), true);
 assert.deepEqual(restoredStairRuntime.system.snapshot(), stairSnapshot, 'Stairs must round-trip through semantic persistence');
-assert.equal(restoredStairRuntime.collision.getObstaclesByType('panel-stair').length, 6, 'Continue must recreate every Stair tread collider');
+assert.equal(restoredStairRuntime.collision.getObstaclesByType('panel-stair').length, 7, 'Continue must recreate all six Stair treads and the top landing handoff');
 assert.equal(restoredStairRuntime.inventory.get('log'), 0, 'Stair restore must not consume Logs');
 const stairPoint = new THREE.Vector3(stairEntry.root.position.x, 0, stairEntry.root.position.z);
 const removedStairs = stairRuntime.system.demolish(stairPoint, stairEntry.id);
