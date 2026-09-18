@@ -3,7 +3,8 @@ import { createToolModelAsset, hasToolModelAsset } from '../rendering/ToolModelA
 import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
-const SWORD_STRIKE_DURATIONS = Object.freeze([0.36, 0.39, 0.44]);
+const SWORD_STRIKE_DURATIONS = Object.freeze([0.42, 0.45, 0.5]);
+const SWORD_AIR_STRIKE_DURATION = 0.58;
 const VISIBLE_SPEAR_SHAFT_CENTER_Y = 0.12;
 const VISIBLE_SPEAR_GRIP_PROFILE = 'visible-hand-mid-shaft-spear-v2';
 
@@ -15,6 +16,7 @@ export class RangerToolPresentation {
     this.remaining = 0;
     this.swordStrikeIndex = 0;
     this.activeSwordStrike = 0;
+    this.swordAirAttack = false;
     this.currentToolId = null;
     this.modelRequestId = 0;
     this.skeletalActionActive = false;
@@ -44,6 +46,7 @@ export class RangerToolPresentation {
     if (toolId === 'sword') {
       this.swordStrikeIndex = 0;
       this.activeSwordStrike = 0;
+      this.swordAirAttack = false;
     }
     const requestId = ++this.modelRequestId;
     this.root.clear();
@@ -63,16 +66,48 @@ export class RangerToolPresentation {
     return this.playSwing('axe');
   }
 
-  playSwing(toolId = this.currentToolId) {
-    if (this.isBusy() || !toolId || toolId === 'spear') return false;
-    if (this.currentToolId !== toolId) this.setEquippedTool(toolId);
+  playSwordStrike({ airborne = !Boolean(this.player.isGrounded?.()) } = {}) {
+    if (this.isBusy()) return false;
+    if (this.currentToolId !== 'sword') this.setEquippedTool('sword');
     this.#syncVisibleHandMount();
     this.#syncVisibility();
 
-    if (toolId === 'sword') {
+    this.swordAirAttack = Boolean(airborne);
+    if (!this.swordAirAttack) {
       this.activeSwordStrike = this.swordStrikeIndex;
       this.swordStrikeIndex = (this.swordStrikeIndex + 1) % SWORD_STRIKE_DURATIONS.length;
     }
+
+    if (this.handMounted) {
+      const action = this.player.playSwordAction?.(this.activeSwordStrike, { airborne: this.swordAirAttack });
+      if (action?.started) {
+        this.duration = action.duration;
+        this.remaining = action.duration;
+        this.skeletalActionActive = true;
+        if (this.swordAirAttack) this.#applySwordAirPose(0);
+        else this.#applyRestPose();
+        return true;
+      }
+    }
+
+    this.duration = this.swordAirAttack
+      ? SWORD_AIR_STRIKE_DURATION
+      : SWORD_STRIKE_DURATIONS[this.activeSwordStrike];
+    this.remaining = this.duration;
+    this.skeletalActionActive = false;
+    if (this.swordAirAttack) this.#applySwordAirPose(0);
+    else this.#applySwingPose(0);
+    return true;
+  }
+
+  playSwing(toolId = this.currentToolId) {
+    if (this.isBusy() || !toolId || toolId === 'spear') return false;
+    if (toolId === 'sword') {
+      return this.playSwordStrike({ airborne: !Boolean(this.player.isGrounded?.()) });
+    }
+    if (this.currentToolId !== toolId) this.setEquippedTool(toolId);
+    this.#syncVisibleHandMount();
+    this.#syncVisibility();
 
     if (this.handMounted && SKELETAL_WORK_TOOLS.has(toolId)) {
       const action = this.player.playToolAction?.(toolId);
@@ -85,9 +120,7 @@ export class RangerToolPresentation {
       }
     }
 
-    this.duration = toolId === 'sword'
-      ? SWORD_STRIKE_DURATIONS[this.activeSwordStrike]
-      : 0.43;
+    this.duration = 0.43;
     this.remaining = this.duration;
     this.skeletalActionActive = false;
     this.#applySwingPose(0);
@@ -102,17 +135,20 @@ export class RangerToolPresentation {
     this.remaining = Math.max(0, this.remaining - dt);
     const progress = 1 - this.remaining / this.duration;
 
-    if (!this.skeletalActionActive) {
+    if (this.swordAirAttack) {
+      this.#applySwordAirPose(progress);
+    } else if (!this.skeletalActionActive) {
       this.#applySwingPose(progress);
     } else {
       // Keep the prop hand-mounted, but add a small grip-relative strike accent.
-      // The authored skeleton still owns the body motion; this only strengthens
+      // The authored skeleton owns the body/arm motion; this only strengthens
       // the visible tool-head follow-through at impact.
       this.#applySkeletalAccent(progress);
     }
 
     if (this.remaining <= 0) {
       this.skeletalActionActive = false;
+      this.swordAirAttack = false;
       this.#applyRestPose();
     }
   }
@@ -198,6 +234,26 @@ export class RangerToolPresentation {
 
     this.root.position.set(0.48, 1.36, 0.16);
     this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.24);
+  }
+
+  #applySwordAirPose(progress) {
+    const eased = THREE.MathUtils.smoothstep(THREE.MathUtils.clamp(progress, 0, 1), 0, 1);
+    const plunge = Math.sin(Math.PI * THREE.MathUtils.clamp((progress - 0.12) / 0.78, 0, 1));
+    if (this.handMounted) {
+      this.root.position.set(0, 0, -0.03 * plunge);
+      this.root.rotation.set(
+        -1.08 + eased * 1.92,
+        -0.14 + eased * 0.28,
+        0.22 - eased * 0.36
+      );
+      return;
+    }
+    this.root.position.set(0.48, 1.48 - plunge * 0.12, 0.1);
+    this.root.rotation.set(
+      -0.98 + eased * 1.82,
+      -0.18 + eased * 0.36,
+      0.2 - eased * 0.34
+    );
   }
 
   #applySwordStrikePose(progress, eased) {
