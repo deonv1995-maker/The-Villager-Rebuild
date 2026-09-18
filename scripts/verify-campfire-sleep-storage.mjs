@@ -40,6 +40,7 @@ function runRestSequence(source) {
   const cameraModes = [];
   const poses = [];
   const toolSelections = [];
+  const torchSuppression = [];
   const seatedEvents = [];
   const overlayState = {
     source: null,
@@ -144,6 +145,11 @@ function runRestSequence(source) {
         toolSelections.push(toolId);
       }
     },
+    torchRuntime: {
+      setHandheldPresentationSuppressed(suppressed) {
+        torchSuppression.push(Boolean(suppressed));
+      }
+    },
     saveController: {
       saveNow(reason) {
         saveReason = reason;
@@ -221,6 +227,7 @@ function runRestSequence(source) {
   assert(pauseStates.at(-1) === false, `${source} rest must resume the authoritative world clock after waking`);
   assert(cameraModes.at(-1) === 'first-person', `${source} rest must restore the camera mode active before sleep`);
   assert(toolSelections[0] === null && toolSelections.at(-1) === 'spear', `${source} rest must hide and restore held-tool presentation`);
+  assert(torchSuppression[0] === true && torchSuppression.at(-1) === false, `${source} rest must suppress and restore handheld torch presentation`);
 
   if (source === 'bed') {
     assert(poses.some(pose => pose.y === 5 && pose.modelPitch > 1.4), 'Bed sleep must preserve constructed-floor support height while lying on the mattress');
@@ -354,6 +361,7 @@ const [
   restOverlaySource,
   restCssSource,
   seatedPoseSource,
+  torchRuntimeSource,
   indexSource
 ] = await Promise.all([
   readFile('src/main.js', 'utf8'),
@@ -374,6 +382,7 @@ const [
   readFile('src/ui/RestTransitionOverlay.js', 'utf8'),
   readFile('src/rest-transition.css', 'utf8'),
   readFile('src/player/RangerSeatedPose.js', 'utf8'),
+  readFile('src/gameplay/VisibleHandTorchRuntimeController.js', 'utf8'),
   readFile('index.html', 'utf8')
 ]);
 
@@ -401,6 +410,8 @@ assert(!rangerSource.includes('this.cinematicDriver.update?.(dt, this);\n      t
 assert(restOverlaySource.includes('💤') && restOverlaySource.includes("document.body.classList.add('rest-transition-active')"), 'Rest overlay must own the blackout sleeping presentation and HUD isolation');
 assert(restCssSource.includes('.rest-transition') && restCssSource.includes('body.rest-transition-active .mobile-hud'), 'Rest overlay styling must cover the viewport and temporarily hide gameplay HUD');
 assert(seatedPoseSource.includes("Cinematic_Campfire_Sit") && seatedPoseSource.includes("Cinematic_Campfire_Stand"), 'Campfire seated pose must remain an isolated cinematic presentation helper');
+assert(sleepSource.includes('this.game.torchRuntime?.setHandheldPresentationSuppressed?.(true)') && sleepSource.includes('this.game.torchRuntime?.setHandheldPresentationSuppressed?.(false)'), 'Rest cinematic must suppress and restore handheld torch presentation without changing torch ownership');
+assert(torchRuntimeSource.includes('setHandheldPresentationSuppressed(suppressed)'), 'Visible-hand torch presentation must expose a narrow cinematic suppression boundary');
 assert(storageDefinitionSource.includes('STARTER_STORAGE_CONTAINERS = Object.freeze([])'), 'Starter Chest and Barrel must be absent from new worlds');
 assert(storageRuntimeSource.includes('LEGACY_STARTER_STORAGE_IDS'), 'Old starter-container saves must use an explicit migration path');
 assert(storageRuntimeSource.includes('this.game.inventory.add(itemId, quantity)'), 'Legacy starter contents must return to inventory instead of being deleted');
