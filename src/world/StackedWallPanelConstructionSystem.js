@@ -286,9 +286,7 @@ export class StackedWallPanelConstructionSystem extends PanelConstructionSystem 
   }
 
   #applySpecializedPreview(placement) {
-    const canAfford = panelBuildCost(this.buildMode).every(requirement => (
-      this.inventory.has(requirement.itemId, requirement.quantity)
-    ));
+    const canAfford = this.canAffordMaterials(panelBuildCost(this.buildMode));
     this.previewValid = Boolean(placement.valid) && canAfford;
     this.#showSpecializedPreview(placement, this.previewValid);
   }

@@ -7,6 +7,7 @@ import {
   panelBuildCost
 } from '../src/data/PanelConstructionDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
+import { ComplexRoofPanelConstructionSystem } from '../src/world/ComplexRoofPanelConstructionSystem.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
 import { constructionFloorCoversVegetation } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
@@ -18,7 +19,7 @@ const makeTerrain = () => ({
   setConstructionFloors() {}
 });
 
-const makeRuntime = (logCount = 0, materialSource = null) => {
+const makeRuntime = (logCount = 0, materialSource = null, SystemClass = PanelConstructionSystem) => {
   const terrain = makeTerrain();
   const collision = new WorldCollisionSystem({
     heightAt: terrain.heightAt,
@@ -28,7 +29,7 @@ const makeRuntime = (logCount = 0, materialSource = null) => {
   const inventory = new InventorySystem();
   if (logCount > 0) inventory.add('log', logCount);
   const group = new THREE.Group();
-  const system = new PanelConstructionSystem({ group, terrain, collision, inventory, materialSource });
+  const system = new SystemClass({ group, terrain, collision, inventory, materialSource });
   return { terrain, collision, inventory, group, system };
 };
 
@@ -72,6 +73,68 @@ assert.equal(storageBackedState.previewValid, true, 'Storage-backed Logs must ma
 assert.ok(storageBackedRuntime.system.build(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1)));
 assert.equal(storedMaterials.log, 3, 'Construction must consume the semantic module cost from the shared material source');
 assert.equal(storageBackedRuntime.inventory.get('log'), 0, 'Storage-backed construction must not require transferring materials into Ranger inventory');
+
+// The live runtime uses ComplexRoofPanelConstructionSystem -> StackedWallPanelConstructionSystem.
+// Its specialized Floor/Wall/Door/Window preview pass must not re-check Ranger inventory
+// after the base construction layer has already accepted the shared storage-backed pool.
+const specializedStoredMaterials = {
+  log: 6,
+  getAvailable(itemId) {
+    return this[itemId] ?? 0;
+  },
+  hasAvailable(itemId, quantity) {
+    return this.getAvailable(itemId) >= quantity;
+  },
+  consumeAvailable(requirements) {
+    if (!requirements.every(requirement => this.hasAvailable(requirement.itemId, requirement.quantity))) return false;
+    for (const requirement of requirements) this[requirement.itemId] -= requirement.quantity;
+    return true;
+  }
+};
+const specializedRuntime = makeRuntime(
+  0,
+  specializedStoredMaterials,
+  ComplexRoofPanelConstructionSystem
+);
+const specializedSeed = specializedRuntime.system.registry.createStructure({
+  originX: 0,
+  originZ: 0,
+  yaw: 0
+});
+assert.equal(
+  specializedSeed.grid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok,
+  true,
+  'Storage-backed specialized preview regression requires one seeded Floor'
+);
+rematerializeSeededState(specializedRuntime);
+specializedRuntime.system.setBuildMode('wall');
+const specializedPlayer = new THREE.Vector3(0, 0, 0);
+const specializedFacing = new THREE.Vector3(0, 0, 1);
+const specializedWallState = specializedRuntime.system.update(specializedPlayer, specializedFacing);
+assert.equal(
+  specializedWallState.canAfford,
+  true,
+  'Live Wall affordability must see Logs stored outside Ranger inventory'
+);
+assert.equal(
+  specializedWallState.previewValid,
+  true,
+  'Live specialized Wall preview must stay green when storage contains the required Logs'
+);
+assert.ok(
+  specializedRuntime.system.build(specializedPlayer, specializedFacing),
+  'Live Wall placement must consume directly from the shared storage-backed material source'
+);
+assert.equal(
+  specializedStoredMaterials.log,
+  3,
+  'Live specialized Wall placement must consume exactly three stored Logs'
+);
+assert.equal(
+  specializedRuntime.inventory.get('log'),
+  0,
+  'Live specialized Wall placement must not require moving Logs into Ranger inventory'
+);
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
@@ -407,11 +470,12 @@ assert.equal(poorState.previewing, true, 'Unaffordable construction should still
 assert.equal(poorState.canAfford, false);
 assert.equal(poorState.previewValid, false, 'Unaffordable panel previews must stay red and uncommittable');
 
-const [controllerSource, gameAppSource, panelSystemSource, complexRoofSource] = await Promise.all([
+const [controllerSource, gameAppSource, panelSystemSource, complexRoofSource, stackedWallSource] = await Promise.all([
   readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/world/PanelConstructionSystem.js', 'utf8'),
-  readFile('src/world/ComplexRoofPanelConstructionSystem.js', 'utf8')
+  readFile('src/world/ComplexRoofPanelConstructionSystem.js', 'utf8'),
+  readFile('src/world/StackedWallPanelConstructionSystem.js', 'utf8')
 ]);
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
@@ -436,6 +500,11 @@ assert.ok(
   complexRoofSource.includes('this.canAffordMaterials(cost)') &&
   complexRoofSource.includes('this.consumeMaterials(cost)'),
   'Complex Roof construction must use the same shared material source as Floor/Wall/Stairs'
+);
+assert.ok(
+  stackedWallSource.includes('this.canAffordMaterials(panelBuildCost(this.buildMode))') &&
+  !stackedWallSource.includes('this.inventory.has(requirement.itemId, requirement.quantity)'),
+  'Specialized Floor/Wall/Door/Window previews must not bypass shared storage-backed affordability'
 );
 assert.ok(
   !controllerSource.includes("event.target.closest?.('[data-resource=\"log\"]')"),
