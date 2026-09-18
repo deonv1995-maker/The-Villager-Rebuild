@@ -129,7 +129,7 @@ assert(!floorSupportSource.includes('FoundationTerrainSystem'), 'Panel floors mu
 for (const requirement of [
   "this.buildMode = 'floor'",
   "this.buildMode === 'floor'",
-  'this.inventory.consume(cost)',
+  'this.consumeMaterials(cost)',
   "type: 'panel-floor'",
   "type: 'panel-wall'",
   "type: 'panel-stair'",
@@ -148,7 +148,7 @@ for (const requirement of [
 }
 
 for (const requirement of [
-  "this.game.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)",
+  "materialSource: game.storage ?? null",
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
   "toolId === 'hammer' && equippedToolId === 'hammer'",
   "const ACTIVE_BUILD_MODES = new Set(['floor', 'wall', 'door', 'window', 'stairs', 'roof'])",
