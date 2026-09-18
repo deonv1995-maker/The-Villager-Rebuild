@@ -20,7 +20,7 @@ export class TitleSaveMenuController {
   attach() {
     if (this.attached || this.profiles.length === 0) return false;
     const actions = this.documentRef?.querySelector?.('.title-menu-actions');
-    const newGameButton = actions?.querySelector?.('.title-play');
+    const newGameButton = actions?.querySelector?.('.title-new-game');
     if (!actions || !newGameButton) return false;
 
     const label = newGameButton.querySelector('span:last-child');
