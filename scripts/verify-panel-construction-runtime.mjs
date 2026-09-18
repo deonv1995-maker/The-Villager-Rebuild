@@ -8,6 +8,7 @@ import {
 } from '../src/data/PanelConstructionDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { ComplexRoofPanelConstructionSystem } from '../src/world/ComplexRoofPanelConstructionSystem.js';
+import { panelCellKey } from '../src/world/PanelConstructionGrid.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
 import { constructionFloorCoversVegetation } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
