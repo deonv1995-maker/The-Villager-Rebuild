@@ -186,8 +186,13 @@ assert.match(
 );
 assert.match(
   inventoryMenuStyles,
-  /\.inventory-menu-toggle\s*\{[\s\S]*?left: max\(10px,[\s\S]*?width: 46px;/,
-  'Closed inventory must be represented by one compact suitcase button on the left safe area'
+  /\.inventory-quick-access\s*\{[\s\S]*?left: max\(10px,[\s\S]*?top: max\(48px,/,
+  'Closed inventory quick access must stay high on the left safe area, clear of the movement thumb zone'
+);
+assert.match(
+  inventoryMenuStyles,
+  /\.inventory-menu-toggle\s*\{[\s\S]*?width: 46px;/,
+  'Closed inventory must retain one compact suitcase button'
 );
 assert.match(inventoryMenuStyles, /\.inventory-grid\s*\{[\s\S]*?display: grid;/, 'Opened suitcase must expose a grid rather than a permanent resource stack');
 assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button needs a dedicated mobile layout');
