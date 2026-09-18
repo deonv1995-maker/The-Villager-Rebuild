@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import {
+  indexPresentationEntry,
+  normalizePresentationExclusions,
+  presentationExclusionCandidates,
+  samePresentationExclusions,
+  vegetationConstructionCollisionRevision
+} from './VegetationInvalidation.js';
+import {
   constructionFloorCoversVegetation,
   presentationExclusionCoversVegetation
 } from './GrassFieldSystem.js';
@@ -46,6 +53,7 @@ export class JungleFloorPresentationSystem {
     this.leafSpacing = leafSpacing;
     this.rootSpacing = rootSpacing;
     this.entries = [];
+    this.entriesByChunk = new Map();
     this.meshes = [];
     this.presentationExclusions = [];
     this.lastCollisionRevision = -1;
@@ -64,31 +72,34 @@ export class JungleFloorPresentationSystem {
   }
 
   setPresentationExclusions(exclusions = []) {
-    this.presentationExclusions = exclusions
-      .filter(exclusion => (
-        Number.isFinite(exclusion?.x)
-        && Number.isFinite(exclusion?.z)
-        && Number.isFinite(exclusion?.radius)
-        && exclusion.radius > 0
-      ))
-      .map(exclusion => ({ x: exclusion.x, z: exclusion.z, radius: exclusion.radius }));
+    const nextExclusions = normalizePresentationExclusions(exclusions);
+    if (samePresentationExclusions(this.presentationExclusions, nextExclusions)) return false;
+
+    const previousExclusions = this.presentationExclusions;
+    const candidates = presentationExclusionCandidates({
+      entries: this.entries,
+      entriesByChunk: this.entriesByChunk,
+      chunks: this.chunks,
+      previousExclusions,
+      nextExclusions
+    });
+    this.presentationExclusions = nextExclusions;
 
     const changedMeshes = new Set();
-    for (const entry of this.entries) {
+    for (const entry of candidates) {
       const hidden = this.#isPresentationExcluded(entry);
       if (hidden === entry.presentationHidden) continue;
       entry.presentationHidden = hidden;
       this.#writeMatrix(entry, false);
       if (entry.mesh) changedMeshes.add(entry.mesh);
     }
-    for (const mesh of changedMeshes) {
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
+    for (const mesh of changedMeshes) mesh.instanceMatrix.needsUpdate = true;
+    return changedMeshes.size > 0;
   }
 
   populate() {
     this.entries.length = 0;
+    this.entriesByChunk.clear();
     this.meshes.length = 0;
     this.lastCollisionRevision = -1;
     this.lastConstructionRevision = -1;
@@ -263,7 +274,10 @@ export class JungleFloorPresentationSystem {
 
     candidates.sort((left, right) => left.rank - right.rank);
     const selected = candidates.slice(0, maxInstances);
-    for (const candidate of selected) this.entries.push(candidate.entry);
+    for (const candidate of selected) {
+      this.entries.push(candidate.entry);
+      indexPresentationEntry(this.entriesByChunk, candidate.entry);
+    }
     return selected.length;
   }
 
@@ -308,8 +322,8 @@ export class JungleFloorPresentationSystem {
   }
 
   #syncConstructionOcclusion() {
-    if (!this.meshes.length || !this.collision?.getRevision || !this.collision?.getObstaclesByType) return;
-    const collisionRevision = this.collision.getRevision();
+    if (!this.meshes.length || !this.collision?.getObstaclesByType) return;
+    const collisionRevision = vegetationConstructionCollisionRevision(this.collision);
     const constructionRevision = this.constructionTerrain?.getRevision?.() ?? 0;
     if (
       collisionRevision === this.lastCollisionRevision
