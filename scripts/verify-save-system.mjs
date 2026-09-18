@@ -3,11 +3,17 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 import {
+  PROFILE_SAVE_STORAGE_PREFIX,
   SAVE_SCHEMA_VERSION,
   SAVE_STORAGE_KEY,
   SAVE_WORLD_REVISION,
-  SaveGameStore
+  SaveGameStore,
+  saveStorageKeyForProfile
 } from '../src/persistence/SaveGameStore.js';
+import {
+  PlayerProfileStore,
+  PROFILE_STORAGE_KEY
+} from '../src/persistence/PlayerProfileStore.js';
 import { constructionFacingYaw } from '../src/persistence/GameStatePersistence.js';
 
 const root = new URL('../', import.meta.url);
@@ -61,6 +67,36 @@ assert.equal(store.hasValidSave(), false, 'Future/incompatible schemas must not 
 store.clear();
 assert.equal(memory.has(SAVE_STORAGE_KEY), false);
 
+const profileStore = new PlayerProfileStore({
+  storage,
+  now: () => '2026-09-18T12:00:00.000Z',
+  createId: () => 'profile-deon'
+});
+const profile = profileStore.create('Deon');
+assert.equal(profile.id, 'profile-deon');
+assert.equal(profile.name, 'Deon');
+assert.equal(profileStore.findByName(' deon ')?.id, profile.id);
+assert.equal(memory.has(PROFILE_STORAGE_KEY), true);
+assert.throws(() => profileStore.create('DEON'), /already exists/i);
+
+const profileSaveStore = new SaveGameStore({
+  storage,
+  profileId: profile.id,
+  now: () => '2026-09-18T12:05:00.000Z'
+});
+profileSaveStore.write({ player: { position: { x: 8, z: 9 } } }, { reason: 'profile-test' });
+assert.equal(profileSaveStore.hasValidSave(), true);
+assert.deepEqual(profileSaveStore.read().state.player.position, { x: 8, z: 9 });
+assert.equal(
+  memory.has(saveStorageKeyForProfile(profile.id)),
+  true,
+  'Profile save must use its own namespaced browser key'
+);
+assert.equal(
+  saveStorageKeyForProfile(profile.id),
+  `${PROFILE_SAVE_STORAGE_PREFIX}${profile.id}`
+);
+
 // Retained legacy construction code still normalizes directed wall transforms while deferred
 // roof/stair systems are being removed. Schema 2 never uses this as semantic panel authority.
 const savedWallRoot = new THREE.Group();
@@ -78,13 +114,17 @@ const arrivalCallbackIndex = main.indexOf('onComplete: () => {');
 const arrivalSaveIndex = main.indexOf('saveController.start({ saveImmediately: true })', arrivalCallbackIndex);
 
 const checks = [
-  ['one versioned save-store key owns browser persistence', SAVE_STORAGE_KEY === 'the-villager-rebuild.save'],
-  ['main boot owns a shared SaveGameStore', main.includes('const saveStore = new SaveGameStore()')],
+  ['legacy save key remains stable for one-time profile migration', SAVE_STORAGE_KEY === 'the-villager-rebuild.save'],
+  ['profile save keys are derived from the shared save-key prefix', PROFILE_SAVE_STORAGE_PREFIX === 'the-villager-rebuild.save.profile.'],
+  ['main owns a shared player-profile index', main.includes('const profileStore = new PlayerProfileStore()')],
+  ['gameplay creates the SaveGameStore for the selected profile', main.includes('new SaveGameStore({ profileId: profile?.id ?? null })')],
+  ['legacy single-save installs migrate into a preserved profile', main.includes('migrateLegacySaveToProfile') && main.includes("profileStore.create('Previous Save')") && main.includes("reason: 'profile-migration'")],
   ['panel runtime exists before SaveGameController', main.includes('new PanelConstructionRuntimeController({ game })') && main.indexOf('new PanelConstructionRuntimeController({ game })') < main.indexOf('new SaveGameController({ game, store: saveStore })')],
   ['Continue restores before autosave starts', main.includes('const restored = saveController.restore()') && main.indexOf('const restored = saveController.restore()') < main.indexOf('saveController.start();')],
   ['new-game autosave begins after beach arrival completion', arrivalCallbackIndex >= 0 && arrivalSaveIndex > arrivalCallbackIndex],
-  ['Continue and New Game are distinct menu actions', titleSaveMenu.includes("label.textContent = 'NEW GAME'") && titleSaveMenu.includes('<span>CONTINUE</span>')],
-  ['Continue uses the title fade cover instead of the shipwreck intro', titleSaveMenu.includes("querySelector('.title-transition')") && titleSaveMenu.includes("classList.add('is-covering')")],
+  ['profile selection and New Game are distinct menu actions', titleSaveMenu.includes('<span>SELECT PROFILE</span>') && titleSaveMenu.includes("label.textContent = 'NEW GAME'")],
+  ['named profile rows are created from persisted profile data', titleSaveMenu.includes('for (const profile of this.profiles)') && titleSaveMenu.includes('profile.name')],
+  ['profile resume uses the title fade cover instead of replaying the shipwreck intro', titleSaveMenu.includes("querySelector('.title-transition')") && titleSaveMenu.includes("classList.add('is-covering')")],
   ['autosave runs periodically while gameplay is active', saveController.includes('AUTOSAVE_INTERVAL_MS = 8000') && saveController.includes("this.saveNow('autosave')")],
   ['autosave flushes when the PWA backgrounds or hides', saveController.includes("addEventListener?.('pagehide'") && saveController.includes("addEventListener?.('visibilitychange'") && saveController.includes("this.saveNow('background')")],
   ['panel snapshot is added to the shared save state', saveController.includes('state.panelConstruction = this.game.panelConstruction?.snapshot?.() ?? null')],

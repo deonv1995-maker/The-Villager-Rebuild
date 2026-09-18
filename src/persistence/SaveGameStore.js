@@ -1,13 +1,21 @@
 export const SAVE_STORAGE_KEY = 'the-villager-rebuild.save';
 export const SAVE_SCHEMA_VERSION = 2;
 export const SAVE_WORLD_REVISION = 2;
+export const PROFILE_SAVE_STORAGE_PREFIX = `${SAVE_STORAGE_KEY}.profile.`;
+
+export function saveStorageKeyForProfile(profileId) {
+  const normalized = String(profileId ?? '').trim();
+  return normalized ? `${PROFILE_SAVE_STORAGE_PREFIX}${normalized}` : SAVE_STORAGE_KEY;
+}
 
 const isRecord = value => Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
 export class SaveGameStore {
-  constructor({ storage = null, now = () => new Date().toISOString() } = {}) {
+  constructor({ storage = null, now = () => new Date().toISOString(), profileId = null } = {}) {
     this.storage = storage;
     this.now = now;
+    this.profileId = profileId;
+    this.storageKey = saveStorageKeyForProfile(profileId);
   }
 
   read() {
@@ -15,7 +23,7 @@ export class SaveGameStore {
     if (!storage) return null;
 
     try {
-      const raw = storage.getItem(SAVE_STORAGE_KEY);
+      const raw = storage.getItem(this.storageKey);
       if (!raw) return null;
       const record = JSON.parse(raw);
       if (!this.#isCompatibleRecord(record)) return null;
@@ -44,7 +52,7 @@ export class SaveGameStore {
     };
 
     try {
-      storage.setItem(SAVE_STORAGE_KEY, JSON.stringify(record));
+      storage.setItem(this.storageKey, JSON.stringify(record));
       return record;
     } catch (error) {
       console.warn('[SAVE] Unable to write save game', error);
@@ -56,7 +64,7 @@ export class SaveGameStore {
     const storage = this.#resolveStorage();
     if (!storage) return false;
     try {
-      storage.removeItem(SAVE_STORAGE_KEY);
+      storage.removeItem(this.storageKey);
       return true;
     } catch (error) {
       console.warn('[SAVE] Unable to clear save game', error);

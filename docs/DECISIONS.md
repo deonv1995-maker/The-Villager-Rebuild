@@ -188,6 +188,14 @@ Compatibility: Sprout arrival state is an additive field inside the existing sch
 
 Reason: story state, world presentation/collision and item storage have different ownership. Keeping them separated allows the next follower/compression slice and eventual production Sprout asset to extend the same story state without duplicating inventory, harvesting or player control.
 
+## 2026-09-18 — Named player profiles own save namespaces
+
+Decision: starting a new game now requires a player-entered Ranger/profile name before the existing shipwreck sequence begins. The title scene presents this as a Ranger close-up, then the confirmed name creates a persistent player profile. Returning players see **NEW GAME** and **SELECT PROFILE**, with each named profile resuming only its own save record.
+
+Persistence keeps one shared schema-2 game-state format. Profiles are an index above that format, and each profile selects a namespaced `SaveGameStore` key rather than introducing a second gameplay persistence implementation. The previous global `the-villager-rebuild.save` key remains only as a compatibility source: on the first profile-aware launch, a valid legacy save is migrated once into a **Previous Save** profile.
+
+Reason: multiple people/worlds on one installed PWA need isolated progression, while construction, inventory, survival, Sprout, world-time and other save-state systems must continue using one authoritative serialization path.
+
 ## Open decisions
 
 The following are intentionally not locked yet:

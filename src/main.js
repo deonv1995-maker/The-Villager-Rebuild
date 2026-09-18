@@ -19,6 +19,7 @@ import { StructureInteriorOcclusionController } from './gameplay/StructureInteri
 import { VisibleHandTorchRuntimeController as TorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
+import { PlayerProfileStore, normalizeProfileName } from './persistence/PlayerProfileStore.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
@@ -35,7 +36,7 @@ import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
 const canvas = document.getElementById('game-canvas');
 const status = document.getElementById('boot-status');
-const saveStore = new SaveGameStore();
+const profileStore = new PlayerProfileStore();
 
 function setStatus(message, error = false) {
   status.textContent = message;
@@ -44,8 +45,9 @@ function setStatus(message, error = false) {
 
 const setGameplayStatus = createGameplayStatusSink(setStatus);
 
-async function bootGameplay(titleScene = null, { resume = false } = {}) {
+async function bootGameplay(titleScene = null, { resume = false, profile = null } = {}) {
   titleScene?.dispose({ keepTransition: true });
+  const saveStore = new SaveGameStore({ profileId: profile?.id ?? null });
 
   try {
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
@@ -227,21 +229,69 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
   }
 }
 
+function migrateLegacySaveToProfile() {
+  if (profileStore.hasProfiles()) return null;
+
+  const legacyStore = new SaveGameStore();
+  const legacyRecord = legacyStore.read();
+  if (!legacyRecord) return null;
+
+  try {
+    const profile = profileStore.create('Previous Save');
+    const profileSaveStore = new SaveGameStore({ profileId: profile.id });
+    const migrated = profileSaveStore.write(legacyRecord.state, { reason: 'profile-migration' });
+    if (migrated) {
+      legacyStore.clear();
+      return profile;
+    }
+    profileStore.remove(profile.id);
+    return null;
+  } catch (error) {
+    console.warn('[PROFILE] Unable to migrate legacy save', error);
+    return null;
+  }
+}
+
+function listPlayableProfiles() {
+  return profileStore.list().filter(profile => (
+    new SaveGameStore({ profileId: profile.id }).hasValidSave()
+  ));
+}
+
 async function boot() {
   document.body.classList.add('title-scene-active');
   let titleScene = null;
+  let pendingProfileName = null;
 
   try {
+    migrateLegacySaveToProfile();
     setStatus('VOYAGE · PREPARING');
     titleScene = new TitleSceneApp({ canvas, setStatus });
     await titleScene.start({
-      onPlay: () => bootGameplay(titleScene)
+      onNewGameRequest: () => titleScene.beginNewGameSetup({
+        onConfirm: name => {
+          profileStore.assertWritable();
+          const normalizedName = normalizeProfileName(name);
+          if (!normalizedName) throw new Error('Enter a name for this profile');
+          if (profileStore.findByName(normalizedName)) {
+            throw new Error('That profile name already exists');
+          }
+          pendingProfileName = normalizedName;
+          return true;
+        }
+      }),
+      onPlay: () => {
+        const profileName = pendingProfileName;
+        pendingProfileName = null;
+        const profile = profileName ? profileStore.create(profileName) : null;
+        return bootGameplay(titleScene, { profile });
+      }
     });
 
     const saveMenu = new TitleSaveMenuController({
-      store: saveStore,
+      profiles: listPlayableProfiles(),
       setStatus,
-      onContinue: () => bootGameplay(titleScene, { resume: true })
+      onContinue: profile => bootGameplay(titleScene, { resume: true, profile })
     });
     saveMenu.attach();
     titleScene.saveMenu = saveMenu;

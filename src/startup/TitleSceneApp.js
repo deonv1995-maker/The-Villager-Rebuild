@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { ASSET_PATHS } from '../data/AssetPaths.js';
+import { PROFILE_NAME_MAX_LENGTH } from '../persistence/PlayerProfileStore.js';
 import { createTitleIslandBackdrop } from './TitleIslandBackdrop.js';
 import { TitleCinematicCamera } from './TitleCinematicCamera.js';
 import { TitleCelestialEvent } from './TitleCelestialEvent.js';
@@ -14,6 +15,8 @@ const RANGER_DECK_BASE = Object.freeze({ x: 1.22, y: 1.14, z: 2.55 });
 const RANGER_DECK_MODEL_YAW = Math.PI * 0.92;
 const RANGER_DECK_IDLE_SPEED = 0.82;
 const CRATE_DECK_BASE = Object.freeze({ x: -1.25, y: 1.78, z: 3.15 });
+const PROFILE_CAMERA_DISTANCE = 3.35;
+const PROFILE_CAMERA_FOV = 34;
 
 export class TitleSceneApp {
   constructor({ canvas, setStatus }) {
@@ -27,6 +30,12 @@ export class TitleSceneApp {
     this.stormDanger = 0;
     this.playStarted = false;
     this.onPlay = null;
+    this.onNewGameRequest = null;
+    this.profilePrompt = null;
+    this.profileFocus = 0;
+    this.profileFocusTarget = 0;
+    this.profileCameraTarget = new THREE.Vector3();
+    this.profileCameraPosition = new THREE.Vector3();
     this.rangerThrown = false;
     this.rangerSplashDone = false;
     this.arrivalSignalAnnounced = false;
@@ -35,8 +44,9 @@ export class TitleSceneApp {
     this.rangerJumpElapsed = 0;
   }
 
-  async start({ onPlay } = {}) {
+  async start({ onPlay, onNewGameRequest } = {}) {
     this.onPlay = typeof onPlay === 'function' ? onPlay : null;
+    this.onNewGameRequest = typeof onNewGameRequest === 'function' ? onNewGameRequest : null;
     this.#createScene();
 
     this.islandBackdrop = createTitleIslandBackdrop();
@@ -93,10 +103,89 @@ export class TitleSceneApp {
   async playIntro() {
     if (this.playStarted) return;
     this.playStarted = true;
+    this.#closeProfilePrompt({ restoreMenu: false });
+    this.profileFocus = 0;
+    this.profileFocusTarget = 0;
+    this.camera.fov = 48;
+    this.camera.updateProjectionMatrix();
     this.state = 'intro';
     this.introElapsed = 0;
     this.menuUi?.classList.add('is-leaving');
     this.setStatus('VOYAGE · ISLAND AHEAD');
+  }
+
+  beginNewGameSetup({ onConfirm } = {}) {
+    if (this.playStarted || this.profilePrompt || !this.menuUi) return false;
+    const newGameButton = this.menuUi.querySelector('.title-new-game');
+    if (!newGameButton) return false;
+
+    this.profileFocusTarget = 1;
+    this.menuUi.classList.add('is-profile-setup');
+    newGameButton.disabled = true;
+
+    const prompt = document.createElement('form');
+    prompt.className = 'title-profile-prompt';
+    prompt.innerHTML = `
+      <div class="title-profile-card">
+        <span class="title-profile-kicker">NEW VOYAGE</span>
+        <h2>Name your Ranger</h2>
+        <p>This name becomes the profile used to continue this world later.</p>
+        <label>
+          <span>Player name</span>
+          <input
+            class="title-profile-name"
+            type="text"
+            maxlength="${PROFILE_NAME_MAX_LENGTH}"
+            autocomplete="off"
+            autocapitalize="words"
+            enterkeyhint="done"
+            aria-describedby="title-profile-error"
+          />
+        </label>
+        <div id="title-profile-error" class="title-profile-error" role="alert" aria-live="polite"></div>
+        <div class="title-profile-actions">
+          <button class="title-profile-cancel" type="button">BACK</button>
+          <button class="title-profile-confirm" type="submit">BEGIN</button>
+        </div>
+      </div>
+    `;
+    this.menuUi.appendChild(prompt);
+    this.profilePrompt = prompt;
+
+    const input = prompt.querySelector('.title-profile-name');
+    const error = prompt.querySelector('.title-profile-error');
+    const cancel = prompt.querySelector('.title-profile-cancel');
+    const confirm = prompt.querySelector('.title-profile-confirm');
+
+    cancel?.addEventListener('click', () => this.#closeProfilePrompt());
+    prompt.addEventListener('submit', async event => {
+      event.preventDefault();
+      const name = input?.value?.trim() ?? '';
+      if (!name) {
+        if (error) error.textContent = 'Enter a name to begin.';
+        input?.focus();
+        return;
+      }
+
+      confirm.disabled = true;
+      cancel.disabled = true;
+      if (error) error.textContent = '';
+
+      try {
+        const accepted = await onConfirm?.(name);
+        if (accepted === false) throw new Error('Unable to create that profile');
+        await this.playIntro();
+      } catch (submitError) {
+        if (error) error.textContent = submitError?.message ?? 'Unable to create that profile.';
+        confirm.disabled = false;
+        cancel.disabled = false;
+        input?.focus();
+      }
+    });
+
+    window.setTimeout(() => input?.focus(), 420);
+    this.setStatus('NEW GAME · NAME YOUR RANGER');
+    return true;
   }
 
   releaseTransition() {
@@ -110,6 +199,7 @@ export class TitleSceneApp {
   dispose({ keepTransition = false } = {}) {
     this.running = false;
     window.removeEventListener('resize', this.resize);
+    this.#closeProfilePrompt({ restoreMenu: false });
     this.menuUi?.remove();
     this.menuUi = null;
     this.titleHeroPresentation?.dispose();
@@ -224,9 +314,9 @@ export class TitleSceneApp {
         <span class="title-rebuild">REBUILD</span>
       </div>
       <div class="title-menu-actions">
-        <button class="title-play" type="button">
+        <button class="title-play title-new-game" type="button">
           <span class="title-play-mark" aria-hidden="true">◆</span>
-          <span>PLAY</span>
+          <span>NEW GAME</span>
         </button>
         <p>Explore · Gather · Build · Rebuild</p>
       </div>
@@ -236,9 +326,9 @@ export class TitleSceneApp {
 
     const button = ui.querySelector('.title-play');
     button?.addEventListener('click', () => {
-      if (this.playStarted) return;
-      button.disabled = true;
-      void this.playIntro();
+      if (this.playStarted || this.profilePrompt) return;
+      if (this.onNewGameRequest) void this.onNewGameRequest();
+      else void this.playIntro();
     });
 
     const transition = document.createElement('div');
@@ -256,8 +346,10 @@ export class TitleSceneApp {
     this.titleHeroPresentation?.update(dt);
 
     let introProgress = 0;
-    if (this.state === 'menu') this.#updateMenu();
-    else if (this.state === 'intro') introProgress = this.#updateIntro(dt);
+    if (this.state === 'menu') {
+      this.#updateMenu();
+      this.#updateProfileCamera(dt);
+    } else if (this.state === 'intro') introProgress = this.#updateIntro(dt);
 
     this.storm?.update(dt, {
       danger: this.stormDanger,
@@ -275,6 +367,58 @@ export class TitleSceneApp {
     this.renderer.render(this.scene, this.camera);
     requestAnimationFrame(this.#frame);
   };
+
+  #closeProfilePrompt({ restoreMenu = true } = {}) {
+    this.profilePrompt?.remove();
+    this.profilePrompt = null;
+    this.profileFocusTarget = 0;
+    this.menuUi?.classList.remove('is-profile-setup');
+    if (restoreMenu) {
+      const newGameButton = this.menuUi?.querySelector('.title-new-game');
+      if (newGameButton) newGameButton.disabled = false;
+      this.setStatus('VOYAGE · READY');
+    }
+  }
+
+  #updateProfileCamera(dt) {
+    const blend = 1 - Math.exp(-Math.max(0, dt) * 6.5);
+    this.profileFocus = THREE.MathUtils.lerp(this.profileFocus, this.profileFocusTarget, blend);
+    if (this.profileFocus < 0.001 && this.profileFocusTarget === 0) {
+      this.profileFocus = 0;
+      if (this.camera.fov !== 48) {
+        this.camera.fov = 48;
+        this.camera.updateProjectionMatrix();
+      }
+      return;
+    }
+    if (!this.rangerRig) return;
+
+    this.rangerRig.updateWorldMatrix(true, false);
+    this.profileCameraTarget.set(0, 1.55, 0);
+    this.rangerRig.localToWorld(this.profileCameraTarget);
+
+    this.profileCameraPosition.copy(this.camera.position).sub(this.profileCameraTarget);
+    if (this.profileCameraPosition.lengthSq() < 0.0001) this.profileCameraPosition.set(0, 0.35, 1);
+    this.profileCameraPosition
+      .normalize()
+      .multiplyScalar(PROFILE_CAMERA_DISTANCE)
+      .add(this.profileCameraTarget);
+    this.profileCameraPosition.y = this.profileCameraTarget.y + 0.34;
+
+    const focus = THREE.MathUtils.smoothstep(this.profileFocus, 0, 1);
+    this.camera.position.lerp(this.profileCameraPosition, focus);
+    this.camera.lookAt(
+      this.profileCameraTarget.x,
+      this.profileCameraTarget.y + 0.06,
+      this.profileCameraTarget.z
+    );
+
+    const nextFov = THREE.MathUtils.lerp(48, PROFILE_CAMERA_FOV, focus);
+    if (Math.abs(this.camera.fov - nextFov) > 0.01) {
+      this.camera.fov = nextFov;
+      this.camera.updateProjectionMatrix();
+    }
+  }
 
   #updateMenu() {
     this.stormDanger = 0;
