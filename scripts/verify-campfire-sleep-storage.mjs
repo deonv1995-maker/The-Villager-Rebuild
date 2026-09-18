@@ -322,6 +322,32 @@ storage.addContainer({ id: 'placed-chest-3', type: 'chest', x: 9, z: 9 });
 assert(storage.store('placed-chest-3', 'stick'), 'Storage system must support independent additional placed containers');
 assert(storage.getStored('placed-chest-3', 'stick') === 1 && storage.getStored('placed-chest-1', 'stick') === 0, 'Each placed container must own independent contents');
 
+const constructionInventory = new InventorySystem();
+constructionInventory.add('log', 2);
+const constructionStorage = new StorageContainerSystem({
+  group: new THREE.Group(),
+  terrain,
+  collision: {
+    addObstacle: record => ({ ...record }),
+    removeObstacle: () => true
+  },
+  inventory: constructionInventory
+});
+constructionStorage.addContainer({
+  id: 'construction-chest-a',
+  type: 'chest',
+  x: 0,
+  z: 0,
+  contents: { log: 4 }
+});
+assert(constructionStorage.getAvailable('log') === 6, 'Build material availability must combine Ranger pack and placed storage');
+assert(constructionStorage.hasAvailable('log', 6), 'Build material affordability must see the combined material pool');
+assert(!constructionStorage.consumeAvailable([{ itemId: 'log', quantity: 7 }]), 'Unaffordable shared material consumption must fail atomically');
+assert(constructionInventory.get('log') === 2 && constructionStorage.getStored('construction-chest-a', 'log') === 4, 'Failed shared material consumption must not mutate pack or storage');
+assert(constructionStorage.consumeAvailable([{ itemId: 'log', quantity: 5 }]), 'Shared material consumption must spend from pack and storage in one transaction');
+assert(constructionInventory.get('log') === 0, 'Build material consumption must spend carried materials first');
+assert(constructionStorage.getStored('construction-chest-a', 'log') === 1, 'Build material consumption must pull the remaining requirement from placed storage');
+
 const saved = storage.snapshot();
 const restoredInventory = new InventorySystem();
 const restoredWorld = new THREE.Group();
