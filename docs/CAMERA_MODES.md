@@ -10,6 +10,7 @@ Third person remains the default mode and preserves the established follow camer
 - right-side touch/mouse drag orbits the camera;
 - after manual look is released, the camera can recover behind the Ranger;
 - the camera keeps its established follow position and distance but aims 2 m ahead along the current horizontal view direction, placing the Ranger below screen centre so more of the forward landscape remains visible;
+- discrete support-height changes such as stair treads are damped only at the vertical look-target layer, so climbing does not kick the camera while Ranger grounding, collision and jump physics remain unchanged;
 - the forward framing bias is presentation-only: it does not alter horizontal movement direction, orbit controls or cinematic camera targeting;
 - the Ranger body and equipped third-person tool presentation remain visible;
 - structure occlusion/transparency remains active to keep the Ranger readable around buildings.
