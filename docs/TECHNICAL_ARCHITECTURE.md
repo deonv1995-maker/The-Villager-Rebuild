@@ -53,6 +53,8 @@ The Day 1 island keeps one continuous terrain but no longer relies on one monoli
 
 These boundaries are deliberately usable by future villagers/animals. An NPC controller may make different movement decisions than the Ranger, but it should query the same terrain/collision world rather than inventing a second obstacle model.
 
+Vertical support context is actor-specific even though collision geometry is shared. Player/NPC grounding queries must pass their own current feet height into the shared traversal service; a single mutable world-level storey reference must never decide which stacked Floor belongs to every actor. Compatibility support state may remain inside `WorldCollisionSystem` for legacy callers, but authoritative Ranger grounding carries its own reference explicitly.
+
 ## Shared systems over duplicated systems
 
 The same world concepts should be used by the player and villagers.
