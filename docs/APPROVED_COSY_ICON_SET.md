@@ -34,6 +34,8 @@ Tools/actions: Hand, Axe, Hammer, Pickaxe, Shovel, Spear, Sword, Torch, Campfire
 
 Resources: Stick, Stone, Grass, Meat, and Log (the Log inventory entry intentionally reuses the Raw Log build icon).
 
+Crafting ingredient costs reuse those same shared item/resource icons rather than spelling out the resource name in each cost pill. The visible cost is the icon plus the current/required count (for example, the Stick icon with `0/3`), while the resource name remains available through accessibility text and desktop title text. This must resolve through the existing `MobileHud.itemIcons` / `ASSET_PATHS` authority rather than introducing a second crafting-only icon map.
+
 Building: Raw Log, Floor, Frame, Wall, Door, Window, Stairs, Roof, Drop Log.
 
 Door and Window are part of this family rather than falling back to the older mobile line glyphs, so every currently player-facing semantic Hammer mode has matching artwork.
