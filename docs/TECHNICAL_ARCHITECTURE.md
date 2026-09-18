@@ -118,9 +118,10 @@ Persistence is designed around stable IDs and data state rather than serialized 
 The current browser persistence boundary has two layers:
 
 - `PlayerProfileStore` owns the lightweight named-profile index only;
-- `SaveGameStore` owns the versioned schema-2 world/gameplay record selected by profile ID.
+- `SaveGameStore` owns the versioned schema-2 world/gameplay record selected by profile ID;
+- `PlayerProfileLifecycle` owns cross-store profile lifecycle operations such as destructive deletion and rollback if the index write fails.
 
-Every named profile therefore receives its own save-key namespace while reusing the same `SaveGameController` and `GameStatePersistence` serialization path. Profile code must not duplicate construction, inventory, survival, Sprout, world-time or other gameplay persistence. The historical global save key is retained only for one-time migration into a **Previous Save** profile.
+Every named profile therefore receives its own save-key namespace while reusing the same `SaveGameController` and `GameStatePersistence` serialization path. Profile code must not duplicate construction, inventory, survival, Sprout, world-time or other gameplay persistence. The title profile picker may list an index entry even when its world save is missing so the user can delete that stranded profile without exposing it as resumable. The historical global save key is retained only for one-time migration into a **Previous Save** profile.
 
 Persistent state includes player survival state, discoveries, inventory/storage, world resource changes where necessary, settlement buildings/designations, recruited villagers, villager homes/jobs, time/day and progression stage.
 
