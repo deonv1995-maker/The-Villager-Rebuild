@@ -1,18 +1,9 @@
 import * as THREE from 'three';
-import { WORLD_DAY_MINUTES } from '../data/WorldTimeDefinitions.js';
 import { TORCH } from '../data/TorchDefinitions.js';
 import { TorchPlacementTargetResolver } from './TorchPlacementTargetResolver.js';
 
 const TAU = Math.PI * 2;
 const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
-const roundTenth = value => Math.round(value * 10) / 10;
-
-function absoluteGameMinute(snapshot) {
-  const day = Math.max(1, Math.floor(Number(snapshot?.day) || 1));
-  const minuteOfDay = clamp(Number(snapshot?.minuteOfDay) || 0, 0, WORLD_DAY_MINUTES);
-  return (day - 1) * WORLD_DAY_MINUTES + minuteOfDay;
-}
-
 export class TorchRuntimeController {
   constructor({
     game,
@@ -26,8 +17,6 @@ export class TorchRuntimeController {
     this.game = game;
     this.definition = definition;
     this.now = now;
-    this.remainingGameMinutes = definition.burnDurationGameMinutes;
-    this.lastAbsoluteGameMinute = null;
     this.lastShadowRefreshMs = Number.NEGATIVE_INFINITY;
     this.lastPresentationMs = null;
     this.wasBurning = false;
@@ -65,18 +54,7 @@ export class TorchRuntimeController {
     this.#syncPresentation();
   }
 
-  apply(worldTimeSnapshot) {
-    const currentAbsoluteGameMinute = absoluteGameMinute(worldTimeSnapshot);
-    const elapsedGameMinutes = this.lastAbsoluteGameMinute === null
-      ? 0
-      : Math.max(0, currentAbsoluteGameMinute - this.lastAbsoluteGameMinute);
-    this.lastAbsoluteGameMinute = currentAbsoluteGameMinute;
-
-    if (elapsedGameMinutes > 0) {
-      if (this.#isBurning()) this.#burn(elapsedGameMinutes);
-      this.#burnPlaced(elapsedGameMinutes);
-    }
-
+  apply() {
     this.#syncPresentation();
     this.#syncPlacedPresentation();
     return this.snapshot();
@@ -85,14 +63,9 @@ export class TorchRuntimeController {
   snapshot(toolId = this.definition.itemId) {
     if (toolId !== this.definition.itemId) return null;
     const quantity = this.game.inventory.get(this.definition.itemId);
-    const maximum = this.definition.burnDurationGameMinutes;
-    const remaining = quantity > 0 ? clamp(this.remainingGameMinutes, 0, maximum) : 0;
     return {
       toolId: this.definition.itemId,
       quantity,
-      remainingGameMinutes: roundTenth(remaining),
-      maxGameMinutes: maximum,
-      percent: maximum > 0 ? roundTenth((remaining / maximum) * 100) : 0,
       burning: this.#isBurning(),
       placedQuantity: this.placedTorches.length
     };
@@ -110,11 +83,6 @@ export class TorchRuntimeController {
     if (!target || !this.game.inventory.has(this.definition.itemId, 1)) return null;
     if (this.game.toolbelt.getEquippedToolId() !== this.definition.itemId) return null;
 
-    const remainingGameMinutes = clamp(
-      this.remainingGameMinutes,
-      0.1,
-      this.definition.burnDurationGameMinutes
-    );
     const consumed = this.game.inventory.consume([{ itemId: this.definition.itemId, quantity: 1 }]);
     if (!consumed) return null;
 
@@ -123,11 +91,9 @@ export class TorchRuntimeController {
       mountKind: target.kind,
       mountId: target.id,
       position: target.position,
-      yaw: target.yaw,
-      remainingGameMinutes
+      yaw: target.yaw
     });
     this.nextPlacedTorchId += 1;
-    this.remainingGameMinutes = this.definition.burnDurationGameMinutes;
     this.game.toolbelt.clearIfUnavailable();
     this.#syncPresentation();
     this.#syncPlacedPresentation();
@@ -139,31 +105,17 @@ export class TorchRuntimeController {
 
   captureState() {
     return {
-      remainingGameMinutes: roundTenth(clamp(
-        this.remainingGameMinutes,
-        0,
-        this.definition.burnDurationGameMinutes
-      )),
       nextPlacedTorchId: this.nextPlacedTorchId,
       placedTorches: this.placedTorches.map(entry => this.#placedSnapshot(entry))
     };
   }
 
   restoreState(state) {
-    const saved = Number(state?.remainingGameMinutes);
-    if (Number.isFinite(saved) && saved > 0) {
-      this.remainingGameMinutes = clamp(saved, 0.1, this.definition.burnDurationGameMinutes);
-    } else {
-      this.remainingGameMinutes = this.definition.burnDurationGameMinutes;
-    }
-
     this.#clearPlacedTorches();
     let derivedNextPlacedId = 0;
     for (const savedTorch of Array.isArray(state?.placedTorches) ? state.placedTorches : []) {
-      const remaining = Number(savedTorch?.remainingGameMinutes);
       const position = savedTorch?.position;
       if (
-        !Number.isFinite(remaining) || remaining <= 0 ||
         !Number.isFinite(position?.x) ||
         !Number.isFinite(position?.y) ||
         !Number.isFinite(position?.z)
@@ -178,18 +130,16 @@ export class TorchRuntimeController {
         mountKind: typeof savedTorch.mountKind === 'string' ? savedTorch.mountKind : 'surface',
         mountId: typeof savedTorch.mountId === 'string' ? savedTorch.mountId : null,
         position,
-        yaw: Number.isFinite(savedTorch.yaw) ? savedTorch.yaw : 0,
-        remainingGameMinutes: clamp(remaining, 0.1, this.definition.burnDurationGameMinutes)
+        yaw: Number.isFinite(savedTorch.yaw) ? savedTorch.yaw : 0
       });
     }
     this.nextPlacedTorchId = Math.max(
       derivedNextPlacedId,
       Number.isInteger(state?.nextPlacedTorchId) ? state.nextPlacedTorchId : 0
     );
-    this.lastAbsoluteGameMinute = null;
     this.#syncPresentation();
     this.#syncPlacedPresentation();
-    return (Number.isFinite(saved) && saved > 0) || this.placedTorches.length > 0;
+    return this.placedTorches.length > 0;
   }
 
   dispose() {
@@ -206,47 +156,7 @@ export class TorchRuntimeController {
       && this.game.inventory.has(this.definition.itemId, 1);
   }
 
-  #burn(elapsedGameMinutes) {
-    let remainingElapsed = elapsedGameMinutes;
-
-    while (remainingElapsed > 0 && this.game.inventory.has(this.definition.itemId, 1)) {
-      if (remainingElapsed < this.remainingGameMinutes) {
-        this.remainingGameMinutes -= remainingElapsed;
-        remainingElapsed = 0;
-        break;
-      }
-
-      remainingElapsed -= this.remainingGameMinutes;
-      this.game.inventory.consume([{ itemId: this.definition.itemId, quantity: 1 }]);
-      this.remainingGameMinutes = this.definition.burnDurationGameMinutes;
-
-      if (!this.game.inventory.has(this.definition.itemId, 1)) {
-        this.game.toolbelt.clearIfUnavailable();
-        this.game.setStatus?.('TORCH BURNED OUT · CRAFT ANOTHER');
-        break;
-      }
-
-      this.game.setStatus?.(`TORCH BURNED OUT · ${this.game.inventory.get(this.definition.itemId)} READY`);
-    }
-  }
-
-  #burnPlaced(elapsedGameMinutes) {
-    if (!this.placedTorches.length) return;
-    const expired = [];
-    for (const entry of this.placedTorches) {
-      entry.remainingGameMinutes -= elapsedGameMinutes;
-      if (entry.remainingGameMinutes <= 0) expired.push(entry);
-    }
-    if (!expired.length) return;
-    for (const entry of expired) this.#removePlacedTorch(entry);
-    this.game.setStatus?.(
-      this.placedTorches.length
-        ? `PLACED TORCH BURNED OUT · ${this.placedTorches.length} STILL LIT`
-        : 'PLACED TORCH BURNED OUT'
-    );
-  }
-
-  #createPlacedTorch({ id, mountKind, mountId, position, yaw, remainingGameMinutes }) {
+  #createPlacedTorch({ id, mountKind, mountId, position, yaw }) {
     const visual = this.#createVisual(id);
     const resolvedYaw = Number.isFinite(yaw) ? yaw : 0;
     const wallVisualOutwardOffset = mountKind === 'wall'
@@ -284,7 +194,6 @@ export class TorchRuntimeController {
       mountId,
       position: { x: position.x, y: position.y, z: position.z },
       yaw: resolvedYaw,
-      remainingGameMinutes,
       root: visual.root,
       flame: visual.flame,
       flameAnchor: visual.flameAnchor,
@@ -301,12 +210,7 @@ export class TorchRuntimeController {
       mountKind: entry.mountKind,
       mountId: entry.mountId,
       position: { ...entry.position },
-      yaw: entry.yaw,
-      remainingGameMinutes: roundTenth(clamp(
-        entry.remainingGameMinutes,
-        0,
-        this.definition.burnDurationGameMinutes
-      ))
+      yaw: entry.yaw
     };
   }
 
