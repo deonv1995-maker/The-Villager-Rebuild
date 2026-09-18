@@ -101,7 +101,9 @@ export class ToolbeltSystem {
         const recipe = this.crafting.getRecipe(toolId);
         const quantity = this.inventory.get(toolId);
         const fuel = definition.role === 'light' ? this.fuel?.snapshot(toolId) ?? null : null;
-        const durability = fuel ? null : this.durability?.snapshot(toolId) ?? null;
+        const fuelPercent = Number.isFinite(fuel?.percent) ? fuel.percent : null;
+        const hasFuelMeter = fuelPercent !== null;
+        const durability = hasFuelMeter ? null : this.durability?.snapshot(toolId) ?? null;
         return {
           id: toolId,
           label: definition.label,
@@ -111,9 +113,11 @@ export class ToolbeltSystem {
           owned: quantity > 0,
           craftable: this.crafting.canCraft(toolId),
           equipped: this.equippedToolId === toolId,
-          durability: fuel?.percent ?? durability?.durability ?? null,
-          meterKind: fuel ? 'fuel' : durability ? 'durability' : null,
-          remainingGameMinutes: fuel?.remainingGameMinutes ?? null,
+          durability: hasFuelMeter ? fuelPercent : durability?.durability ?? null,
+          meterKind: hasFuelMeter ? 'fuel' : durability ? 'durability' : null,
+          remainingGameMinutes: hasFuelMeter && Number.isFinite(fuel?.remainingGameMinutes)
+            ? fuel.remainingGameMinutes
+            : null,
           ingredients: recipe.ingredients.map(ingredient => ({ ...ingredient }))
         };
       })
