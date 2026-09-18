@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { readFile } from 'node:fs/promises';
 import {
+  CampfireSleepRuntimeController,
+  REST_SEQUENCE_TIMING,
   canSleepAtCampfire,
   resolveCampfireWakeTime
 } from '../src/gameplay/CampfireSleepRuntimeController.js';
@@ -22,6 +24,215 @@ const eveningWake = resolveCampfireWakeTime({ day: 3, minuteOfDay: 21 * 60 });
 assert(eveningWake.day === 4 && eveningWake.minuteOfDay === 7 * 60, 'Evening sleep must advance to 07:00 on the next day');
 const earlyWake = resolveCampfireWakeTime({ day: 4, minuteOfDay: 4 * 60 });
 assert(earlyWake.day === 4 && earlyWake.minuteOfDay === 7 * 60, 'Pre-dawn sleep must advance to 07:00 on the same day');
+assert(
+  Object.values(REST_SEQUENCE_TIMING).every(value => Number.isFinite(value) && value > 0),
+  'Rest transition phase timing must remain explicit and finite'
+);
+
+function runRestSequence(source) {
+  let frameCallback = null;
+  let action = null;
+  let setTimeCalls = 0;
+  let syncCalls = 0;
+  let saveReason = null;
+  let endedCinematic = 0;
+  const pauseStates = [];
+  const cameraModes = [];
+  const poses = [];
+  const toolSelections = [];
+  const seatedEvents = [];
+  const overlayState = {
+    source: null,
+    fade: 0,
+    fadeAtTimeJump: null,
+    sleeping: false,
+    finished: false
+  };
+  let timeSnapshot = { day: 3, minuteOfDay: 21 * 60, displayTime: '21:00' };
+  const startPosition = source === 'bed'
+    ? new THREE.Vector3(4.9, 5, 4.3)
+    : new THREE.Vector3(1.9, 0, 0.2);
+
+  const fakePlayer = {
+    root: new THREE.Group(),
+    getPosition(target) {
+      return target.copy(startPosition);
+    },
+    getFacingDirection(target) {
+      return target.set(0, 0, 1);
+    },
+    getCameraMode() {
+      return 'first-person';
+    },
+    setCameraMode(mode) {
+      cameraModes.push(mode);
+      return mode;
+    },
+    beginCinematic(driver) {
+      this.driver = driver;
+      return true;
+    },
+    endCinematic(driver) {
+      assert(this.driver === driver, 'Rest cinematic must release only its own Ranger driver');
+      this.driver = null;
+      endedCinematic += 1;
+      return true;
+    },
+    setCinematicPose(pose) {
+      poses.push({ ...pose });
+      this.root.position.set(pose.x, pose.y, pose.z);
+      this.root.rotation.y = pose.yaw;
+      return true;
+    },
+    playCinematicAnimation() {
+      return { name: 'test-cinematic', duration: 1 };
+    },
+    setSpearEquipped() {}
+  };
+
+  const bed = {
+    id: 'bed-test',
+    position: { x: 4, y: 5, z: 4 },
+    yaw: Math.PI / 2
+  };
+  const game = {
+    player: fakePlayer,
+    worldTime: {
+      getSnapshot: () => timeSnapshot,
+      setTime(wake) {
+        setTimeCalls += 1;
+        overlayState.fadeAtTimeJump = overlayState.fade;
+        timeSnapshot = {
+          day: wake.day,
+          minuteOfDay: wake.minuteOfDay,
+          displayTime: '07:00'
+        };
+        return timeSnapshot;
+      }
+    },
+    worldTimeRuntime: {
+      setPaused(paused) {
+        pauseStates.push(Boolean(paused));
+      },
+      sync() {
+        syncCalls += 1;
+      }
+    },
+    physicalLogs: { isCarrying: () => false },
+    beds: {
+      getNearestBed: () => source === 'bed' ? bed : null
+    },
+    campfire: {
+      getState: () => source === 'campfire'
+        ? { built: true, position: { x: 0, y: 0, z: 0 } }
+        : { built: false, position: null }
+    },
+    island: {
+      heightAt: () => 0
+    },
+    hud: {
+      setExternalAction(id, next) {
+        if (id === 'campfire-sleep') action = next;
+      },
+      setObjective() {}
+    },
+    toolbelt: {
+      getEquippedToolId: () => 'spear'
+    },
+    toolPresentation: {
+      setEquippedTool(toolId) {
+        toolSelections.push(toolId);
+      }
+    },
+    saveController: {
+      saveNow(reason) {
+        saveReason = reason;
+      }
+    },
+    setStatus() {}
+  };
+  const overlay = {
+    begin(restSource) {
+      overlayState.source = restSource;
+      overlayState.finished = false;
+    },
+    setFade(value) {
+      overlayState.fade = Number(value);
+    },
+    setSleeping(value) {
+      overlayState.sleeping = Boolean(value);
+    },
+    finish() {
+      overlayState.fade = 0;
+      overlayState.sleeping = false;
+      overlayState.finished = true;
+    },
+    dispose() {}
+  };
+  const seatedPose = {
+    playSit() {
+      seatedEvents.push('sit');
+      return true;
+    },
+    playStand() {
+      seatedEvents.push('stand');
+      return true;
+    },
+    stop() {
+      seatedEvents.push('stop');
+    }
+  };
+  const controller = new CampfireSleepRuntimeController({
+    game,
+    overlay,
+    seatedPose,
+    requestFrame: callback => {
+      frameCallback = callback;
+      return 1;
+    },
+    cancelFrame: () => {}
+  });
+
+  controller.start();
+  frameCallback?.(0);
+  assert(action?.caption === 'SLEEP', `${source} must expose the shared SLEEP action at night`);
+  assert(action.onTrigger(), `${source} SLEEP action must start the rest cinematic`);
+  assert(setTimeCalls === 0, `${source} must not advance world time when the rest cinematic starts`);
+  assert(pauseStates[0] === true, `${source} rest must pause only the authoritative world clock during the cinematic`);
+
+  let safety = 0;
+  while (setTimeCalls === 0 && safety < 200) {
+    controller.update(0.05);
+    safety += 1;
+  }
+  assert(setTimeCalls === 1, `${source} rest must advance world time exactly once after fade-out`);
+  assert(overlayState.fadeAtTimeJump >= 0.999, `${source} world-time jump must happen only under full black`);
+  assert(overlayState.sleeping, `${source} blackout must display the sleeping presentation after the time jump`);
+  assert(syncCalls === 1, `${source} wake time must immediately resync lighting and celestial presentation`);
+  assert(saveReason === (source === 'bed' ? 'bed-sleep' : 'campfire-sleep'), `${source} rest must retain its established save reason`);
+
+  safety = 0;
+  while (endedCinematic === 0 && safety < 200) {
+    controller.update(0.05);
+    safety += 1;
+  }
+  assert(endedCinematic === 1, `${source} rest must release cinematic control after the wake sequence`);
+  assert(overlayState.finished, `${source} rest overlay must clear after the Ranger wakes`);
+  assert(pauseStates.at(-1) === false, `${source} rest must resume the authoritative world clock after waking`);
+  assert(cameraModes.at(-1) === 'first-person', `${source} rest must restore the camera mode active before sleep`);
+  assert(toolSelections[0] === null && toolSelections.at(-1) === 'spear', `${source} rest must hide and restore held-tool presentation`);
+
+  if (source === 'bed') {
+    assert(poses.some(pose => pose.y === 5 && pose.modelPitch > 1.4), 'Bed sleep must preserve constructed-floor support height while lying on the mattress');
+  } else {
+    assert(seatedEvents.includes('sit') && seatedEvents.includes('stand'), 'Campfire sleep must visibly sit before blackout and stand during wake');
+  }
+
+  controller.dispose();
+}
+
+runRestSequence('bed');
+runRestSequence('campfire');
 
 const inventory = new InventorySystem();
 inventory.add('stick', 16);
@@ -139,6 +350,10 @@ const [
   resourceSource,
   sproutArrivalSource,
   sproutCompanionSource,
+  rangerSource,
+  restOverlaySource,
+  restCssSource,
+  seatedPoseSource,
   indexSource
 ] = await Promise.all([
   readFile('src/main.js', 'utf8'),
@@ -155,11 +370,17 @@ const [
   readFile('src/data/ResourceDefinitions.js', 'utf8'),
   readFile('src/gameplay/SproutArrivalController.js', 'utf8'),
   readFile('src/gameplay/SproutCompanionController.js', 'utf8'),
+  readFile('src/player/RangerController.js', 'utf8'),
+  readFile('src/ui/RestTransitionOverlay.js', 'utf8'),
+  readFile('src/rest-transition.css', 'utf8'),
+  readFile('src/player/RangerSeatedPose.js', 'utf8'),
   readFile('index.html', 'utf8')
 ]);
 
 for (const requirement of [
-  'new CampfireSleepRuntimeController({ game })',
+  'new RestTransitionOverlay({',
+  'new CampfireSleepRuntimeController({',
+  'overlay: restTransitionOverlay',
   'new StorageRuntimeController({ game })',
   'new PlaceableUtilityRuntimeController({ game })',
   'game.storage = storageRuntime.system',
@@ -169,7 +390,17 @@ for (const requirement of [
 }
 assert(sleepSource.includes('this.game.worldTime.setTime(wake)'), 'Sleep must advance the existing authoritative world clock');
 assert(sleepSource.includes('this.game.worldTimeRuntime?.sync?.()'), 'Sleep must immediately resync existing lighting/celestial consumers');
-assert(sleepSource.includes("this.game.saveController?.saveNow?.('campfire-sleep')"), 'Sleep must checkpoint advanced world time');
+assert(sleepSource.includes("const saveReason = this.sequence.source === 'bed' ? 'bed-sleep' : 'campfire-sleep';"), 'Bed and campfire sleep must retain distinct existing checkpoint reasons');
+assert(sleepSource.includes('this.game.saveController?.saveNow?.(saveReason)'), 'Sleep must checkpoint only after the morning time jump');
+assert(sleepSource.includes('this.game.worldTimeRuntime?.setPaused?.(true)'), 'Rest cinematic must freeze only world-clock progression while character animation continues');
+assert(sleepSource.includes('this.game.worldTimeRuntime?.setPaused?.(false)'), 'Rest cinematic must resume world-clock progression after waking');
+assert(sleepSource.includes('this.overlay?.setSleeping?.(true)'), 'Full-black sleep phase must expose the shared sleeping presentation');
+assert(sleepSource.includes('this.seatedPose.playSit?.()') && sleepSource.includes('this.seatedPose.playStand?.()'), 'Campfire rest must own explicit sit and stand presentation phases');
+assert(rangerSource.includes('y = null') && rangerSource.includes('Number.isFinite(y) ? y : this.terrain.heightAt(x, z)'), 'Cinematic poses must accept constructed support height without replacing terrain as the fallback');
+assert(!rangerSource.includes('this.cinematicDriver.update?.(dt, this);\n      this.root.position.y = this.terrain.heightAt'), 'Ranger update must not overwrite cinematic support height after the driver positions the character');
+assert(restOverlaySource.includes('💤') && restOverlaySource.includes("document.body.classList.add('rest-transition-active')"), 'Rest overlay must own the blackout sleeping presentation and HUD isolation');
+assert(restCssSource.includes('.rest-transition') && restCssSource.includes('body.rest-transition-active .mobile-hud'), 'Rest overlay styling must cover the viewport and temporarily hide gameplay HUD');
+assert(seatedPoseSource.includes("Cinematic_Campfire_Sit") && seatedPoseSource.includes("Cinematic_Campfire_Stand"), 'Campfire seated pose must remain an isolated cinematic presentation helper');
 assert(storageDefinitionSource.includes('STARTER_STORAGE_CONTAINERS = Object.freeze([])'), 'Starter Chest and Barrel must be absent from new worlds');
 assert(storageRuntimeSource.includes('LEGACY_STARTER_STORAGE_IDS'), 'Old starter-container saves must use an explicit migration path');
 assert(storageRuntimeSource.includes('this.game.inventory.add(itemId, quantity)'), 'Legacy starter contents must return to inventory instead of being deleted');
@@ -201,5 +432,6 @@ assert(saveSource.includes('this.game.placeableUtilityRuntime?.restoreState?.(re
 assert(resourceSource.includes("storageCategory: 'food'"), 'Food routing must remain data-defined for future barrel-compatible foods');
 assert(indexSource.includes('./src/inventory-menu.css'), 'Combined suitcase UI stylesheet must be loaded by the app shell');
 assert(indexSource.includes('./src/storage.css'), 'Storage panel stylesheet must remain loaded');
+assert(indexSource.includes('./src/rest-transition.css'), 'Rest transition stylesheet must be loaded by the app shell');
 
-console.log('Campfire sleep, full-screen paused suitcase inventory, bench-gated placeable storage, transfers, migration and persistence verified');
+console.log('Bed/campfire rest cinematics, blackout wake timing, paused world clock, suitcase inventory, bench-gated storage, transfers, migration and persistence verified');
