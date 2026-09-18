@@ -72,9 +72,7 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
     }
 
     const cost = panelBuildCost('roof', { roofCellCount: placement.roofCellCount });
-    const canAfford = cost.every(requirement => (
-      this.inventory.has(requirement.itemId, requirement.quantity)
-    ));
+    const canAfford = this.canAffordMaterials(cost);
     this.previewValid = Boolean(placement.valid) && canAfford;
     this.#showRoofPreview(placement, this.previewValid);
     return this.getBuildState();
@@ -109,7 +107,7 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
       return null;
     }
 
-    if (!this.inventory.consume(cost)) {
+    if (!this.consumeMaterials(cost)) {
       structure.grid.removeRoofZone(stateResult.roofZone.key);
       this.#restoreRoofZones(structure, absorbedRoofZones);
       return null;
