@@ -96,6 +96,18 @@ Tree regrowth, grass renewal and ambient Stick renewal remain unchanged by the c
 
 Campfire remains a separate crafted world structure costing three Sticks plus three Stones. It does not consume Logs and keeps its existing two-step preview/confirm workflow.
 
+## Rest and sleep presentation
+
+Bed sleep and campfire sleep share one rest-transition controller rather than separate time-skip implementations.
+
+- A Bed sleep interaction moves the Ranger to the placed Bed, settles him onto the mattress, then begins the shared sleep transition.
+- Campfire sleep moves the Ranger to a nearby seated position facing the active fire and uses a procedural seated pose before the same transition.
+- The screen fades fully to black before authoritative world time is changed. The blackout shows a short 💤 presentation, then morning lighting is synchronized while the screen is still black.
+- Fade-in and the Ranger's get-up/stand motion are one wake sequence. Normal player control resumes only after that sequence finishes.
+- The world-time runtime is paused only for the cinematic transition; rendering and character animation continue. The existing `WorldTimeSystem` remains the sole clock authority and still resolves the wake time to the established start of daytime.
+- Bed and campfire sleep retain their existing save reasons and checkpoint only after the morning time jump.
+- Cinematic Ranger height may use the support height supplied by the interaction. This is required for Beds placed on constructed upper floors and does not create a second terrain/collision authority.
+
 ## Save/Continue
 
 The panel cutover uses save schema/world revision 2. Semantic panel state is reconstructed before Ranger restore so floor/support collision already exists when a saved player position is applied.
