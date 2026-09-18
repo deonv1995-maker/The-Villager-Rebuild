@@ -128,12 +128,21 @@ export class TestIslandSystem {
     });
   }
 
-  walkableHeightAt(x, z) {
+  walkableHeightAt(x, z, {
+    referenceY = null,
+    maxStepUp = 0.58,
+    airborne = false
+  } = {}) {
     const base = this.constructionHeightAt(x, z);
-    const referenceY = this.collision.getSupportReferenceY();
+    const sharedReferenceY = this.collision.getSupportReferenceY();
     return this.collision.supportHeightAt(x, z, base, {
-      referenceY: Number.isFinite(referenceY) ? referenceY : base,
-      maxStepUp: 0.58
+      referenceY: Number.isFinite(referenceY)
+        ? referenceY
+        : Number.isFinite(sharedReferenceY)
+          ? sharedReferenceY
+          : base,
+      maxStepUp,
+      airborne
     });
   }
 

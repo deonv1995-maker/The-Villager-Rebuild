@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { RangerController } from '../src/player/RangerController.js';
 import { rangerGroundHeightAt } from '../src/player/RangerGrounding.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
+
+globalThis.window ??= {
+  addEventListener() {},
+  removeEventListener() {}
+};
 
 const flatTerrain = { heightAt: () => 2.4 };
 assert.equal(
@@ -59,9 +66,16 @@ const multistoreyTerrain = {
     referenceY: Number.MAX_SAFE_INTEGER,
     maxStepUp: Number.MAX_SAFE_INTEGER
   }),
-  walkableHeightAt: (x, z) => collision.supportHeightAt(x, z, 0, {
-    referenceY: collision.getSupportReferenceY() ?? 0,
-    maxStepUp: 0.58
+  walkableHeightAt: (x, z, {
+    referenceY = null,
+    maxStepUp = 0.58,
+    airborne = false
+  } = {}) => collision.supportHeightAt(x, z, 0, {
+    referenceY: Number.isFinite(referenceY)
+      ? referenceY
+      : collision.getSupportReferenceY() ?? 0,
+    maxStepUp,
+    airborne
   })
 };
 
@@ -95,6 +109,30 @@ assert.equal(
   collision.getSupportReferenceY(),
   0.1,
   'Horizontal movement under another storey must preserve the lower vertical support context'
+);
+
+// WorldCollisionSystem is shared by the Ranger, Sprout, wildlife and future NPCs. Another
+// ground-level actor may legitimately update its compatibility support reference after the
+// Ranger reaches an upper storey. Ranger idle grounding must carry its own feet Y instead
+// of inheriting that shared mutable value and snapping back to storey zero.
+const rangerScene = new THREE.Scene();
+const rangerCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const upperStoreyRanger = new RangerController({
+  scene: rangerScene,
+  camera: rangerCamera,
+  terrain: multistoreyTerrain,
+  collision
+});
+upperStoreyRanger.model = new THREE.Group();
+upperStoreyRanger.root.add(upperStoreyRanger.model);
+upperStoreyRanger.assetMode = 'kaykit';
+upperStoreyRanger.root.position.set(0, 3.0, 0);
+collision.setSupportReferenceY(0.1);
+upperStoreyRanger.update(1 / 60);
+assert.equal(
+  upperStoreyRanger.root.position.y,
+  3.0,
+  'An idle Ranger on an upper storey must ignore another actor\'s lower shared support reference'
 );
 
 console.log('Ranger footprint and multistorey support grounding verification passed.');

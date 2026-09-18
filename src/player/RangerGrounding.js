@@ -11,18 +11,24 @@ const FOOTPRINT_DIRECTIONS = Object.freeze([
   [-Math.SQRT1_2, -Math.SQRT1_2]
 ]);
 
-const supportHeightAt = (terrain, x, z) => (
+const supportHeightAt = (terrain, x, z, options) => (
   typeof terrain.walkableHeightAt === 'function'
-    ? terrain.walkableHeightAt(x, z)
+    ? terrain.walkableHeightAt(x, z, options)
     : terrain.heightAt(x, z)
 );
 
-export function rangerGroundHeightAt(terrain, x, z, radius = DEFAULT_FOOTPRINT_RADIUS) {
-  let ground = supportHeightAt(terrain, x, z);
+export function rangerGroundHeightAt(
+  terrain,
+  x,
+  z,
+  radius = DEFAULT_FOOTPRINT_RADIUS,
+  options = {}
+) {
+  let ground = supportHeightAt(terrain, x, z, options);
   for (const [directionX, directionZ] of FOOTPRINT_DIRECTIONS) {
     ground = Math.max(
       ground,
-      supportHeightAt(terrain, x + directionX * radius, z + directionZ * radius)
+      supportHeightAt(terrain, x + directionX * radius, z + directionZ * radius, options)
     );
   }
   return ground;
