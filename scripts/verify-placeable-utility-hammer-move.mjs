@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { readFile } from 'node:fs/promises';
+import { PLACEABLE_UTILITY_DEFINITIONS } from '../src/data/PlaceableUtilityDefinitions.js';
 import { CampfireSleepRuntimeController } from '../src/gameplay/CampfireSleepRuntimeController.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { PlaceableUtilityRuntimeController } from '../src/gameplay/PlaceableUtilityRuntimeController.js';
+import { PLACEABLE_WALL_SNAP_GAP } from '../src/world/PlaceableUtilityWallSnapRules.js';
 import { StorageContainerSystem } from '../src/world/StorageContainerSystem.js';
 
 function assert(condition, message) {
@@ -14,6 +16,7 @@ const collisionHandles = new Set();
 let supportHeight = null;
 let lastClearanceOptions = null;
 let terrainSlope = 0;
+let placementWallSurfaces = [];
 const collision = {
   addObstacle(record) {
     const handle = { ...record };
@@ -78,7 +81,10 @@ const game = {
   toolbelt: { getEquippedToolId: () => 'hammer' },
   panelConstructionRuntime: {
     ownsHammerInteraction: () => true,
-    system: { isActive: () => false }
+    system: {
+      isActive: () => false,
+      getPlacementWallSurfaces: () => placementWallSurfaces
+    }
   },
   currentInteractionTarget: null,
   hud,
@@ -217,6 +223,71 @@ const indoorBarrel = externalActions.get('utility-place')?.onTrigger();
 assert(indoorBarrel?.position.y === supportHeight, 'Food Barrel placement must use the standable floor support height');
 assert(storage.snapshot().find(record => record.id === indoorBarrel.id)?.y === supportHeight, 'Food Barrel save data must persist its indoor floor elevation');
 storage.removeContainer(indoorBarrel.id);
+
+for (const itemId of ['crafting-bench', 'chest', 'barrel', 'bed']) {
+  const wallSnap = PLACEABLE_UTILITY_DEFINITIONS[itemId]?.wallSnap;
+  assert(
+    Number.isFinite(wallSnap?.width) &&
+    Number.isFinite(wallSnap?.depth) &&
+    Number.isFinite(wallSnap?.range),
+    `${itemId} must define one data-driven wall-snap footprint`
+  );
+}
+
+const snapWall = {
+  id: 'panel:house-1:wall:north',
+  x: 0,
+  y: supportHeight,
+  z: 3,
+  yaw: 0,
+  halfLength: 1.6,
+  halfThickness: 0.28
+};
+placementWallSurfaces = [snapWall];
+inventory.add('bed', 1);
+assert(runtime.selectInventoryItem('bed'), 'Bed must enter wall-aware indoor placement mode');
+const snappedBedPreview = runtime.previewPlacement;
+assert(snappedBedPreview?.snapWallId === snapWall.id, 'Bed preview must prefer a nearby semantic solid wall');
+assert(
+  Math.abs(Math.abs(snappedBedPreview.yaw) - Math.PI) < 0.0001,
+  'Wall-snapped Bed must turn its foot/front side back into the room'
+);
+const bedHalfDepth = PLACEABLE_UTILITY_DEFINITIONS.bed.wallSnap.depth * 0.5;
+const roomSideWallFaceZ = snapWall.z - snapWall.halfThickness;
+const snappedBedBackZ = snappedBedPreview.z + bedHalfDepth;
+assert(
+  Math.abs((roomSideWallFaceZ - snappedBedBackZ) - PLACEABLE_WALL_SNAP_GAP) < 0.0001,
+  'Wall-snapped Bed must leave only the authored small clearance behind its headboard'
+);
+const snappedClearanceIgnore = lastClearanceOptions?.ignore;
+assert(
+  snappedClearanceIgnore?.({
+    type: 'panel-wall',
+    label: snapWall.id,
+    bottomY: supportHeight,
+    topY: supportHeight + 2
+  }),
+  'Placement clearance must ignore only the semantic wall currently owning the snap'
+);
+assert(
+  !snappedClearanceIgnore?.({
+    type: 'panel-wall',
+    label: 'panel:house-1:wall:east',
+    bottomY: supportHeight,
+    topY: supportHeight + 2
+  }),
+  'Other same-storey walls must continue blocking snapped furniture'
+);
+const wallBed = externalActions.get('utility-place')?.onTrigger();
+assert(wallBed?.position.z === snappedBedPreview.z, 'Confirmed Bed placement must preserve the snapped wall position');
+utilityState = runtime.captureState();
+const wallBedRecord = utilityState.beds.find(record => record.id === wallBed.id);
+assert(
+  Math.abs(Math.abs(wallBedRecord?.yaw ?? 0) - Math.PI) < 0.0001,
+  'Wall-snapped furniture orientation must persist through the existing save record'
+);
+runtime.bedSystem.removeBed(wallBed.id);
+placementWallSurfaces = [];
 supportHeight = null;
 terrainSlope = 0;
 
@@ -306,6 +377,12 @@ assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utili
 assert(!runtimeSource.includes('new THREE.Raycaster()'), 'Placeable utility runtime must not introduce a competing first-person raycaster');
 assert(runtimeSource.includes('if (this.game.currentInteractionTarget)'), 'Semantic panel demolition must retain first ownership of REMOVE-mode hammer targets');
 assert(runtimeSource.includes('collision.supportHeightAt?.('), 'Utility placement must reuse the shared standable-surface resolver');
+assert(runtimeSource.includes('resolvePlaceableUtilityWallSnap({'), 'Utility placement must route wall alignment through the shared snap rule');
+assert(runtimeSource.includes('snapWallId: this.previewPlacement.snapWallId'), 'Placement confirmation must preserve snapped-wall clearance validation');
+
+const panelSource = await readFile('src/world/PanelConstructionSystem.js', 'utf8');
+assert(panelSource.includes('getPlacementWallSurfaces()'), 'Semantic construction must expose one read-only wall placement surface boundary');
+assert(panelSource.includes("(entry.variant ?? 'solid') === 'solid'"), 'Door and Window panels must not become furniture snap surfaces');
 
 const storageSource = await readFile('src/world/StorageContainerSystem.js', 'utf8');
 assert(!storageSource.includes('GLTFLoader'), 'Storage visual refresh must not introduce an unlicensed third-party model dependency');
@@ -313,4 +390,4 @@ assert(storageSource.includes('lidProfile'), 'Storage Chest visual must retain i
 assert(storageSource.includes('flatShading: true'), 'Food Barrel visual must retain its low-poly segmented presentation');
 
 runtime.dispose();
-console.log('Bed placement/sleep plus refreshed Chest and Barrel presentation verified');
+console.log('Bed/storage placement, semantic wall snapping, sleep and refreshed furniture presentation verified');
