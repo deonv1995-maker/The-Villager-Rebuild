@@ -676,7 +676,10 @@ export class RangerController {
   }
 
   #groundHeightAt(x, z) {
-    return rangerGroundHeightAt(this.terrain, x, z);
+    return rangerGroundHeightAt(this.terrain, x, z, undefined, {
+      referenceY: this.root.position.y,
+      airborne: !this.grounded
+    });
   }
 
   #createSpearVisual() {
