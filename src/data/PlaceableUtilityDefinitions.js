@@ -9,7 +9,8 @@ export const PLACEABLE_UTILITY_DEFINITIONS = Object.freeze({
     placementRadius: 0.9,
     maxSlope: 0.34,
     collisionRadius: 0.86,
-    collisionHeight: 1.05
+    collisionHeight: 1.05,
+    wallSnap: Object.freeze({ width: 1.55, depth: 0.76, range: 1.1 }),
   }),
   chest: Object.freeze({
     id: 'chest',
@@ -20,7 +21,8 @@ export const PLACEABLE_UTILITY_DEFINITIONS = Object.freeze({
     placementRadius: 0.78,
     maxSlope: 0.34,
     collisionRadius: 0.72,
-    collisionHeight: 0.9
+    collisionHeight: 0.9,
+    wallSnap: Object.freeze({ width: 1.22, depth: 0.8, range: 1.1 }),
   }),
   barrel: Object.freeze({
     id: 'barrel',
@@ -31,7 +33,8 @@ export const PLACEABLE_UTILITY_DEFINITIONS = Object.freeze({
     placementRadius: 0.6,
     maxSlope: 0.34,
     collisionRadius: 0.52,
-    collisionHeight: 1.05
+    collisionHeight: 1.05,
+    wallSnap: Object.freeze({ width: 1.02, depth: 1.02, range: 1.1 }),
   }),
   bed: Object.freeze({
     id: 'bed',
@@ -41,7 +44,8 @@ export const PLACEABLE_UTILITY_DEFINITIONS = Object.freeze({
     placementRadius: 1.1,
     maxSlope: 0.28,
     collisionRadius: 1.05,
-    collisionHeight: 0.8
+    collisionHeight: 0.8,
+    wallSnap: Object.freeze({ width: 1.16, depth: 1.94, range: 1.4 }),
   })
 });
 

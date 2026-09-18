@@ -5,6 +5,7 @@ import {
 } from '../data/PlaceableUtilityDefinitions.js';
 import { BedSystem } from '../world/BedSystem.js';
 import { CraftingBenchSystem } from '../world/CraftingBenchSystem.js';
+import { resolvePlaceableUtilityWallSnap } from '../world/PlaceableUtilityWallSnapRules.js';
 import { selectFirstPersonUtilityTarget } from '../world/UtilityInteractionTargetingRules.js';
 
 const ANGLE_OFFSETS = Object.freeze([0, 0.5, -0.5, 1, -1, Math.PI]);
@@ -122,7 +123,8 @@ export class PlaceableUtilityRuntimeController {
       definition,
       this.previewPlacement.x,
       this.previewPlacement.z,
-      this.previewPlacement.y
+      this.previewPlacement.y,
+      { snapWallId: this.previewPlacement.snapWallId }
     )) {
       this.#updatePlacement();
       return null;
@@ -201,6 +203,7 @@ export class PlaceableUtilityRuntimeController {
 
   #findPlacement(definition, playerPosition, facingDirection) {
     const baseAngle = Math.atan2(facingDirection.x, facingDirection.z);
+    const wallSurfaces = this.game.panelConstructionRuntime?.system?.getPlacementWallSurfaces?.() ?? [];
     for (const extraDistance of DISTANCE_OFFSETS) {
       const distance = definition.preferredDistance + extraDistance;
       for (const angleOffset of ANGLE_OFFSETS) {
@@ -208,13 +211,38 @@ export class PlaceableUtilityRuntimeController {
         const x = playerPosition.x + Math.sin(angle) * distance;
         const z = playerPosition.z + Math.cos(angle) * distance;
         const y = this.#resolvePlacementHeight(x, z, playerPosition.y);
-        if (!this.#isPlacementClear(definition, x, z, y)) continue;
-        return {
+        const candidate = {
           x,
           y,
           z,
           yaw: baseAngle
         };
+
+        const snapped = resolvePlaceableUtilityWallSnap({
+          definition,
+          candidate,
+          playerPosition,
+          wallSurfaces
+        });
+        if (snapped) {
+          const snappedY = this.#resolvePlacementHeight(snapped.x, snapped.z, playerPosition.y);
+          const sameSurfaceLevel = Math.abs(snappedY - y) <= 0.35;
+          if (sameSurfaceLevel && this.#isPlacementClear(
+            definition,
+            snapped.x,
+            snapped.z,
+            snappedY,
+            { snapWallId: snapped.snapWallId }
+          )) {
+            return {
+              ...snapped,
+              y: snappedY
+            };
+          }
+        }
+
+        if (!this.#isPlacementClear(definition, x, z, y)) continue;
+        return candidate;
       }
     }
     return null;
@@ -227,7 +255,7 @@ export class PlaceableUtilityRuntimeController {
     return Number.isFinite(supportedY) ? supportedY : terrainY;
   }
 
-  #isPlacementClear(definition, x, z, y = null) {
+  #isPlacementClear(definition, x, z, y = null, { snapWallId = null } = {}) {
     const terrain = this.game.island;
     const collision = terrain.collision;
     if (terrain.isPlayable?.(x, z, definition.placementRadius + 0.25) === false) return false;
@@ -242,10 +270,17 @@ export class PlaceableUtilityRuntimeController {
 
     const objectTopY = surfaceY + definition.collisionHeight;
     return collision.isCircleClear?.(x, z, definition.placementRadius, {
-      ignore: obstacle => (
-        (Number.isFinite(obstacle?.topY) && obstacle.topY <= surfaceY + PLACEMENT_VERTICAL_EPSILON)
-        || (Number.isFinite(obstacle?.bottomY) && obstacle.bottomY >= objectTopY - PLACEMENT_VERTICAL_EPSILON)
-      )
+      ignore: obstacle => {
+        const obstacleLabel = String(obstacle?.label ?? '');
+        const isSnappedWall = Boolean(
+          snapWallId &&
+          obstacle?.type === 'panel-wall' &&
+          (obstacleLabel === snapWallId || obstacleLabel.startsWith(`${snapWallId}:`))
+        );
+        return isSnappedWall
+          || (Number.isFinite(obstacle?.topY) && obstacle.topY <= surfaceY + PLACEMENT_VERTICAL_EPSILON)
+          || (Number.isFinite(obstacle?.bottomY) && obstacle.bottomY >= objectTopY - PLACEMENT_VERTICAL_EPSILON);
+      }
     }) ?? true;
   }
 

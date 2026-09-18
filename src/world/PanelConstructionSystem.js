@@ -175,6 +175,25 @@ export class PanelConstructionSystem {
     return this.setActive(!this.active);
   }
 
+  getPlacementWallSurfaces() {
+    return [...this.entries.values()]
+      .filter(entry => (
+        entry.active !== false &&
+        entry.kind === 'wall' &&
+        (entry.variant ?? 'solid') === 'solid' &&
+        entry.root
+      ))
+      .map(entry => ({
+        id: entry.id,
+        x: entry.root.position.x,
+        y: entry.root.position.y,
+        z: entry.root.position.z,
+        yaw: entry.root.rotation.y,
+        halfLength: PANEL_GRID.cellSize * 0.5,
+        halfThickness: CONSTRUCTION_DIMENSIONS.wallThickness
+      }));
+  }
+
   setBuildMode(mode) {
     if (!PANEL_BUILD_MODES.includes(mode)) return false;
     this.buildMode = mode;
