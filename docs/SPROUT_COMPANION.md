@@ -42,22 +42,23 @@ Future storage-capacity upgrades may increase capacity or compression efficiency
 
 The responsibility split is explicit:
 
-- **Ranger performs the harvesting.** The Ranger chops a standing tree, mines a rock, cuts/harvests vegetation and performs other active world interactions.
-- **World systems create real results.** A felled tree visibly falls and settles before its configured Logs become collectible; mined/cut resources exist in the world according to their resource system.
-- **Ranger may manually collect loose results.** Eligible pickups, including Logs, enter the same shared inventory when the player picks them up and capacity allows.
-- **Sprout performs automatic retrieval.** After allegiance, Sprout detects eligible loose world pickups near the Ranger and collects them through the compression sequence.
+- **Ranger performs the harvesting for intact/tool-gated nodes.** The Ranger chops standing trees, mines rocks and performs other active survival interactions that require a tool or dedicated harvest system.
+- **World systems create real results.** A felled tree visibly falls and settles before its configured Logs become collectible; mined resources exist in the world according to their resource system.
+- **Grass is the passive forage exception.** The visible harvestable grass patches owned by `GatherableSystem` are already gatherable inventory resources rather than intact tool-gated nodes. The Ranger may hand-gather them, and allied Sprout may retrieve those same patches directly through the normal reservation/compression transaction.
+- **Ranger may manually collect gatherables.** Eligible pickups, including Logs and grass patches, enter the same shared inventory when the player gathers them and capacity allows.
+- **Sprout performs automatic retrieval.** After allegiance, Sprout detects eligible `GatherableSystem` resources near the Ranger and collects them through the compression sequence.
 - **Inventory remains authoritative.** Collection succeeds only when the resource is legitimately transferred out of its world representation and into the shared inventory.
 
-Sprout never silently harvests intact trees, rocks or other nodes merely because they are within collection range. Harvestable grass patches also remain Ranger interactions. Sprout may collect a loose Grass pickup only after another world/harvest system has created that pickup as a legitimate result.
+Sprout never silently harvests intact trees, rocks or other tool-gated nodes merely because they are within collection range. Direct grass-patch retrieval is intentionally limited to the passive forage exception already owned by `GatherableSystem`; it does not give Sprout authority over `TreeHarvestSystem`, `RockHarvestSystem` or future active harvest systems.
 
 ## Automatic collection
 
-After allegiance, Sprout dynamically follows the Ranger and may retrieve the following loose pickup types:
+After allegiance, Sprout dynamically follows the Ranger and may retrieve the following gatherable types:
 
 - Logs already produced as world pickups;
 - loose Sticks;
 - loose Stones;
-- loose Grass pickups produced by an eligible world/harvest flow;
+- visible harvestable Grass patches plus loose/tutorial Grass clumps owned by `GatherableSystem`;
 - later resources explicitly opted into companion collection by data.
 
 Raw Meat is intentionally not part of the initial automatic collection set.
@@ -74,22 +75,22 @@ A hard catch-up fallback may relocate the companion back beside the Ranger if or
 
 ## Transactional collection boundary
 
-`GatherableSystem` remains the authority for loose-pickup identity and removal. Sprout does not directly award an item merely because a scan or beam animation started.
+`GatherableSystem` remains the authority for companion-retrievable world resources and removal. Its shared loose-resource transaction now covers both normal item records and passive harvestable grass patches. Sprout does not directly award an item merely because a scan or beam animation started.
 
 Collection uses a small reservation/commit transaction:
 
-1. Sprout finds an active eligible loose pickup that fits the currently active shared-storage profile.
-2. Sprout scans that pickup while approaching it, then pauses briefly in beam range with the scanner locked on the item. No reservation or inventory award occurs during this scan phase.
+1. Sprout finds an active eligible gatherable that fits the currently active shared-storage profile.
+2. Sprout scans that resource while approaching it, then pauses briefly in beam range with the scanner locked on the target. No reservation or inventory award occurs during this scan phase.
 3. The scanner switches off before compression begins.
-4. `GatherableSystem` reserves that pickup for Sprout, preventing normal player targeting while the transfer is in progress.
-5. The authoritative pickup remains active with its original saved transform; only its normal visual is temporarily hidden.
-6. Sprout animates a temporary presentation clone toward the companion with the existing compression beam/halo.
-7. If collection is cancelled, the reservation is released and the authoritative pickup becomes visible again.
-8. Immediately before commit, `GatherableSystem` re-checks capacity. If storage changed or filled during the animation, the reservation is released and the world pickup is restored instead of being lost.
-9. If compression completes and capacity still permits it, `GatherableSystem` commits the reserved removal.
+4. `GatherableSystem` reserves the resource for Sprout, preventing normal player targeting while the transfer is in progress.
+5. Normal loose items remain active at their saved transform with their world root temporarily hidden. For a grass patch, the authoritative instanced patch remains active but receives a transient `collectionHidden` presentation flag.
+6. Sprout animates a temporary presentation clone toward the companion with the existing compression beam/halo. Grass uses the same clump geometry/material presentation as the tutorial grass without converting the island's instanced field into separate scene objects.
+7. If collection is cancelled, the reservation is released. Loose items reappear and grass clears only the transient `collectionHidden` flag, restoring the original patch.
+8. Immediately before commit, `GatherableSystem` re-checks capacity. If storage changed or filled during the animation, the reservation is released and the world resource is restored instead of being lost.
+9. If compression completes and capacity still permits it, `GatherableSystem` commits the reserved removal. A grass commit marks the patch harvested and permanently hides its authoritative instanced entries.
 10. Only after that commit succeeds does the existing shared `InventorySystem` receive the quantity and the HUD refresh from the authoritative inventory snapshot.
 
-Because the authoritative pickup is not moved or made inactive until commit, an autosave during the short compression animation still records a recoverable world item rather than a half-transferred resource.
+Because the authoritative resource is not made inactive until commit, an autosave during the short compression animation still records a recoverable world resource rather than a half-transferred award. Reservation state is deliberately transient and is cleared on restore; harvested grass patch IDs remain the persistence authority for depleted patches.
 
 ## Scan and compression presentation
 
@@ -150,7 +151,7 @@ These are progression extensions and must build on the same companion/inventory 
 
 - `InventorySystem` remains the single item-count authority for the Ranger/Sprout pair. It owns storage profiles, bulk accounting and capacity checks while retaining an uncapped authoritative `add` path for save restore and internal state transformations.
 - `InventoryCapacityController` binds the active inventory profile to the existing Sprout allegiance checkpoint, exposes that capacity to world-pickup systems and presents the compact PACK/SPROUT capacity readout. It does not own quantities.
-- `GatherableSystem` remains responsible for loose world pickup identity, player targeting, Ranger capacity preflight, Sprout reservation/release and legitimate committed pickup removal. Inventory-backed resources, including Logs, use its normal pickup transaction; it never deletes a pickup that fails the active capacity check.
+- `GatherableSystem` remains responsible for loose world pickup identity, passive harvestable grass patches, player targeting, Ranger capacity preflight, Sprout reservation/release and legitimate committed removal. Inventory-backed resources, including Logs and Grass, use the same reservation/commit boundary; it never deletes a resource that fails the active capacity check.
 - `TreeHarvestSystem` remains responsible for axe hits, standing-tree state, felling completion, stump/regrowth state and creation of timber results.
 - `TreeFellingPresentation` owns only the temporary visual fall of the already-harvested authored tree. It does not award Logs, mutate inventory or decide harvesting.
 - `SproutArrivalController` owns the opening gameplay story state, crash investigation objective, rescue action, boot dialogue and allegiance checkpoint. At allegiance it exposes the single crash-site Sprout presentation for companion ownership; it does not own item quantities or harvesting.
@@ -168,7 +169,7 @@ The Sprout introduction, crash-site rescue, companion retrieval, human carrying 
 
 Before Sprout allegiance, the Ranger's shared inventory operates as a 24-bulk-unit human pack. Small world pickups and loose Logs enter that inventory only when they fit; a Log costs eight units, so the pack remains human-scale without routing timber into the legacy shoulder-carry construction path. The HUD exposes the live PACK usage.
 
-Once allied, the same inventory changes to Sprout's 96-unit compressed profile. Manual Ranger pickup continues to use that shared inventory, while Sprout follows the Ranger, uses the shared collision world for movement, scans a bounded radius for eligible loose Stick/Stone/Grass/Log pickups that fit, and projects the scanner from the authored scanning lens toward a selected pickup while approaching it. At beam range Sprout stops for a short scan-lock pause; the scanner then turns off before the pickup is reserved and the existing blue compression transfer begins. Selected pickup approaches remain bounded to eight seconds, active compression finishes before catch-up, and collection uses the `GatherableSystem` reservation/commit boundary so save data cannot record an unexplained duplicate award. The HUD changes to the SPROUT capacity readout without introducing a transfer screen or second inventory.
+Once allied, the same inventory changes to Sprout's 96-unit compressed profile. Manual Ranger gathering continues to use that shared inventory, while Sprout follows the Ranger, uses the shared collision world for movement, scans a bounded radius for eligible Stick/Stone/Log pickups and passive Grass patches that fit, and projects the scanner from the authored scanning lens toward a selected resource while approaching it. Normal island grass is therefore collectible by Sprout just like the tutorial Grass without duplicating the grass field into hundreds of separate scene objects. At beam range Sprout stops for a short scan-lock pause; the scanner then turns off before the resource is reserved and the existing blue compression transfer begins. Selected approaches remain bounded to eight seconds, active compression finishes before catch-up, and collection uses the `GatherableSystem` reservation/commit boundary so save data cannot record an unexplained duplicate award. The HUD changes to the SPROUT capacity readout without introducing a transfer screen or second inventory.
 
 For timber specifically, the Ranger's final axe hit starts a visible authored-tree fall. The tree must settle before its configured Log pickups are spawned. The Ranger may manually store a loose Log through the normal inventory pickup path, while allied Sprout may instead scan and compress those same legitimate pickups into the same shared inventory for larger-scale construction storage.
 
