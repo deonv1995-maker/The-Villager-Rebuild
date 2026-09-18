@@ -8,7 +8,6 @@ import { ASSET_PATHS } from '../src/data/AssetPaths.js';
 import { CRAFTING_RECIPES } from '../src/data/CraftingDefinitions.js';
 import { TORCH } from '../src/data/TorchDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_ORDER } from '../src/data/ToolDefinitions.js';
-import { WORLD_DAY_MINUTES, WORLD_TIME } from '../src/data/WorldTimeDefinitions.js';
 import { CraftingSystem } from '../src/gameplay/CraftingSystem.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { ToolbeltSystem } from '../src/gameplay/ToolbeltSystem.js';
@@ -18,10 +17,11 @@ const root = new URL('../', import.meta.url);
 const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
 const nearlyEqual = (left, right, epsilon = 0.11) => Math.abs(left - right) <= epsilon;
 
-const nightMinutes = (WORLD_DAY_MINUTES - WORLD_TIME.phases.nightStart) + WORLD_TIME.phases.dawnStart;
-assert.equal(nightMinutes, 9 * 60, 'The current night phase must remain nine in-game hours');
-assert.equal(TORCH.burnDurationGameMinutes, nightMinutes / 2, 'One torch must last half of the configured night');
-assert.equal(TORCH.burnDurationGameMinutes, 270, 'Baseline torch life must be 4.5 in-game hours');
+assert.equal(
+  Object.hasOwn(TORCH, 'burnDurationGameMinutes'),
+  false,
+  'Torch definitions must not expose a finite burnout duration'
+);
 assert.equal(TOOL_DEFINITIONS.torch.role, 'light');
 assert.equal(TOOL_DEFINITIONS.torch.icon, 'torch', 'Torch must use its dedicated UI icon semantic');
 assert.ok(
@@ -169,40 +169,49 @@ assert.ok(
 assert.equal(torch.light.shadow.needsUpdate, true, 'Torch shadow must invalidate after its local refresh interval');
 assert.equal(rendererShadowMap.needsUpdate, true);
 
+const quantityBeforeLongRun = inventory.get('torch');
 torch.apply({ day: 1, minuteOfDay: 22 * 60 + 15 });
-assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135));
-assert.ok(nearlyEqual(torch.snapshot().percent, 50));
-assert.equal(inventory.get('torch'), 2, 'Partial burn must not consume the held torch early');
-const torchSlotHalf = toolbelt.snapshot().find(entry => entry.id === 'torch');
-assert.equal(torchSlotHalf.meterKind, 'fuel');
-assert.ok(nearlyEqual(torchSlotHalf.durability, 50), 'Existing belt meter must display torch fuel percentage');
+torch.apply({ day: 4, minuteOfDay: 6 * 60 });
+assert.equal(
+  inventory.get('torch'),
+  quantityBeforeLongRun,
+  'Holding a torch across multiple nights must not consume inventory'
+);
+assert.equal(
+  Object.hasOwn(torch.snapshot(), 'percent'),
+  false,
+  'Persistent torches must not expose a fuel percentage'
+);
+const persistentTorchSlot = toolbelt.snapshot().find(entry => entry.id === 'torch');
+assert.equal(persistentTorchSlot.meterKind, null, 'Persistent torches must not show a fuel meter');
+assert.equal(persistentTorchSlot.durability, null, 'Persistent torches must not show a fake full durability/fuel bar');
 
 toolbelt.select('hand');
-torch.apply({ day: 1, minuteOfDay: 23 * 60 + 15 });
-assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, 135), 'Torch fuel must pause while not held');
-assert.equal(torch.light.visible, false, 'Unequipped torch must stop lighting the world');
-assert.equal(rangerMesh.castShadow, false, 'Ranger torch-shadow casting must restore when the torch is put away');
+torch.apply({ day: 6, minuteOfDay: 2 * 60 });
+assert.equal(
+  inventory.get('torch'),
+  quantityBeforeLongRun,
+  'Putting a persistent torch away must not alter inventory'
+);
 
 toolbelt.select('torch');
-torch.apply({ day: 2, minuteOfDay: 1 * 60 + 30 });
-assert.equal(inventory.get('torch'), 1, 'Finishing a torch must consume exactly one inventory unit');
-assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, TORCH.burnDurationGameMinutes));
-assert.equal(toolbelt.getEquippedToolId(), 'torch', 'A spare torch must automatically continue the held light');
-
-torch.apply({ day: 2, minuteOfDay: 6 * 60 });
-assert.equal(inventory.get('torch'), 0, 'Second full burn must consume the spare torch');
-assert.equal(toolbelt.getEquippedToolId(), null, 'Toolbelt must fall back to hand when the final torch burns out');
-assert.equal(torch.light.visible, false);
-assert.equal(rangerMesh.castShadow, false);
-assert.ok(statuses.at(-1)?.includes('TORCH BURNED OUT'));
-
-inventory.add('torch', 1);
-toolbelt.select('torch');
-assert.equal(torch.restoreState({ remainingGameMinutes: 90 }), true);
-torch.apply({ day: 2, minuteOfDay: 6 * 60 });
-assert.ok(nearlyEqual(torch.captureState().remainingGameMinutes, 90), 'Restore sync must not burn offline/background time');
-torch.apply({ day: 2, minuteOfDay: 6 * 60 + 30 });
-assert.ok(nearlyEqual(torch.captureState().remainingGameMinutes, 60), 'Restored partial torch must resume from saved fuel');
+torch.apply({ day: 12, minuteOfDay: 4 * 60 });
+assert.equal(
+  inventory.get('torch'),
+  quantityBeforeLongRun,
+  'Re-equipping a persistent torch must remain non-degrading'
+);
+assert.equal(toolbelt.getEquippedToolId(), 'torch', 'Persistent torch must remain equipped instead of burning out');
+assert.equal(
+  Object.hasOwn(torch.captureState(), 'remainingGameMinutes'),
+  false,
+  'New torch saves must not persist obsolete handheld fuel'
+);
+assert.equal(
+  torch.restoreState({ remainingGameMinutes: 1, placedTorches: [] }),
+  false,
+  'Legacy handheld fuel alone must not recreate a finite-lifetime state'
+);
 torch.dispose();
 assert.equal(torch.light.parent, null, 'Torch runtime must release its scene light cleanly');
 assert.equal(rangerMesh.castShadow, false, 'Torch disposal must restore the Ranger shadow policy');
