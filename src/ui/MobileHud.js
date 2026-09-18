@@ -98,6 +98,18 @@ export class MobileHud {
         <div class="inventory-grid" data-role="inventory"></div>
         <div class="craft-menu-list" data-role="craft-list" hidden></div>
       </section>
+      <section class="survival-vitals" data-role="survival-vitals" aria-label="Player survival status">
+        <div class="survival-vital health" data-role="health-vital">
+          <span class="survival-vital-label">HEALTH</span>
+          <span class="survival-vital-track" aria-hidden="true"><span class="survival-vital-fill" data-role="health-fill"></span></span>
+          <strong class="survival-vital-value" data-role="health-value">100</strong>
+        </div>
+        <div class="survival-vital hunger" data-role="hunger-vital">
+          <span class="survival-vital-label">HUNGER</span>
+          <span class="survival-vital-track" aria-hidden="true"><span class="survival-vital-fill" data-role="hunger-fill"></span></span>
+          <strong class="survival-vital-value" data-role="hunger-value">100</strong>
+        </div>
+      </section>
       <div class="hud-note" data-role="objective">DAY 1 · Gather sticks, stones and grass</div>
       <div class="toolbelt" data-role="toolbelt">${toolButtons}</div>
       <div class="log-build-tray" data-role="log-build" hidden>
@@ -135,6 +147,13 @@ export class MobileHud {
     this.craftContext = this.root.querySelector('[data-role="craft-context"]');
     this.craftList = this.root.querySelector('[data-role="craft-list"]');
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
+    this.survivalVitals = this.root.querySelector('[data-role="survival-vitals"]');
+    this.healthVital = this.root.querySelector('[data-role="health-vital"]');
+    this.healthFill = this.root.querySelector('[data-role="health-fill"]');
+    this.healthValue = this.root.querySelector('[data-role="health-value"]');
+    this.hungerVital = this.root.querySelector('[data-role="hunger-vital"]');
+    this.hungerFill = this.root.querySelector('[data-role="hunger-fill"]');
+    this.hungerValue = this.root.querySelector('[data-role="hunger-value"]');
     this.actionButton = this.root.querySelector('.action');
     this.actionIcon = this.root.querySelector('[data-role="action-icon"]');
     this.actionCaption = this.root.querySelector('[data-role="action-caption"]');
@@ -235,6 +254,27 @@ export class MobileHud {
 
   setObjective(message) {
     this.objectiveElement.textContent = message;
+  }
+
+  setSurvivalVitals(state) {
+    if (!state) return;
+    const health = Math.max(0, Math.min(Number(state.maxHealth) || 100, Number(state.health) || 0));
+    const hunger = Math.max(0, Math.min(Number(state.maxHunger) || 100, Number(state.hunger) || 0));
+    const maxHealth = Math.max(1, Number(state.maxHealth) || 100);
+    const maxHunger = Math.max(1, Number(state.maxHunger) || 100);
+    const healthPercent = Math.max(0, Math.min(1, health / maxHealth));
+    const hungerPercent = Math.max(0, Math.min(1, hunger / maxHunger));
+
+    if (this.healthFill) this.healthFill.style.width = `${(healthPercent * 100).toFixed(1)}%`;
+    if (this.hungerFill) this.hungerFill.style.width = `${(hungerPercent * 100).toFixed(1)}%`;
+    if (this.healthValue) this.healthValue.textContent = String(Math.ceil(health));
+    if (this.hungerValue) this.hungerValue.textContent = String(Math.ceil(hunger));
+    this.healthVital?.classList.toggle('critical', healthPercent <= 0.25);
+    this.hungerVital?.classList.toggle('critical', hungerPercent <= 0.25);
+    this.survivalVitals?.setAttribute(
+      'aria-label',
+      `Health ${Math.ceil(health)} of ${maxHealth}, hunger ${Math.ceil(hunger)} of ${maxHunger}`
+    );
   }
 
   setCameraMode(mode) {
