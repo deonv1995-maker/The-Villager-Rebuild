@@ -143,7 +143,8 @@ export class CampfireSleepRuntimeController {
     const player = this.game.player;
     if (!player) return false;
     player.getPosition(this.position);
-    player.getFacingDirection(this.facing);
+    this.facing.set(0, 0, 1);
+    player.getFacingDirection?.(this.facing);
 
     const restTarget = source === 'bed'
       ? this.#resolveBedTarget(target, this.position)
