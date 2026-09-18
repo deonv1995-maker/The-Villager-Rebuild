@@ -1,8 +1,9 @@
 .survival-vitals {
   position: absolute;
-  left: max(10px, env(safe-area-inset-left));
-  top: max(58px, calc(env(safe-area-inset-top) + 54px));
-  width: min(164px, 42vw);
+  left: 50%;
+  top: max(8px, calc(env(safe-area-inset-top) + 6px));
+  transform: translateX(-50%);
+  width: min(210px, 48vw);
   display: grid;
   gap: 5px;
   padding: 7px 8px;
@@ -59,7 +60,7 @@
 
 @media (max-width: 700px) and (orientation: portrait) {
   .survival-vitals {
-    width: min(150px, 44vw);
+    width: min(180px, 64vw);
     padding: 6px 7px;
   }
 
