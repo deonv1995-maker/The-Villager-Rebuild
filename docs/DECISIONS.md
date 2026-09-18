@@ -194,6 +194,8 @@ Decision: starting a new game now requires a player-entered Ranger/profile name 
 
 Persistence keeps one shared schema-2 game-state format. Profiles are an index above that format, and each profile selects a namespaced `SaveGameStore` key rather than introducing a second gameplay persistence implementation. The previous global `the-villager-rebuild.save` key remains only as a compatibility source: on the first profile-aware launch, a valid legacy save is migrated once into a **Previous Save** profile.
 
+Profile deletion is intentionally destructive and requires explicit confirmation from the title profile picker. `PlayerProfileLifecycle` coordinates deletion across the lightweight profile index and the selected profile's namespaced save key; `PlayerProfileStore` remains index-only and `SaveGameStore` remains world-save-only. If removing the profile index fails after its save key is cleared, the lifecycle makes a best-effort restore of the valid save record so the visible profile is not silently stranded without its world.
+
 Reason: multiple people/worlds on one installed PWA need isolated progression, while construction, inventory, survival, Sprout, world-time and other save-state systems must continue using one authoritative serialization path.
 
 ## Open decisions

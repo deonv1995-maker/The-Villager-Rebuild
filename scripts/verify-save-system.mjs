@@ -14,6 +14,7 @@ import {
   PlayerProfileStore,
   PROFILE_STORAGE_KEY
 } from '../src/persistence/PlayerProfileStore.js';
+import { PlayerProfileLifecycle } from '../src/persistence/PlayerProfileLifecycle.js';
 import { constructionFacingYaw } from '../src/persistence/GameStatePersistence.js';
 
 const root = new URL('../', import.meta.url);
@@ -30,9 +31,16 @@ assert.equal(SAVE_SCHEMA_VERSION, 2, 'Panel construction cutover must use save s
 assert.equal(SAVE_WORLD_REVISION, 2, 'Panel construction cutover must use world revision 2');
 
 const memory = new Map();
+let failNextProfileIndexWrite = false;
 const storage = {
   getItem: key => memory.get(key) ?? null,
-  setItem: (key, value) => memory.set(key, String(value)),
+  setItem: (key, value) => {
+    if (failNextProfileIndexWrite && key === PROFILE_STORAGE_KEY) {
+      failNextProfileIndexWrite = false;
+      throw new Error('simulated profile index write failure');
+    }
+    memory.set(key, String(value));
+  },
   removeItem: key => memory.delete(key)
 };
 const store = new SaveGameStore({ storage, now: () => '2026-09-07T12:00:00.000Z' });
@@ -97,6 +105,47 @@ assert.equal(
   `${PROFILE_SAVE_STORAGE_PREFIX}${profile.id}`
 );
 
+const profileLifecycle = new PlayerProfileLifecycle({
+  profileStore,
+  createSaveStore: profileId => new SaveGameStore({
+    storage,
+    profileId,
+    now: () => '2026-09-18T12:10:00.000Z'
+  })
+});
+assert.equal(profileLifecycle.deleteProfile(profile.id), true);
+assert.equal(profileStore.list().length, 0, 'Deleting a profile must remove it from the profile index');
+assert.equal(
+  memory.has(saveStorageKeyForProfile(profile.id)),
+  false,
+  'Deleting a profile must remove its namespaced world save'
+);
+
+const rollbackProfile = profileStore.create('Rollback Test');
+const rollbackSaveStore = new SaveGameStore({
+  storage,
+  profileId: rollbackProfile.id,
+  now: () => '2026-09-18T12:15:00.000Z'
+});
+rollbackSaveStore.write({ player: { position: { x: 3, z: 4 } } }, { reason: 'rollback-test' });
+failNextProfileIndexWrite = true;
+assert.throws(
+  () => profileLifecycle.deleteProfile(rollbackProfile.id),
+  /simulated profile index write failure/,
+  'Profile deletion must surface an index-write failure'
+);
+assert.equal(
+  profileStore.findByName('Rollback Test')?.id,
+  rollbackProfile.id,
+  'A failed profile-index deletion must leave the profile visible'
+);
+assert.equal(
+  rollbackSaveStore.hasValidSave(),
+  true,
+  'A failed profile-index deletion must restore the world save'
+);
+assert.equal(profileLifecycle.deleteProfile(rollbackProfile.id), true, 'Rollback-test profile cleanup must succeed');
+
 // Retained legacy construction code still normalizes directed wall transforms while deferred
 // roof/stair systems are being removed. Schema 2 never uses this as semantic panel authority.
 const savedWallRoot = new THREE.Group();
@@ -117,6 +166,8 @@ const checks = [
   ['legacy save key remains stable for one-time profile migration', SAVE_STORAGE_KEY === 'the-villager-rebuild.save'],
   ['profile save keys are derived from the shared save-key prefix', PROFILE_SAVE_STORAGE_PREFIX === 'the-villager-rebuild.save.profile.'],
   ['main owns a shared player-profile index', main.includes('const profileStore = new PlayerProfileStore()')],
+  ['profile deletion is coordinated by the dedicated lifecycle boundary', main.includes('new PlayerProfileLifecycle({ profileStore })') && main.includes('onDelete: profile => profileLifecycle.deleteProfile(profile.id)')],
+  ['profile picker keeps every profile visible while marking whether a save can resume', main.includes('function listProfiles()') && main.includes('hasSave: new SaveGameStore({ profileId: profile.id }).hasValidSave()')],
   ['gameplay creates the SaveGameStore for the selected profile', main.includes('new SaveGameStore({ profileId: profile?.id ?? null })')],
   ['legacy single-save installs migrate into a preserved profile', main.includes('migrateLegacySaveToProfile') && main.includes("profileStore.create('Previous Save')") && main.includes("reason: 'profile-migration'")],
   ['panel runtime exists before SaveGameController', main.includes('new PanelConstructionRuntimeController({ game })') && main.indexOf('new PanelConstructionRuntimeController({ game })') < main.indexOf('new SaveGameController({ game, store: saveStore })')],
@@ -124,6 +175,8 @@ const checks = [
   ['new-game autosave begins after beach arrival completion', arrivalCallbackIndex >= 0 && arrivalSaveIndex > arrivalCallbackIndex],
   ['profile selection and New Game are distinct menu actions', titleSaveMenu.includes('<span>SELECT PROFILE</span>') && titleSaveMenu.includes("label.textContent = 'NEW GAME'")],
   ['named profile rows are created from persisted profile data', titleSaveMenu.includes('for (const profile of this.profiles)') && titleSaveMenu.includes('profile.name')],
+  ['profile deletion is a separate confirmed destructive action', titleSaveMenu.includes('title-profile-delete') && titleSaveMenu.includes('This permanently deletes this profile and its saved world.') && titleSaveMenu.includes('this.onDelete?.(profile)')],
+  ['profiles without a valid save remain deletable without exposing Continue', titleSaveMenu.includes('profile.hasSave !== false') && titleSaveMenu.includes('NO SAVED WORLD')],
   ['profile resume uses the title fade cover instead of replaying the shipwreck intro', titleSaveMenu.includes("querySelector('.title-transition')") && titleSaveMenu.includes("classList.add('is-covering')")],
   ['autosave runs periodically while gameplay is active', saveController.includes('AUTOSAVE_INTERVAL_MS = 8000') && saveController.includes("this.saveNow('autosave')")],
   ['autosave flushes when the PWA backgrounds or hides', saveController.includes("addEventListener?.('pagehide'") && saveController.includes("addEventListener?.('visibilitychange'") && saveController.includes("this.saveNow('background')")],

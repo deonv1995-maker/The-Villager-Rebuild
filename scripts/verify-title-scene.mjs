@@ -95,7 +95,7 @@ const checks = [
   ['main starts beach arrival after existing gameplay systems load', main.includes('new BeachArrivalIntroController') && main.includes('arrivalIntro.start()') && main.includes('window.__villager = game')],
   ['gameplay still uses existing GameApp', main.includes("import { GameApp } from './core/GameApp.js';")],
   ['title stylesheet is linked', index.includes('./src/title.css')],
-  ['title UI includes profile selection and naming presentation', css.includes('.title-profile-list') && css.includes('.title-profile-prompt') && css.includes('.title-profile-name')],
+  ['title UI includes profile selection, deletion and naming presentation', css.includes('.title-profile-list') && css.includes('.title-profile-delete') && css.includes('.title-profile-prompt') && css.includes('.title-profile-name')],
   ['title UI is mobile safe-area aware', css.includes('safe-area-inset-top') && css.includes('@media (orientation: landscape)')],
   ['game HUD remains hidden through the arrival cinematic', css.includes('body.title-scene-active .mobile-hud') && css.includes('body.arrival-intro-active .mobile-hud')],
   ['game HUD fades in when arrival control is released', css.includes('body.arrival-intro-revealing .mobile-hud') && css.includes('transition: opacity 880ms ease')]
