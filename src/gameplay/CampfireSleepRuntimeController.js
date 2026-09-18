@@ -19,7 +19,7 @@ const REST_PHASE = Object.freeze({
   WAKE: 'wake'
 });
 
-const BED_SIDE_OFFSET = 0.98;
+const BED_SIDE_OFFSET = 1.52;
 const BED_FOOT_OFFSET = 0.58;
 const BED_STAGE_FOOT_OFFSET = 0.22;
 const BED_MATTRESS_OFFSET = 0.59;
