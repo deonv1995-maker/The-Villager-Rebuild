@@ -42,6 +42,16 @@ export function resolveContextAction({
     };
   }
 
+  if (toolId === 'sword') {
+    return {
+      source: 'attack',
+      available: true,
+      icon: 'sword',
+      label: huntTarget ? `Strike ${huntTarget.label}` : 'Swing sword',
+      caption: 'STRIKE'
+    };
+  }
+
   if (interactionTarget?.type === 'thrown-spear') {
     return {
       source: 'interaction',
@@ -82,10 +92,8 @@ export function resolveContextAction({
       source: 'attack',
       available: true,
       icon: toolId,
-      label: toolId === 'spear'
-        ? `Throw spear at ${huntTarget.label}`
-        : `Slash ${huntTarget.label}`,
-      caption: toolId === 'spear' ? 'THROW' : 'SLASH'
+      label: `Throw spear at ${huntTarget.label}`,
+      caption: 'THROW'
     };
   }
 
