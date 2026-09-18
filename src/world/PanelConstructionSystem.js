@@ -847,13 +847,31 @@ export class PanelConstructionSystem {
   }
 
   #wallClear(edge, baseY) {
-    return this.collision.isCircleClear(edge.x, edge.z, CONSTRUCTION_DIMENSIONS.wallThickness * 0.8, {
-      ignore: obstacle => (
-        obstacle.type === 'panel-floor' ||
-        obstacle.type === 'panel-stair' ||
-        (obstacle.type === 'panel-wall' && obstacle.topY <= baseY + 0.02)
-      )
-    });
+    const wallTopY = baseY + PANEL_GRID.storeyHeight;
+    const ignore = obstacle => (
+      obstacle.type === 'panel-floor' ||
+      obstacle.type === 'panel-stair' ||
+      (Number.isFinite(obstacle.topY) && obstacle.topY <= baseY + 0.02) ||
+      (Number.isFinite(obstacle.bottomY) && obstacle.bottomY >= wallTopY - 0.02)
+    );
+
+    if (typeof this.collision.isBoxClear === 'function') {
+      return this.collision.isBoxClear(
+        edge.x,
+        edge.z,
+        PANEL_GRID.cellSize * 0.5,
+        CONSTRUCTION_DIMENSIONS.wallThickness,
+        edge.yaw,
+        { ignore }
+      );
+    }
+
+    return this.collision.isCircleClear(
+      edge.x,
+      edge.z,
+      CONSTRUCTION_DIMENSIONS.wallThickness * 0.8,
+      { ignore }
+    );
   }
 
   #stairClear(x, z) {
