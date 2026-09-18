@@ -5,6 +5,7 @@ const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import
 const hammerMenuSource = fs.readFileSync(new URL('../src/ui/HammerConstructionMenu.js', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
 const inventoryMenuStyles = fs.readFileSync(new URL('../src/inventory-menu.css', import.meta.url), 'utf8');
+const craftingStyles = fs.readFileSync(new URL('../src/crafting.css', import.meta.url), 'utf8');
 const cosyIconStyles = fs.readFileSync(new URL('../src/cosy-icons.css', import.meta.url), 'utf8');
 const indexSource = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -123,6 +124,26 @@ assert.match(mobileHudSource, /card\.setAttribute\('aria-label'/, 'Inventory gri
 assert.match(mobileHudSource, /data-role="inventory-toggle"/, 'One suitcase toggle must replace the always-visible inventory strip');
 assert.match(mobileHudSource, /data-inventory-tab="craft"/, 'Crafting must share the suitcase panel');
 assert.doesNotMatch(mobileHudSource, /class="craft-menu-toggle"/, 'Standalone craft toggle must stay retired');
+assert.match(
+  mobileHudSource,
+  /costIcon\.src = this\.itemIcons\[ingredient\.itemId\] \?\? this\.toolIcons\.hand;/,
+  'Crafting ingredient costs must reuse the same shared item icon map as the suitcase inventory'
+);
+assert.match(
+  mobileHudSource,
+  /costCount\.textContent = `\$\{ingredient\.available\}\/\$\{ingredient\.quantity\}`;/,
+  'Crafting ingredient icons must retain available/required counts'
+);
+assert.match(
+  mobileHudSource,
+  /cost\.setAttribute\('aria-label', `\$\{ingredient\.label\} \$\{ingredient\.available\} of \$\{ingredient\.quantity\}`\);/,
+  'Icon-only crafting costs must retain accessible ingredient labels'
+);
+assert.doesNotMatch(
+  mobileHudSource,
+  /cost\.textContent = `\$\{ingredient\.label\}/,
+  'Visible crafting costs must not duplicate resource names beside their icons'
+);
 
 assert.match(indexSource, /inventory-menu\.css/, 'The suitcase inventory stylesheet must be loaded');
 assert.match(indexSource, /cosy-icons\.css/, 'The cosy icon stylesheet must be loaded');
@@ -135,6 +156,16 @@ assert.match(
 );
 assert.match(inventoryMenuStyles, /\.inventory-card\s*\{[\s\S]*?min-height: 82px;/, 'Suitcase item blocks must stay compact enough to expose more inventory at once');
 assert.match(inventoryMenuStyles, /\.inventory-card \.inventory-resource-icon\s*\{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/, 'Inventory item icons must remain readable inside the opened suitcase');
+assert.match(
+  craftingStyles,
+  /\.craft-cost-icon\s*\{[\s\S]*?width: 16px;[\s\S]*?height: 16px;/,
+  'Crafting ingredient pills must show readable shared item icons'
+);
+assert.match(
+  inventoryMenuStyles,
+  /\.inventory-menu \.craft-cost-icon\s*\{[\s\S]*?width: 18px;[\s\S]*?height: 18px;/,
+  'Opened suitcase crafting costs must enlarge ingredient icons for mobile readability'
+);
 assert.match(
   inventoryMenuStyles,
   /\.inventory-menu \.craft-menu-list\[hidden\]\s*\{\s*display: none;\s*\}/,
