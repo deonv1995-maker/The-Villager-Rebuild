@@ -92,6 +92,7 @@ const checks = [
   ['panel snapshot is semantic registry data', panelSystem.includes('registry: this.registry.snapshot()') && panelSystem.includes('PanelStructureRegistry.restore(snapshot.registry)')],
   ['panel grid persistence is data-only', panelGrid.includes('snapshot()') && panelGrid.includes('static restore(snapshot)') && !panelGrid.includes('toJSON()')],
   ['save state still includes Ranger, inventory and equipment', persistence.includes('player: capturePlayer(game)') && persistence.includes('inventory: captureInventory(game)') && persistence.includes('equipment: captureEquipment(game)')],
+  ['save state includes player health and hunger without changing schema 2', persistence.includes('survival: game.survival?.captureState?.() ?? null') && persistence.includes('game.survival?.restoreState?.(state.survival)')],
   ['save state still includes resource harvesting and world gatherables', persistence.includes('harvest: captureHarvest(game)') && persistence.includes('gatherables: captureGatherables(game)') && persistence.includes('harvestedGrassPatchIds')],
   ['retained transition construction remains data-based rather than serialized scene objects', persistence.includes('createConstructionLogVisual(saved.mode)') && persistence.includes('captureTransform(entry.root)') && !persistence.includes('toJSON()')],
   ['thrown spears normalize safely back to inventory with durability', persistence.includes('recoverableSpearDurabilities') && persistence.includes("game.inventory.add('spear', 1)") && persistence.includes('recoveredSpearDurabilities')],
