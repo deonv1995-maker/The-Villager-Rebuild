@@ -104,6 +104,7 @@ Bed sleep and campfire sleep share one rest-transition controller rather than se
 - Campfire sleep moves the Ranger to a nearby seated position facing the active fire and uses a procedural seated pose before the same transition.
 - The screen fades fully to black before authoritative world time is changed. The blackout shows a short 💤 presentation, then morning lighting is synchronized while the screen is still black.
 - Fade-in and the Ranger's get-up/stand motion are one wake sequence. Normal player control resumes only after that sequence finishes.
+- After the Ranger reaches the safe standing point beside the Bed/fire, the gameplay root remains there. Lying/sitting movement is presentation-local to the visible character, so autosave cannot persist the Ranger inside a Bed or campfire collider.
 - The world-time runtime is paused only for the cinematic transition; rendering and character animation continue. The existing `WorldTimeSystem` remains the sole clock authority and still resolves the wake time to the established start of daytime.
 - Bed and campfire sleep retain their existing save reasons and checkpoint only after the morning time jump.
 - Cinematic Ranger height may use the support height supplied by the interaction. This is required for Beds placed on constructed upper floors and does not create a second terrain/collision authority.
