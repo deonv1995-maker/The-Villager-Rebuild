@@ -21,13 +21,16 @@ export class WorldCollisionSystem {
     this.slopeSampleDistance = slopeSampleDistance;
     this.obstacles = [];
     this.revision = 0;
+    this.typeRevisions = new Map();
     this.supportReferenceY = null;
   }
 
   clear() {
+    const affectedTypes = new Set(this.obstacles.map(obstacle => obstacle.type));
     this.obstacles.length = 0;
     this.supportReferenceY = null;
     this.revision += 1;
+    for (const type of affectedTypes) this.#bumpTypeRevision(type);
   }
 
   addCircle(options) {
@@ -85,6 +88,7 @@ export class WorldCollisionSystem {
     };
     this.obstacles.push(obstacle);
     this.revision += 1;
+    this.#bumpTypeRevision(type);
     return obstacle;
   }
 
@@ -124,6 +128,7 @@ export class WorldCollisionSystem {
     };
     this.obstacles.push(obstacle);
     this.revision += 1;
+    this.#bumpTypeRevision(type);
     return obstacle;
   }
 
@@ -133,6 +138,10 @@ export class WorldCollisionSystem {
 
   getRevision() {
     return this.revision;
+  }
+
+  getTypeRevision(type) {
+    return this.typeRevisions.get(type) ?? 0;
   }
 
   getSupportReferenceY() {
@@ -153,6 +162,7 @@ export class WorldCollisionSystem {
     if (index < 0) return false;
     this.obstacles.splice(index, 1);
     this.revision += 1;
+    this.#bumpTypeRevision(obstacle.type);
     return true;
   }
 
@@ -238,6 +248,11 @@ export class WorldCollisionSystem {
     }
 
     return { x: from.x, z: from.z, blocked: true };
+  }
+
+  #bumpTypeRevision(type) {
+    if (!type) return;
+    this.typeRevisions.set(type, (this.typeRevisions.get(type) ?? 0) + 1);
   }
 
   #boxLocalCoordinates(obstacle, x, z) {

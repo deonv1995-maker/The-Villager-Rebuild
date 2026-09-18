@@ -14,6 +14,7 @@ export class WorldChunkSystem {
     this.frustum = new THREE.Frustum();
     this.projectionView = new THREE.Matrix4();
     this.cameraPosition = new THREE.Vector3();
+    this.chunkFrustumSphere = new THREE.Sphere(new THREE.Vector3(), 1);
     this.playerChunk = { ix: 0, iz: 0 };
   }
 
@@ -194,11 +195,9 @@ export class WorldChunkSystem {
       let visible = local;
 
       if (!visible && distanceSq <= renderDistanceSq) {
-        const sphere = new THREE.Sphere(
-          new THREE.Vector3(chunk.centerX, 2.5, chunk.centerZ),
-          chunk.radius
-        );
-        visible = this.frustum.intersectsSphere(sphere);
+        this.chunkFrustumSphere.center.set(chunk.centerX, 2.5, chunk.centerZ);
+        this.chunkFrustumSphere.radius = chunk.radius;
+        visible = this.frustum.intersectsSphere(this.chunkFrustumSphere);
       }
 
       chunk.root.visible = visible;

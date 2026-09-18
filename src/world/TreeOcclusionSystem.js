@@ -4,15 +4,21 @@ const TREE_LABEL_PATTERN = /^forest-tree-(\d+)$/;
 const TREE_BATCH_PATTERN = /^forest-tree-batch-(\d+)-(\d+)$/;
 const TREE_INTERACTION_OPAQUE_RADIUS = 3.1;
 
-const distanceToSegment2D = (x, z, x1, z1, x2, z2) => {
+const distanceToSegment2D = (result, x, z, x1, z1, x2, z2) => {
   const vx = x2 - x1;
   const vz = z2 - z1;
   const lengthSq = vx * vx + vz * vz;
-  if (lengthSq <= 0.0001) return { distance: Math.hypot(x - x1, z - z1), t: 0 };
+  if (lengthSq <= 0.0001) {
+    result.distance = Math.hypot(x - x1, z - z1);
+    result.t = 0;
+    return result;
+  }
   const t = THREE.MathUtils.clamp(((x - x1) * vx + (z - z1) * vz) / lengthSq, 0, 1);
   const px = x1 + vx * t;
   const pz = z1 + vz * t;
-  return { distance: Math.hypot(x - px, z - pz), t };
+  result.distance = Math.hypot(x - px, z - pz);
+  result.t = t;
+  return result;
 };
 
 export class TreeOcclusionSystem {
@@ -25,7 +31,11 @@ export class TreeOcclusionSystem {
     this.treeVariantCount = Math.max(1, this.treeBatches.size);
     this.fadeBatches = this.#createFadeBatches();
     this.previousHidden = [];
+    this.activeTrees = [];
+    this.activeTreeIds = new Set();
+    this.lastTreeCollisionRevision = -1;
     this.cameraPosition = new THREE.Vector3();
+    this.segmentResult = { distance: 0, t: 0 };
     this.hiddenMatrix = new THREE.Matrix4().compose(
       new THREE.Vector3(0, -1000, 0),
       new THREE.Quaternion(),
@@ -36,9 +46,9 @@ export class TreeOcclusionSystem {
   update(playerPosition, camera) {
     if (!playerPosition || !camera || this.fadeBatches.size === 0) return;
 
-    const activeTrees = this.#collectActiveTrees();
-    const activeIds = new Set(activeTrees.map(tree => tree.treeId));
-    this.#restorePreviousOpaqueTrees(activeIds);
+    this.#refreshActiveTrees();
+    const activeTrees = this.activeTrees;
+    this.#restorePreviousOpaqueTrees(this.activeTreeIds);
     this.#clearFadeBatches();
 
     camera.getWorldPosition(this.cameraPosition);
@@ -57,6 +67,7 @@ export class TreeOcclusionSystem {
       if (playerDistance <= TREE_INTERACTION_OPAQUE_RADIUS) continue;
 
       const line = distanceToSegment2D(
+        this.segmentResult,
         tree.obstacle.x,
         tree.obstacle.z,
         this.cameraPosition.x,
@@ -104,7 +115,21 @@ export class TreeOcclusionSystem {
       if (originals.length > 0) this.previousHidden.push({ treeId: tree.treeId, originals });
     }
 
-    this.#refreshFadeBounds();
+  }
+
+  #refreshActiveTrees() {
+    const typeRevision = this.collision.getTypeRevision?.('tree');
+    if (
+      Number.isFinite(typeRevision)
+      && typeRevision === this.lastTreeCollisionRevision
+    ) return;
+
+    this.activeTrees = this.#collectActiveTrees();
+    this.activeTreeIds.clear();
+    for (const tree of this.activeTrees) this.activeTreeIds.add(tree.treeId);
+    this.lastTreeCollisionRevision = Number.isFinite(typeRevision)
+      ? typeRevision
+      : -1;
   }
 
   #collectActiveTrees() {
@@ -177,6 +202,7 @@ export class TreeOcclusionSystem {
     fade.count = 0;
     fade.castShadow = false;
     fade.receiveShadow = false;
+    fade.frustumCulled = false;
     fade.renderOrder = 3;
     fade.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.group.add(fade);
@@ -207,15 +233,6 @@ export class TreeOcclusionSystem {
     for (const fade of this.fadeBatches.values()) {
       fade.count = 0;
       fade.instanceMatrix.needsUpdate = true;
-    }
-  }
-
-  #refreshFadeBounds() {
-    for (const fade of this.fadeBatches.values()) {
-      if (fade.count === 0) continue;
-      fade.boundingBox = null;
-      fade.boundingSphere = null;
-      fade.computeBoundingSphere();
     }
   }
 }

@@ -99,6 +99,9 @@ Key strategies include:
 
 - instanced repeated vegetation where appropriate;
 - localized grass interaction: spatially index instances and update only grass near/recovering from the player rather than every blade every frame;
+- localized event invalidation: presentation exclusions such as the Sprout crash footprint must update only affected world chunks, never rescan every vegetation instance for a small local event;
+- semantic collision revisions: vegetation occlusion listens only to construction collider types that can actually change floor coverage, so removing a tree or adding the Sprout crash collider cannot trigger an island-wide construction rescan;
+- allocation-free hot culling paths: reusable bounds/vectors should be retained for per-frame chunk visibility tests instead of allocating temporary objects per chunk;
 - deterministic scatter with reserved footprints so density can increase without creating costly overlap-repair passes;
 - LOD/culling for environment assets;
 - limited active AI updates based on distance/relevance;

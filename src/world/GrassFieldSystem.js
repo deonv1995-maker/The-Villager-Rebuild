@@ -1,4 +1,11 @@
 import * as THREE from 'three';
+import {
+  indexPresentationEntry,
+  normalizePresentationExclusions,
+  presentationExclusionCandidates,
+  samePresentationExclusions,
+  vegetationConstructionCollisionRevision
+} from './VegetationInvalidation.js';
 
 export function constructionFloorCoversVegetation(entry, floor, padding = 0.12) {
   if (!entry || !floor || floor.shape !== 'box') return false;
@@ -84,6 +91,7 @@ export class ReactiveVegetationFieldSystem {
     this.mesh = null;
     this.meshes = [];
     this.entries = [];
+    this.entriesByChunk = new Map();
     this.grid = new Map();
     this.active = new Set();
     this.lastPlayerX = null;
@@ -101,17 +109,21 @@ export class ReactiveVegetationFieldSystem {
   }
 
   setPresentationExclusions(exclusions = []) {
-    this.presentationExclusions = exclusions
-      .filter(exclusion => (
-        Number.isFinite(exclusion?.x) &&
-        Number.isFinite(exclusion?.z) &&
-        Number.isFinite(exclusion?.radius) &&
-        exclusion.radius > 0
-      ))
-      .map(exclusion => ({ x: exclusion.x, z: exclusion.z, radius: exclusion.radius }));
+    const nextExclusions = normalizePresentationExclusions(exclusions);
+    if (samePresentationExclusions(this.presentationExclusions, nextExclusions)) return false;
+
+    const previousExclusions = this.presentationExclusions;
+    const candidates = presentationExclusionCandidates({
+      entries: this.entries,
+      entriesByChunk: this.entriesByChunk,
+      chunks: this.chunks,
+      previousExclusions,
+      nextExclusions
+    });
+    this.presentationExclusions = nextExclusions;
 
     const changedMeshes = new Set();
-    for (const entry of this.entries) {
+    for (const entry of candidates) {
       const hidden = this.#isPresentationExcluded(entry);
       if (hidden === entry.presentationHidden) continue;
       entry.presentationHidden = hidden;
@@ -122,10 +134,8 @@ export class ReactiveVegetationFieldSystem {
       this.#writeMatrix(entry, false);
       if (entry.mesh) changedMeshes.add(entry.mesh);
     }
-    for (const mesh of changedMeshes) {
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
+    for (const mesh of changedMeshes) mesh.instanceMatrix.needsUpdate = true;
+    return changedMeshes.size > 0;
   }
 
   setCollectionHidden(entries = [], hidden = false) {
@@ -141,15 +151,13 @@ export class ReactiveVegetationFieldSystem {
       this.#writeMatrix(entry, false);
       if (entry.mesh) changedMeshes.add(entry.mesh);
     }
-    for (const mesh of changedMeshes) {
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.computeBoundingSphere();
-    }
+    for (const mesh of changedMeshes) mesh.instanceMatrix.needsUpdate = true;
     return changedMeshes.size > 0;
   }
 
   populate() {
     this.entries.length = 0;
+    this.entriesByChunk.clear();
     this.grid.clear();
     this.active.clear();
     this.meshes.length = 0;
@@ -197,6 +205,7 @@ export class ReactiveVegetationFieldSystem {
       };
       entry.presentationHidden = this.#isPresentationExcluded(entry);
       this.entries.push(entry);
+      indexPresentationEntry(this.entriesByChunk, entry);
       this.#addToGrid(entry);
       placed += 1;
     }
@@ -285,8 +294,8 @@ export class ReactiveVegetationFieldSystem {
   }
 
   #syncConstructionOcclusion() {
-    if (!this.collision?.getRevision || !this.collision?.getObstaclesByType) return;
-    const collisionRevision = this.collision.getRevision();
+    if (!this.collision?.getObstaclesByType) return;
+    const collisionRevision = vegetationConstructionCollisionRevision(this.collision);
     const constructionRevision = this.constructionTerrain?.getRevision?.() ?? 0;
     if (
       collisionRevision === this.lastCollisionRevision &&
