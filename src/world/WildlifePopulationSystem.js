@@ -104,7 +104,6 @@ export class WildlifePopulationSystem {
   } = {}) {
     const selected = this.#selectMeleeActor(playerPosition, direction, { range, arcDegrees });
     if (!selected) return null;
-    this.activeAttackActor = selected;
     const result = selected.meleeAttack(playerPosition, { range, damage, direction, arcDegrees });
     if (result?.defeated) this.#scheduleRespawn(selected);
     return result;
@@ -485,6 +484,7 @@ export class WildlifePopulationSystem {
       nearest = actor;
       nearestHitDistance = target.hitDistance;
     }
+    this.activeAttackActor = nearest;
     return nearest;
   }
 
