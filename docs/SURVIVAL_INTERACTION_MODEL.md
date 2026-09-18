@@ -2,6 +2,20 @@
 
 Foundation 0.3.8 keeps the established gathering, crafting, tools, combat, terrain and mobile-control boundaries while construction transitions to semantic panels.
 
+## Player health and hunger
+
+`PlayerSurvivalSystem` is the single authority for the Ranger's current health and hunger.
+
+- Health and hunger both use a 0-100 data-driven scale from `SurvivalDefinitions.js`.
+- Hunger advances from authoritative world-time minutes rather than wall-clock time, so normal play and sleep time-skips use the same rate.
+- The current tuning consumes 60 hunger points per full in-game day.
+- At zero hunger, starvation begins damaging health at 5 health per in-game hour.
+- Aggressive wildlife supplies damage through its animal definition. The wolf currently deals 18 health per successful attack event; knockback remains presentation/movement feedback and does not own health.
+- Reaching 0 health uses a temporary no-item-loss shoreline recovery: the Ranger returns to the safe spawn with 50 health and 35 hunger. This prevents a soft-lock while a later death/penalty design remains intentionally deferred.
+- Health and hunger are included in the existing schema-2 save state. Older compatible schema-2 saves without survival fields restore to the normal starting values rather than requiring a save reset.
+- The mobile HUD only renders survival state; it does not own survival logic.
+- Food consumption is deliberately not implemented here. Raw Meat remains a gathered food resource until the next cook/eat milestone adds the authoritative hunger-restoration path.
+
 ## Resource storage
 
 Resources declare storage in `ResourceDefinitions.js`.
