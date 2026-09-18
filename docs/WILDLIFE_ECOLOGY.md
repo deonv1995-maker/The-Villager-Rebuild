@@ -53,6 +53,12 @@ Shared states now include wandering, grazing, scavenging, prowling, fleeing, hun
 
 The wolf is territorial: entering its configured aggro radius starts a chase, and entering attack range creates a wildlife attack event. The chase enforces a species-owned stand-off radius so the adult wolf stops in front of the Ranger instead of pursuing the Ranger's centre point and visually clipping through the character. The Ranger integration applies collision-resolved knockback/stagger feedback rather than inventing a separate health/survival-stat system before that system exists as an authoritative gameplay layer.
 
+### Melee combat feedback
+
+Sword combat keeps wildlife health authoritative inside `WildAnimalActor` / `WildlifePopulationSystem`. A sword press is always a valid strike action while the Sword is equipped, but damage is only applied when the configured forward strike arc intersects an animal's melee body hitbox. This separates input/presentation from damage confirmation and prevents a swing from becoming an automatic hit merely because an animal was previously selected.
+
+The wolf declares an explicit melee hitbox and one in-world billboard health bar through `AnimalDefinitions`. The bar reads the same authoritative `health / maxHealth` values returned by damage events, updates immediately after a confirmed hit, and is removed with the actor on defeat/respawn retirement. The existing hit-flash remains presentation feedback; it does not own damage state.
+
 Social animals intentionally do not share a synchronized wander clock. `WildAnimalActor` derives a deterministic per-instance motion phase from the species and population-slot instance ID, then offsets initial pauses, wander targets and presentation phase. This preserves reproducible population behavior while preventing deer and rabbit groups from marching, stopping and animating in lockstep.
 
 ## Presentation and animation
