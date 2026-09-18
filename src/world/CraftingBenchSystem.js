@@ -44,7 +44,10 @@ export class CraftingBenchSystem {
       type: 'crafting-bench',
       label: id,
       bottomY: placementY,
-      topY: placementY + BENCH.collisionHeight
+      topY: placementY + BENCH.collisionHeight,
+      constructionHalfX: BENCH.wallSnap.width * 0.5,
+      constructionHalfZ: BENCH.wallSnap.depth * 0.5,
+      constructionYaw: yaw
     });
 
     const bench = { id, root, collisionHandle };
