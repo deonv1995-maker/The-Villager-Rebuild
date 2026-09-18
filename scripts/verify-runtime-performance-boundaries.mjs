@@ -125,11 +125,12 @@ assert.equal(
   'equivalent presentation exclusions must be detected without redundant invalidation'
 );
 
-const [grassSource, groundCoverSource, jungleSource, ambientSource, chunkSource, packageSource] = await Promise.all([
+const [grassSource, groundCoverSource, jungleSource, ambientSource, treeOcclusionSource, chunkSource, packageSource] = await Promise.all([
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
   readFile('src/world/GroundCoverPresentationSystem.js', 'utf8'),
   readFile('src/world/JungleFloorPresentationSystem.js', 'utf8'),
   readFile('src/world/AmbientWorldDetailSystem.js', 'utf8'),
+  readFile('src/world/TreeOcclusionSystem.js', 'utf8'),
   readFile('src/world/WorldChunkSystem.js', 'utf8'),
   readFile('package.json', 'utf8')
 ]);
@@ -158,6 +159,20 @@ for (const [label, source] of [
     `${label} visibility-only invalidation must not recompute instance bounds on the impact frame`
   );
 }
+
+assert.ok(
+  treeOcclusionSource.includes("this.collision.getTypeRevision?.('tree')"),
+  'tree occlusion must cache active tree records behind the tree collision revision'
+);
+assert.ok(
+  treeOcclusionSource.includes('this.segmentResult = { distance: 0, t: 0 }'),
+  'tree occlusion segment tests must reuse their result object instead of allocating per tree'
+);
+assert.equal(
+  treeOcclusionSource.includes('#refreshFadeBounds()'),
+  false,
+  'tiny camera-to-player fade batches must not recompute bounding spheres every frame'
+);
 
 assert.ok(
   chunkSource.includes('this.chunkFrustumSphere = new THREE.Sphere'),
