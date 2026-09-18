@@ -21,6 +21,20 @@ This pass adds one new player-crafted **Bed** and refreshes the presentation of 
 
 First-person utility selection remains centralized in `UtilityInteractionTargetingRules.js`. Bed, Bench and Storage participate in the same centre-reticle query so one utility cannot incorrectly publish an interaction through another utility in front of it.
 
+## Indoor wall-snapping contract
+
+Crafted placeables reuse semantic construction walls as optional placement anchors instead of creating a second room or furniture grid.
+
+- `PanelConstructionSystem.getPlacementWallSurfaces()` exposes read-only geometry for active **solid** wall panels. Door and Window panels are deliberately excluded so furniture does not auto-block openings.
+- `PlaceableUtilityWallSnapRules.js` is the single geometry rule for wall alignment. It keeps furniture on the player's side of the wall, clamps it within the wall segment, turns the item's usable/front side back into the room, and leaves only a 0.04-unit visual clearance behind the item.
+- `PlaceableUtilityDefinitions.js` owns each item's wall footprint. Bed, Storage Chest, Food Barrel and Crafting Bench therefore use one generic snap algorithm instead of item-specific placement code.
+- The established standable-surface resolver still owns vertical placement. Wall snapping changes only horizontal position/yaw, then re-resolves support height and requires the snapped position to remain on the same floor level.
+- Collision validation ignores only the **specific solid wall that owns the snap**. Other walls, furniture and same-storey obstacles still block placement.
+- Snap identity is preview-only. Save records continue storing the established `x/y/z/yaw` values, so there is no save-schema change and no second furniture persistence system.
+- When no eligible wall is nearby, the original free-placement search remains the fallback. Existing exterior placement remains available.
+
+This boundary is reusable for later furniture types: a new crafted prop normally needs only its data-defined wall footprint unless it genuinely requires different placement semantics.
+
 ## Sleep contract
 
 The existing `CampfireSleepRuntimeController` retains the sleep-time authority. Bed is an additional sleep source, not a second sleep implementation.
@@ -49,6 +63,10 @@ The existing `verify-placeable-utility-hammer-move.mjs` regression path now addi
 - Bed inventory/placeable integration;
 - Bed Hammer REMOVE/replacement behavior;
 - Bed placement and saved elevation on constructed floors;
+- data-driven Bed/Chest/Barrel/Bench wall-snap footprints;
+- semantic solid-wall snapping with the furniture back edge held 0.04 units off the wall;
+- snapped-wall-only collision filtering while neighboring walls remain blocking;
+- snapped orientation persistence through existing save records;
 - Bed persistence through `placeableUtilities`;
 - nighttime Bed sleep advancing the authoritative clock to 07:00 and syncing lighting;
 - refreshed Chest/Barrel procedural detail;
@@ -61,7 +79,9 @@ The full repository `npm run check` remains the merge gate.
 After deployment, verify on a physical phone in both first- and third-person:
 
 - craft Bed from a Crafting Bench and place it outdoors and on an indoor constructed floor;
-- confirm the Bed footprint feels sensible and does not clip through nearby walls;
+- aim Bed, Chest, Barrel and Crafting Bench near an interior solid wall and confirm each snaps tightly against it with its usable/front side facing into the room;
+- confirm Door/Window openings do not attract furniture snapping and neighboring walls still prevent corner clipping;
+- confirm the tighter wall placement leaves noticeably more walking space without trapping the Ranger;
 - at night, approach the Bed and confirm **SLEEP** appears and wakes at 07:00;
 - Hammer > REMOVE can move the Bed and re-enter the established placement preview;
 - Chest and Barrel still open, transfer resources and restore after Save/Continue;
