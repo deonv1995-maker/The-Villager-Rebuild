@@ -549,14 +549,20 @@ export class GameApp {
     if (toolId === 'sword') {
       if (this.toolPresentation?.isBusy()) return;
       const target = this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.sword.range);
-      if (!target) return;
-      this.player.faceWorldPoint(target.position);
+      if (target) this.player.faceWorldPoint(target.position);
+      this.player.getFacingDirection(this.playerFacing);
       if (!this.toolPresentation?.playSwing('sword')) return;
       const hit = this.hunt.meleeAttack(this.playerPosition, {
         range: TOOL_DEFINITIONS.sword.range,
-        damage: TOOL_DEFINITIONS.sword.damage
+        damage: TOOL_DEFINITIONS.sword.damage,
+        direction: this.playerFacing,
+        arcDegrees: TOOL_DEFINITIONS.sword.attackArcDegrees
       });
-      if (hit) this.#handleCombatResult(hit);
+      if (hit) {
+        this.#handleCombatResult(hit);
+        return;
+      }
+      this.setStatus('SWORD · STRIKE');
     }
   }
 
@@ -701,9 +707,14 @@ export class GameApp {
       return;
     }
 
-    if (this.currentHuntTarget && toolId === 'sword') {
-      this.setStatus(`${this.currentHuntTarget.label.toUpperCase()} · SWORD RANGE`);
-      this.hud?.setObjective('Sword action / F · lateral slash');
+    if (toolId === 'sword') {
+      if (this.currentHuntTarget) {
+        this.setStatus(`${this.currentHuntTarget.label.toUpperCase()} · SWORD RANGE`);
+        this.hud?.setObjective('Sword action / F · three-strike combo');
+      } else {
+        this.setStatus('SWORD READY');
+        this.hud?.setObjective('Sword action / F · strike whenever the sword is equipped');
+      }
       return;
     }
 

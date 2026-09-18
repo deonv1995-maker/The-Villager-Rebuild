@@ -18,6 +18,7 @@ import { PHYSICAL_LOG } from '../src/data/PhysicalLogDefinitions.js';
 import { DayOneHuntSystem } from '../src/world/DayOneHuntSystem.js';
 import { SpearProjectileSystem } from '../src/world/SpearProjectileSystem.js';
 import { WORLD_LAYOUT } from '../src/data/WorldLayout.js';
+import { resolveContextAction } from '../src/ui/ContextActionPolicy.js';
 
 function animationNamesFromGlb(buffer) {
   assert.equal(buffer.toString('ascii', 0, 4), 'glTF', 'KayKit animation asset must remain a valid GLB');
@@ -40,6 +41,7 @@ assert.equal(TOOL_DEFINITIONS.hammer.role, 'demolition');
 assert.equal(TOOL_DEFINITIONS.pickaxe.role, 'rock-harvest');
 assert.equal(TOOL_DEFINITIONS.shovel.role, 'stump-removal');
 assert.equal(TOOL_DEFINITIONS.sword.role, 'melee');
+assert.equal(TOOL_DEFINITIONS.sword.attackArcDegrees, 118, 'Sword hit detection must use the shared forward strike arc');
 assert.equal(TOOL_DEFINITIONS.torch.role, 'light');
 assert.equal(TOOL_DEFINITIONS.torch.usesDurability, false, 'Torch fuel must stay separate from per-use tool durability');
 assert.deepEqual(
@@ -48,6 +50,26 @@ assert.deepEqual(
   'Shovel recipe must stay data-driven at one Stick, one Stone and one Grass'
 );
 assert.ok(TOOL_DEFINITIONS.spear.lockRange >= 8, 'Spear must auto-lock at a meaningful projectile range');
+
+const idleSwordAction = resolveContextAction({ toolId: 'sword', huntTarget: null });
+assert.equal(idleSwordAction.source, 'attack', 'Equipped sword must own the combat action even without a lock target');
+assert.equal(idleSwordAction.available, true, 'Sword strike button must remain viable whenever the sword is equipped');
+assert.equal(idleSwordAction.caption, 'STRIKE');
+const swordWithContextAction = resolveContextAction({
+  toolId: 'sword',
+  huntTarget: null,
+  externalActions: [{
+    id: 'spear-retrieve',
+    available: true,
+    icon: 'hand',
+    label: 'Retrieve spear',
+    caption: 'RETRIEVE',
+    priority: 2000
+  }]
+});
+assert.equal(swordWithContextAction.caption, 'STRIKE', 'Equipped sword must keep its strike button ahead of unrelated contextual actions');
+const idleSpearAction = resolveContextAction({ toolId: 'spear', huntTarget: null });
+assert.equal(idleSpearAction.available, false, 'Spear must continue requiring a valid throw target');
 
 for (const resourceId of ['stick', 'stone', 'grass', 'log']) {
   assert.equal(RESOURCE_DEFINITIONS[resourceId].storage, 'inventory', `${resourceId} must enter inventory when picked up`);
@@ -313,6 +335,10 @@ assert.ok(gatherSource.includes('createPhysicalLogVisual'), 'World Logs must ret
 assert.ok(gatherSource.includes("definition.storage !== 'inventory'"), 'Gatherable pickup must route resources according to storage definitions');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'));
 assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'));
+assert.ok(toolSource.includes('const SWORD_STRIKE_DURATIONS = Object.freeze([0.36, 0.39, 0.44])'), 'Sword presentation must retain three distinct strike timings');
+assert.ok(toolSource.includes('this.swordStrikeIndex = (this.swordStrikeIndex + 1) % SWORD_STRIKE_DURATIONS.length'), 'Sword strikes must cycle deterministically through all three animations');
+assert.ok(appSource.includes('direction: this.playerFacing'), 'Sword damage must use the Ranger facing direction');
+assert.ok(appSource.includes('arcDegrees: TOOL_DEFINITIONS.sword.attackArcDegrees'), 'Sword damage must use the shared configured melee arc');
 assert.ok(playerSource.includes('mountRightHandObject(object)'));
 assert.ok(playerSource.includes("/^Throw$/i") && playerSource.includes('playSpearThrow(onRelease)'));
 assert.ok(floorSupportSource.includes("createPhysicalLogVisual('AutomaticFloorSupport')") && floorSupportSource.includes("fill.name = 'automatic-floor-fill'"));

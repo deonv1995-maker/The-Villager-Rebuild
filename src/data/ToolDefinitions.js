@@ -48,6 +48,7 @@ export const TOOL_DEFINITIONS = Object.freeze({
     role: 'melee',
     actionLabel: 'Strike',
     range: 2.35,
+    attackArcDegrees: 118,
     damage: 1
   }),
   torch: Object.freeze({
