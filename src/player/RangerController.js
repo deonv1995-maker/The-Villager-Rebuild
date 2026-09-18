@@ -259,7 +259,9 @@ export class RangerController {
     modelPitch = 0,
     modelYaw = 0,
     modelRoll = 0,
+    modelXOffset = 0,
     modelYOffset = 0,
+    modelZOffset = 0,
     snapCamera = false
   } = {}) {
     if (!this.cinematicDriver) return false;
@@ -268,7 +270,7 @@ export class RangerController {
     this.root.position.y = Number.isFinite(y) ? y : this.terrain.heightAt(x, z);
     this.root.rotation.y = yaw;
     if (this.model) {
-      this.model.position.set(0, modelYOffset, 0);
+      this.model.position.set(modelXOffset, modelYOffset, modelZOffset);
       this.model.rotation.set(modelPitch, modelYaw, modelRoll);
     }
     if (snapCamera) {
