@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { PLACEABLE_UTILITY_DEFINITIONS } from '../data/PlaceableUtilityDefinitions.js';
 import { RESOURCE_DEFINITIONS } from '../data/ResourceDefinitions.js';
 import {
   STARTER_STORAGE_CONTAINERS,
@@ -40,7 +39,6 @@ export class StorageContainerSystem {
 
     const root = this.#createVisual(type);
     const placementY = Number.isFinite(y) ? y : this.terrain.heightAt(x, z);
-    const constructionFootprint = PLACEABLE_UTILITY_DEFINITIONS[type]?.wallSnap ?? null;
     root.position.set(x, placementY, z);
     root.rotation.y = yaw;
     root.name = `storage-${type}-${id}`;
@@ -53,10 +51,7 @@ export class StorageContainerSystem {
       type: 'storage-container',
       label: id,
       bottomY: placementY,
-      topY: placementY + definition.collisionHeight,
-      constructionHalfX: (constructionFootprint?.width ?? 0) * 0.5,
-      constructionHalfZ: (constructionFootprint?.depth ?? 0) * 0.5,
-      constructionYaw: yaw
+      topY: placementY + definition.collisionHeight
     });
 
     const container = {
