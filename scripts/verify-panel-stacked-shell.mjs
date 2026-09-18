@@ -87,7 +87,15 @@ const firstWallTop = groundLevel + PANEL_GRID.storeyHeight;
 const secondWallTop = firstWallTop + PANEL_GRID.storeyHeight;
 
 const seedUpperStairWallGap = grid => {
-  const lowerCells = [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }];
+  // Two independently enclosed lower root cells support the upper Floors on either side
+  // of the opening. The middle lower cell deliberately has no north Wall, so the desired
+  // upper edge cannot fall back to the existing vertical stacked-wall rule.
+  const lowerCells = [
+    { x: 0, z: 0 },
+    { x: 1, z: 0 },
+    { x: 2, z: 0 },
+    { x: 1, z: 1 }
+  ];
   for (const cell of lowerCells) {
     assert.equal(
       grid.placeFloor({ ...cell, storey: 0, levelY: groundLevel }).ok,
@@ -95,9 +103,10 @@ const seedUpperStairWallGap = grid => {
       `Expected lower Floor at ${cell.x}:${cell.z}`
     );
   }
-  addPerimeterWalls(grid, lowerCells);
+  addPerimeterWalls(grid, [{ x: 0, z: 0 }]);
+  addPerimeterWalls(grid, [{ x: 2, z: 0 }]);
   assert.equal(
-    grid.placeStair({ x: 0, z: 0, storey: 0, direction: 'east' }).ok,
+    grid.placeStair({ x: 1, z: 1, storey: 0, direction: 'north' }).ok,
     true,
     'Test topology must reserve the middle upper cell as a Stair opening'
   );
@@ -132,6 +141,12 @@ const seedUpperStairWallGap = grid => {
   });
   assert.equal(left.ok, true);
   assert.equal(right.ok, true);
+  assert.equal(
+    collectPanelUpperWallSupports([...grid.walls.values()])
+      .some(support => support.key === 'edge:1:x:1:0'),
+    false,
+    'The middle upper edge must not have an exact lower-wall support'
+  );
   return {
     leftWallKey: left.wall.key,
     rightWallKey: right.wall.key,
