@@ -70,6 +70,8 @@ The storage routing rules remain:
 
 Transfers use `InventorySystem.consume()` and `InventorySystem.tryAdd()` so Ranger capacity remains authoritative when taking items back. Container contents never become a second inventory system.
 
+Semantic construction has one deliberate exception to manual withdrawal: while Hammer build mode is active, `PanelConstructionSystem` receives `StorageContainerSystem` as an optional material source. `StorageContainerSystem.getAvailable()/hasAvailable()/consumeAvailable()` exposes carried inventory plus all placed container contents as one construction-only pool. Consumption is atomic, spends carried materials first, then removes the remainder directly from stored stacks; it does not transfer those stacks into the Ranger pack and therefore does not require spare carrying capacity. Failed affordability checks mutate neither inventory nor storage. Normal crafting, food, equipment and storage transfer behavior remain unchanged.
+
 ### Storage transfer UI contract
 
 The opened storage panel is a two-pane transfer surface rather than a row of one-item Store/Take buttons:
