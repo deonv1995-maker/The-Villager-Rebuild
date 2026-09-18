@@ -96,10 +96,16 @@ export class WildlifePopulationSystem {
     return result;
   }
 
-  meleeAttack(playerPosition, { range = 2.35, damage = 1 } = {}) {
-    const selected = this.#selectAttackActor(playerPosition, range);
+  meleeAttack(playerPosition, {
+    range = 2.35,
+    damage = 1,
+    direction = null,
+    arcDegrees = 118
+  } = {}) {
+    const selected = this.#selectMeleeActor(playerPosition, direction, { range, arcDegrees });
     if (!selected) return null;
-    const result = selected.meleeAttack(playerPosition, { range, damage });
+    this.activeAttackActor = selected;
+    const result = selected.meleeAttack(playerPosition, { range, damage, direction, arcDegrees });
     if (result?.defeated) this.#scheduleRespawn(selected);
     return result;
   }
@@ -306,6 +312,10 @@ export class WildlifePopulationSystem {
   #retireActor(actor) {
     if (!actor) return;
     actor.setAttackIndicator(false);
+    if (typeof actor.dispose === 'function') {
+      actor.dispose();
+      return;
+    }
     if (actor.targetRing) this.scene.remove(actor.targetRing);
     if (actor.harvestRing) this.scene.remove(actor.harvestRing);
     if (actor.group) this.scene.remove(actor.group);
@@ -463,6 +473,18 @@ export class WildlifePopulationSystem {
       nearestDistance = target.distance;
     }
     this.activeAttackActor = nearest;
+    return nearest;
+  }
+
+  #selectMeleeActor(playerPosition, direction, { range, arcDegrees }) {
+    let nearest = null;
+    let nearestHitDistance = Number.POSITIVE_INFINITY;
+    for (const actor of this.actors) {
+      const target = actor.getMeleeHitTarget(playerPosition, direction, { range, arcDegrees });
+      if (!target || target.hitDistance >= nearestHitDistance) continue;
+      nearest = actor;
+      nearestHitDistance = target.hitDistance;
+    }
     return nearest;
   }
 
