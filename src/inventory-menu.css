@@ -1,7 +1,16 @@
-.inventory-menu-toggle {
+.inventory-quick-access {
   position: absolute;
   left: max(10px, env(safe-area-inset-left));
-  top: max(58px, calc(env(safe-area-inset-top) + 54px));
+  top: max(48px, calc(env(safe-area-inset-top) + 44px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.inventory-menu-toggle {
+  position: relative;
   display: grid;
   place-items: center;
   width: 46px;
@@ -19,6 +28,63 @@
 .inventory-menu-toggle:active { border-color: #f0cf76; background: rgba(79, 91, 57, .98); }
 .inventory-menu-toggle[data-over-capacity="true"] { border-color: #d85d57; }
 .inventory-menu-toggle:active { transform: scale(.95); }
+
+.inventory-capacity-gauge {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 3px;
+  width: 38px;
+  height: clamp(68px, 18vh, 94px);
+  padding: 5px 5px 4px;
+  border: 1px solid rgba(240, 207, 118, .46);
+  border-radius: 11px;
+  background: rgba(23, 46, 33, .86);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.inventory-capacity-track {
+  position: relative;
+  width: 16px;
+  height: 100%;
+  min-height: 42px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(225, 207, 151, .34);
+  border-radius: 999px;
+  background: rgba(5, 12, 9, .72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .06) inset;
+}
+
+.inventory-capacity-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
+  border-radius: inherit;
+  background: #70b88a;
+  transition: height 140ms linear;
+}
+
+.inventory-capacity-readout {
+  color: #fff0cb;
+  font-size: 7px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .02em;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory-capacity-gauge[data-over-capacity="true"] {
+  border-color: rgba(216, 93, 87, .78);
+}
+
+.inventory-capacity-gauge[data-over-capacity="true"] .inventory-capacity-fill {
+  background: #d85d57;
+}
 
 .mobile-hud:has(.inventory-menu:not([hidden])) { z-index: 30; }
 
@@ -197,7 +263,11 @@ button.inventory-card { pointer-events: auto; touch-action: none; }
 .inventory-menu .craft-recipe-button { min-height: 44px; font-size: 9px; }
 
 @media (max-width: 700px) and (orientation: portrait) {
-  .inventory-menu-toggle { left: max(8px, env(safe-area-inset-left)); top: max(56px, calc(env(safe-area-inset-top) + 52px)); }
+  .inventory-quick-access {
+    left: max(8px, env(safe-area-inset-left));
+    top: max(48px, calc(env(safe-area-inset-top) + 44px));
+  }
+  .inventory-capacity-gauge { height: clamp(68px, 15vh, 88px); }
   .inventory-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
   .inventory-card { min-height: 82px; padding: 6px 5px 5px; }
   .inventory-card .inventory-resource-icon { width: 38px; height: 38px; }
