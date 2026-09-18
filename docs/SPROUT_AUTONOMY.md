@@ -26,7 +26,7 @@ After the Ranger has been stationary for a short period, Sprout stops treating t
 
 Loose-resource retrieval still has priority over decorative roaming. When Sprout reaches an eligible loose pickup while the Ranger is idle, the existing reservation/commit transaction is preserved, but the presentation may include an inspection beat before compression: the reserved pickup is represented by a temporary clone, lifted near Sprout's scanner, rotated briefly, then compressed and committed through the same authoritative `GatherableSystem` boundary. The real pickup is never awarded merely because inspection began.
 
-Sprout still does not harvest intact trees, rocks or grass patches. Idle curiosity is not a second harvesting system.
+Sprout still does not harvest intact trees, rocks or other tool-gated nodes. Passive harvestable Grass patches are the deliberate exception: they are already `GatherableSystem` inventory resources, so allied Sprout may reserve and compress them through the same collection transaction as loose pickups. Idle curiosity is not a second harvesting system.
 
 ## Automatic extended-idle flourish
 
