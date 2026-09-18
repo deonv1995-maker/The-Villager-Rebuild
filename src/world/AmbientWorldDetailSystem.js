@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { constructionFloorCoversVegetation } from './GrassFieldSystem.js';
+import { vegetationConstructionCollisionRevision } from './VegetationInvalidation.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const smoothstep = (value, min, max) => {
@@ -385,8 +386,8 @@ export class AmbientWorldDetailSystem {
   }
 
   #syncConstructionOcclusion() {
-    if (!this.meshes.length || !this.collision?.getRevision || !this.collision?.getObstaclesByType) return;
-    const collisionRevision = this.collision.getRevision();
+    if (!this.meshes.length || !this.collision?.getObstaclesByType) return;
+    const collisionRevision = vegetationConstructionCollisionRevision(this.collision);
     const constructionRevision = this.constructionTerrain?.getRevision?.() ?? 0;
     if (
       collisionRevision === this.lastCollisionRevision &&
