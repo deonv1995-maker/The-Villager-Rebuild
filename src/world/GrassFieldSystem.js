@@ -128,6 +128,26 @@ export class ReactiveVegetationFieldSystem {
     }
   }
 
+  setCollectionHidden(entries = [], hidden = false) {
+    const nextHidden = Boolean(hidden);
+    const changedMeshes = new Set();
+    for (const entry of entries) {
+      if (!entry || entry.collectionHidden === nextHidden) continue;
+      entry.collectionHidden = nextHidden;
+      entry.bendX = 0;
+      entry.bendZ = 0;
+      entry.compression = 0;
+      this.active.delete(entry);
+      this.#writeMatrix(entry, false);
+      if (entry.mesh) changedMeshes.add(entry.mesh);
+    }
+    for (const mesh of changedMeshes) {
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+    return changedMeshes.size > 0;
+  }
+
   populate() {
     this.entries.length = 0;
     this.grid.clear();
@@ -172,7 +192,8 @@ export class ReactiveVegetationFieldSystem {
         bendZ: 0,
         compression: 0,
         constructionHidden: false,
-        presentationHidden: false
+        presentationHidden: false,
+        collectionHidden: false
       };
       entry.presentationHidden = this.#isPresentationExcluded(entry);
       this.entries.push(entry);
@@ -204,7 +225,7 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of candidates) {
-      if (entry.constructionHidden || entry.presentationHidden) continue;
+      if (entry.constructionHidden || entry.presentationHidden || entry.collectionHidden) continue;
       const dx = entry.x - playerPosition.x;
       const dz = entry.z - playerPosition.z;
       const distance = Math.hypot(dx, dz);
@@ -239,7 +260,7 @@ export class ReactiveVegetationFieldSystem {
     }
 
     for (const entry of Array.from(this.active)) {
-      if (entry.constructionHidden || entry.presentationHidden) {
+      if (entry.constructionHidden || entry.presentationHidden || entry.collectionHidden) {
         this.active.delete(entry);
         continue;
       }
@@ -379,7 +400,7 @@ export class ReactiveVegetationFieldSystem {
     if (!entry.mesh || entry.index < 0) return;
     this.dummy.position.set(entry.x, entry.y, entry.z);
     this.dummy.rotation.set(entry.baseLeanX + entry.bendX, entry.baseYaw, entry.baseLeanZ + entry.bendZ);
-    if (entry.constructionHidden || entry.presentationHidden) {
+    if (entry.constructionHidden || entry.presentationHidden || entry.collectionHidden) {
       this.dummy.scale.set(0, 0, 0);
     } else {
       this.dummy.scale.set(entry.scaleX, entry.scaleY * (1 - entry.compression), entry.scaleZ);
