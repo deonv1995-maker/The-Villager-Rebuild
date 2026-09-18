@@ -55,6 +55,19 @@ const idleSwordAction = resolveContextAction({ toolId: 'sword', huntTarget: null
 assert.equal(idleSwordAction.source, 'attack', 'Equipped sword must own the combat action even without a lock target');
 assert.equal(idleSwordAction.available, true, 'Sword strike button must remain viable whenever the sword is equipped');
 assert.equal(idleSwordAction.caption, 'STRIKE');
+const swordWithContextAction = resolveContextAction({
+  toolId: 'sword',
+  huntTarget: null,
+  externalActions: [{
+    id: 'spear-retrieve',
+    available: true,
+    icon: 'hand',
+    label: 'Retrieve spear',
+    caption: 'RETRIEVE',
+    priority: 2000
+  }]
+});
+assert.equal(swordWithContextAction.caption, 'STRIKE', 'Equipped sword must keep its strike button ahead of unrelated contextual actions');
 const idleSpearAction = resolveContextAction({ toolId: 'spear', huntTarget: null });
 assert.equal(idleSpearAction.available, false, 'Spear must continue requiring a valid throw target');
 
