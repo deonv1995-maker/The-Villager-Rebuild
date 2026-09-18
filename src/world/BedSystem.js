@@ -44,10 +44,7 @@ export class BedSystem {
       type: 'bed',
       label: id,
       bottomY: placementY,
-      topY: placementY + BED.collisionHeight,
-      constructionHalfX: BED.wallSnap.width * 0.5,
-      constructionHalfZ: BED.wallSnap.depth * 0.5,
-      constructionYaw: yaw
+      topY: placementY + BED.collisionHeight
     });
 
     const bed = { id, root, collisionHandle };
