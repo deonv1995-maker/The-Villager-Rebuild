@@ -239,7 +239,7 @@ Selecting Hammer opens the compact semantic build dock. The live choices are Flo
 
 Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. For Wall/Door/Window mode, a floorless stacked edge from a completed lower enclosure or a supported one-panel same-storey gap between two upper wall sections may replace an otherwise invalid ground/Floor-backed fallback. For Roof mode, vertically aligned valid supports prefer the highest completed ring when their horizontal score is effectively tied. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Large Roofs use the nearest covered cell for reach/scoring rather than forcing interaction through the aggregate centre.
 
-Green means the candidate and combined build-material cost are valid; red means support/occupancy/clearance/material requirements are not satisfied. The Hammer material count represents the construction pool available across the Ranger pack and placed storage, not only what fits in the pack.
+Green means the candidate and combined build-material cost are valid; red means support/occupancy/clearance/material requirements are not satisfied. Wall clearance is three-dimensional: horizontal overlap blocks placement only when the existing collision volume also overlaps the candidate Wall's storey height. A Chest, Bench or other bounded obstacle on the floor below must not invalidate an otherwise supported upper-storey Wall, while same-storey furniture, Walls and vertically tall world obstacles still block normally. The Hammer material count represents the construction pool available across the Ranger pack and placed storage, not only what fits in the pack.
 
 The legacy physical-log build tray remains isolated transition infrastructure and is hidden during semantic panel construction.
 
@@ -319,6 +319,7 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - reverse demolition protection while a floorless upper wall depends on the lower enclosure;
 - a Stair-reserved upper Floor opening exposing a one-panel same-storey Wall gap only when two independently supported collinear upper Walls flank it;
 - live Hammer targeting/building of that upper gap at the Ranger's active storey without synthesizing a Floor;
+- upper-gap Wall clearance remaining valid when a bounded lower-storey utility shares the same X/Z but ends below the Wall base;
 - save/Continue reconstruction of the bridged edge after its two support roots and demolition protection for those flanking Walls;
 - a completed floorless upper ring exposing a high Roof support cell at its exact wall-top elevation;
 - third-person Roof targeting choosing that highest completed ring instead of the lower aligned support;
