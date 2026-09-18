@@ -9,7 +9,7 @@ const TORCH_GRIP_ROTATION = new THREE.Euler(-0.1, 0.02, 0.08, 'XYZ');
 const TORCH_CARRY_PROFILE = 'steady-upright';
 
 /**
- * Keeps TorchRuntimeController as the fuel/placement/mounted-light authority while
+ * Keeps TorchRuntimeController as the placement/mounted-light authority while
  * adapting the handheld prop to the active visible player presentation. The carried
  * torch deliberately has no world light; illumination begins only after placement.
  */
