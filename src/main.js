@@ -19,7 +19,8 @@ import { StructureInteriorOcclusionController } from './gameplay/StructureInteri
 import { VisibleHandTorchRuntimeController as TorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
-import { PlayerProfileLifecycle } from './persistence/PlayerProfileLifecycle.js';\nimport { PlayerProfileStore, normalizeProfileName } from './persistence/PlayerProfileStore.js';
+import { PlayerProfileLifecycle } from './persistence/PlayerProfileLifecycle.js';
+import { PlayerProfileStore, normalizeProfileName } from './persistence/PlayerProfileStore.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
@@ -36,7 +37,8 @@ import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
 const canvas = document.getElementById('game-canvas');
 const status = document.getElementById('boot-status');
-const profileStore = new PlayerProfileStore();\nconst profileLifecycle = new PlayerProfileLifecycle({ profileStore });
+const profileStore = new PlayerProfileStore();
+const profileLifecycle = new PlayerProfileLifecycle({ profileStore });
 
 function setStatus(message, error = false) {
   status.textContent = message;
