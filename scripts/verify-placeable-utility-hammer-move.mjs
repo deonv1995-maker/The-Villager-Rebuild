@@ -309,9 +309,37 @@ const sleepGame = {
   campfire: { getState: () => ({ built: false, position: null }) },
   physicalLogs: { isCarrying: () => false },
   player: {
+    root: new THREE.Group(),
+    cinematicDriver: null,
     getPosition(target) {
       target.set(0, 0, 0);
-    }
+    },
+    getFacingDirection(target) {
+      target.set(0, 0, 1);
+    },
+    getCameraMode() {
+      return 'third-person';
+    },
+    setCameraMode(mode) {
+      return mode;
+    },
+    beginCinematic(driver) {
+      if (this.cinematicDriver) return false;
+      this.cinematicDriver = driver;
+      return true;
+    },
+    endCinematic(driver) {
+      if (this.cinematicDriver !== driver) return false;
+      this.cinematicDriver = null;
+      return true;
+    },
+    setCinematicPose() {
+      return true;
+    },
+    playCinematicAnimation() {
+      return { name: 'test-rest-animation', duration: 1 };
+    },
+    setSpearEquipped() {}
   },
   worldTime: {
     getSnapshot: () => worldTimeSnapshot,
@@ -321,9 +349,26 @@ const sleepGame = {
     }
   },
   worldTimeRuntime: {
+    paused: false,
+    setPaused(paused) {
+      this.paused = Boolean(paused);
+      return this.paused;
+    },
     sync() {
       lightingSyncs += 1;
     }
+  },
+  island: {
+    heightAt: () => 0
+  },
+  toolbelt: {
+    getEquippedToolId: () => null
+  },
+  toolPresentation: {
+    setEquippedTool() {}
+  },
+  torchRuntime: {
+    setHandheldPresentationSuppressed() {}
   },
   saveController: {
     saveNow(reason) {
@@ -353,10 +398,18 @@ sleepRuntime.start();
 sleepFrame();
 const bedSleepAction = sleepActions.get('campfire-sleep');
 assert(bedSleepAction?.caption === 'SLEEP' && bedSleepAction?.label.includes('bed'), 'A nearby placed Bed must expose the established SLEEP action at night');
-assert(bedSleepAction.onTrigger(), 'Bed sleep action must complete through the existing world-time boundary');
-assert(worldTimeSnapshot.day === 3 && worldTimeSnapshot.minuteOfDay === 420, 'Sleeping in Bed must advance the authoritative clock to next morning at 07:00');
+assert(bedSleepAction.onTrigger(), 'Bed sleep action must begin through the existing world-time boundary');
+assert(worldTimeSnapshot.day === 2, 'Bed sleep must not jump the world clock before the rest cinematic reaches blackout');
+let sleepSafety = 0;
+while (worldTimeSnapshot.day === 2 && sleepSafety < 100) {
+  sleepRuntime.update(0.05);
+  sleepSafety += 1;
+}
+assert(worldTimeSnapshot.day === 3 && worldTimeSnapshot.minuteOfDay === 420, 'Sleeping in Bed must advance the authoritative clock to next morning at 07:00 after fade-out');
 assert(sleepSaves.at(-1) === 'bed-sleep', 'Bed sleep must checkpoint with a dedicated save reason');
 assert(lightingSyncs === 1, 'Bed sleep must immediately resync established world-time presentations');
+for (let index = 0; index < 80; index += 1) sleepRuntime.update(0.05);
+assert(!sleepGame.player.cinematicDriver, 'Bed sleep must return Ranger control after the wake sequence');
 runtime.bedSystem.removeBed(sleepBed.id);
 sleepRuntime.dispose();
 
