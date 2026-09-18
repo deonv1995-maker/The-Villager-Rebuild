@@ -3,6 +3,7 @@ import { createToolModelAsset, hasToolModelAsset } from '../rendering/ToolModelA
 import { RangerAppearancePresentation } from './RangerAppearancePresentation.js';
 
 const SKELETAL_WORK_TOOLS = new Set(['axe', 'hammer', 'pickaxe']);
+const SWORD_STRIKE_DURATIONS = Object.freeze([0.36, 0.39, 0.44]);
 const VISIBLE_SPEAR_SHAFT_CENTER_Y = 0.12;
 const VISIBLE_SPEAR_GRIP_PROFILE = 'visible-hand-mid-shaft-spear-v2';
 
@@ -12,6 +13,8 @@ export class RangerToolPresentation {
     this.appearancePresentation = appearancePresentation ?? new RangerAppearancePresentation({ player });
     this.duration = 0.46;
     this.remaining = 0;
+    this.swordStrikeIndex = 0;
+    this.activeSwordStrike = 0;
     this.currentToolId = null;
     this.modelRequestId = 0;
     this.skeletalActionActive = false;
@@ -38,6 +41,10 @@ export class RangerToolPresentation {
       return;
     }
     this.currentToolId = toolId;
+    if (toolId === 'sword') {
+      this.swordStrikeIndex = 0;
+      this.activeSwordStrike = 0;
+    }
     const requestId = ++this.modelRequestId;
     this.root.clear();
     if (toolId) {
@@ -62,6 +69,11 @@ export class RangerToolPresentation {
     this.#syncVisibleHandMount();
     this.#syncVisibility();
 
+    if (toolId === 'sword') {
+      this.activeSwordStrike = this.swordStrikeIndex;
+      this.swordStrikeIndex = (this.swordStrikeIndex + 1) % SWORD_STRIKE_DURATIONS.length;
+    }
+
     if (this.handMounted && SKELETAL_WORK_TOOLS.has(toolId)) {
       const action = this.player.playToolAction?.(toolId);
       if (action?.started) {
@@ -73,7 +85,9 @@ export class RangerToolPresentation {
       }
     }
 
-    this.duration = toolId === 'sword' ? 0.4 : 0.43;
+    this.duration = toolId === 'sword'
+      ? SWORD_STRIKE_DURATIONS[this.activeSwordStrike]
+      : 0.43;
     this.remaining = this.duration;
     this.skeletalActionActive = false;
     this.#applySwingPose(0);
@@ -171,16 +185,7 @@ export class RangerToolPresentation {
       : 1 - Math.pow(-2 * progress + 2, 2) / 2;
 
     if (this.currentToolId === 'sword') {
-      // The fallback sword action is deliberately lateral rather than the old
-      // generic up/down tool arc: blade winds across the body and cuts sideways.
-      const slash = -1.22 + eased * 2.44;
-      if (this.handMounted) {
-        this.root.position.set(0, 0, 0);
-        this.root.rotation.set(0.08, -0.32 + eased * 0.64, slash);
-        return;
-      }
-      this.root.position.set(0.52, 1.4, 0.12);
-      this.root.rotation.set(0.18, -0.46 + eased * 0.92, slash);
+      this.#applySwordStrikePose(progress, eased);
       return;
     }
 
@@ -193,6 +198,44 @@ export class RangerToolPresentation {
 
     this.root.position.set(0.48, 1.36, 0.16);
     this.root.rotation.set(swing, 0.08, -0.34 + Math.sin(progress * Math.PI) * 0.24);
+  }
+
+  #applySwordStrikePose(progress, eased) {
+    const strike = this.activeSwordStrike % SWORD_STRIKE_DURATIONS.length;
+    const followThrough = Math.sin(progress * Math.PI);
+
+    if (strike === 0) {
+      const slash = -1.22 + eased * 2.44;
+      if (this.handMounted) {
+        this.root.position.set(0, 0, 0);
+        this.root.rotation.set(0.08, -0.32 + eased * 0.64, slash);
+        return;
+      }
+      this.root.position.set(0.52, 1.4, 0.12);
+      this.root.rotation.set(0.18, -0.46 + eased * 0.92, slash);
+      return;
+    }
+
+    if (strike === 1) {
+      const backhand = 1.18 - eased * 2.36;
+      if (this.handMounted) {
+        this.root.position.set(0, 0, 0);
+        this.root.rotation.set(-0.08 - followThrough * 0.12, 0.34 - eased * 0.68, backhand);
+        return;
+      }
+      this.root.position.set(0.5, 1.39, 0.1);
+      this.root.rotation.set(0.08 - followThrough * 0.14, 0.44 - eased * 0.88, backhand);
+      return;
+    }
+
+    const diagonal = -0.92 + eased * 1.84;
+    if (this.handMounted) {
+      this.root.position.set(0, 0, 0);
+      this.root.rotation.set(-0.82 + eased * 1.34, -0.42 + eased * 0.84, diagonal);
+      return;
+    }
+    this.root.position.set(0.5, 1.42, 0.1);
+    this.root.rotation.set(-0.72 + eased * 1.18, -0.52 + eased * 1.04, diagonal);
   }
 
   async #upgradeToolModel(toolId, fallback, requestId) {
