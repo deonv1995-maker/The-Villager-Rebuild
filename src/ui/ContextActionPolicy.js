@@ -77,15 +77,17 @@ export function resolveContextAction({
     };
   }
 
-  if (WEAPON_TOOLS.has(toolId) && huntTarget) {
+  if (WEAPON_TOOLS.has(toolId) && (toolId === 'sword' || huntTarget)) {
     return {
       source: 'attack',
       available: true,
       icon: toolId,
       label: toolId === 'spear'
         ? `Throw spear at ${huntTarget.label}`
-        : `Slash ${huntTarget.label}`,
-      caption: toolId === 'spear' ? 'THROW' : 'SLASH'
+        : huntTarget
+          ? `Strike ${huntTarget.label}`
+          : 'Swing sword',
+      caption: toolId === 'spear' ? 'THROW' : 'STRIKE'
     };
   }
 
