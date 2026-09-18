@@ -157,7 +157,13 @@ assert.ok(resources.includes("storage: 'inventory'"), 'Resource definitions must
 assert.ok(!resources.includes("manualPickup: 'physical'"), 'Loose Logs must not be routed into legacy physical carrying');
 assert.ok(gatherables.includes("definition.storage !== 'inventory' || definition.manualPickup === 'physical'"), 'Gatherable routing must still respect explicitly physical resources if one is introduced later');
 assert.ok(gatherables.includes('this.#canStore(item.resourceId, quantity)'), 'Loose pickup selection must obey capacity before removal');
-assert.ok(gatherables.includes('item.reservedBy = null;\n      item.root.visible = true;\n      return null;'), 'Sprout reservation commit must restore the world pickup if capacity changes before transfer');
+assert.ok(
+  gatherables.includes('item.reservedBy = null;')
+    && gatherables.includes('item.root.visible = true;')
+    && gatherables.includes("if (!this.#canStore('grass', patch.quantity))")
+    && gatherables.includes('setCollectionHidden?.(patch.entries, false)'),
+  'Sprout reservation commit must restore normal pickups and grass patches if capacity changes before transfer'
+);
 assert.ok(contextPolicy.includes("? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')") && contextPolicy.includes(": 'FULL'"), 'Full storage must disable the unified mobile pickup action visibly');
 assert.ok(
   capacityControllerSource.includes('const state = this.inventory.getStorageState();')

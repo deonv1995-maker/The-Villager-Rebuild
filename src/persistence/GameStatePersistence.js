@@ -270,6 +270,8 @@ const restoreGatherables = (game, state) => {
   );
   const harvested = new Set(Array.isArray(state.harvestedGrassPatchIds) ? state.harvestedGrassPatchIds : []);
   for (const patch of gatherables.grassPatches) {
+    patch.reservedBy = null;
+    gatherables.grassField?.setCollectionHidden?.(patch.entries, false);
     if (harvested.has(patch.id)) hideGrassPatch(gatherables, patch);
   }
   gatherables.target = null;

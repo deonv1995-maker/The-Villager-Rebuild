@@ -184,7 +184,8 @@ export class GatherableSystem {
 
   findNearestLooseResource(position, maxDistance, filter = null) {
     if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
-    let nearest = null;
+    let nearestKind = null;
+    let nearestResource = null;
     let nearestDistanceSq = maxDistance * maxDistance;
 
     for (const item of this.items) {
@@ -198,71 +199,133 @@ export class GatherableSystem {
       const dz = item.root.position.z - position.z;
       const distanceSq = dx * dx + dz * dz;
       if (distanceSq > nearestDistanceSq) continue;
-      nearest = item;
+      nearestKind = 'item';
+      nearestResource = item;
       nearestDistanceSq = distanceSq;
     }
 
-    return nearest ? this.#describeLooseItem(nearest) : null;
+    for (const patch of this.grassPatches) {
+      if (!patch.active || patch.reservedBy) continue;
+      if (!this.#canStore('grass', patch.quantity)) continue;
+      if (filter && !filter('grass', patch.quantity)) continue;
+      const dx = patch.x - position.x;
+      const dz = patch.z - position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearestKind = 'grass-patch';
+      nearestResource = patch;
+      nearestDistanceSq = distanceSq;
+    }
+
+    if (nearestKind === 'item') return this.#describeLooseItem(nearestResource);
+    if (nearestKind === 'grass-patch') return this.#describeGrassPatch(nearestResource);
+    return null;
   }
 
   getLooseResource(id) {
     const item = this.items.find(candidate => candidate.id === id);
-    if (!item?.active || item.reservedBy) return null;
-    const definition = RESOURCE_DEFINITIONS[item.resourceId];
-    if (definition?.storage !== 'inventory') return null;
-    const quantity = item.quantity ?? definition.pickupQuantity;
-    if (!this.#canStore(item.resourceId, quantity)) return null;
-    return this.#describeLooseItem(item);
+    if (item) {
+      if (!item.active || item.reservedBy) return null;
+      const definition = RESOURCE_DEFINITIONS[item.resourceId];
+      if (definition?.storage !== 'inventory') return null;
+      const quantity = item.quantity ?? definition.pickupQuantity;
+      if (!this.#canStore(item.resourceId, quantity)) return null;
+      return this.#describeLooseItem(item);
+    }
+
+    const patch = this.grassPatches.find(candidate => candidate.id === id);
+    if (!patch?.active || patch.reservedBy) return null;
+    if (!this.#canStore('grass', patch.quantity)) return null;
+    return this.#describeGrassPatch(patch);
   }
 
   reserveLooseResource(id, owner) {
     if (!owner) throw new Error('Loose-resource reservations require an owner token');
     const item = this.items.find(candidate => candidate.id === id);
-    if (!item?.active || (item.reservedBy && item.reservedBy !== owner)) return null;
-    const definition = RESOURCE_DEFINITIONS[item.resourceId];
-    if (definition?.storage !== 'inventory') return null;
-    const quantity = item.quantity ?? definition.pickupQuantity;
-    if (!this.#canStore(item.resourceId, quantity)) return null;
-    item.reservedBy = owner;
-    item.root.visible = false;
-    if (this.target?.kind === 'item' && this.target.item === item) {
+    if (item) {
+      if (!item.active || (item.reservedBy && item.reservedBy !== owner)) return null;
+      const definition = RESOURCE_DEFINITIONS[item.resourceId];
+      if (definition?.storage !== 'inventory') return null;
+      const quantity = item.quantity ?? definition.pickupQuantity;
+      if (!this.#canStore(item.resourceId, quantity)) return null;
+      item.reservedBy = owner;
+      item.root.visible = false;
+      if (this.target?.kind === 'item' && this.target.item === item) {
+        this.target = null;
+        this.indicator.visible = false;
+      }
+      return this.#describeLooseItem(item);
+    }
+
+    const patch = this.grassPatches.find(candidate => candidate.id === id);
+    if (!patch?.active || (patch.reservedBy && patch.reservedBy !== owner)) return null;
+    if (!this.#canStore('grass', patch.quantity)) return null;
+    patch.reservedBy = owner;
+    this.grassField?.setCollectionHidden?.(patch.entries, true);
+    if (this.target?.kind === 'grass-patch' && this.target.patch === patch) {
       this.target = null;
       this.indicator.visible = false;
     }
-    return this.#describeLooseItem(item);
+    return this.#describeGrassPatch(patch);
   }
 
   releaseLooseResource(id, owner) {
     const item = this.items.find(candidate => candidate.id === id);
-    if (!item?.active || item.reservedBy !== owner) return false;
-    item.reservedBy = null;
-    item.root.visible = true;
+    if (item) {
+      if (!item.active || item.reservedBy !== owner) return false;
+      item.reservedBy = null;
+      item.root.visible = true;
+      return true;
+    }
+
+    const patch = this.grassPatches.find(candidate => candidate.id === id);
+    if (!patch?.active || patch.reservedBy !== owner) return false;
+    patch.reservedBy = null;
+    this.grassField?.setCollectionHidden?.(patch.entries, false);
     return true;
   }
 
   takeReservedLooseResource(id, owner) {
     const item = this.items.find(candidate => candidate.id === id);
-    if (!item?.active || item.reservedBy !== owner) return null;
-    const definition = RESOURCE_DEFINITIONS[item.resourceId];
-    if (definition?.storage !== 'inventory') return null;
-    const quantity = item.quantity ?? definition.pickupQuantity;
-    if (!this.#canStore(item.resourceId, quantity)) {
+    if (item) {
+      if (!item.active || item.reservedBy !== owner) return null;
+      const definition = RESOURCE_DEFINITIONS[item.resourceId];
+      if (definition?.storage !== 'inventory') return null;
+      const quantity = item.quantity ?? definition.pickupQuantity;
+      if (!this.#canStore(item.resourceId, quantity)) {
+        item.reservedBy = null;
+        item.root.visible = true;
+        return null;
+      }
       item.reservedBy = null;
+      item.active = false;
       item.root.visible = true;
+      item.root.parent?.remove(item.root);
+      if (this.target?.kind === 'item' && this.target.item === item) {
+        this.target = null;
+        this.indicator.visible = false;
+      }
+      return {
+        id: item.id,
+        resourceId: definition.id,
+        label: definition.label,
+        quantity
+      };
+    }
+
+    const patch = this.grassPatches.find(candidate => candidate.id === id);
+    if (!patch?.active || patch.reservedBy !== owner) return null;
+    if (!this.#canStore('grass', patch.quantity)) {
+      patch.reservedBy = null;
+      this.grassField?.setCollectionHidden?.(patch.entries, false);
       return null;
     }
-    item.reservedBy = null;
-    item.active = false;
-    item.root.visible = true;
-    item.root.parent?.remove(item.root);
-    if (this.target?.kind === 'item' && this.target.item === item) {
-      this.target = null;
-      this.indicator.visible = false;
-    }
+    const quantity = this.#harvestGrassPatch(patch);
+    if (quantity <= 0) return null;
     return {
-      id: item.id,
-      resourceId: definition.id,
-      label: definition.label,
+      id: patch.id,
+      resourceId: 'grass',
+      label: RESOURCE_DEFINITIONS.grass.label,
       quantity
     };
   }
@@ -330,6 +393,17 @@ export class GatherableSystem {
       quantity: item.quantity ?? definition?.pickupQuantity ?? 1,
       root: item.root,
       position: item.root.position.clone()
+    };
+  }
+
+  #describeGrassPatch(patch) {
+    return {
+      id: patch.id,
+      resourceId: 'grass',
+      label: RESOURCE_DEFINITIONS.grass.label,
+      quantity: patch.quantity,
+      root: patch.pickupRoot,
+      position: patch.pickupRoot.position.clone()
     };
   }
 
@@ -467,6 +541,13 @@ export class GatherableSystem {
         for (const entry of center.entries) this.#suppressGrassEntry(entry);
         continue;
       }
+      const pickupRoot = this.#createGrass(10000 + patchIndex);
+      pickupRoot.position.set(
+        center.x,
+        this.#groundY('grass', center.x, center.z),
+        center.z
+      );
+      pickupRoot.name = `gatherable-grass-patch-${patchIndex}`;
       const patch = {
         id: `grass-patch-${patchIndex}`,
         x: center.x,
@@ -474,6 +555,8 @@ export class GatherableSystem {
         radius: center.radius,
         entries: center.entries,
         active: true,
+        reservedBy: null,
+        pickupRoot,
         quantity: THREE.MathUtils.clamp(Math.ceil(center.entries.length / 16), 1, 5)
       };
       this.grassPatches.push(patch);
@@ -523,6 +606,8 @@ export class GatherableSystem {
   #harvestGrassPatch(patch) {
     if (!patch?.active) return 0;
     patch.active = false;
+    patch.reservedBy = null;
+    this.grassField?.setCollectionHidden?.(patch.entries, false);
     const dirtyMeshes = new Set();
     for (const entry of patch.entries) {
       entry.grassHarvested = true;
@@ -563,7 +648,7 @@ export class GatherableSystem {
         const bucket = this.grassPatchGrid.get(`${ix}:${iz}`);
         if (!bucket) continue;
         for (const patch of bucket) {
-          if (!patch.active || visited.has(patch)) continue;
+          if (!patch.active || patch.reservedBy || visited.has(patch)) continue;
           visited.add(patch);
           for (const entry of patch.entries) {
             const dx = playerPosition.x - entry.x;
