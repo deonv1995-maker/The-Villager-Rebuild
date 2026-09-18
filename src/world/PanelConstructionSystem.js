@@ -1048,11 +1048,14 @@ export class PanelConstructionSystem {
     root.userData.panelConstructionKind = 'stairs';
     this.group.add(root);
 
-    const collisionHandles = semanticStairColliderSpecs(placement).map((spec, index) => this.collision.addBox({
-      ...spec,
-      type: 'panel-stair',
-      label: `${id}:step:${index}`
-    }));
+    const collisionHandles = semanticStairColliderSpecs(placement).map((spec, index) => {
+      const { role = 'tread', ...collider } = spec;
+      return this.collision.addBox({
+        ...collider,
+        type: 'panel-stair',
+        label: role === 'landing' ? `${id}:landing` : `${id}:step:${index}`
+      });
+    });
     const entry = {
       id,
       kind: 'stairs',
