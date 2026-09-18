@@ -230,7 +230,16 @@ function runRestSequence(source) {
   assert(torchSuppression[0] === true && torchSuppression.at(-1) === false, `${source} rest must suppress and restore handheld torch presentation`);
 
   if (source === 'bed') {
-    assert(poses.some(pose => pose.y === 5 && pose.modelPitch > 1.4), 'Bed sleep must preserve constructed-floor support height while lying on the mattress');
+    const lyingPose = poses.find(pose => pose.y === 5 && pose.modelPitch > 1.4);
+    assert(lyingPose, 'Bed sleep must preserve constructed-floor support height while lying on the mattress');
+    assert(
+      Math.hypot(lyingPose.x - bed.position.x, lyingPose.z - bed.position.z) >= 0.8,
+      'Bed sleep must keep the gameplay root at a safe standing point outside the Bed collider'
+    );
+    assert(
+      Math.hypot(lyingPose.modelXOffset ?? 0, lyingPose.modelZOffset ?? 0) > 0.25,
+      'Bed lying motion must be presentation-local instead of moving the saved gameplay root into the Bed'
+    );
   } else {
     assert(seatedEvents.includes('sit') && seatedEvents.includes('stand'), 'Campfire sleep must visibly sit before blackout and stand during wake');
   }
@@ -406,6 +415,8 @@ assert(sleepSource.includes('this.game.worldTimeRuntime?.setPaused?.(false)'), '
 assert(sleepSource.includes('this.overlay?.setSleeping?.(true)'), 'Full-black sleep phase must expose the shared sleeping presentation');
 assert(sleepSource.includes('this.seatedPose.playSit?.()') && sleepSource.includes('this.seatedPose.playStand?.()'), 'Campfire rest must own explicit sit and stand presentation phases');
 assert(rangerSource.includes('y = null') && rangerSource.includes('Number.isFinite(y) ? y : this.terrain.heightAt(x, z)'), 'Cinematic poses must accept constructed support height without replacing terrain as the fallback');
+assert(rangerSource.includes('modelXOffset = 0') && rangerSource.includes('modelZOffset = 0'), 'Cinematic presentation must support local visual offsets without moving the gameplay root');
+assert(sleepSource.includes('#modelOffsetFromStage(worldPosition, yaw)'), 'Rest presentation must keep the gameplay root at the safe stage while the visible Ranger moves into Bed/fire pose');
 assert(!rangerSource.includes('this.cinematicDriver.update?.(dt, this);\n      this.root.position.y = this.terrain.heightAt'), 'Ranger update must not overwrite cinematic support height after the driver positions the character');
 assert(restOverlaySource.includes('💤') && restOverlaySource.includes("document.body.classList.add('rest-transition-active')"), 'Rest overlay must own the blackout sleeping presentation and HUD isolation');
 assert(restCssSource.includes('.rest-transition') && restCssSource.includes('body.rest-transition-active .mobile-hud'), 'Rest overlay styling must cover the viewport and temporarily hide gameplay HUD');
