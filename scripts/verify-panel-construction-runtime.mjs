@@ -6,8 +6,13 @@ import {
   PANEL_GRID,
   panelBuildCost
 } from '../src/data/PanelConstructionDefinitions.js';
+import { PLACEABLE_UTILITY_DEFINITIONS } from '../src/data/PlaceableUtilityDefinitions.js';
+import { CONSTRUCTION_DIMENSIONS } from '../src/data/PhysicalLogDefinitions.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
+import { CraftingBenchSystem } from '../src/world/CraftingBenchSystem.js';
 import { PanelConstructionSystem } from '../src/world/PanelConstructionSystem.js';
+import { PLACEABLE_WALL_SNAP_GAP } from '../src/world/PlaceableUtilityWallSnapRules.js';
+import { StorageContainerSystem } from '../src/world/StorageContainerSystem.js';
 import { constructionFloorCoversVegetation } from '../src/world/GrassFieldSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 
@@ -72,6 +77,103 @@ assert.equal(storageBackedState.previewValid, true, 'Storage-backed Logs must ma
 assert.ok(storageBackedRuntime.system.build(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1)));
 assert.equal(storedMaterials.log, 3, 'Construction must consume the semantic module cost from the shared material source');
 assert.equal(storageBackedRuntime.inventory.get('log'), 0, 'Storage-backed construction must not require transferring materials into Ranger inventory');
+
+// Placeable furniture keeps a generous circular movement collider, but semantic wall
+// placement must use the visible rectangular footprint so a real wall gap is not falsely
+// rejected. Genuine visible overlap must still remain invalid.
+const utilityClearanceRuntime = makeRuntime(6);
+const utilityStructure = utilityClearanceRuntime.system.registry.createStructure({
+  originX: 0,
+  originZ: 0,
+  yaw: 0
+});
+assert.equal(
+  utilityStructure.grid.placeFloor({ x: 0, z: 0, levelY: 0.08 }).ok,
+  true,
+  'Utility-clearance regression requires one seeded semantic Floor'
+);
+rematerializeSeededState(utilityClearanceRuntime);
+const utilityFloor = [...utilityStructure.grid.floors.values()][0];
+const utilityEdge = utilityClearanceRuntime.system.registry.edgePlacementWorld(utilityStructure, {
+  x: utilityFloor.x,
+  z: utilityFloor.z,
+  storey: utilityFloor.storey,
+  direction: 'south'
+});
+const clearancePlayer = new THREE.Vector3(0, 0, 0);
+const clearanceFacing = new THREE.Vector3(0, 0, 1);
+const utilityY = utilityFloor.levelY + 0.028;
+
+const benchDefinition = PLACEABLE_UTILITY_DEFINITIONS['crafting-bench'];
+const benchOffset = CONSTRUCTION_DIMENSIONS.wallThickness
+  + benchDefinition.wallSnap.depth * 0.5
+  + PLACEABLE_WALL_SNAP_GAP;
+const benchSystem = new CraftingBenchSystem({
+  group: utilityClearanceRuntime.group,
+  terrain: utilityClearanceRuntime.terrain,
+  collision: utilityClearanceRuntime.collision
+});
+const bench = benchSystem.createBench({
+  x: utilityEdge.x + utilityEdge.inwardNormal.x * benchOffset,
+  y: utilityY,
+  z: utilityEdge.z + utilityEdge.inwardNormal.z * benchOffset,
+  yaw: utilityEdge.yaw
+});
+utilityClearanceRuntime.system.setBuildMode('wall');
+let utilityWallState = utilityClearanceRuntime.system.update(clearancePlayer, clearanceFacing);
+assert.equal(utilityClearanceRuntime.system.previewPlacement?.direction, 'south');
+assert.equal(
+  utilityWallState.previewValid,
+  true,
+  'A crafting bench with a real visible wall gap must not be rejected by its oversized circular movement collider'
+);
+benchSystem.removeBench(bench.id);
+
+const storageClearance = new StorageContainerSystem({
+  group: utilityClearanceRuntime.group,
+  terrain: utilityClearanceRuntime.terrain,
+  collision: utilityClearanceRuntime.collision,
+  inventory: utilityClearanceRuntime.inventory,
+  initialContainers: []
+});
+const chestDefinition = PLACEABLE_UTILITY_DEFINITIONS.chest;
+const chestOffset = CONSTRUCTION_DIMENSIONS.wallThickness
+  + chestDefinition.wallSnap.depth * 0.5
+  + PLACEABLE_WALL_SNAP_GAP;
+storageClearance.addContainer({
+  id: 'clearance-chest',
+  type: 'chest',
+  x: utilityEdge.x + utilityEdge.inwardNormal.x * chestOffset,
+  y: utilityY,
+  z: utilityEdge.z + utilityEdge.inwardNormal.z * chestOffset,
+  yaw: utilityEdge.yaw,
+  contents: { log: 3 }
+});
+utilityWallState = utilityClearanceRuntime.system.update(clearancePlayer, clearanceFacing);
+assert.equal(
+  utilityWallState.previewValid,
+  true,
+  'A storage chest with a real visible wall gap must not block semantic wall placement'
+);
+storageClearance.removeContainer('clearance-chest');
+
+const overlappingChestOffset = CONSTRUCTION_DIMENSIONS.wallThickness
+  + chestDefinition.wallSnap.depth * 0.5
+  - 0.05;
+storageClearance.addContainer({
+  id: 'overlapping-chest',
+  type: 'chest',
+  x: utilityEdge.x + utilityEdge.inwardNormal.x * overlappingChestOffset,
+  y: utilityY,
+  z: utilityEdge.z + utilityEdge.inwardNormal.z * overlappingChestOffset,
+  yaw: utilityEdge.yaw
+});
+utilityWallState = utilityClearanceRuntime.system.update(clearancePlayer, clearanceFacing);
+assert.equal(
+  utilityWallState.previewValid,
+  false,
+  'A chest whose visible footprint genuinely overlaps the wall must still block placement'
+);
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
