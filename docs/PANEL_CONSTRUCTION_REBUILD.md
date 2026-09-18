@@ -44,6 +44,8 @@ While semantic build mode is active, affordability and placement consume against
 
 This pooling is scoped to construction. Crafting, eating, tool use and ordinary inventory actions keep their existing authorities and do not gain remote access to storage. Container acceptance still comes from `StorageContainerDefinitions`; today Logs/Stone/Stick/Grass belong in Storage Chests while Food Barrels remain food-only. If a future container is allowed to hold a construction material, the same build-material source can consume it without adding another construction inventory system.
 
+Every semantic construction preview path must use the shared `PanelConstructionSystem.canAffordMaterials()` boundary. Specialized stacked/floor-backed Floor, Wall, Door and Window previews are not allowed to re-check `InventorySystem` directly; doing so creates a contradictory red preview even when the shared storage pool can afford the module. Complex Roof preview/build uses the same boundary.
+
 Current semantic costs are:
 
 - Floor Panel: **3 Logs**;
