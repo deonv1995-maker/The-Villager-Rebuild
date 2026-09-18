@@ -99,7 +99,7 @@ Current tool roles remain:
 - Hammer — demolition, including semantic panel demolition;
 - Pickaxe — rock harvesting;
 - Shovel — stump removal;
-- Sword — short-range forward-hitbox melee with an always-available strike action while equipped and a deterministic three-animation strike cycle.
+- Sword — short-range forward-hitbox melee with an always-available strike action while equipped. Ground strikes cycle through three authored full-body KayKit combat actions so Hero M's torso, arms and visible hand move with the blade. Pressing Strike while airborne interrupts the normal jump presentation with a dedicated downward air attack; jump physics remain owned by `RangerController`, while Hero M adds only a presentation-local forward slam posture.
 
 Tool crafting consumes inventory resources through `CraftingSystem`. Tool durability remains owned by `ToolDurabilitySystem` / `EquipmentRuntimeController`, not by individual structure systems.
 

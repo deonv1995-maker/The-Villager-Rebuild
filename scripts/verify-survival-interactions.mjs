@@ -198,6 +198,20 @@ assert.ok(
   normalizedWorkNames.some(name => ['interact', 'chop', 'attack', 'heavy'].some(token => name.includes(token))),
   'Production animation assets must retain a usable work/strike action'
 );
+const normalizedMeleeNames = meleeNames.map(name => name.toLowerCase().replace(/[^a-z0-9]/g, ''));
+const oneHandSwordAttacks = normalizedMeleeNames.filter(name =>
+  name.includes('1h') && name.includes('melee') && name.includes('attack')
+);
+assert.ok(
+  oneHandSwordAttacks.length >= 3,
+  'KayKit melee library must retain at least three authored one-handed attacks for the Sword combo'
+);
+assert.ok(
+  normalizedMeleeNames.some(name =>
+    name.includes('melee') && name.includes('attack') && ['chop', 'heavy', 'vertical'].some(token => name.includes(token))
+  ),
+  'KayKit melee library must retain a downward-capable authored attack for the airborne Sword strike'
+);
 
 const [
   appSource,
@@ -215,6 +229,7 @@ const [
   gatherSource,
   toolSource,
   playerSource,
+  heroMSource,
   floorSupportSource
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
@@ -232,6 +247,7 @@ const [
   readFile('src/world/GatherableSystem.js', 'utf8'),
   readFile('src/player/RangerToolPresentation.js', 'utf8'),
   readFile('src/player/RangerController.js', 'utf8'),
+  readFile('src/player/HeroMPresentation.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8')
 ]);
 
@@ -335,8 +351,17 @@ assert.ok(gatherSource.includes('createPhysicalLogVisual'), 'World Logs must ret
 assert.ok(gatherSource.includes("definition.storage !== 'inventory'"), 'Gatherable pickup must route resources according to storage definitions');
 assert.ok(toolSource.includes('this.player.mountRightHandObject?.(this.root)'));
 assert.ok(toolSource.includes('this.player.playToolAction?.(toolId)'));
-assert.ok(toolSource.includes('const SWORD_STRIKE_DURATIONS = Object.freeze([0.36, 0.39, 0.44])'), 'Sword presentation must retain three distinct strike timings');
-assert.ok(toolSource.includes('this.swordStrikeIndex = (this.swordStrikeIndex + 1) % SWORD_STRIKE_DURATIONS.length'), 'Sword strikes must cycle deterministically through all three animations');
+assert.ok(toolSource.includes('const SWORD_STRIKE_DURATIONS = Object.freeze([0.42, 0.45, 0.5])'), 'Sword presentation must retain three distinct strike timings');
+assert.ok(toolSource.includes('this.swordStrikeIndex = (this.swordStrikeIndex + 1) % SWORD_STRIKE_DURATIONS.length'), 'Ground Sword strikes must cycle deterministically through all three animations');
+assert.ok(toolSource.includes('playSwordStrike({ airborne = !Boolean(this.player.isGrounded?.()) } = {})'), 'Sword presentation must branch between grounded and airborne strikes');
+assert.ok(toolSource.includes('this.player.playSwordAction?.(this.activeSwordStrike, { airborne: this.swordAirAttack })'), 'Sword prop motion must be synchronized with the Ranger skeleton action');
+assert.ok(playerSource.includes('playSwordAction(strikeIndex = 0, { airborne = !this.grounded } = {})'), 'Ranger animation authority must expose full-body Sword actions');
+assert.ok(playerSource.includes('this.swordActionNames = this.#selectSwordActions()'), 'Ranger must bind the three ground Sword attacks from the authored melee library');
+assert.ok(playerSource.includes('this.swordAirActionName = this.#selectSwordAirAction(this.swordActionNames)'), 'Ranger must bind a dedicated authored airborne Sword action');
+assert.ok(playerSource.includes('isSwordAirAttacking()'), 'Ranger must expose airborne Sword state to presentation layers');
+assert.ok(heroMSource.includes('HERO_M_SWORD_AIR_ATTACK_FORWARD_PITCH'), 'Hero M must add a presentation-only forward slam posture during airborne Sword attacks');
+assert.ok(heroMSource.includes('this.player?.isSwordAirAttacking?.()'), 'Hero M air strike must override the normal double-jump flip presentation');
+assert.ok(appSource.includes('this.toolPresentation?.playSwordStrike({ airborne })'), 'GameApp must route jump strikes explicitly through the airborne Sword presentation');
 assert.ok(appSource.includes('direction: this.playerFacing'), 'Sword damage must use the Ranger facing direction');
 assert.ok(appSource.includes('arcDegrees: TOOL_DEFINITIONS.sword.attackArcDegrees'), 'Sword damage must use the shared configured melee arc');
 assert.ok(playerSource.includes('mountRightHandObject(object)'));

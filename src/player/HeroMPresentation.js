@@ -10,6 +10,8 @@ const HERO_M_FRONT_FLIP_DURATION = 0.58;
 const HERO_M_FRONT_FLIP_RADIANS = Math.PI * 2;
 const HERO_M_FRONT_FLIP_TUCK_HORIZONTAL_SCALE = 0.84;
 const HERO_M_FRONT_FLIP_TUCK_VERTICAL_SCALE = 0.62;
+const HERO_M_SWORD_AIR_ATTACK_FORWARD_PITCH = 0.5;
+const HERO_M_SWORD_AIR_ATTACK_TUCK = 0.16;
 const TOOL_AXIS = new THREE.Vector3(0, 1, 0);
 const GRIP_OUTER_FRACTION = 0.24;
 const MIN_GRIP_WEIGHT = 0.5;
@@ -477,6 +479,21 @@ export class HeroMPresentation extends MasculinePrismaHumanoidPresentation {
   #updateFrontFlip(dt) {
     if (!this.heroMMotionRoot) return;
     const jumpStage = this.player?.jumpStage ?? 0;
+    if (this.player?.isSwordAirAttacking?.()) {
+      const attackProgress = this.player.getSwordAttackProgress?.() ?? 0;
+      const strikeWeight = Math.sin(Math.PI * THREE.MathUtils.clamp(attackProgress, 0, 1));
+      this.heroMFlipActive = false;
+      this.heroMFlipElapsed = 0;
+      this.heroMLastJumpStage = jumpStage;
+      this.heroMMotionRoot.rotation.x = strikeWeight * HERO_M_SWORD_AIR_ATTACK_FORWARD_PITCH;
+      this.#applyFrontFlipTuck(strikeWeight * HERO_M_SWORD_AIR_ATTACK_TUCK);
+      this.heroMMotionRoot.userData.frontFlipProgress = 0;
+      this.heroMMotionRoot.userData.swordAirAttackProgress = attackProgress;
+      this.heroMMotionRoot.userData.swordAirAttackWeight = strikeWeight;
+      return;
+    }
+    this.heroMMotionRoot.userData.swordAirAttackProgress = 0;
+    this.heroMMotionRoot.userData.swordAirAttackWeight = 0;
     if (jumpStage === 2 && this.heroMLastJumpStage !== 2) {
       this.heroMFlipActive = true;
       this.heroMFlipElapsed = 0;

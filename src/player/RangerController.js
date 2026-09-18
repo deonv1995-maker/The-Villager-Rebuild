@@ -39,6 +39,8 @@ const TOOL_ACTION_TARGET_DURATION = Object.freeze({
   hammer: 0.62,
   pickaxe: 0.78
 });
+const SWORD_ACTION_TARGET_DURATIONS = Object.freeze([0.42, 0.45, 0.5]);
+const SWORD_AIR_ACTION_TARGET_DURATION = 0.58;
 
 export class RangerController {
   constructor({ scene, camera, terrain, collision = null }) {
@@ -74,8 +76,13 @@ export class RangerController {
     this.actions = new Map();
     this.throwAnimation = null;
     this.toolActionNames = new Map();
+    this.swordActionNames = [];
+    this.swordAirActionName = null;
     this.toolActionRemaining = 0;
+    this.toolActionDuration = 0;
     this.toolActionToolId = null;
+    this.toolActionName = null;
+    this.toolActionAirborne = false;
     this.spearEquipped = false;
     this.spearVisual = null;
     this.spearMount = null;
@@ -167,6 +174,8 @@ export class RangerController {
       const actionName = this.#selectToolAction(toolId);
       if (actionName) this.toolActionNames.set(toolId, actionName);
     }
+    this.swordActionNames = this.#selectSwordActions();
+    this.swordAirActionName = this.#selectSwordAirAction(this.swordActionNames);
     this.#setAnimation('Idle_A', true);
   }
 
@@ -430,6 +439,19 @@ export class RangerController {
     return this.spearThrowRemaining > 0;
   }
 
+  isGrounded() {
+    return this.grounded;
+  }
+
+  isSwordAirAttacking() {
+    return this.isToolActing() && this.toolActionToolId === 'sword' && this.toolActionAirborne;
+  }
+
+  getSwordAttackProgress() {
+    if (this.toolActionToolId !== 'sword' || this.toolActionDuration <= 0) return 0;
+    return THREE.MathUtils.clamp(1 - (this.toolActionRemaining / this.toolActionDuration), 0, 1);
+  }
+
   isToolActing() {
     return this.toolActionRemaining > 0;
   }
@@ -455,9 +477,42 @@ export class RangerController {
     const timeScale = THREE.MathUtils.clamp(clipDuration / targetDuration, 0.72, 1.9);
     const duration = clipDuration / timeScale;
     this.toolActionRemaining = duration;
+    this.toolActionDuration = duration;
     this.toolActionToolId = toolId;
+    this.toolActionName = actionName;
+    this.toolActionAirborne = false;
     this.#playOneShot(actionName, timeScale);
-    return { started: true, duration, actionName };
+    return { started: true, duration, actionName, airborne: false };
+  }
+
+  playSwordAction(strikeIndex = 0, { airborne = !this.grounded } = {}) {
+    if (this.assetMode !== 'kaykit' || this.isSpearThrowing() || this.isToolActing()) return false;
+    const normalizedIndex = Math.abs(Math.trunc(strikeIndex)) % SWORD_ACTION_TARGET_DURATIONS.length;
+    const actionName = airborne
+      ? this.swordAirActionName
+      : this.swordActionNames[normalizedIndex];
+    const action = actionName ? this.actions.get(actionName) : null;
+    const clipDuration = action?.getClip()?.duration;
+    if (!action || !Number.isFinite(clipDuration) || clipDuration <= 0) return false;
+
+    const targetDuration = airborne
+      ? SWORD_AIR_ACTION_TARGET_DURATION
+      : SWORD_ACTION_TARGET_DURATIONS[normalizedIndex];
+    const timeScale = THREE.MathUtils.clamp(clipDuration / targetDuration, 0.72, 2.2);
+    const duration = clipDuration / timeScale;
+    this.toolActionRemaining = duration;
+    this.toolActionDuration = duration;
+    this.toolActionToolId = 'sword';
+    this.toolActionName = actionName;
+    this.toolActionAirborne = Boolean(airborne);
+    this.#playOneShot(actionName, timeScale);
+    return {
+      started: true,
+      duration,
+      actionName,
+      airborne: Boolean(airborne),
+      strikeIndex: normalizedIndex
+    };
   }
 
   beginCameraLook() {
@@ -652,9 +707,11 @@ export class RangerController {
     this.toolActionRemaining = Math.max(0, this.toolActionRemaining - dt);
     if (this.toolActionRemaining > 0) return;
 
-    const completedTool = this.toolActionToolId;
-    const actionName = completedTool ? this.toolActionNames.get(completedTool) : null;
+    const actionName = this.toolActionName;
     this.toolActionToolId = null;
+    this.toolActionName = null;
+    this.toolActionDuration = 0;
+    this.toolActionAirborne = false;
     if (this.assetMode === 'kaykit' && this.grounded && this.animationState === actionName) {
       this.#setAnimation('Idle_A', true);
     }
@@ -759,6 +816,72 @@ export class RangerController {
       if (partial) return partial;
     }
     return null;
+  }
+
+  #selectSwordActions() {
+    const names = [...this.actions.keys()];
+    const normalize = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const oneHanded = names.filter(name => {
+      const normalized = normalize(name);
+      return normalized.includes('1h') && normalized.includes('melee') && normalized.includes('attack');
+    });
+    const pool = oneHanded.length > 0
+      ? oneHanded
+      : names.filter(name => {
+        const normalized = normalize(name);
+        return normalized.includes('melee') && normalized.includes('attack');
+      });
+    const preferenceSets = [
+      ['1hmeleeattackslicehorizontal', '1hmeleeattackhorizontal', '1hmeleeattackslice', '1hmeleeattack'],
+      ['1hmeleeattackstab', '1hmeleeattackthrust', '1hmeleeattackreverse', '1hmeleeattack'],
+      ['1hmeleeattackchop', '1hmeleeattackvertical', '1hmeleeattackheavy', '1hmeleeattack']
+    ];
+    const selected = [];
+    const used = new Set();
+
+    for (const preferences of preferenceSets) {
+      let match = null;
+      for (const preferred of preferences) {
+        match = pool.find(name => !used.has(name) && normalize(name) === preferred);
+        if (match) break;
+      }
+      if (!match) {
+        for (const preferred of preferences) {
+          match = pool.find(name => !used.has(name) && normalize(name).includes(preferred));
+          if (match) break;
+        }
+      }
+      match ??= pool.find(name => !used.has(name)) ?? null;
+      if (match) {
+        selected.push(match);
+        used.add(match);
+      }
+    }
+
+    const fallback = selected[0] ?? this.#selectToolAction('hammer');
+    while (selected.length < SWORD_ACTION_TARGET_DURATIONS.length && fallback) selected.push(fallback);
+    return selected;
+  }
+
+  #selectSwordAirAction(groundActions = []) {
+    const names = [...this.actions.keys()];
+    const normalize = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const preferences = [
+      '2hmeleeattackchop',
+      '2hmeleeattackheavy',
+      '1hmeleeattackchop',
+      '1hmeleeattackvertical',
+      '1hmeleeattackheavy'
+    ];
+    for (const preferred of preferences) {
+      const exact = names.find(name => normalize(name) === preferred);
+      if (exact) return exact;
+    }
+    for (const preferred of preferences) {
+      const partial = names.find(name => normalize(name).includes(preferred));
+      if (partial) return partial;
+    }
+    return groundActions[2] ?? groundActions[0] ?? this.#selectToolAction('hammer');
   }
 
   #playOneShot(name, timeScale = 1) {

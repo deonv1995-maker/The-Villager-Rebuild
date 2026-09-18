@@ -555,10 +555,11 @@ export class GameApp {
 
     if (toolId === 'sword') {
       if (this.toolPresentation?.isBusy()) return;
+      const airborne = !this.player.isGrounded?.();
       const target = this.hunt.getAttackTarget(this.playerPosition, TOOL_DEFINITIONS.sword.range);
       if (target) this.player.faceWorldPoint(target.position);
       this.player.getFacingDirection(this.playerFacing);
-      if (!this.toolPresentation?.playSwing('sword')) return;
+      if (!this.toolPresentation?.playSwordStrike({ airborne })) return;
       const hit = this.hunt.meleeAttack(this.playerPosition, {
         range: TOOL_DEFINITIONS.sword.range,
         damage: TOOL_DEFINITIONS.sword.damage,
@@ -569,7 +570,7 @@ export class GameApp {
         this.#handleCombatResult(hit);
         return;
       }
-      this.setStatus('SWORD · STRIKE');
+      this.setStatus(airborne ? 'SWORD · AIR STRIKE' : 'SWORD · STRIKE');
     }
   }
 
