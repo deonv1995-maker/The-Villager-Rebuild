@@ -204,19 +204,17 @@ export class GatherableSystem {
       nearestDistanceSq = distanceSq;
     }
 
-    if (!filter || filter('grass')) {
-      for (const patch of this.grassPatches) {
-        if (!patch.active || patch.reservedBy) continue;
-        if (!this.#canStore('grass', patch.quantity)) continue;
-        if (filter && !filter('grass', patch.quantity)) continue;
-        const dx = patch.x - position.x;
-        const dz = patch.z - position.z;
-        const distanceSq = dx * dx + dz * dz;
-        if (distanceSq > nearestDistanceSq) continue;
-        nearestKind = 'grass-patch';
-        nearestResource = patch;
-        nearestDistanceSq = distanceSq;
-      }
+    for (const patch of this.grassPatches) {
+      if (!patch.active || patch.reservedBy) continue;
+      if (!this.#canStore('grass', patch.quantity)) continue;
+      if (filter && !filter('grass', patch.quantity)) continue;
+      const dx = patch.x - position.x;
+      const dz = patch.z - position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearestKind = 'grass-patch';
+      nearestResource = patch;
+      nearestDistanceSq = distanceSq;
     }
 
     if (nearestKind === 'item') return this.#describeLooseItem(nearestResource);
@@ -549,7 +547,7 @@ export class GatherableSystem {
         this.#groundY('grass', center.x, center.z),
         center.z
       );
-      pickupRoot.name = `gatherable-grass-${`grass-patch-${patchIndex}`}`;
+      pickupRoot.name = `gatherable-grass-patch-${patchIndex}`;
       const patch = {
         id: `grass-patch-${patchIndex}`,
         x: center.x,
