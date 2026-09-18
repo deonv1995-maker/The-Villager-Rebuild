@@ -79,9 +79,17 @@ export class MobileHud {
     `).join('');
 
     this.root.innerHTML = `
-      <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open inventory" aria-expanded="false">
-        <img src="${ui.suitcase}" alt="" aria-hidden="true">
-      </button>
+      <div class="inventory-quick-access" data-role="inventory-quick-access">
+        <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open inventory" aria-expanded="false">
+          <img src="${ui.suitcase}" alt="" aria-hidden="true">
+        </button>
+        <div class="inventory-capacity-gauge" data-role="inventory-capacity-gauge" aria-label="Storage capacity">
+          <span class="inventory-capacity-track" aria-hidden="true">
+            <span class="inventory-capacity-fill" data-role="inventory-capacity-fill"></span>
+          </span>
+          <strong class="inventory-capacity-readout" data-role="inventory-capacity-readout">0 / 24</strong>
+        </div>
+      </div>
       <section class="inventory-menu" data-role="inventory-menu" aria-label="Inventory and crafting" hidden>
         <div class="inventory-menu-header">
           <div>
@@ -143,6 +151,9 @@ export class MobileHud {
     this.inventoryMenu = this.root.querySelector('[data-role="inventory-menu"]');
     this.inventoryClose = this.root.querySelector('[data-role="inventory-close"]');
     this.inventoryCapacity = this.root.querySelector('[data-role="inventory-capacity"]');
+    this.inventoryCapacityGauge = this.root.querySelector('[data-role="inventory-capacity-gauge"]');
+    this.inventoryCapacityFill = this.root.querySelector('[data-role="inventory-capacity-fill"]');
+    this.inventoryCapacityReadout = this.root.querySelector('[data-role="inventory-capacity-readout"]');
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
     this.craftContext = this.root.querySelector('[data-role="craft-context"]');
     this.craftList = this.root.querySelector('[data-role="craft-list"]');
@@ -229,16 +240,34 @@ export class MobileHud {
 
   setInventoryCapacity(state) {
     if (!state) return;
+    const used = Math.max(0, Number(state.used) || 0);
+    const capacity = Math.max(1, Number(state.capacity) || 1);
+    const fillPercent = Math.max(0, Math.min(100, (used / capacity) * 100));
+    const overCapacity = Boolean(state.overCapacity);
+
     if (this.inventoryCapacity) {
-      this.inventoryCapacity.textContent = `${state.hudLabel} ${state.used}/${state.capacity}`;
-      this.inventoryCapacity.dataset.overCapacity = state.overCapacity ? 'true' : 'false';
+      this.inventoryCapacity.textContent = `${state.hudLabel} ${used}/${capacity}`;
+      this.inventoryCapacity.dataset.overCapacity = overCapacity ? 'true' : 'false';
+    }
+    if (this.inventoryCapacityFill) {
+      this.inventoryCapacityFill.style.height = `${fillPercent.toFixed(1)}%`;
+    }
+    if (this.inventoryCapacityReadout) {
+      this.inventoryCapacityReadout.textContent = `${used} / ${capacity}`;
+    }
+    if (this.inventoryCapacityGauge) {
+      this.inventoryCapacityGauge.dataset.overCapacity = overCapacity ? 'true' : 'false';
+      this.inventoryCapacityGauge.setAttribute(
+        'aria-label',
+        `${state.label} storage, ${used} of ${capacity} bulk used`
+      );
     }
     if (this.inventoryToggle) {
-      this.inventoryToggle.dataset.overCapacity = state.overCapacity ? 'true' : 'false';
-      this.inventoryToggle.title = `${state.label}: ${state.used}/${state.capacity} bulk units`;
+      this.inventoryToggle.dataset.overCapacity = overCapacity ? 'true' : 'false';
+      this.inventoryToggle.title = `${state.label}: ${used}/${capacity} bulk units`;
       this.inventoryToggle.setAttribute(
         'aria-label',
-        `${this.inventoryMenuOpen ? 'Close' : 'Open'} inventory, ${state.used} of ${state.capacity} bulk used`
+        `${this.inventoryMenuOpen ? 'Close' : 'Open'} inventory, ${used} of ${capacity} bulk used`
       );
     }
   }

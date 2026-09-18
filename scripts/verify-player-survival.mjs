@@ -69,5 +69,11 @@ assert.ok(animalActor.includes('damage: Math.max(0, Number(aggression.damage) ||
 assert.ok(sleepRuntime.includes('this.game.survival?.advanceWorldMinutes?.(skippedMinutes)'), 'Sleep skips must still consume hunger');
 assert.ok(indexHtml.includes('./src/survival.css'), 'Survival HUD stylesheet must be included');
 assert.ok(survivalCss.includes('.survival-vital.health') && survivalCss.includes('.survival-vital.hunger'));
+assert.ok(
+  survivalCss.includes('left: 50%;')
+    && survivalCss.includes('transform: translateX(-50%);')
+    && survivalCss.includes('top: max(8px, calc(env(safe-area-inset-top) + 6px));'),
+  'Health and hunger must stay centered at the top of the mobile HUD'
+);
 
 console.log('Player hunger, damage, persistence, sleep progression and HUD contracts verified.');

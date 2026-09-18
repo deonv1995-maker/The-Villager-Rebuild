@@ -149,6 +149,7 @@ const gatherables = read('src/world/GatherableSystem.js');
 const contextPolicy = read('src/ui/ContextActionPolicy.js');
 const capacityControllerSource = read('src/gameplay/InventoryCapacityController.js');
 const hudSource = read('src/ui/MobileHud.js');
+const inventoryCss = read('src/inventory-menu.css');
 const main = read('src/main.js');
 const docs = read('docs/SPROUT_COMPANION.md');
 const packageJson = JSON.parse(read('package.json'));
@@ -171,6 +172,19 @@ assert.ok(
   'Capacity runtime must render the authoritative storage state through the inventory HUD API'
 );
 assert.ok(hudSource.includes('setInventoryCapacity(state)'), 'Mobile HUD must own suitcase capacity presentation');
+assert.ok(
+  hudSource.includes('class="inventory-quick-access"')
+    && hudSource.includes('data-role="inventory-capacity-fill"')
+    && hudSource.includes('this.inventoryCapacityFill.style.height'),
+  'Suitcase quick access must expose the vertical bottom-up capacity gauge through the existing HUD boundary'
+);
+assert.ok(
+  inventoryCss.includes('.inventory-quick-access')
+    && inventoryCss.includes('top: max(48px, calc(env(safe-area-inset-top) + 44px))')
+    && inventoryCss.includes('.inventory-capacity-fill')
+    && inventoryCss.includes('bottom: 0;'),
+  'Suitcase button and capacity gauge must stay high on the left edge and fill from bottom to top away from the thumb zone'
+);
 assert.ok(main.includes('new InventoryCapacityController({ game })'), 'Gameplay boot must install one shared capacity runtime');
 assert.ok(docs.includes('24 bulk units') && docs.includes('96 compressed units') && docs.includes('manual Log pickup'), 'Companion architecture must preserve human-pack limits while documenting inventory-backed Log pickup');
 assert.ok(packageJson.scripts.check.includes('npm run verify:inventory-capacity'), 'Full repository check must include capacity regression coverage');
