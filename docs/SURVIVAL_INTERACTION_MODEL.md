@@ -94,7 +94,7 @@ Current tool roles remain:
 - Hammer — demolition, including semantic panel demolition;
 - Pickaxe — rock harvesting;
 - Shovel — stump removal;
-- Sword — short-range melee.
+- Sword — short-range forward-hitbox melee with an always-available strike action while equipped and a deterministic three-animation strike cycle.
 
 Tool crafting consumes inventory resources through `CraftingSystem`. Tool durability remains owned by `ToolDurabilitySystem` / `EquipmentRuntimeController`, not by individual structure systems.
 
