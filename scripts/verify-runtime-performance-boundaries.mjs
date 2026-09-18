@@ -125,10 +125,11 @@ assert.equal(
   'equivalent presentation exclusions must be detected without redundant invalidation'
 );
 
-const [grassSource, groundCoverSource, jungleSource, chunkSource, packageSource] = await Promise.all([
+const [grassSource, groundCoverSource, jungleSource, ambientSource, chunkSource, packageSource] = await Promise.all([
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
   readFile('src/world/GroundCoverPresentationSystem.js', 'utf8'),
   readFile('src/world/JungleFloorPresentationSystem.js', 'utf8'),
+  readFile('src/world/AmbientWorldDetailSystem.js', 'utf8'),
   readFile('src/world/WorldChunkSystem.js', 'utf8'),
   readFile('package.json', 'utf8')
 ]);
@@ -136,12 +137,14 @@ const [grassSource, groundCoverSource, jungleSource, chunkSource, packageSource]
 for (const [label, source] of [
   ['reactive grass', grassSource],
   ['ground cover', groundCoverSource],
-  ['jungle floor', jungleSource]
+  ['jungle floor', jungleSource],
+  ['ambient world detail', ambientSource]
 ]) {
   assert.ok(
     source.includes('vegetationConstructionCollisionRevision(this.collision)'),
     `${label} must invalidate from construction collider revisions rather than every world collider`
   );
+  if (label === 'ambient world detail') continue;
   const exclusionStart = source.indexOf('setPresentationExclusions(exclusions = [])');
   const populateStart = source.indexOf('populate()', exclusionStart);
   const exclusionSource = source.slice(exclusionStart, populateStart);
