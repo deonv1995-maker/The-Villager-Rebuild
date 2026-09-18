@@ -42,6 +42,16 @@ export function resolveContextAction({
     };
   }
 
+  if (toolId === 'sword') {
+    return {
+      source: 'attack',
+      available: true,
+      icon: 'sword',
+      label: huntTarget ? `Strike ${huntTarget.label}` : 'Swing sword',
+      caption: 'STRIKE'
+    };
+  }
+
   if (interactionTarget?.type === 'thrown-spear') {
     return {
       source: 'interaction',
@@ -77,17 +87,13 @@ export function resolveContextAction({
     };
   }
 
-  if (WEAPON_TOOLS.has(toolId) && (toolId === 'sword' || huntTarget)) {
+  if (WEAPON_TOOLS.has(toolId) && huntTarget) {
     return {
       source: 'attack',
       available: true,
       icon: toolId,
-      label: toolId === 'spear'
-        ? `Throw spear at ${huntTarget.label}`
-        : huntTarget
-          ? `Strike ${huntTarget.label}`
-          : 'Swing sword',
-      caption: toolId === 'spear' ? 'THROW' : 'STRIKE'
+      label: `Throw spear at ${huntTarget.label}`,
+      caption: 'THROW'
     };
   }
 
