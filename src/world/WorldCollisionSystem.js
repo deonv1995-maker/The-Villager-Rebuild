@@ -50,7 +50,10 @@ export class WorldCollisionSystem {
     supportY = null,
     supportOverridesBase = false,
     supportOverrideTolerance = 0,
-    stepHeight = 0.58
+    stepHeight = 0.58,
+    constructionHalfX = 0,
+    constructionHalfZ = 0,
+    constructionYaw = 0
   }) {
     if (
       !Number.isFinite(x) ||
@@ -81,7 +84,10 @@ export class WorldCollisionSystem {
       supportY: Number.isFinite(supportY) ? supportY : null,
       supportOverridesBase: Boolean(supportOverridesBase),
       supportOverrideTolerance: Math.max(0, supportOverrideTolerance),
-      stepHeight: Math.max(0, stepHeight)
+      stepHeight: Math.max(0, stepHeight),
+      constructionHalfX: Number.isFinite(constructionHalfX) ? Math.max(0, constructionHalfX) : 0,
+      constructionHalfZ: Number.isFinite(constructionHalfZ) ? Math.max(0, constructionHalfZ) : 0,
+      constructionYaw: Number.isFinite(constructionYaw) ? constructionYaw : 0
     };
     this.obstacles.push(obstacle);
     this.revision += 1;
@@ -162,6 +168,25 @@ export class WorldCollisionSystem {
     }
     const shouldIgnore = typeof ignore === 'function' ? ignore : () => false;
     return this.obstacles.every(obstacle => shouldIgnore(obstacle) || !this.#overlapsObstacle(obstacle, x, z, radius));
+  }
+
+  isBoxClear(x, z, halfX, halfZ, yaw = 0, { ignore = null } = {}) {
+    if (
+      !Number.isFinite(x) ||
+      !Number.isFinite(z) ||
+      !Number.isFinite(halfX) ||
+      !Number.isFinite(halfZ) ||
+      halfX <= 0 ||
+      halfZ <= 0 ||
+      !Number.isFinite(yaw)
+    ) {
+      throw new Error('Box clearance requires finite x, z, yaw and positive half extents');
+    }
+    const shouldIgnore = typeof ignore === 'function' ? ignore : () => false;
+    return this.obstacles.every(obstacle => (
+      shouldIgnore(obstacle) ||
+      !this.#obstacleOverlapsBox(obstacle, x, z, halfX, halfZ, yaw)
+    ));
   }
 
   /**
@@ -276,6 +301,78 @@ export class WorldCollisionSystem {
     const dz = z - obstacle.z;
     const minDistance = obstacle.radius + radius;
     return dx * dx + dz * dz < minDistance * minDistance;
+  }
+
+  #obstacleOverlapsBox(obstacle, x, z, halfX, halfZ, yaw) {
+    if (obstacle.constructionHalfX > 0 && obstacle.constructionHalfZ > 0) {
+      return this.#boxesOverlap(
+        x,
+        z,
+        halfX,
+        halfZ,
+        yaw,
+        obstacle.x,
+        obstacle.z,
+        obstacle.constructionHalfX,
+        obstacle.constructionHalfZ,
+        obstacle.constructionYaw
+      );
+    }
+
+    if (obstacle.shape === 'box') {
+      return this.#boxesOverlap(
+        x,
+        z,
+        halfX,
+        halfZ,
+        yaw,
+        obstacle.x,
+        obstacle.z,
+        obstacle.halfX,
+        obstacle.halfZ,
+        obstacle.yaw
+      );
+    }
+
+    const dx = obstacle.x - x;
+    const dz = obstacle.z - z;
+    const c = Math.cos(yaw);
+    const s = Math.sin(yaw);
+    const u = dx * c - dz * s;
+    const v = dx * s + dz * c;
+    const outsideX = Math.max(Math.abs(u) - halfX, 0);
+    const outsideZ = Math.max(Math.abs(v) - halfZ, 0);
+    return outsideX * outsideX + outsideZ * outsideZ < obstacle.radius * obstacle.radius;
+  }
+
+  #boxesOverlap(ax, az, aHalfX, aHalfZ, aYaw, bx, bz, bHalfX, bHalfZ, bYaw) {
+    const ca = Math.cos(aYaw);
+    const sa = Math.sin(aYaw);
+    const cb = Math.cos(bYaw);
+    const sb = Math.sin(bYaw);
+    const r00 = ca * cb + sa * sb;
+    const r01 = ca * sb - sa * cb;
+    const r10 = -r01;
+    const r11 = r00;
+    const ar00 = Math.abs(r00);
+    const ar01 = Math.abs(r01);
+    const ar10 = Math.abs(r10);
+    const ar11 = Math.abs(r11);
+
+    const dx = bx - ax;
+    const dz = bz - az;
+    const ta0 = dx * ca - dz * sa;
+    const ta1 = dx * sa + dz * ca;
+
+    if (Math.abs(ta0) >= aHalfX + bHalfX * ar00 + bHalfZ * ar01) return false;
+    if (Math.abs(ta1) >= aHalfZ + bHalfX * ar10 + bHalfZ * ar11) return false;
+
+    const tb0 = ta0 * r00 + ta1 * r10;
+    const tb1 = ta0 * r01 + ta1 * r11;
+    if (Math.abs(tb0) >= bHalfX + aHalfX * ar00 + aHalfZ * ar10) return false;
+    if (Math.abs(tb1) >= bHalfZ + aHalfX * ar01 + aHalfZ * ar11) return false;
+
+    return true;
   }
 
   #withinSupport(obstacle, x, z, padding = 0) {
