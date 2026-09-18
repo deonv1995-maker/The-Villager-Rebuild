@@ -301,7 +301,10 @@ assert.ok(Math.abs(gapRuntime.system.previewPlacement.baseY - firstWallTop) < 1e
 
 const builtGapWall = gapRuntime.system.build(upperGapPlayer, gapFacing);
 assert.equal(builtGapWall?.kind, 'wall');
-assert.equal(builtGapWall?.key, liveGap.gapWallKey);
+assert.ok(
+  gapRuntime.system.getDemolitionEntries().some(entry => entry.stateKey === liveGap.gapWallKey),
+  'The live build must commit the bridged canonical wall edge'
+);
 assert.equal(gapRuntime.inventory.get('log'), 0, 'The bridged upper Wall must keep the established three-Log cost');
 
 const seedLowerRuntimeShell = runtime => {
