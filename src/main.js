@@ -19,7 +19,7 @@ import { StructureInteriorOcclusionController } from './gameplay/StructureInteri
 import { VisibleHandTorchRuntimeController as TorchRuntimeController } from './gameplay/VisibleHandTorchRuntimeController.js';
 import { createGameplayStatusSink } from './gameplay/TutorialGuidancePolicy.js';
 import { WallPanelCustomizationController } from './gameplay/WallPanelCustomizationController.js';
-import { PlayerProfileStore, normalizeProfileName } from './persistence/PlayerProfileStore.js';
+import { PlayerProfileLifecycle } from './persistence/PlayerProfileLifecycle.js';\nimport { PlayerProfileStore, normalizeProfileName } from './persistence/PlayerProfileStore.js';
 import { SaveGameController } from './persistence/SaveGameController.js';
 import { SaveGameStore } from './persistence/SaveGameStore.js';
 import { installDesktopPrompt, registerVillagerServiceWorker } from './platform/DesktopInstallPrompt.js';
@@ -36,7 +36,7 @@ import { StructureRoofQuery } from './world/StructureRoofQuery.js';
 
 const canvas = document.getElementById('game-canvas');
 const status = document.getElementById('boot-status');
-const profileStore = new PlayerProfileStore();
+const profileStore = new PlayerProfileStore();\nconst profileLifecycle = new PlayerProfileLifecycle({ profileStore });
 
 function setStatus(message, error = false) {
   status.textContent = message;
@@ -252,10 +252,11 @@ function migrateLegacySaveToProfile() {
   }
 }
 
-function listPlayableProfiles() {
-  return profileStore.list().filter(profile => (
-    new SaveGameStore({ profileId: profile.id }).hasValidSave()
-  ));
+function listProfiles() {
+  return profileStore.list().map(profile => ({
+    ...profile,
+    hasSave: new SaveGameStore({ profileId: profile.id }).hasValidSave()
+  }));
 }
 
 async function boot() {
@@ -289,9 +290,10 @@ async function boot() {
     });
 
     const saveMenu = new TitleSaveMenuController({
-      profiles: listPlayableProfiles(),
+      profiles: listProfiles(),
       setStatus,
-      onContinue: profile => bootGameplay(titleScene, { resume: true, profile })
+      onContinue: profile => bootGameplay(titleScene, { resume: true, profile }),
+      onDelete: profile => profileLifecycle.deleteProfile(profile.id)
     });
     saveMenu.attach();
     titleScene.saveMenu = saveMenu;
