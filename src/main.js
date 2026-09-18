@@ -240,8 +240,12 @@ function migrateLegacySaveToProfile() {
     const profile = profileStore.create('Previous Save');
     const profileSaveStore = new SaveGameStore({ profileId: profile.id });
     const migrated = profileSaveStore.write(legacyRecord.state, { reason: 'profile-migration' });
-    if (migrated) legacyStore.clear();
-    return migrated ? profile : null;
+    if (migrated) {
+      legacyStore.clear();
+      return profile;
+    }
+    profileStore.remove(profile.id);
+    return null;
   } catch (error) {
     console.warn('[PROFILE] Unable to migrate legacy save', error);
     return null;
@@ -266,6 +270,7 @@ async function boot() {
     await titleScene.start({
       onNewGameRequest: () => titleScene.beginNewGameSetup({
         onConfirm: name => {
+          profileStore.assertWritable();
           const normalizedName = normalizeProfileName(name);
           if (!normalizedName) throw new Error('Enter a name for this profile');
           if (profileStore.findByName(normalizedName)) {
