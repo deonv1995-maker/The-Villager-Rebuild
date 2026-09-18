@@ -31,7 +31,9 @@ export function createSemanticStairPanelVisual(name = 'SemanticStairs') {
     tread.position.set(
       0,
       stepRise * (index + 1),
-      -PANEL_STAIR.runLength * 0.5 + PANEL_STAIR.stepRun * (index + 0.5)
+      PANEL_STAIR.runOffset -
+        PANEL_STAIR.runLength * 0.5 +
+        PANEL_STAIR.stepRun * (index + 0.5)
     );
     group.add(tread);
   }
@@ -51,7 +53,7 @@ export function createSemanticStairPanelVisual(name = 'SemanticStairs') {
     support.position.set(
       side * sideOffset,
       totalRise * 0.5 - PHYSICAL_LOG.radius * 0.9,
-      0
+      PANEL_STAIR.runOffset
     );
     support.quaternion.copy(supportQuaternion);
     group.add(support);
@@ -67,7 +69,9 @@ export function semanticStairColliderSpecs({ x, z, yaw, baseY, topY = null }) {
     : baseY + PANEL_GRID.storeyHeight;
   const specs = [];
   for (let index = 0; index < PANEL_STAIR.stepCount; index += 1) {
-    const localZ = -PANEL_STAIR.runLength * 0.5 + PANEL_STAIR.stepRun * (index + 0.5);
+    const localZ = PANEL_STAIR.runOffset -
+      PANEL_STAIR.runLength * 0.5 +
+      PANEL_STAIR.stepRun * (index + 0.5);
     const world = localToWorld({ x, z, yaw }, 0, localZ);
     // Keep the established tiny tread clearance on the intermediate steps, but seat
     // tread six on the exact upper-floor walking surface. The final support must hand
@@ -99,7 +103,8 @@ export function semanticStairColliderSpecs({ x, z, yaw, baseY, topY = null }) {
   // that remaining top-level strip so the Ranger can stand at the head of the stairs,
   // turn onto a side Floor, or continue onto the next Floor instead of stepping into the
   // reserved opening. This remains part of the Stair's shared collision authority.
-  const lastTreadLocalZ = -PANEL_STAIR.runLength * 0.5 +
+  const lastTreadLocalZ = PANEL_STAIR.runOffset -
+    PANEL_STAIR.runLength * 0.5 +
     PANEL_STAIR.stepRun * (PANEL_STAIR.stepCount - 0.5);
   const lastTreadSupportEnd = lastTreadLocalZ + PANEL_STAIR.stepRun * 0.56;
   const landingStart = lastTreadSupportEnd - PHYSICAL_LOG.floorSupportSeamPadding;

@@ -21,11 +21,28 @@ export const PANEL_DIRECTIONS = Object.freeze({
   west: Object.freeze({ id: 'west', dx: -1, dz: 0, opposite: 'east' })
 });
 
+// Semantic Stairs span two canonical Floor cells, but the visible flight is deliberately
+// biased toward the high/target cell. The low/source end keeps a full split-floor strip
+// plus one wall thickness as a real landing so the Ranger can step completely off the
+// first tread even when a perimeter Wall occupies the source cell's far edge. The high
+// end preserves the established half-strip handoff that the Stair-owned top landing
+// collider bridges to the upper Floor.
+const SEMANTIC_STAIR_HIGH_LANDING = PHYSICAL_LOG.floorWidth * 0.5;
+const SEMANTIC_STAIR_LOW_LANDING =
+  PHYSICAL_LOG.floorWidth + CONSTRUCTION_DIMENSIONS.wallThickness;
+const SEMANTIC_STAIR_RUN_LENGTH =
+  PANEL_GRID.cellSize * 2 - SEMANTIC_STAIR_LOW_LANDING - SEMANTIC_STAIR_HIGH_LANDING;
+const SEMANTIC_STAIR_RUN_OFFSET =
+  (SEMANTIC_STAIR_LOW_LANDING - SEMANTIC_STAIR_HIGH_LANDING) * 0.5;
+
 export const PANEL_STAIR = Object.freeze({
   stepCount: PHYSICAL_LOG.stairStepCount,
   width: CONSTRUCTION_DIMENSIONS.doorClearWidth,
-  runLength: PHYSICAL_LOG.stairRunLength,
-  stepRun: PHYSICAL_LOG.stairRunLength / PHYSICAL_LOG.stairStepCount,
+  runLength: SEMANTIC_STAIR_RUN_LENGTH,
+  runOffset: SEMANTIC_STAIR_RUN_OFFSET,
+  lowLanding: SEMANTIC_STAIR_LOW_LANDING,
+  highLanding: SEMANTIC_STAIR_HIGH_LANDING,
+  stepRun: SEMANTIC_STAIR_RUN_LENGTH / PHYSICAL_LOG.stairStepCount,
   stepRise: PANEL_GRID.storeyHeight / PHYSICAL_LOG.stairStepCount
 });
 
