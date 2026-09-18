@@ -116,7 +116,7 @@ export class TitleSceneApp {
 
   beginNewGameSetup({ onConfirm } = {}) {
     if (this.playStarted || this.profilePrompt || !this.menuUi) return false;
-    const newGameButton = this.menuUi.querySelector('.title-play');
+    const newGameButton = this.menuUi.querySelector('.title-new-game');
     if (!newGameButton) return false;
 
     this.profileFocusTarget = 1;
@@ -314,7 +314,7 @@ export class TitleSceneApp {
         <span class="title-rebuild">REBUILD</span>
       </div>
       <div class="title-menu-actions">
-        <button class="title-play" type="button">
+        <button class="title-play title-new-game" type="button">
           <span class="title-play-mark" aria-hidden="true">◆</span>
           <span>NEW GAME</span>
         </button>
@@ -374,7 +374,7 @@ export class TitleSceneApp {
     this.profileFocusTarget = 0;
     this.menuUi?.classList.remove('is-profile-setup');
     if (restoreMenu) {
-      const newGameButton = this.menuUi?.querySelector('.title-play');
+      const newGameButton = this.menuUi?.querySelector('.title-new-game');
       if (newGameButton) newGameButton.disabled = false;
       this.setStatus('VOYAGE · READY');
     }
