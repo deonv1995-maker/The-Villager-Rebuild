@@ -106,9 +106,14 @@ const torch = new TorchRuntimeController({ game, now: () => nowMs });
 game.torchRuntime = torch;
 toolbelt.fuel = torch;
 
+const inventoryBeforeLongRun = inventory.get('torch');
 torch.apply({ day: 1, minuteOfDay: 20 * 60 });
-torch.apply({ day: 1, minuteOfDay: 20 * 60 + 60 });
-assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, TORCH.burnDurationGameMinutes - 60));
+torch.apply({ day: 3, minuteOfDay: 5 * 60 });
+assert.equal(
+  inventory.get('torch'),
+  inventoryBeforeLongRun,
+  'Unplaced torches must remain available indefinitely'
+);
 
 const postTarget = torch.getPlacementTarget();
 assert.equal(postTarget?.kind, 'post', 'A nearby forward vertical frame must resolve as a post torch mount');
@@ -117,11 +122,11 @@ const inventoryBeforePost = inventory.get('torch');
 const postTorch = torch.place(postTarget);
 assert.ok(postTorch, 'Resolved post target must accept a torch');
 assert.equal(inventory.get('torch'), inventoryBeforePost - 1, 'Mounting transfers exactly one torch out of inventory');
-assert.ok(
-  nearlyEqual(postTorch.remainingGameMinutes, TORCH.burnDurationGameMinutes - 60),
-  'Mounting transfers the active torch unit with its remaining fuel'
+assert.equal(
+  Object.hasOwn(postTorch, 'remainingGameMinutes'),
+  false,
+  'Mounted torches must not carry a finite fuel value'
 );
-assert.ok(nearlyEqual(torch.snapshot().remainingGameMinutes, TORCH.burnDurationGameMinutes));
 assert.equal(torch.placedTorches[0].light.castShadow, false, 'Placed ambient torches must not allocate point-light shadow maps');
 assert.equal(torch.placedTorches[0].light.visible, true, 'A nearby placed torch must emit ambient light');
 const postEntry = torch.placedTorches[0];
@@ -156,14 +161,20 @@ assert.ok(
 );
 
 nowMs += 100;
-torch.apply({ day: 1, minuteOfDay: 20 * 60 + 90 });
-assert.ok(
-  nearlyEqual(torch.placedTorches[0].remainingGameMinutes, TORCH.burnDurationGameMinutes - 90),
-  'Placed torch fuel must continue burning after the player mounts it'
+const placedCountBeforeTimeJump = torch.placedTorches.length;
+torch.apply({ day: 12, minuteOfDay: 4 * 60 });
+assert.equal(
+  torch.placedTorches.length,
+  placedCountBeforeTimeJump,
+  'Placed torches must remain mounted across arbitrarily long world-time jumps'
 );
 assert.ok(
-  nearlyEqual(torch.placedTorches[1].remainingGameMinutes, TORCH.burnDurationGameMinutes - 30),
-  'A later placed torch must keep its own independent burn state'
+  torch.placedTorches.every(entry => entry.root.parent === scene),
+  'Persistent placed torch visuals must stay in the world'
+);
+assert.ok(
+  torch.placedTorches.every(entry => entry.light.parent === scene),
+  'Persistent placed torch lights must stay in the world'
 );
 
 for (let index = 0; index < 8; index += 1) {
@@ -190,8 +201,19 @@ assert.ok(
 const saved = torch.captureState();
 const savedInventoryQuantity = inventory.get('torch');
 assert.equal(saved.placedTorches.length, torch.placedTorches.length);
-assert.ok(saved.placedTorches.every(entry => entry.remainingGameMinutes > 0));
-assert.equal(torch.restoreState(saved), true, 'Placed torches must restore through the existing torch save section');
+assert.ok(
+  saved.placedTorches.every(entry => !Object.hasOwn(entry, 'remainingGameMinutes')),
+  'New placed-torch saves must not contain obsolete fuel values'
+);
+const legacySaved = {
+  ...saved,
+  placedTorches: saved.placedTorches.map(entry => ({ ...entry, remainingGameMinutes: 0.01 }))
+};
+assert.equal(
+  torch.restoreState(legacySaved),
+  true,
+  'Legacy placed torches must restore even when their old saved fuel was nearly empty'
+);
 assert.equal(torch.placedTorches.length, saved.placedTorches.length);
 assert.equal(inventory.get('torch'), savedInventoryQuantity, 'Restore must not consume inventory again for already-placed torches');
 const restoredWallEntry = torch.placedTorches.find(entry => entry.mountKind === 'wall');
@@ -224,7 +246,8 @@ const checks = [
   ['torch placement reuses the external contextual action channel', equipmentSource.includes("TORCH_PLACEMENT_ACTION_ID = 'torch-place'") && equipmentSource.includes("caption: 'PLACE'")],
   ['all actual tool slots expose quantity badges', mobileHudSource.includes("count.hidden = entry.id === 'hand'")],
   ['the hand pseudo-slot remains the only slot without a quantity badge', !mobileHudSource.includes("count.hidden = entry.id !== 'spear'")],
-  ['torch save state stays in the dedicated torch persistence boundary', saveSource.includes('state.torch = this.game.torchRuntime?.captureState?.() ?? null') && saveSource.includes('this.game.torchRuntime?.restoreState?.(record.state.torch)')]
+  ['torch save state stays in the dedicated torch persistence boundary', saveSource.includes('state.torch = this.game.torchRuntime?.captureState?.() ?? null') && saveSource.includes('this.game.torchRuntime?.restoreState?.(record.state.torch)')],
+  ['placed torch runtime has no burnout status path', !read('src/gameplay/TorchRuntimeController.js').includes('TORCH BURNED OUT')]
 ];
 
 let failed = 0;
