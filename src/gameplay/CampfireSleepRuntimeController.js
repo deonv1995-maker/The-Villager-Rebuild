@@ -305,41 +305,83 @@ export class CampfireSleepRuntimeController {
   #poseSettle(progress) {
     const sequence = this.sequence;
     if (!sequence) return;
-    this.#setPose({
+    const yaw = lerpAngle(sequence.stageYaw, sequence.restYaw, progress);
+    const visualPosition = {
       x: THREE.MathUtils.lerp(sequence.stage.x, sequence.rest.x, progress),
       y: THREE.MathUtils.lerp(sequence.stage.y, sequence.rest.y, progress),
-      z: THREE.MathUtils.lerp(sequence.stage.z, sequence.rest.z, progress),
-      yaw: lerpAngle(sequence.stageYaw, sequence.restYaw, progress),
+      z: THREE.MathUtils.lerp(sequence.stage.z, sequence.rest.z, progress)
+    };
+    const modelOffset = this.#modelOffsetFromStage(visualPosition, yaw);
+    this.#setPose({
+      ...sequence.stage,
+      yaw,
       modelPitch: THREE.MathUtils.lerp(0, sequence.restModelPitch, progress),
-      modelYOffset: THREE.MathUtils.lerp(0, sequence.restModelYOffset, progress)
+      modelXOffset: modelOffset.x,
+      modelYOffset: (visualPosition.y - sequence.stage.y)
+        + THREE.MathUtils.lerp(0, sequence.restModelYOffset, progress),
+      modelZOffset: modelOffset.z
     });
   }
 
   #poseRest() {
     const sequence = this.sequence;
     if (!sequence) return;
+    const modelOffset = this.#modelOffsetFromStage(sequence.rest, sequence.restYaw);
     this.#setPose({
-      ...sequence.rest,
+      ...sequence.stage,
       yaw: sequence.restYaw,
       modelPitch: sequence.restModelPitch,
-      modelYOffset: sequence.restModelYOffset
+      modelXOffset: modelOffset.x,
+      modelYOffset: (sequence.rest.y - sequence.stage.y) + sequence.restModelYOffset,
+      modelZOffset: modelOffset.z
     });
   }
 
   #poseWake(progress) {
     const sequence = this.sequence;
     if (!sequence) return;
-    this.#setPose({
+    const yaw = lerpAngle(sequence.restYaw, sequence.stageYaw, progress);
+    const visualPosition = {
       x: THREE.MathUtils.lerp(sequence.rest.x, sequence.stage.x, progress),
       y: THREE.MathUtils.lerp(sequence.rest.y, sequence.stage.y, progress),
-      z: THREE.MathUtils.lerp(sequence.rest.z, sequence.stage.z, progress),
-      yaw: lerpAngle(sequence.restYaw, sequence.stageYaw, progress),
+      z: THREE.MathUtils.lerp(sequence.rest.z, sequence.stage.z, progress)
+    };
+    const modelOffset = this.#modelOffsetFromStage(visualPosition, yaw);
+    this.#setPose({
+      ...sequence.stage,
+      yaw,
       modelPitch: THREE.MathUtils.lerp(sequence.restModelPitch, 0, progress),
-      modelYOffset: THREE.MathUtils.lerp(sequence.restModelYOffset, 0, progress)
+      modelXOffset: modelOffset.x,
+      modelYOffset: (visualPosition.y - sequence.stage.y)
+        + THREE.MathUtils.lerp(sequence.restModelYOffset, 0, progress),
+      modelZOffset: modelOffset.z
     });
   }
 
-  #setPose({ x, y, z, yaw, modelPitch = 0, modelYOffset = 0, snapCamera = false }) {
+  #modelOffsetFromStage(worldPosition, yaw) {
+    const sequence = this.sequence;
+    if (!sequence) return { x: 0, z: 0 };
+    const dx = worldPosition.x - sequence.stage.x;
+    const dz = worldPosition.z - sequence.stage.z;
+    const cosine = Math.cos(yaw);
+    const sine = Math.sin(yaw);
+    return {
+      x: dx * cosine - dz * sine,
+      z: dx * sine + dz * cosine
+    };
+  }
+
+  #setPose({
+    x,
+    y,
+    z,
+    yaw,
+    modelPitch = 0,
+    modelXOffset = 0,
+    modelYOffset = 0,
+    modelZOffset = 0,
+    snapCamera = false
+  }) {
     this.game.player?.setCinematicPose?.({
       x,
       y,
@@ -348,7 +390,9 @@ export class CampfireSleepRuntimeController {
       modelPitch,
       modelYaw: 0,
       modelRoll: 0,
+      modelXOffset,
       modelYOffset,
+      modelZOffset,
       snapCamera
     });
   }
