@@ -132,6 +132,46 @@ assert.ok(
   'wolf chase must stop in front of the Ranger instead of moving through the Ranger centre'
 );
 
+assert.equal(ANIMAL_DEFINITIONS.wolf.combat.meleeHitboxRadius, 1.05, 'wolf must expose an explicit melee body hitbox');
+const combatWolf = new WildAnimalActor({
+  scene: new THREE.Scene(),
+  terrain: flatTerrain,
+  definition: ANIMAL_DEFINITIONS.wolf,
+  center: { x: 0, z: 0 },
+  instanceId: 'wolf-combat-test'
+});
+combatWolf.group.position.set(0, 0, 0);
+const swordOrigin = new THREE.Vector3(0, 0, 3);
+const swordFacing = new THREE.Vector3(0, 0, -1);
+assert.equal(
+  combatWolf.getAttackTarget(swordOrigin, 2.35),
+  null,
+  'centre-distance targeting should remain outside the sword range for this hitbox-edge test'
+);
+const wolfHitboxTarget = combatWolf.getMeleeHitTarget(swordOrigin, swordFacing, { range: 2.35, arcDegrees: 118 });
+assert.ok(wolfHitboxTarget, 'sword reach must intersect the wolf body hitbox instead of requiring its centre to be in range');
+assert.equal(wolfHitboxTarget.hitboxRadius, ANIMAL_DEFINITIONS.wolf.combat.meleeHitboxRadius);
+assert.equal(
+  combatWolf.getMeleeHitTarget(swordOrigin, new THREE.Vector3(0, 0, 1), { range: 2.35, arcDegrees: 118 }),
+  null,
+  'wolf hitbox behind the Ranger must not receive a forward sword strike'
+);
+assert.ok(combatWolf.healthBar, 'wolf must create an in-world health bar');
+const fullHealthPixels = combatWolf.healthBarPixels.slice();
+const swordHit = combatWolf.meleeAttack(swordOrigin, {
+  range: 2.35,
+  damage: 1,
+  direction: swordFacing,
+  arcDegrees: 118
+});
+assert.equal(swordHit?.health, ANIMAL_DEFINITIONS.wolf.maxHealth - 1, 'successful sword hit must reduce authoritative wolf health');
+assert.equal(
+  fullHealthPixels.some((value, index) => value !== combatWolf.healthBarPixels[index]),
+  true,
+  'wolf health bar pixels must update immediately when damage is dealt'
+);
+combatWolf.dispose();
+
 assert.equal(ANIMAL_DEFINITIONS.deer.presentation.format, 'gltf', 'deer must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.fox.presentation.format, 'gltf', 'fox must use the licensed animated production asset');
 assert.equal(ANIMAL_DEFINITIONS.wolf.presentation.format, 'gltf', 'wolf must use the licensed animated production asset');
