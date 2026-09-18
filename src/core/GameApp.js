@@ -117,6 +117,7 @@ export class GameApp {
           onAttack: () => this.#tryAttack(),
           onToolSelect: toolId => this.#trySelectTool(toolId),
           onBuildOption: mode => this.#tryLogBuildOption(mode),
+          onInventoryItemSelect: itemId => this.#tryUseInventoryItem(itemId),
           onInventoryVisibilityChange: open => this.setPaused(open, 'inventory-menu')
         });
         this.player.getPosition(this.playerPosition);
@@ -172,6 +173,7 @@ export class GameApp {
     this.toolPresentation?.update(dt);
     this.demolitionPreview?.update(dt);
     this.campfire?.update(dt);
+    this.foodRuntime?.update(dt);
 
     const survivalEvent = this.survival?.advanceWorldMinutes?.(
       dt * (this.worldTime?.gameMinutesPerRealSecond ?? 1)
@@ -418,6 +420,11 @@ export class GameApp {
       this.#refreshTargets(0);
       this.#syncProgress();
     }
+  }
+
+  #tryUseInventoryItem(itemId) {
+    if (this.foodRuntime?.consumeInventoryItem?.(itemId)) return true;
+    return Boolean(this.placeableUtilityRuntime?.selectInventoryItem?.(itemId));
   }
 
   #trySelectTool(toolId) {

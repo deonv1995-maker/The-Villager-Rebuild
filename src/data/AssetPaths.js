@@ -103,6 +103,7 @@ export const ASSET_PATHS = Object.freeze({
         stone: asset('ui/cosy/icon-resource-stone.webp'),
         grass: asset('ui/cosy/icon-resource-grass.webp'),
         meat: asset('ui/cosy/icon-resource-meat.webp'),
+        cooked_meat: asset('ui/cosy/icon-resource-meat.webp'),
         log: asset('ui/cosy/icon-build-raw.webp')
       }),
       build: Object.freeze({

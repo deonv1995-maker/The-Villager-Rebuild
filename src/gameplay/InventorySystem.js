@@ -133,6 +133,8 @@ export class InventorySystem {
       id: definition.id,
       label: definition.label,
       kind: definition.kind ?? 'resource',
+      storageCategory: definition.storageCategory ?? null,
+      edible: Boolean(definition.food?.edible),
       quantity: this.get(definition.id)
     }));
   }

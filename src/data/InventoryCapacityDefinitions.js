@@ -28,6 +28,7 @@ export const INVENTORY_ITEM_BULK = Object.freeze({
   stone: 2,
   grass: 1,
   meat: 2,
+  cooked_meat: 2,
   log: 8,
   spear: 3,
   axe: 4,

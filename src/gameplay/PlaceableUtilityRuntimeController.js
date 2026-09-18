@@ -48,7 +48,6 @@ export class PlaceableUtilityRuntimeController {
     this.previewPlacement = null;
     this.activeBenchSessionId = null;
     this.nextStorageId = this.#resolveNextStorageId();
-    this.boundInventorySelect = itemId => this.selectInventoryItem(itemId);
     this.boundInventoryVisibility = open => this.#onInventoryVisibility(open);
   }
 
@@ -172,7 +171,6 @@ export class PlaceableUtilityRuntimeController {
     const hud = this.game.hud;
     if (!hud || this.hudAttached) return;
     this.hudAttached = true;
-    hud.onInventoryItemSelect = this.boundInventorySelect;
     hud.onInventoryVisibilityChange = this.boundInventoryVisibility;
   }
 

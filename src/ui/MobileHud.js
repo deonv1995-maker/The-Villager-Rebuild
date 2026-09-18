@@ -185,7 +185,7 @@ export class MobileHud {
       .filter(entry => entry.quantity > 0 || (entry.kind === 'resource' && alwaysVisible.has(entry.id)));
 
     this.inventoryElement.replaceChildren(...visible.map(entry => {
-      const selectable = entry.kind === 'placeable' && entry.quantity > 0;
+      const selectable = entry.quantity > 0 && (entry.kind === 'placeable' || entry.edible);
       const card = document.createElement(selectable ? 'button' : 'div');
       card.className = 'inventory-card';
       card.dataset.resource = entry.id;
@@ -193,9 +193,13 @@ export class MobileHud {
         card.type = 'button';
         card.dataset.inventorySelect = entry.id;
       }
-      card.classList.toggle('placeable', selectable);
-      card.setAttribute('aria-label', `${entry.label}: ${entry.quantity}${selectable ? ', tap to place' : ''}`);
-      card.title = selectable ? `${entry.label}: ${entry.quantity} · Tap to place` : `${entry.label}: ${entry.quantity}`;
+      card.classList.toggle('placeable', entry.kind === 'placeable' && selectable);
+      card.classList.toggle('edible', Boolean(entry.edible && selectable));
+      const tapAction = entry.edible ? 'eat' : entry.kind === 'placeable' ? 'place' : null;
+      card.setAttribute('aria-label', `${entry.label}: ${entry.quantity}${tapAction ? `, tap to ${tapAction}` : ''}`);
+      card.title = tapAction
+        ? `${entry.label}: ${entry.quantity} · Tap to ${tapAction}`
+        : `${entry.label}: ${entry.quantity}`;
 
       const icon = document.createElement('img');
       icon.className = 'inventory-resource-icon';
@@ -215,7 +219,7 @@ export class MobileHud {
       card.append(icon, label, quantity);
       if (selectable) {
         const hint = document.createElement('small');
-        hint.textContent = 'PLACE';
+        hint.textContent = entry.edible ? 'EAT' : 'PLACE';
         hint.setAttribute('aria-hidden', 'true');
         card.append(hint);
       }

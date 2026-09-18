@@ -630,6 +630,7 @@ export function captureGameState(game) {
     harvest: captureHarvest(game),
     gatherables: captureGatherables(game),
     campfire: captureCampfire(game),
+    food: game.foodRuntime?.captureState?.() ?? null,
     construction: captureConstruction(game),
     wallPanels: captureWallPanels(game),
     roofThatch: captureRoofThatch(game),
@@ -644,6 +645,7 @@ export function restoreGameState(game, state) {
   restoreHarvest(game, state.harvest);
   restoreGatherables(game, state.gatherables);
   restoreCampfire(game, state.campfire);
+  game.foodRuntime?.restoreState?.(state.food);
   restoreConstruction(game, state.construction);
   restoreWallPanels(game, state.wallPanels);
   restoreRoofThatch(game, state.roofThatch);

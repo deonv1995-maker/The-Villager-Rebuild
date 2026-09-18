@@ -26,6 +26,7 @@ const cosyResourceIcons = Object.freeze({
   stone: 'icon-resource-stone.webp',
   grass: 'icon-resource-grass.webp',
   meat: 'icon-resource-meat.webp',
+  cooked_meat: 'icon-resource-meat.webp',
   log: 'icon-build-raw.webp'
 });
 

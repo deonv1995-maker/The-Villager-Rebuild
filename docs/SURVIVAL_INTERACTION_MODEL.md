@@ -14,7 +14,12 @@ Foundation 0.3.8 keeps the established gathering, crafting, tools, combat, terra
 - Reaching 0 health uses a temporary no-item-loss shoreline recovery: the Ranger returns to the safe spawn with 50 health and 35 hunger. This prevents a soft-lock while a later death/penalty design remains intentionally deferred.
 - Health and hunger are included in the existing schema-2 save state. Older compatible schema-2 saves without survival fields restore to the normal starting values rather than requiring a save reset.
 - The mobile HUD only renders survival state; it does not own survival logic.
-- Food consumption is deliberately not implemented here. Raw Meat remains a gathered food resource until the next cook/eat milestone adds the authoritative hunger-restoration path.
+- Raw Meat is deliberately non-edible. Its resource definition declares the campfire as its cooking station and resolves one Raw Meat into one Cooked Meat after the shared cooking duration.
+- `FoodRuntimeController` owns the campfire cooking transaction, roasting presentation, in-progress cooking save state and edible inventory action. It does not own hunger values.
+- Starting a cook reserves one Raw Meat immediately. In-progress cooking is saved, so backgrounding or continuing a save cannot silently duplicate or lose the reserved food.
+- Cooked Meat restores 45 hunger through `PlayerSurvivalSystem.restoreHunger()`. The inventory UI only requests the consume action; it does not mutate hunger directly.
+- Eating at full hunger is rejected without consuming the food.
+- The current cooking path is intentionally station-driven so later pots, ovens or village cooking workplaces can extend food production without replacing the shared inventory/survival authorities.
 
 ## Resource storage
 

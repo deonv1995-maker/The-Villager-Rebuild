@@ -3,6 +3,7 @@ import { WorldTimeSystem } from './core/WorldTimeSystem.js';
 import { GameApp } from './core/GameApp.js';
 import { CampfireSleepRuntimeController } from './gameplay/CampfireSleepRuntimeController.js';
 import { EquipmentRuntimeController } from './gameplay/EquipmentRuntimeController.js';
+import { FoodRuntimeController } from './gameplay/FoodRuntimeController.js';
 import { InventoryCapacityController } from './gameplay/InventoryCapacityController.js';
 import { InventoryGainFeedbackController } from './gameplay/InventoryGainFeedbackController.js';
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
@@ -107,6 +108,10 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     const equipmentRuntime = new EquipmentRuntimeController({ game });
     equipmentRuntime.start();
     game.equipmentRuntime = equipmentRuntime;
+
+    const foodRuntime = new FoodRuntimeController({ game });
+    foodRuntime.start();
+    game.foodRuntime = foodRuntime;
 
     const placeableUtilityRuntime = new PlaceableUtilityRuntimeController({ game });
     placeableUtilityRuntime.start();

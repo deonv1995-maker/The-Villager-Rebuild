@@ -35,7 +35,8 @@ The established 0.3.8 physical-construction rules still remain intact:
 - the bottom toolbelt starts with permanent **Hand**, followed by Spear, Axe, Hammer, Pickaxe and Sword;
 - all handheld tools continue to use the shared authored right-hand attachment boundary;
 - Spear still uses the authored KayKit `Throw` animation, timed hand release and live-target ballistic arc;
-- campfire construction still uses the established survival/crafting path rather than creating a second economy;
+- campfire construction and timed meat cooking use the established survival/inventory path rather than creating a second economy;
+- Raw Meat must be cooked at the campfire before it becomes edible Cooked Meat, which restores hunger through the shared player-survival authority;
 - physical Logs remain 2.90 units long;
 - the expanded mainland, procedural terrain, chunk streaming, water, tree transparency, PWA install architecture and deterministic Pages deployment ordering remain unchanged by the current construction/camera refinements.
 
