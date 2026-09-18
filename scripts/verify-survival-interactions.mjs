@@ -324,7 +324,7 @@ assert.ok(!panelRuntimeSource.includes('[data-resource="log"]'), 'Inventory Logs
 assert.ok(!panelRuntimeSource.includes("this.game.toolbelt?.select('hand')"), 'Semantic placement must keep the Hammer equipped');
 for (const requirement of [
   'this.registry = new PanelStructureRegistry()',
-  'this.inventory.consume(cost)',
+  'this.consumeMaterials(cost)',
   "type: 'panel-floor'",
   "type: 'panel-wall'",
   "type: 'panel-stair'",

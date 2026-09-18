@@ -16,7 +16,8 @@ export class PanelConstructionRuntimeController {
       group: game.island.group,
       terrain: game.island,
       collision: game.island.collision,
-      inventory: game.inventory
+      inventory: game.inventory,
+      materialSource: game.storage ?? null
     });
     this.game.panelConstruction = this.system;
     this.running = false;

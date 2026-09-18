@@ -18,7 +18,7 @@ const makeTerrain = () => ({
   setConstructionFloors() {}
 });
 
-const makeRuntime = (logCount = 0) => {
+const makeRuntime = (logCount = 0, materialSource = null) => {
   const terrain = makeTerrain();
   const collision = new WorldCollisionSystem({
     heightAt: terrain.heightAt,
@@ -28,7 +28,7 @@ const makeRuntime = (logCount = 0) => {
   const inventory = new InventorySystem();
   if (logCount > 0) inventory.add('log', logCount);
   const group = new THREE.Group();
-  const system = new PanelConstructionSystem({ group, terrain, collision, inventory });
+  const system = new PanelConstructionSystem({ group, terrain, collision, inventory, materialSource });
   return { terrain, collision, inventory, group, system };
 };
 
@@ -46,6 +46,32 @@ assert.deepEqual(PANEL_BUILD_COSTS.window, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.stairs, [{ itemId: 'log', quantity: 3 }]);
 assert.deepEqual(PANEL_BUILD_COSTS.roof, [{ itemId: 'log', quantity: 5 }]);
 assert.deepEqual(panelBuildCost('roof', { roofCellCount: 2 }), [{ itemId: 'log', quantity: 10 }]);
+
+const storedMaterials = {
+  log: 6,
+  getAvailable(itemId) {
+    return this[itemId] ?? 0;
+  },
+  hasAvailable(itemId, quantity) {
+    return this.getAvailable(itemId) >= quantity;
+  },
+  consumeAvailable(requirements) {
+    if (!requirements.every(requirement => this.hasAvailable(requirement.itemId, requirement.quantity))) return false;
+    for (const requirement of requirements) this[requirement.itemId] -= requirement.quantity;
+    return true;
+  }
+};
+const storageBackedRuntime = makeRuntime(0, storedMaterials);
+storageBackedRuntime.system.setActive(true);
+const storageBackedState = storageBackedRuntime.system.update(
+  new THREE.Vector3(0, 0, 0),
+  new THREE.Vector3(0, 0, 1)
+);
+assert.equal(storageBackedState.materialQuantity, 6, 'Build HUD material quantity must include the injected storage-backed material source');
+assert.equal(storageBackedState.previewValid, true, 'Storage-backed Logs must make construction affordable with an empty Ranger pack');
+assert.ok(storageBackedRuntime.system.build(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 1)));
+assert.equal(storedMaterials.log, 3, 'Construction must consume the semantic module cost from the shared material source');
+assert.equal(storageBackedRuntime.inventory.get('log'), 0, 'Storage-backed construction must not require transferring materials into Ranger inventory');
 
 const player = new THREE.Vector3(0, 0, 0);
 const facing = new THREE.Vector3(0, 0, 1);
@@ -381,10 +407,11 @@ assert.equal(poorState.previewing, true, 'Unaffordable construction should still
 assert.equal(poorState.canAfford, false);
 assert.equal(poorState.previewValid, false, 'Unaffordable panel previews must stay red and uncommittable');
 
-const [controllerSource, gameAppSource, panelSystemSource] = await Promise.all([
+const [controllerSource, gameAppSource, panelSystemSource, complexRoofSource] = await Promise.all([
   readFile('src/gameplay/PanelConstructionRuntimeController.js', 'utf8'),
   readFile('src/core/GameApp.js', 'utf8'),
-  readFile('src/world/PanelConstructionSystem.js', 'utf8')
+  readFile('src/world/PanelConstructionSystem.js', 'utf8'),
+  readFile('src/world/ComplexRoofPanelConstructionSystem.js', 'utf8')
 ]);
 for (const requirement of [
   "import { HammerConstructionMenu } from '../ui/HammerConstructionMenu.js'",
@@ -401,6 +428,15 @@ for (const requirement of [
 ]) {
   assert.ok(controllerSource.includes(requirement), `Panel runtime controller is missing contract: ${requirement}`);
 }
+assert.ok(
+  controllerSource.includes('materialSource: game.storage ?? null'),
+  'Live semantic construction must receive the established placed-storage authority as its optional material source'
+);
+assert.ok(
+  complexRoofSource.includes('this.canAffordMaterials(cost)') &&
+  complexRoofSource.includes('this.consumeMaterials(cost)'),
+  'Complex Roof construction must use the same shared material source as Floor/Wall/Stairs'
+);
 assert.ok(
   !controllerSource.includes("event.target.closest?.('[data-resource=\"log\"]')"),
   'Inventory Logs must remain construction material and must not be a competing build-menu trigger'

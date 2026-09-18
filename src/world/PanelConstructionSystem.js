@@ -131,7 +131,7 @@ const chooseRoofRectangle = (floors, seed) => {
 };
 
 export class PanelConstructionSystem {
-  constructor({ group, terrain, collision, inventory }) {
+  constructor({ group, terrain, collision, inventory, materialSource = null }) {
     if (!group || !terrain || !collision || !inventory) {
       throw new Error('PanelConstructionSystem requires group, terrain, collision and inventory');
     }
@@ -139,6 +139,7 @@ export class PanelConstructionSystem {
     this.terrain = terrain;
     this.collision = collision;
     this.inventory = inventory;
+    this.materialSource = materialSource;
     this.registry = new PanelStructureRegistry();
     this.floorSupports = new FloorSupportVisual({ group, terrain });
     this.entries = new Map();
@@ -219,7 +220,7 @@ export class PanelConstructionSystem {
       previewing: Boolean(this.previewRoot && this.previewPlacement),
       canAfford: this.#canAfford(this.buildMode, this.previewPlacement),
       cost,
-      materialQuantity: this.inventory.get(PANEL_CONSTRUCTION_RESOURCE_ID)
+      materialQuantity: this.getMaterialQuantity(PANEL_CONSTRUCTION_RESOURCE_ID)
     };
   }
 
@@ -307,7 +308,7 @@ export class PanelConstructionSystem {
       return null;
     }
 
-    if (!this.inventory.consume(cost)) {
+    if (!this.consumeMaterials(cost)) {
       if (this.buildMode === 'floor') {
         structure.grid.removeFloor({
           x: placement.cellX ?? 0,
@@ -1193,9 +1194,23 @@ export class PanelConstructionSystem {
     return this.#costFor(buildModeForEntry(entry), entry);
   }
 
+  getMaterialQuantity(itemId) {
+    return this.materialSource?.getAvailable?.(itemId) ?? this.inventory.get(itemId);
+  }
+
+  canAffordMaterials(requirements) {
+    return requirements.every(requirement => (
+      this.materialSource?.hasAvailable?.(requirement.itemId, requirement.quantity)
+      ?? this.inventory.has(requirement.itemId, requirement.quantity)
+    ));
+  }
+
+  consumeMaterials(requirements) {
+    return this.materialSource?.consumeAvailable?.(requirements) ?? this.inventory.consume(requirements);
+  }
+
   #canAfford(mode, placement = null) {
-    const requirements = this.#costFor(mode, placement);
-    return requirements.every(requirement => this.inventory.has(requirement.itemId, requirement.quantity));
+    return this.canAffordMaterials(this.#costFor(mode, placement));
   }
 
   #baseHeightAt(x, z) {

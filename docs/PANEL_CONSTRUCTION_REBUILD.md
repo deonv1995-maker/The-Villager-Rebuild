@@ -36,9 +36,13 @@ This milestone does **not** re-enable the legacy individual-Log structural workf
 
 Trees still create a visibly full-sized Log world pickup. When the Ranger collects it, the Log enters `InventorySystem` and becomes semantic construction material.
 
-The material flow remains:
+The material flow is now:
 
-`tree -> world Log pickup -> inventory Log -> semantic building module`
+`tree -> world Log pickup -> Ranger inventory or placed storage -> shared build material source -> semantic building module`
+
+While semantic build mode is active, affordability and placement consume against one construction-only material pool: carried inventory plus the contents of every placed storage container. The Ranger pack is spent first, then matching stored stacks are consumed directly through `StorageContainerSystem` in stable container order. Materials are never copied into the pack, so Ranger/Sprout carrying capacity does not cap the size of a structure once resources have been deposited into storage.
+
+This pooling is scoped to construction. Crafting, eating, tool use and ordinary inventory actions keep their existing authorities and do not gain remote access to storage. Container acceptance still comes from `StorageContainerDefinitions`; today Logs/Stone/Stick/Grass belong in Storage Chests while Food Barrels remain food-only. If a future container is allowed to hold a construction material, the same build-material source can consume it without adding another construction inventory system.
 
 Current semantic costs are:
 
@@ -227,7 +231,7 @@ Selecting Hammer opens the compact semantic build dock. The live choices are Flo
 
 Third person uses Ranger-relative semantic candidates. For Floor mode, aiming into a closed lower-storey wall enclosure can resolve the coincident wall-top Floor slot before falling back to another ground-level structure. For Wall/Door/Window mode, a floorless stacked edge from a completed lower enclosure may replace an otherwise invalid ground/Floor-backed fallback. For Roof mode, vertically aligned valid supports prefer the highest completed ring when their horizontal score is effectively tied. First person scores semantic candidates against the centre-camera aim ray, including their vertical storey position. Large Roofs use the nearest covered cell for reach/scoring rather than forcing interaction through the aggregate centre.
 
-Green means the candidate and inventory cost are valid; red means support/occupancy/clearance/material requirements are not satisfied.
+Green means the candidate and combined build-material cost are valid; red means support/occupancy/clearance/material requirements are not satisfied. The Hammer material count represents the construction pool available across the Ranger pack and placed storage, not only what fits in the pack.
 
 The legacy physical-log build tray remains isolated transition infrastructure and is hidden during semantic panel construction.
 
