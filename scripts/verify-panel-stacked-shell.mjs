@@ -9,6 +9,7 @@ import {
   panelCellKey
 } from '../src/world/PanelConstructionGrid.js';
 import {
+  collectPanelSameStoreyWallGapSupports,
   collectPanelUpperWallSupports,
   collectPanelWallEnclosureCells
 } from '../src/world/PanelUpperStoreyRules.js';
@@ -84,6 +85,59 @@ const addSupportedUpperRing = (grid, variants = {}) => {
 const groundLevel = 0.08;
 const firstWallTop = groundLevel + PANEL_GRID.storeyHeight;
 const secondWallTop = firstWallTop + PANEL_GRID.storeyHeight;
+
+const seedUpperStairWallGap = grid => {
+  const lowerCells = [{ x: 0, z: 0 }, { x: 1, z: 0 }, { x: 2, z: 0 }];
+  for (const cell of lowerCells) {
+    assert.equal(
+      grid.placeFloor({ ...cell, storey: 0, levelY: groundLevel }).ok,
+      true,
+      `Expected lower Floor at ${cell.x}:${cell.z}`
+    );
+  }
+  addPerimeterWalls(grid, lowerCells);
+  assert.equal(
+    grid.placeStair({ x: 0, z: 0, storey: 0, direction: 'east' }).ok,
+    true,
+    'Test topology must reserve the middle upper cell as a Stair opening'
+  );
+
+  assert.equal(
+    grid.placeFloor({ x: 0, z: 0, storey: 1, levelY: firstWallTop }).ok,
+    true
+  );
+  assert.equal(
+    grid.placeFloor({ x: 1, z: 0, storey: 1, levelY: firstWallTop }).reason,
+    'stair-opening',
+    'The Stair target must keep the middle upper Floor intentionally open'
+  );
+  assert.equal(
+    grid.placeFloor({ x: 2, z: 0, storey: 1, levelY: firstWallTop }).ok,
+    true
+  );
+
+  const left = grid.placeWall({
+    x: 0,
+    z: 0,
+    storey: 1,
+    direction: 'north',
+    variant: 'solid'
+  });
+  const right = grid.placeWall({
+    x: 2,
+    z: 0,
+    storey: 1,
+    direction: 'north',
+    variant: 'solid'
+  });
+  assert.equal(left.ok, true);
+  assert.equal(right.ok, true);
+  return {
+    leftWallKey: left.wall.key,
+    rightWallKey: right.wall.key,
+    gapWallKey: 'edge:1:x:1:0'
+  };
+};
 
 // Core topology: a closed semantic lower section exposes the exact same four edges one
 // storey higher without requiring an upper Floor. Door and Window remain wall-family
@@ -168,6 +222,87 @@ assert.equal(
   0,
   'An incomplete lower section must not expose upper wall support'
 );
+
+// A reserved Stair opening deliberately leaves the middle upper Floor absent. When two
+// independently supported, collinear upper walls flank exactly one canonical edge, that
+// edge may bridge the opening without inventing a hidden Floor or requiring a wall below.
+const stairGapGrid = new PanelConstructionGrid();
+const stairGap = seedUpperStairWallGap(stairGapGrid);
+const sameStoreyGapSupports = collectPanelSameStoreyWallGapSupports(
+  [...stairGapGrid.walls.values()],
+  [...stairGapGrid.floors.values()],
+  { levelTolerance: PANEL_GRID.snapTolerance + 0.001 }
+);
+const stairGapSupport = sameStoreyGapSupports.find(support => support.key === stairGap.gapWallKey);
+assert.ok(stairGapSupport, 'Two rooted upper walls must expose the single Wall-width gap between them');
+assert.equal(stairGapSupport.snapKind, 'same-storey-wall-gap');
+assert.ok(Math.abs(stairGapSupport.levelY - firstWallTop) < 1e-8);
+assert.deepEqual(
+  stairGapSupport.supportingWallKeys,
+  [stairGap.leftWallKey, stairGap.rightWallKey].sort(),
+  'The gap Wall must depend on both independently supported flanking walls'
+);
+
+const bridgedGap = stairGapGrid.placeWall({
+  x: 1,
+  z: 0,
+  storey: 1,
+  direction: 'north',
+  variant: 'solid'
+});
+assert.equal(bridgedGap.ok, true, 'The upper Wall must be placeable directly across the Stair opening');
+assert.equal(bridgedGap.wall.key, stairGap.gapWallKey);
+assert.ok(Math.abs(bridgedGap.wall.baseY - firstWallTop) < 1e-8);
+assert.equal(
+  stairGapGrid.floors.has(panelCellKey({ x: 1, z: 0, storey: 1 })),
+  false,
+  'Bridging the upper perimeter must not synthesize a Floor across the Stair opening'
+);
+
+const restoredStairGapGrid = PanelConstructionGrid.restore(stairGapGrid.snapshot());
+assert.ok(
+  restoredStairGapGrid.walls.has(stairGap.gapWallKey),
+  'Save/Continue must restore a same-storey bridge after both flanking roots are available'
+);
+assert.equal(
+  restoredStairGapGrid.removeWall(stairGap.leftWallKey),
+  false,
+  'A flanking support Wall must remain protected while the bridge depends on it'
+);
+assert.equal(restoredStairGapGrid.removeWall(stairGap.gapWallKey), true);
+assert.equal(
+  restoredStairGapGrid.removeWall(stairGap.leftWallKey),
+  true,
+  'The flanking Wall may be removed after its dependent bridge is gone'
+);
+
+// The live Hammer resolver must target the same supported one-panel gap while the Ranger
+// stands on the upper storey. This reproduces the device case where the desired Wall sits
+// between two upstairs wall sections beside the Stair opening.
+const gapRuntime = makeRuntime(3);
+const gapStructure = gapRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
+const liveGap = seedUpperStairWallGap(gapStructure.grid);
+gapRuntime.system.restore(gapRuntime.system.snapshot());
+gapRuntime.system.setActive(true);
+gapRuntime.system.setBuildMode('wall');
+const gapTargetDistance = PHYSICAL_LOG.placeDistance + PANEL_GRID.cellSize * 0.12;
+const upperGapPlayer = new THREE.Vector3(
+  PANEL_GRID.cellSize * 1.5,
+  firstWallTop,
+  -gapTargetDistance
+);
+const gapFacing = new THREE.Vector3(0, 0, 1);
+const gapState = gapRuntime.system.update(upperGapPlayer, gapFacing);
+assert.equal(gapState.previewValid, true, 'Upper Stair-gap Wall preview must be green');
+assert.equal(gapRuntime.system.previewPlacement?.storey, 1);
+assert.equal(gapRuntime.system.previewPlacement?.stateKey, liveGap.gapWallKey);
+assert.equal(gapRuntime.system.previewPlacement?.snapKind, 'same-storey-wall-gap');
+assert.ok(Math.abs(gapRuntime.system.previewPlacement.baseY - firstWallTop) < 1e-8);
+
+const builtGapWall = gapRuntime.system.build(upperGapPlayer, gapFacing);
+assert.equal(builtGapWall?.kind, 'wall');
+assert.equal(builtGapWall?.key, liveGap.gapWallKey);
+assert.equal(gapRuntime.inventory.get('log'), 0, 'The bridged upper Wall must keep the established three-Log cost');
 
 const seedLowerRuntimeShell = runtime => {
   const structure = runtime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
