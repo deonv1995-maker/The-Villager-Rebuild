@@ -92,9 +92,9 @@ assert.equal(
   true,
   'Utility-clearance regression requires one seeded semantic Floor'
 );
-rematerializeSeededState(utilityClearanceRuntime);
-const utilityFloor = [...utilityStructure.grid.floors.values()][0];
-const utilityEdge = utilityClearanceRuntime.system.registry.edgePlacementWorld(utilityStructure, {
+const liveUtilityStructure = rematerializeSeededState(utilityClearanceRuntime);
+const utilityFloor = [...liveUtilityStructure.grid.floors.values()][0];
+const utilityEdge = utilityClearanceRuntime.system.registry.edgePlacementWorld(liveUtilityStructure, {
   x: utilityFloor.x,
   z: utilityFloor.z,
   storey: utilityFloor.storey,
