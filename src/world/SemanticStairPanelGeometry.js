@@ -60,14 +60,23 @@ export function createSemanticStairPanelVisual(name = 'SemanticStairs') {
   return group;
 }
 
-export function semanticStairColliderSpecs({ x, z, yaw, baseY }) {
+export function semanticStairColliderSpecs({ x, z, yaw, baseY, topY = null }) {
   const stepRise = semanticStairStepRise();
+  const resolvedTopY = Number.isFinite(topY)
+    ? topY
+    : baseY + PANEL_GRID.storeyHeight;
   const specs = [];
   for (let index = 0; index < PANEL_STAIR.stepCount; index += 1) {
     const localZ = -PANEL_STAIR.runLength * 0.5 + PANEL_STAIR.stepRun * (index + 0.5);
     const world = localToWorld({ x, z, yaw }, 0, localZ);
-    const supportY = baseY + stepRise * (index + 1) + 0.018;
+    // Keep the established tiny tread clearance on the intermediate steps, but seat
+    // tread six on the exact upper-floor walking surface. The final support must hand
+    // off to a Floor without creating a false drop at the top of the flight.
+    const supportY = index === PANEL_STAIR.stepCount - 1
+      ? resolvedTopY
+      : baseY + stepRise * (index + 1) + 0.018;
     specs.push({
+      role: 'tread',
       x: world.x,
       z: world.z,
       halfX: PANEL_STAIR.width * 0.5,
@@ -84,5 +93,39 @@ export function semanticStairColliderSpecs({ x, z, yaw, baseY }) {
       stepHeight: PHYSICAL_LOG.stairMaxStepRise
     });
   }
+
+  // A semantic Stair reserves the whole target upper-floor cell as its stairwell opening,
+  // while the compact six-tread visual ends short of that cell's far edge. Bridge only
+  // that remaining top-level strip so the Ranger can stand at the head of the stairs,
+  // turn onto a side Floor, or continue onto the next Floor instead of stepping into the
+  // reserved opening. This remains part of the Stair's shared collision authority.
+  const lastTreadLocalZ = -PANEL_STAIR.runLength * 0.5 +
+    PANEL_STAIR.stepRun * (PANEL_STAIR.stepCount - 0.5);
+  const lastTreadSupportEnd = lastTreadLocalZ + PANEL_STAIR.stepRun * 0.56;
+  const landingStart = lastTreadSupportEnd - PHYSICAL_LOG.floorSupportSeamPadding;
+  const landingEnd = PANEL_GRID.cellSize + PHYSICAL_LOG.floorSupportSeamPadding;
+  if (landingEnd > landingStart) {
+    const localZ = (landingStart + landingEnd) * 0.5;
+    const world = localToWorld({ x, z, yaw }, 0, localZ);
+    const halfZ = (landingEnd - landingStart) * 0.5;
+    specs.push({
+      role: 'landing',
+      x: world.x,
+      z: world.z,
+      halfX: PANEL_STAIR.width * 0.5,
+      halfZ,
+      yaw,
+      bottomY: resolvedTopY - Math.max(0.1, PHYSICAL_LOG.floorUndersideDepth * 0.5),
+      topY: resolvedTopY + 0.035,
+      standable: true,
+      supportHalfX: PANEL_STAIR.width * 0.5,
+      supportHalfZ: halfZ,
+      supportY: resolvedTopY,
+      supportOverridesBase: true,
+      supportOverrideTolerance: PANEL_GRID.storeyHeight,
+      stepHeight: PHYSICAL_LOG.stairMaxStepRise
+    });
+  }
+
   return specs;
 }
