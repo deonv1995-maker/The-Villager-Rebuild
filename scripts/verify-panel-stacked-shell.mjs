@@ -302,9 +302,9 @@ gapRuntime.system.setActive(true);
 gapRuntime.system.setBuildMode('wall');
 const gapTargetDistance = PHYSICAL_LOG.placeDistance + PANEL_GRID.cellSize * 0.12;
 const upperGapPlayer = new THREE.Vector3(
-  PANEL_GRID.cellSize * 1.5,
+  PANEL_GRID.cellSize,
   firstWallTop,
-  -gapTargetDistance
+  -PANEL_GRID.cellSize * 0.5 - gapTargetDistance
 );
 const gapFacing = new THREE.Vector3(0, 0, 1);
 const gapState = gapRuntime.system.update(upperGapPlayer, gapFacing);
