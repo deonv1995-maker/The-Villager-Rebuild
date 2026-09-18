@@ -172,6 +172,7 @@ export class CampfireSleepRuntimeController {
     };
 
     this.game.hud?.setExternalAction('campfire-sleep', null);
+    this.game.torchRuntime?.setHandheldPresentationSuppressed?.(true);
     this.game.worldTimeRuntime?.setPaused?.(true);
     this.game.toolPresentation?.setEquippedTool?.(null);
     player.setSpearEquipped?.(false);
@@ -425,9 +426,10 @@ export class CampfireSleepRuntimeController {
     player?.playCinematicAnimation?.(['Idle_A'], { loop: true, timeScale: 1 });
     player?.endCinematic?.(this);
     this.overlay?.finish?.();
-    this.game.worldTimeRuntime?.setPaused?.(false);
     this.game.toolPresentation?.setEquippedTool?.(sequence.equippedToolId);
     player?.setSpearEquipped?.(sequence.equippedToolId === 'spear');
+    this.game.torchRuntime?.setHandheldPresentationSuppressed?.(false);
+    this.game.worldTimeRuntime?.setPaused?.(false);
     if (sequence.cameraModeBefore) player?.setCameraMode?.(sequence.cameraModeBefore);
 
     this.sequence = null;
@@ -450,9 +452,10 @@ export class CampfireSleepRuntimeController {
     player?.playCinematicAnimation?.(['Idle_A'], { loop: true, timeScale: 1 });
     player?.endCinematic?.(this);
     this.overlay?.finish?.();
-    this.game.worldTimeRuntime?.setPaused?.(false);
     this.game.toolPresentation?.setEquippedTool?.(sequence.equippedToolId);
     player?.setSpearEquipped?.(sequence.equippedToolId === 'spear');
+    this.game.torchRuntime?.setHandheldPresentationSuppressed?.(false);
+    this.game.worldTimeRuntime?.setPaused?.(false);
     if (sequence.cameraModeBefore) player?.setCameraMode?.(sequence.cameraModeBefore);
     this.sequence = null;
   }
