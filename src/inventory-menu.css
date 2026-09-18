@@ -138,7 +138,9 @@
 }
 button.inventory-card { pointer-events: auto; touch-action: none; }
 .inventory-card.placeable { border-color: rgba(240, 207, 118, .58); background: rgba(63, 72, 49, .94); }
-.inventory-card.placeable:active { transform: scale(.96); }
+.inventory-card.edible { border-color: rgba(218, 151, 82, .64); background: rgba(74, 58, 40, .94); }
+.inventory-card.placeable:active,
+.inventory-card.edible:active { transform: scale(.96); }
 .inventory-card .inventory-resource-icon {
   width: 38px;
   height: 38px;
