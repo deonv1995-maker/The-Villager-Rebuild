@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import * as THREE from 'three';
+import { RangerController } from '../src/player/RangerController.js';
 import { rangerGroundHeightAt } from '../src/player/RangerGrounding.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
+
+globalThis.window ??= {
+  addEventListener() {},
+  removeEventListener() {}
+};
 
 const flatTerrain = { heightAt: () => 2.4 };
 assert.equal(
