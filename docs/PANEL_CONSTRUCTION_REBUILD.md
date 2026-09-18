@@ -91,12 +91,13 @@ A Stair flight:
 - reserves their shared edge as a Stair opening, so a Wall cannot compete for that edge;
 - prevents either supporting Floor from being demolished while the flight exists;
 - creates six deterministic standable tread colliders using the shared Ranger collision system;
+- seats tread six on the exact upper-floor walking height and adds one Stair-owned top landing handoff support across the remaining compact-flight gap to the reserved cell edge;
 - keeps every tread rise within the existing Ranger step-up contract;
 - materializes as a complete split-Log stair visual with side stringers;
 - consumes and refunds exactly 3 Logs;
 - round-trips through semantic save/Continue state without transform inference.
 
-The Stair target cell also reserves the corresponding upper-storey opening. Upper-storey Floor placement respects that opening instead of silently laying a Floor across the top of the stairs.
+The Stair target cell also reserves the corresponding upper-storey opening. Upper-storey Floor placement respects that opening instead of silently laying a Floor across the top of the stairs. Because the compact six-tread run ends before the far edge of that full-cell opening, the Stair owns a narrow top-level landing support from tread six to the canonical cell boundary. That handoff is collision/runtime geometry derived from the Stair itself, not a hidden Floor record or second traversal system; it lets the Ranger stop, turn onto an adjacent upstairs Floor, or continue forward without dropping into the reserved opening.
 
 ## Semantic upper-storey Floors
 
@@ -260,7 +261,7 @@ The game save boundary remains schema **2** / world revision **2**. The panel-gr
 
 `PanelConstructionSystem.snapshot()` stores semantic registry/grid state. Save/Continue recreates runtime visuals and collision from that state without re-consuming Logs.
 
-A restored Stair recreates all six walkable tread colliders. A restored upper Floor recreates the same standable Floor collider at its stored structural level without terrain foundation posts. Floorless wall tiers restore from lowest to highest storey so each recursive support exists before its dependent tier. A restored Roof re-runs the deterministic footprint planner from its stored cell keys and resolves its structural elevation from either the real Floor or completed wall enclosure that supports those cells. No Three.js transforms, wing meshes, synthetic Floor panels or junction masks are serialized as structural authority.
+A restored Stair recreates all six walkable tread colliders plus the derived top landing handoff support. A restored upper Floor recreates the same standable Floor collider at its stored structural level without terrain foundation posts. Floorless wall tiers restore from lowest to highest storey so each recursive support exists before its dependent tier. A restored Roof re-runs the deterministic footprint planner from its stored cell keys and resolves its structural elevation from either the real Floor or completed wall enclosure that supports those cells. No Three.js transforms, wing meshes, synthetic Floor panels or junction masks are serialized as structural authority.
 
 Older rectangular semantic Roof saves remain valid: their exact cell set simply re-plans as one rectangular wing.
 
