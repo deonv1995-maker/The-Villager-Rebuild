@@ -1,11 +1,5 @@
-import { WORLD_DAY_MINUTES, WORLD_TIME } from './WorldTimeDefinitions.js';
-
-const nightDurationGameMinutes =
-  (WORLD_DAY_MINUTES - WORLD_TIME.phases.nightStart) + WORLD_TIME.phases.dawnStart;
-
 export const TORCH = Object.freeze({
   itemId: 'torch',
-  burnDurationGameMinutes: nightDurationGameMinutes * 0.5,
   light: Object.freeze({
     color: 0xffa24f,
     intensity: 58,
