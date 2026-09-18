@@ -136,6 +136,17 @@ const stairUsesCell = (stair, cellKey) => (
   stair.sourceCellKey === cellKey || stair.targetCellKey === cellKey
 );
 
+const stairUpperOpeningKeys = stair => (
+  [stair?.sourceCellKey, stair?.targetCellKey]
+    .map(parsePanelCellKey)
+    .filter(Boolean)
+    .map(cell => panelCellKey({
+      x: cell.x,
+      z: cell.z,
+      storey: cell.storey + 1
+    }))
+);
+
 const roofZoneUsesEdge = (zone, edgeKey) => {
   for (const cellKey of zone.cellKeys ?? []) {
     const cell = parsePanelCellKey(cellKey);
@@ -188,7 +199,7 @@ export class PanelConstructionGrid {
     const lowerKey = panelCellKey({ x, z, storey: storey - 1 });
     if (storey > 0) {
       const reservedByStair = [...this.stairs.values()].some(stair => (
-        stair.storey === storey - 1 && stair.targetCellKey === lowerKey
+        stair.storey === storey - 1 && stairUsesCell(stair, lowerKey)
       ));
       if (reservedByStair) return { ok: false, reason: 'stair-opening', key };
     }
@@ -326,6 +337,19 @@ export class PanelConstructionGrid {
       return { ok: false, reason: 'level-mismatch' };
     }
 
+    const upperOpeningKeys = [
+      panelCellKey({ x, z, storey: storey + 1 }),
+      panelCellKey({ x: targetX, z: targetZ, storey: storey + 1 })
+    ];
+    const upperFloorConflict = upperOpeningKeys.find(cellKey => this.floors.has(cellKey));
+    if (upperFloorConflict) {
+      return {
+        ok: false,
+        reason: 'upper-floor-opening-conflict',
+        cellKey: upperFloorConflict
+      };
+    }
+
     const key = panelStairKey({ x, z, storey, direction });
     if (this.stairs.has(key)) return { ok: false, reason: 'occupied-stair', key };
     const occupiedCell = [...this.stairs.values()].some(stair => (
@@ -422,7 +446,15 @@ export class PanelConstructionGrid {
       cellSize: snapshot.cellSize
     });
 
+    // Older semantic Stair saves reserved only the target upper cell, which allowed an
+    // upper Floor to overlap the lower/source half of the two-cell flight. Normalize that
+    // invalid legacy overlap before rebuilding runtime collision so both directions keep
+    // full Ranger headroom through the stairwell.
+    const stairOpeningUpperFloorKeys = new Set(
+      (snapshot.stairs ?? []).flatMap(stairUpperOpeningKeys)
+    );
     for (const floor of snapshot.floors ?? []) {
+      if (stairOpeningUpperFloorKeys.has(floor?.key)) continue;
       const result = grid.placeFloor(floor);
       if (!result.ok) throw new Error(`Invalid persisted floor: ${floor.key ?? 'unknown'}`);
     }
