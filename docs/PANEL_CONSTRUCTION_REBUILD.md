@@ -91,13 +91,14 @@ A Stair flight:
 - reserves their shared edge as a Stair opening, so a Wall cannot compete for that edge;
 - prevents either supporting Floor from being demolished while the flight exists;
 - creates six deterministic standable tread colliders using the shared Ranger collision system;
+- biases the visible flight toward the high/target cell so the low/source end retains a real lower landing even when a perimeter Wall occupies that cell's far edge;
 - seats tread six on the exact upper-floor walking height and adds one Stair-owned top landing handoff support across the remaining compact-flight gap to the reserved cell edge;
 - keeps every tread rise within the existing Ranger step-up contract;
 - materializes as a complete split-Log stair visual with side stringers;
 - consumes and refunds exactly 3 Logs;
 - round-trips through semantic save/Continue state without transform inference.
 
-The Stair's two lower-storey footprint cells — source and target — reserve both corresponding upper-storey cells as one two-cell stairwell opening. Upper-storey Floor placement respects the whole opening so the lower half of the compact flight cannot sit beneath a Floor slab that blocks Ranger headroom on descent. Because the compact six-tread run ends before the far edge of the target cell, the Stair owns a narrow top-level landing support from tread six to the canonical target-cell boundary. That handoff is collision/runtime geometry derived from the Stair itself, not a hidden Floor record or second traversal system; it lets the Ranger stop, turn onto an adjacent upstairs Floor, or continue forward without dropping into the reserved opening. Saves created while only the target cell was reserved are normalized on Continue by discarding any conflicting source-cell upper Floor before runtime collision is rebuilt, preserving the Stair and restoring bidirectional traversal.
+The Stair's two lower-storey footprint cells — source and target — reserve both corresponding upper-storey cells as one two-cell stairwell opening. Upper-storey Floor placement respects the whole opening so the lower half of the compact flight cannot sit beneath a Floor slab that blocks Ranger headroom on descent. The six-tread run is asymmetrically positioned inside those two cells: the high/target end retains the established compact upper handoff, while the low/source end leaves a full split-floor strip plus one wall thickness as lower landing clearance. This prevents the Ranger's footprint from remaining pinned to tread one until its capsule reaches a normal perimeter Wall at the foot of the stairs. Because the compact run ends before the far edge of the target cell, the Stair owns a narrow top-level landing support from tread six to the canonical target-cell boundary. That handoff is collision/runtime geometry derived from the Stair itself, not a hidden Floor record or second traversal system; it lets the Ranger stop, turn onto an adjacent upstairs Floor, or continue forward without dropping into the reserved opening. Saves created while only the target cell was reserved are normalized on Continue by discarding any conflicting source-cell upper Floor before runtime collision is rebuilt, preserving the Stair and restoring bidirectional traversal.
 
 ## Semantic upper-storey Floors
 
@@ -288,6 +289,7 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 
 - all semantic material costs;
 - six Stair tread colliders using the same Ranger support resolver;
+- lower Stair egress reaching the lower Floor before a source-cell perimeter Wall can trap the Ranger on tread one;
 - exact Stair placement/remove/refund and restore;
 - wall-supported basic gable Roof preview;
 - exact Roof placement/remove/refund and restore;
