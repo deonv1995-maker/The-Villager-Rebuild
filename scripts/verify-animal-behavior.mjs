@@ -108,6 +108,7 @@ wolf.update(0.1, nearWolf);
 const wolfAttack = wolf.consumePlayerAttack();
 assert.ok(wolfAttack, 'wolf must produce an attack event when the Ranger enters attack range');
 assert.equal(wolfAttack.animalId, 'wolf');
+assert.equal(wolfAttack.damage, ANIMAL_DEFINITIONS.wolf.ecology.aggression.damage, 'wolf attack events must carry configured player damage');
 assert.notEqual(wolf.getState().behavior, 'flee', 'wolf must not use prey flee behavior for Ranger proximity');
 
 const wolfStandOff = ANIMAL_DEFINITIONS.wolf.ecology.aggression.standOffRange;
