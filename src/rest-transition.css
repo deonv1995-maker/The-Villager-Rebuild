@@ -1,0 +1,66 @@
+.rest-transition {
+  --rest-transition-fade: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: #000;
+  opacity: var(--rest-transition-fade);
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.rest-transition.active {
+  visibility: visible;
+}
+
+.rest-transition__sleep {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(6px, 2vw, 14px);
+  opacity: 0;
+  transform: translateY(10px) scale(.94);
+  transition: opacity 180ms ease, transform 220ms ease;
+  font-size: clamp(34px, 12vw, 74px);
+  line-height: 1;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, .55));
+}
+
+.rest-transition.sleeping .rest-transition__sleep {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.rest-transition__sleep span {
+  display: block;
+  animation: rest-zzz-float 1.25s ease-in-out infinite;
+}
+
+.rest-transition__sleep span:nth-child(2) {
+  animation-delay: 140ms;
+  font-size: .82em;
+}
+
+.rest-transition__sleep span:nth-child(3) {
+  animation-delay: 280ms;
+  font-size: .66em;
+}
+
+body.rest-transition-active .mobile-hud,
+body.rest-transition-active #boot-status {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@keyframes rest-zzz-float {
+  0%, 100% { transform: translateY(4px); opacity: .62; }
+  50% { transform: translateY(-5px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rest-transition__sleep span {
+    animation: none;
+  }
+}

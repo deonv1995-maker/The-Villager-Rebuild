@@ -27,6 +27,7 @@ import { DayNightLightingSystem } from './rendering/DayNightLightingSystem.js';
 import { BeachArrivalIntroController } from './startup/BeachArrivalIntroController.js';
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
+import { RestTransitionOverlay } from './ui/RestTransitionOverlay.js';
 import { RoofWallPolishSystem } from './world/RoofWallPolishSystem.js';
 import { StackedRoofReflowSystem } from './world/StackedRoofReflowSystem.js';
 import { StructureRoofQuery } from './world/StructureRoofQuery.js';
@@ -83,8 +84,15 @@ async function bootGameplay(titleScene = null, { resume = false } = {}) {
     game.onPauseChange(paused => worldTimeRuntime.setPaused(paused));
     worldTimeRuntime.sync();
 
-    const campfireSleepRuntime = new CampfireSleepRuntimeController({ game });
+    const restTransitionOverlay = new RestTransitionOverlay({
+      root: document.getElementById('app-shell')
+    });
+    const campfireSleepRuntime = new CampfireSleepRuntimeController({
+      game,
+      overlay: restTransitionOverlay
+    });
     campfireSleepRuntime.start();
+    game.restTransitionOverlay = restTransitionOverlay;
     game.campfireSleepRuntime = campfireSleepRuntime;
 
     const storageRuntime = new StorageRuntimeController({ game });

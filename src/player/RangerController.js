@@ -253,21 +253,24 @@ export class RangerController {
 
   setCinematicPose({
     x = this.root.position.x,
+    y = null,
     z = this.root.position.z,
     yaw = this.root.rotation.y,
     modelPitch = 0,
     modelYaw = 0,
     modelRoll = 0,
+    modelXOffset = 0,
     modelYOffset = 0,
+    modelZOffset = 0,
     snapCamera = false
   } = {}) {
     if (!this.cinematicDriver) return false;
     this.root.position.x = x;
     this.root.position.z = z;
-    this.root.position.y = this.terrain.heightAt(x, z);
+    this.root.position.y = Number.isFinite(y) ? y : this.terrain.heightAt(x, z);
     this.root.rotation.y = yaw;
     if (this.model) {
-      this.model.position.set(0, modelYOffset, 0);
+      this.model.position.set(modelXOffset, modelYOffset, modelZOffset);
       this.model.rotation.set(modelPitch, modelYaw, modelRoll);
     }
     if (snapCamera) {
@@ -514,7 +517,6 @@ export class RangerController {
 
     if (this.cinematicDriver) {
       this.cinematicDriver.update?.(dt, this);
-      this.root.position.y = this.terrain.heightAt(this.root.position.x, this.root.position.z);
       this.mixer?.update(dt);
       this.#updateSpearAnchor();
       if (this.spearMount) {

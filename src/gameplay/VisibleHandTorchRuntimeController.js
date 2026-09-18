@@ -20,6 +20,7 @@ export class VisibleHandTorchRuntimeController extends TorchRuntimeController {
     super(options);
     this.visibleHandMounted = false;
     this.carryProfileActive = null;
+    this.handheldPresentationSuppressed = false;
     this.#suppressHandheldIllumination();
     if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
       shadowMap.needsUpdate = shadowNeedsUpdateBefore;
@@ -37,8 +38,18 @@ export class VisibleHandTorchRuntimeController extends TorchRuntimeController {
     if (shadowMap && shadowNeedsUpdateBefore !== undefined) {
       shadowMap.needsUpdate = shadowNeedsUpdateBefore;
     }
-    this.#syncCarryProfile(snapshot.burning);
+    if (this.handheldPresentationSuppressed) this.visualRoot.visible = false;
+    this.#syncCarryProfile(snapshot.burning && !this.handheldPresentationSuppressed);
     return snapshot;
+  }
+
+  setHandheldPresentationSuppressed(suppressed) {
+    this.handheldPresentationSuppressed = Boolean(suppressed);
+    const snapshot = super.apply();
+    this.#suppressHandheldIllumination();
+    if (this.handheldPresentationSuppressed) this.visualRoot.visible = false;
+    this.#syncCarryProfile(snapshot.burning && !this.handheldPresentationSuppressed, { force: true });
+    return this.handheldPresentationSuppressed;
   }
 
   place(target) {
