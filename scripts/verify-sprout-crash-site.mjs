@@ -51,7 +51,7 @@ const checks = [
   ['Sprout story state is captured and restored through the shared save controller', saveController.includes('state.sproutArrival = this.game.sproutArrival?.captureState?.() ?? null') && saveController.includes('this.game.sproutArrival?.restoreState?.(record.state.sproutArrival)')],
   ['Sprout story restore occurs after shared Ranger/gatherable restore so restored demo logs exist before crash-state reconstruction', saveController.indexOf('restoreGameState(this.game, record.state)') < saveController.indexOf('this.game.sproutArrival?.restoreState?.(record.state.sproutArrival)')],
   ['pre-Sprout saves are deliberately skipped rather than replaying the opening in an established world', controller.includes('PHASE.LEGACY_SKIPPED') && controller.includes('legacySkipped: true')],
-  ['story milestones request explicit save checkpoints', controller.includes("saveNow?.('sprout-impact')") && controller.includes("saveNow?.('sprout-rescue')") && controller.includes("saveNow?.('sprout-allied')")],
+  ['story milestones request explicit save checkpoints', controller.includes("queueSave?.('sprout-impact')") && controller.includes("saveNow?.('sprout-rescue')") && controller.includes("saveNow?.('sprout-allied')")],
   ['crash-scene documentation preserves tree, log, inventory and terrain authority boundaries', docs.includes('same forest tree asset family') && docs.includes('GatherableSystem') && docs.includes('single shared InventorySystem') && docs.includes('no duplicate log authority') && docs.includes('does not create a competing terrain deformation system')]
 ];
 
