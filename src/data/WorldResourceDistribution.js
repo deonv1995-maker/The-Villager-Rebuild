@@ -13,6 +13,13 @@ export const WORLD_RESOURCE_DISTRIBUTION = Object.freeze({
       minSpacing: 3.6,
       maxSlope: 0.6,
       scatterClearance: 0.24
+    }),
+    mushroom: Object.freeze({
+      count: 72,
+      minSpacing: 4.8,
+      maxSlope: 0.42,
+      scatterClearance: 0.18,
+      minForestCover: 0.5
     })
   }),
   renewal: Object.freeze({
