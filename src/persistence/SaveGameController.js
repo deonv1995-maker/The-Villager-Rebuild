@@ -36,6 +36,7 @@ export class SaveGameController {
         minuteOfDay: WORLD_TIME.legacySaveFallbackMinuteOfDay
       });
     }
+    this.game.island?.explorationPois?.restoreState?.(record.state.caveMining);
     this.game.panelConstruction?.restore?.(record.state.panelConstruction);
     this.game.landscaping?.restore?.(record.state.landscaping);
     restoreGameState(this.game, record.state);
@@ -69,6 +70,7 @@ export class SaveGameController {
     try {
       const state = captureGameState(this.game);
       state.worldTime = this.game.worldTime?.captureState?.() ?? null;
+      state.caveMining = this.game.island?.explorationPois?.captureState?.() ?? null;
       state.torch = this.game.torchRuntime?.captureState?.() ?? null;
       state.storage = this.game.storageRuntime?.captureState?.() ?? null;
       state.placeableUtilities = this.game.placeableUtilityRuntime?.captureState?.() ?? null;
