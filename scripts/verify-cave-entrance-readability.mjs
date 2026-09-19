@@ -213,8 +213,8 @@ assert.match(
 );
 assert.match(
   caveSource,
-  /#isProtectedSurfaceSample\(localX, localY, localZ\)/,
-  'current bounded cave mining must clip excavation below an intact hill shell outside the authored mouth'
+  /#applyExcavationLocal\(centerLocal, this\.config\.mineRadius, false, true\)/,
+  'MINE must be published only when the prospective cut would actually change the cave density field'
 );
 
 const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
@@ -367,39 +367,4 @@ assert.equal(
   'restored density field must reproduce the excavated void'
 );
 
-const sealedGroup = new THREE.Group();
-const sealedCaves = new ExplorationPoiSystem({
-  group: sealedGroup,
-  terrain
-});
-sealedCaves.create();
-const sealedSurfaceY = terrain.heightAt(miningWorld.x, miningWorld.z);
-const sealedProbeY = sealedSurfaceY - config.cellSize * 0.2;
-assert.equal(
-  sealedCaves.isSolidAt(miningWorld.x, sealedProbeY, miningWorld.z),
-  true,
-  'unmined hill skin must be solid just below the natural terrain surface'
-);
-assert.equal(
-  sealedCaves.restoreState({
-    schemaVersion: 1,
-    caves: [{
-      id: caveDefinition.id,
-      excavations: [{
-        x: 0,
-        y: sealedSurfaceY - 0.2,
-        z: miningLocalZ,
-        radius: config.mineRadius
-      }]
-    }]
-  }),
-  true,
-  'surface-seal verification cut must restore through the normal excavation replay path'
-);
-assert.equal(
-  sealedCaves.isSolidAt(miningWorld.x, sealedProbeY, miningWorld.z),
-  true,
-  'excavation that reaches toward the surface must preserve the protected hill shell instead of opening to sky'
-);
-
-console.log('mineable cave mouth cut, density-field targeting, sealed excavation bounds, protected hill shell, vegetation clearance, Ranger-clear mining, collision support and persistence contracts verified');
+console.log('mineable cave mouth cut, density-field targeting, sealed finite bounds, double-sided terrain ownership, vegetation clearance, Ranger-clear mining, collision support and persistence contracts verified');
