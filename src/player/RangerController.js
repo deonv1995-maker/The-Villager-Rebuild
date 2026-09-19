@@ -5,7 +5,7 @@ import { PLAYER_TRAVERSAL_TUNING, gravityForVerticalSpeed } from '../data/Player
 import { rangerGroundHeightAt } from './RangerGrounding.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
-const PLAYER_RADIUS = 0.42;
+const PLAYER_RADIUS = PLAYER_TRAVERSAL_TUNING.body.radius;
 const DEFAULT_WALK_SPEED = 3.4;
 const ANALOG_WALK_MIN_SPEED = 1.35;
 const ANALOG_WALK_MAX_SPEED = 4.5;
@@ -22,7 +22,7 @@ const CAMERA_POSITION_RESPONSE = 4.2;
 const CAMERA_RETURN_DELAY = 1.25;
 const THIRD_PERSON_LOOK_AHEAD = 2;
 const THIRD_PERSON_TARGET_HEIGHT = 1.35;
-const FIRST_PERSON_EYE_HEIGHT = 1.72;
+const FIRST_PERSON_EYE_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.eyeHeight;
 const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 2.4;
 const FIRST_PERSON_BOB_RUN_PHASE_PER_METER = 1.75;
 const FIRST_PERSON_BOB_WALK_VERTICAL = 0.055;
