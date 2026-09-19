@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { caveMineableSurfaceOwnedAt } from './CaveTerrainProfile.js';
 import { terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const ISO_LEVEL = 0;
@@ -60,7 +61,13 @@ class MineableCaveVolume {
       vertexColors: true,
       roughness: 1,
       flatShading: true,
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide,
+      // The cave volume intentionally overlaps untouched island terrain outside
+      // the natural mouth. Bias it behind the island surface so that overlap
+      // seals the seam without z-fighting or visible ground cracks.
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
     });
     this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), this.material);
     this.mesh.name = `${definition.id}-mineable-ground`;
@@ -167,6 +174,15 @@ class MineableCaveVolume {
 
     const local = this.#worldPointToLocal(hit.point);
     if (!this.#canExcavateAtLocal(local)) return null;
+
+    // Outside the authored mouth, the normal hill surface still visually owns
+    // the top of this finite underground volume. Do not let the Pickaxe target
+    // that hidden duplicate surface through the heightfield.
+    const depthBelowSurface = this.#surfaceYAtLocal(local.x, local.z) - local.y;
+    if (
+      depthBelowSurface < this.config.cellSize * 0.55 &&
+      !caveMineableSurfaceOwnedAt(this.definition, hit.point.x, hit.point.z)
+    ) return null;
 
     return {
       type: 'mineable-cave',
@@ -594,6 +610,26 @@ export class MineableCaveSystem {
       created += 1;
     }
     return created;
+  }
+
+  getPresentationExclusions() {
+    const exclusions = [];
+    for (const volume of this.instances.values()) {
+      const definition = volume.definition;
+      const config = definition.mineableVolume;
+      const radius = Number(config?.vegetationExclusionRadius);
+      if (!Number.isFinite(radius) || radius <= 0) continue;
+      const localZ = Number(config.vegetationExclusionCenterZ ?? config.tunnelStartZ ?? 0);
+      const c = Math.cos(definition.yaw);
+      const s = Math.sin(definition.yaw);
+      exclusions.push({
+        id: `mineable-cave-mouth:${definition.id}`,
+        x: definition.x + localZ * s,
+        z: definition.z + localZ * c,
+        radius
+      });
+    }
+    return exclusions;
   }
 
   getMineTarget({ aim, playerPosition = null } = {}) {
