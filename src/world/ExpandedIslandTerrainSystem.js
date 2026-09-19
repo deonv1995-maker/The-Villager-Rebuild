@@ -46,6 +46,8 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       ...this.satelliteIslands.map(island => Math.abs(island.z - this.centerZ) + island.halfZ + 28)
     );
     this.terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
+    this.caveTerrainMaterial = this.terrainMaterial.clone();
+    this.caveTerrainMaterial.side = THREE.DoubleSide;
   }
 
   coastRadiusAt(angle) {
@@ -306,7 +308,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
         geometry.computeVertexNormals();
         geometry.computeBoundingSphere();
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+        const mesh = new THREE.Mesh(
+          geometry,
+          needsCaveDetail ? this.caveTerrainMaterial : this.terrainMaterial
+        );
         mesh.name = `terrain-chunk-${ix}-${iz}`;
         mesh.userData.terrainSegments = segments;
         mesh.position.set(centerX, 0, centerZ);
