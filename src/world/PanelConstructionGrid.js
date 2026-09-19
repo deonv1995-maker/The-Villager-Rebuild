@@ -159,6 +159,33 @@ const roofZoneUsesEdge = (zone, edgeKey) => {
   return false;
 };
 
+const roofZoneUsesRaisedBoundaryEdge = (zone, edgeKey, walls) => {
+  const covered = new Set(zone.cellKeys ?? []);
+  for (const cellKey of zone.cellKeys ?? []) {
+    const cell = parsePanelCellKey(cellKey);
+    if (!cell) continue;
+    for (const [direction, offset] of Object.entries(PANEL_DIRECTIONS)) {
+      const neighbourKey = panelCellKey({
+        x: cell.x + offset.dx,
+        z: cell.z + offset.dz,
+        storey: cell.storey
+      });
+      if (covered.has(neighbourKey)) continue;
+
+      const sameStoreyEdge = panelEdgeDescriptor({ ...cell, direction });
+      if (walls.has(sameStoreyEdge.key)) continue;
+
+      const raisedEdge = panelEdgeDescriptor({
+        ...cell,
+        storey: cell.storey + 1,
+        direction
+      });
+      if (raisedEdge.key === edgeKey) return true;
+    }
+  }
+  return false;
+};
+
 export class PanelConstructionGrid {
   constructor({ originX = 0, originZ = 0, cellSize = PANEL_GRID.cellSize } = {}) {
     this.originX = requireFinite(originX, 'Grid originX');
