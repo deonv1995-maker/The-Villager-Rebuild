@@ -8,7 +8,6 @@ const TERRAIN_COLOR_DEPTH = 0.42;
 const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
-const SURFACE_SEAL_DEPTH_CELLS = 0.2;
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -422,7 +421,6 @@ class MineableCaveVolume {
         const y = this.yMin + iy * this.stepY;
         for (let ix = minX; ix <= maxX; ix += 1) {
           const x = this.xMin + ix * this.stepX;
-          if (this.#isProtectedSurfaceSample(x, y, z)) continue;
           const sphereDensity = Math.hypot(x - center.x, y - center.y, z - center.z) - radius;
           const index = this.#index(ix, iy, iz);
           if (sphereDensity < this.field[index] - 0.00001) {
@@ -454,13 +452,6 @@ class MineableCaveVolume {
       local.z > this.zMax - padding - safeRadius ||
       local.y < this.yMin + padding + safeRadius
     );
-  }
-
-  #isProtectedSurfaceSample(localX, localY, localZ) {
-    const world = this.#localToWorldXZ(localX, localZ);
-    if (caveMineableSurfaceOwnedAt(this.definition, world.x, world.z)) return false;
-    const sealDepth = this.config.cellSize * SURFACE_SEAL_DEPTH_CELLS;
-    return localY >= this.#surfaceYAtLocal(localX, localZ) - sealDepth;
   }
 
   #rebuildGeometry() {
