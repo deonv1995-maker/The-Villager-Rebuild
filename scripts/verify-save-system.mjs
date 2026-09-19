@@ -16,6 +16,7 @@ import {
 } from '../src/persistence/PlayerProfileStore.js';
 import { PlayerProfileLifecycle } from '../src/persistence/PlayerProfileLifecycle.js';
 import { constructionFacingYaw } from '../src/persistence/GameStatePersistence.js';
+import { SaveGameController } from '../src/persistence/SaveGameController.js';
 
 const root = new URL('../', import.meta.url);
 const read = path => readFileSync(fileURLToPath(new URL(path, root)), 'utf8');
@@ -52,6 +53,17 @@ assert.equal(record.reason, 'test');
 assert.equal(store.hasValidSave(), true);
 assert.deepEqual(store.read().state.player.position, { x: 1, z: 2 });
 assert.equal(memory.has(SAVE_STORAGE_KEY), true);
+
+const serializedState = JSON.stringify({ player: { position: { x: 5, z: 6 } } });
+store.write(
+  { player: { position: { x: 5, z: 6 } } },
+  { reason: 'serialized-state-test', serializedState }
+);
+assert.deepEqual(
+  store.read().state.player.position,
+  { x: 5, z: 6 },
+  'SaveGameStore must accept the controller\'s already serialized state without changing the saved schema'
+);
 
 memory.set(SAVE_STORAGE_KEY, JSON.stringify({
   schemaVersion: 1,
@@ -159,6 +171,55 @@ const recoveredWallYawDelta = Math.abs(Math.atan2(
 ));
 assert.ok(recoveredWallYawDelta < 0.000001, 'Retained legacy wall helper must remain internally coherent during transition');
 
+const queuedCallbacks = {
+  frame: null,
+  timeout: null,
+  idle: null
+};
+const queuedSaves = [];
+const schedulingWindow = {
+  requestAnimationFrame(callback) {
+    queuedCallbacks.frame = callback;
+    return 11;
+  },
+  cancelAnimationFrame() {
+    queuedCallbacks.frame = null;
+  },
+  setTimeout(callback) {
+    queuedCallbacks.timeout = callback;
+    return 12;
+  },
+  clearTimeout() {
+    queuedCallbacks.timeout = null;
+  },
+  requestIdleCallback(callback) {
+    queuedCallbacks.idle = callback;
+    return 13;
+  },
+  cancelIdleCallback() {
+    queuedCallbacks.idle = null;
+  }
+};
+const schedulingController = new SaveGameController({
+  game: {},
+  store: {},
+  windowRef: schedulingWindow,
+  documentRef: null
+});
+schedulingController.running = true;
+schedulingController.saveNow = reason => {
+  queuedSaves.push(reason);
+  return { saved: true };
+};
+assert.equal(schedulingController.queueSave('sprout-impact'), true);
+assert.deepEqual(queuedSaves, [], 'Queued checkpoints must not save on the event frame');
+queuedCallbacks.frame?.();
+assert.deepEqual(queuedSaves, [], 'Queued checkpoints must yield at least one rendered frame');
+queuedCallbacks.timeout?.();
+assert.deepEqual(queuedSaves, [], 'Queued checkpoints must prefer idle time after the impact delay');
+queuedCallbacks.idle?.({ didTimeout: false, timeRemaining: () => 16 });
+assert.deepEqual(queuedSaves, ['sprout-impact'], 'Queued checkpoints must eventually commit through saveNow');
+
 const arrivalCallbackIndex = main.indexOf('onComplete: () => {');
 const arrivalSaveIndex = main.indexOf('saveController.start({ saveImmediately: true })', arrivalCallbackIndex);
 
@@ -179,6 +240,9 @@ const checks = [
   ['profiles without a valid save remain deletable without exposing Continue', titleSaveMenu.includes('profile.hasSave !== false') && titleSaveMenu.includes('NO SAVED WORLD')],
   ['profile resume uses the title fade cover instead of replaying the shipwreck intro', titleSaveMenu.includes("querySelector('.title-transition')") && titleSaveMenu.includes("classList.add('is-covering')")],
   ['autosave runs periodically while gameplay is active', saveController.includes('AUTOSAVE_INTERVAL_MS = 8000') && saveController.includes("this.saveNow('autosave')")],
+  ['cinematic checkpoints can yield the impact frame before saving', saveController.includes("queueSave(reason = 'autosave'") && saveController.includes('requestAnimationFrame(afterImpactFrame)') && saveController.includes('requestIdleCallback(')],
+  ['immediate saves cancel queued checkpoints for lifecycle reliability', saveController.includes('this.#cancelQueuedSave();') && saveController.includes("this.onPageHide = () => this.saveNow('pagehide')") && saveController.includes("this.saveNow('background')")],
+  ['already serialized state is reused for storage writes', saveController.includes('serializedState: fingerprint')],
   ['autosave flushes when the PWA backgrounds or hides', saveController.includes("addEventListener?.('pagehide'") && saveController.includes("addEventListener?.('visibilitychange'") && saveController.includes("this.saveNow('background')")],
   ['panel snapshot is added to the shared save state', saveController.includes('state.panelConstruction = this.game.panelConstruction?.snapshot?.() ?? null')],
   ['panel construction restores before shared gameplay/Ranger restore', saveController.includes('this.game.panelConstruction?.restore?.(record.state.panelConstruction)') && saveController.indexOf('this.game.panelConstruction?.restore?.(record.state.panelConstruction)') < saveController.indexOf('restoreGameState(this.game, record.state)')],
