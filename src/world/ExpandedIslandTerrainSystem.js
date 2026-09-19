@@ -278,10 +278,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-        // Mineable caves own the complete ground surface inside their bounded
-        // footprint. Remove only terrain triangles whose centroids fall inside
-        // that footprint; the cave volume supplies the matching top surface and
-        // all underground walls/floors there.
+        // The normal island surface stays authoritative above the underground
+        // cave volume. Remove only triangles whose centroids fall inside the
+        // authored natural mouth; the cave mesh overlaps underneath the retained
+        // hill surface so the seam cannot open into sky/water cracks.
         const sourceIndex = geometry.getIndex();
         if (sourceIndex) {
           const keptIndices = [];

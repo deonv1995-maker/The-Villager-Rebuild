@@ -1,6 +1,6 @@
 const WORK_TARGETS = Object.freeze({
   axe: Object.freeze(new Set(['tree'])),
-  pickaxe: Object.freeze(new Set(['rock'])),
+  pickaxe: Object.freeze(new Set(['rock', 'mineable-cave'])),
   hammer: Object.freeze(new Set(['placed-log', 'panel-construction', 'campfire']))
 });
 

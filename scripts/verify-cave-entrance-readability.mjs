@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
 import {
@@ -144,16 +145,46 @@ assert.equal(
 const debug = caves.getDebugState(caveDefinition.id);
 assert.ok(debug, 'mineable cave must expose bounded diagnostic state');
 assert.equal(debug.excavationCount, 0, 'fresh cave must begin with no player excavation records');
+const openingWorld = localToWorld(0, config.surfaceOpeningCenterZ);
+assert.equal(
+  caveMineableSurfaceOwnedAt(caveDefinition, openingWorld.x, openingWorld.z),
+  true,
+  'authored cave mouth must remove the island surface above the exposed tunnel'
+);
 assert.equal(
   caveMineableSurfaceOwnedAt(caveDefinition, caveDefinition.x, caveDefinition.z),
-  true,
-  'cave centre must belong to the volumetric ground footprint'
+  false,
+  'intact hill surface above the underground volume must remain owned by the normal heightfield'
+);
+const nearVolumeEdgeWorld = localToWorld(
+  config.halfWidth - config.surfaceOpeningBoundaryInset * 0.25,
+  config.surfaceOpeningCenterZ
+);
+assert.equal(
+  caveMineableSurfaceOwnedAt(caveDefinition, nearVolumeEdgeWorld.x, nearVolumeEdgeWorld.z),
+  false,
+  'surface cutting must stay inset from the finite volume boundary so the two terrain owners overlap safely'
 );
 const outsideWorld = localToWorld(config.halfWidth + 2, 0);
 assert.equal(
   caveMineableSurfaceOwnedAt(caveDefinition, outsideWorld.x, outsideWorld.z),
   false,
   'normal heightfield must retain ownership outside the bounded cave footprint'
+);
+
+const exclusions = caves.getPresentationExclusions();
+assert.equal(exclusions.length, 1, 'mineable cave must publish one vegetation-clearance zone for its exposed mouth');
+assert.equal(
+  exclusions[0].radius >= config.tunnelHalfWidth + 1,
+  true,
+  'cave mouth vegetation clearance must cover the tunnel opening and immediate rim'
+);
+
+const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
+assert.match(
+  islandSource,
+  /explorationPois\.getPresentationExclusions[\s\S]*setPresentationExclusion/,
+  'island boot must feed cave mouth exclusions into grass, fern and ground-cover presentation'
 );
 
 const chunkSize = 72;
@@ -163,11 +194,18 @@ const caveTerrainChunk = terrainGroup.getObjectByName(`terrain-chunk-${caveChunk
 assert.ok(caveTerrainChunk, 'terrain renderer must retain the chunk containing the cave footprint');
 const terrainSegments = caveTerrainChunk.userData.terrainSegments;
 const fullTriangleIndexCount = terrainSegments * terrainSegments * 6;
+const retainedIndexCount = caveTerrainChunk.geometry.getIndex().count;
 assert.equal(
-  caveTerrainChunk.geometry.getIndex().count < fullTriangleIndexCount,
+  retainedIndexCount < fullTriangleIndexCount,
   true,
-  'heightfield triangles inside the cave footprint must be removed so one terrain owner is visible'
+  'heightfield triangles above the authored cave mouth must be removed'
 );
+assert.equal(
+  retainedIndexCount > fullTriangleIndexCount * 0.9,
+  true,
+  'surface cutting must stay local to the cave mouth instead of punching a large rectangular hole through the hill'
+);
+assert.equal(mesh.material.polygonOffset, true, 'overlapping cave ground must use depth bias to seal terrain seams without z-fighting');
 
 const aimOrigin = new THREE.Vector3(tunnelWorld.x, supportY + 1.22, tunnelWorld.z);
 const aimDirection = localDirectionToWorld(1, 0);
@@ -227,4 +265,4 @@ assert.equal(
   'restored density field must reproduce the excavated void'
 );
 
-console.log('mineable cave volume, terrain ownership, first-person excavation, collision support and persistence contracts verified');
+console.log('mineable cave mouth seam, vegetation clearance, mobile-ready targeting, collision support and persistence contracts verified');
