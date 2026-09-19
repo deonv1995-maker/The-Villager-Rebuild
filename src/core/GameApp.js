@@ -349,8 +349,15 @@ export class GameApp {
       return;
     }
 
+    // Preserve the cave target that was actually shown on the HUD. Re-running
+    // targeting on the tap frame can land on the opposite side of a low-poly
+    // surface boundary after tiny camera motion, making a visible MINE button
+    // appear to do nothing.
+    const displayedCaveTarget = this.currentInteractionTarget?.type === 'mineable-cave'
+      ? this.currentInteractionTarget
+      : null;
     this.#refreshTargets(0);
-    const target = this.currentInteractionTarget;
+    const target = displayedCaveTarget ?? this.currentInteractionTarget;
     if (!target) return;
 
     if (target.type === 'carcass') {

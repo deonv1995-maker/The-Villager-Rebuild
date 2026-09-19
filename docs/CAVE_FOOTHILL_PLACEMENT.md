@@ -22,9 +22,9 @@ This is the foundation for directional Pickaxe excavation and later underground 
 - a local surface-mouth cut profile;
 - a vegetation-clearance radius for the exposed entrance.
 
-\`ExpandedIslandTerrainSystem\` continues to generate the island normally. Within the mineable cave footprint it removes only the heightfield render triangles whose centroids belong to the volume. \`MineableCaveSystem\` generates a matching top surface from the same terrain-height samples, so the cave reads as part of the hill rather than an object placed on it.
+\`ExpandedIslandTerrainSystem\` continues to generate the island normally. Around the cave mouth it uses a locally refined terrain grid, then removes every heightfield render triangle that intersects the authored opening. \`MineableCaveSystem\` generates a matching top surface from the same terrain-height samples, so the cave reads as part of the hill rather than an object placed on it. The tighter local grid keeps the cut close to the authored ellipse instead of allowing large coarse terrain triangles to create oversized holes.
 
-There is exactly one visible ground owner at a given cave-footprint surface location.
+There is exactly one visible ground owner at a given cave-footprint surface location. Cave-adjacent heightfield chunks render both faces so the retained hill surface remains visible from underground even when the volumetric roof is mined very close to it. The vegetation presentation exclusion intentionally extends beyond the opening far enough to cover the small triangle spill at its rim, so grass, ferns and ground-cover instances cannot remain suspended over removed heightfield triangles.
 
 \`caveTerrainOffsetAt()\` returns zero for mineable caves. The former carved heightfield trench is deliberately not combined with the volume system.
 
@@ -41,7 +41,7 @@ Initial density combines:
 
 The generated surface is continuous across cave mouth, walls, roof, floor and an overlapping top-ground skin. Outside the natural mouth that top skin sits behind the retained island terrain and exists only to seal the volumetric boundary. It does not use Minecraft-style visible cubes.
 
-The current volume is finite by design. Side, rear and bottom margins cannot be excavated through. This keeps the first implementation bounded for mobile performance and prevents exposing the edge of the density domain. Surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
+The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. The normal island heightfield remains the authoritative surface outside the authored mouth, and cave-adjacent heightfield chunks render both faces so that surface cannot disappear when viewed from underground. This keeps Ranger-clear cuts possible beneath shallow overburden without exposing either the edge of the density domain or blue sky through a culled terrain backface. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
 
 ## First-person Pickaxe excavation
 
@@ -50,11 +50,14 @@ The existing centre-camera first-person ray remains the targeting authority.
 When Pickaxe is equipped in first person:
 
 1. \`GameApp\` obtains the established camera aim ray;
-2. \`MineableCaveSystem\` raycasts the generated cave surface;
-3. only the frontmost reachable surface under the white dot publishes \`Mine ground\`;
-4. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction;
-5. the cave mesh is regenerated from the modified density field;
-6. normal Pickaxe durability is consumed through \`EquipmentRuntimeController\`.
+2. \`MineableCaveSystem\` samples that ray through the authoritative scalar-density field and refines the first empty-to-solid transition;
+3. the prospective excavation centre is checked against the finite-volume margins and the system confirms that the cut would actually change the density field before \`Mine ground\` is published;
+4. the HUD keeps the target it actually displayed through the tap frame, preventing tiny camera movement from cancelling a visible MINE action;
+5. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction;
+6. the cave mesh is regenerated from the modified density field;
+7. normal Pickaxe durability is consumed through \`EquipmentRuntimeController\`.
+
+The density field, not the low-poly render triangles, is the mining-target authority. Render-mesh triangle edges can therefore change as the cave is rebuilt without creating dead reticle zones or intermittent action-button loss.
 
 For mostly horizontal mining, the cut centre is lowered from first-person eye height to the Ranger body centreline. The cut diameter is derived from the shared Ranger body height plus walking clearance, so one forward strike produces a roughly character-sized opening instead of a small pocket that has to be widened manually. Aiming toward the floor or roof still follows the reticle direction within the current protected volume boundaries.
 
@@ -113,7 +116,10 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - terrain render ownership removed only at the authored mouth, with every intersecting terrain triangle removed so no green cap can bridge the opening;
 - genuine underground floor support;
 - empty traversable initial tunnel and solid mineable walls;
-- first-person ray acquisition, directional excavation and Ranger-clear forward cut size;
+- first-person density-field target acquisition with no dependency on render-triangle seams;
+- validation that every exposed MINE action has a legal, state-changing excavation;
+- sealed finite-volume side/rear/bottom margins plus double-sided cave-adjacent heightfield surface ownership outside the authored mouth;
+- directional excavation and Ranger-clear forward cut size;
 - shared volumetric collision support;
 - compact versioned excavation persistence;
 - cave-mouth vegetation exclusion so grass/ferns/ground cover do not float over the opening;
@@ -124,10 +130,12 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 
 After merge and Pages deployment, verify on Android/PWA:
 
-- from outside, the entrance reads as a hole naturally cut into the foothill with no brown triangular wings, rectangular green lid or freestanding rock ring;
+- from outside, the entrance reads as a hole naturally cut into the foothill with no brown triangular wings, rectangular green lid, freestanding rock ring or grass/ground-cover suspended over the opening;
 - walk into the initial cave without snapping to the surface above;
-- in first person equip Pickaxe and aim the white dot at the left/right wall, floor and roof;
+- in first person equip Pickaxe and sweep the white dot slowly across the left/right wall, floor and roof; valid mineable ground should keep the MINE action stable instead of flickering at polygon boundaries;
+- when MINE is visible, tapping it should always produce the corresponding excavation unless the Pickaxe is already busy;
 - each valid strike visibly removes a Ranger-clear section of ground in the aimed direction; forward mining should produce an even walkable shaft without repeated widening;
+- mine repeatedly near the roof and finite-volume edges and confirm the retained hill surface remains visible from below with no blue-sky holes outside the authored entrance;
 - Ranger cannot walk through unmined solid wall;
 - Ranger can step onto newly exposed floor surfaces without being teleported to the hilltop;
 - switch to third person outside and confirm ordinary large-rock Pickaxe mining is unchanged;

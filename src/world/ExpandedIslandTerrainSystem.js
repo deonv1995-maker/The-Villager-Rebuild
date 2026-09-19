@@ -46,6 +46,8 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       ...this.satelliteIslands.map(island => Math.abs(island.z - this.centerZ) + island.halfZ + 28)
     );
     this.terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
+    this.caveTerrainMaterial = this.terrainMaterial.clone();
+    this.caveTerrainMaterial.side = THREE.DoubleSide;
   }
 
   coastRadiusAt(angle) {
@@ -244,7 +246,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         const needsCaveDetail = EXPLORATION_POIS.some(definition => (
           caveTerrainNeedsRefinement(definition, centerX, centerZ, chunkSize)
         ));
-        const segments = needsCaveDetail ? this.chunkTerrainSegments * 2 : this.chunkTerrainSegments;
+        // The cave mouth is the only place where the heightfield is cut away.
+        // Refine that local mesh enough that triangle removal follows the authored
+        // opening instead of leaving large jagged overhangs or oversized gaps.
+        const segments = needsCaveDetail ? this.chunkTerrainSegments * 4 : this.chunkTerrainSegments;
         const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
         geometry.rotateX(-Math.PI / 2);
         const position = geometry.attributes.position;
@@ -279,9 +284,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
         // The normal island surface stays authoritative above the underground
-        // cave volume. Remove only triangles whose centroids fall inside the
-        // authored natural mouth; the cave mesh overlaps underneath the retained
-        // hill surface so the seam cannot open into sky/water cracks.
+        // cave volume. Remove every terrain triangle that intersects the authored
+        // natural mouth; the locally refined grid keeps that cut close to the
+        // ellipse while the cave mesh overlaps underneath the retained hill.
         const sourceIndex = geometry.getIndex();
         if (sourceIndex) {
           const keptIndices = [];
@@ -303,7 +308,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
         geometry.computeVertexNormals();
         geometry.computeBoundingSphere();
-        const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
+        const mesh = new THREE.Mesh(
+          geometry,
+          needsCaveDetail ? this.caveTerrainMaterial : this.terrainMaterial
+        );
         mesh.name = `terrain-chunk-${ix}-${iz}`;
         mesh.userData.terrainSegments = segments;
         mesh.position.set(centerX, 0, centerZ);

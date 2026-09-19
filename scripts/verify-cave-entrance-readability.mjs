@@ -190,9 +190,31 @@ assert.equal(
 const exclusions = caves.getPresentationExclusions();
 assert.equal(exclusions.length, 1, 'mineable cave must publish one vegetation-clearance zone for its exposed mouth');
 assert.equal(
-  exclusions[0].radius >= config.tunnelHalfWidth + 1,
+  exclusions[0].radius >= Math.max(config.surfaceOpeningHalfWidth, config.surfaceOpeningHalfDepth) + 1.5,
   true,
-  'cave mouth vegetation clearance must cover the tunnel opening and immediate rim'
+  'cave mouth vegetation clearance must cover the refined terrain-cut spill as well as the authored opening'
+);
+
+const caveSource = fs.readFileSync(new URL('../src/world/MineableCaveSystem.js', import.meta.url), 'utf8');
+assert.doesNotMatch(
+  caveSource,
+  /intersectObject\(this\.mesh/,
+  'Pickaxe targeting must not depend on low-poly render-triangle seams'
+);
+assert.match(
+  caveSource,
+  /#findDensitySurfaceHit\(origin, direction\)/,
+  'Pickaxe targeting must ray-march the authoritative cave density field'
+);
+assert.match(
+  caveSource,
+  /#canExcavateSphereAtLocal\(local, radius\)/,
+  'the complete excavation sphere must be validated before MINE is published'
+);
+assert.match(
+  caveSource,
+  /#applyExcavationLocal\(centerLocal, this\.config\.mineRadius, false, true\)/,
+  'MINE must be published only when the prospective cut would actually change the cave density field'
 );
 
 const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
@@ -208,6 +230,16 @@ const caveChunkZ = Math.floor(caveDefinition.z / chunkSize);
 const caveTerrainChunk = terrainGroup.getObjectByName(`terrain-chunk-${caveChunkX}-${caveChunkZ}`);
 assert.ok(caveTerrainChunk, 'terrain renderer must retain the chunk containing the cave footprint');
 const terrainSegments = caveTerrainChunk.userData.terrainSegments;
+assert.equal(
+  terrainSegments >= 72,
+  true,
+  'terrain around the cave mouth must use the refined grid so the cut does not expand by large coarse triangles'
+);
+assert.equal(
+  caveTerrainChunk.material.side,
+  THREE.DoubleSide,
+  'cave-adjacent terrain must render its underside so protected hill surface cannot disappear into sky from underground'
+);
 const fullTriangleIndexCount = terrainSegments * terrainSegments * 6;
 const retainedIndexCount = caveTerrainChunk.geometry.getIndex().count;
 assert.equal(
@@ -335,4 +367,4 @@ assert.equal(
   'restored density field must reproduce the excavated void'
 );
 
-console.log('mineable cave mouth cut, Ranger-clear mining profile, mobile-ready targeting, collision support and persistence contracts verified');
+console.log('mineable cave mouth cut, density-field targeting, sealed finite bounds, double-sided terrain ownership, vegetation clearance, Ranger-clear mining, collision support and persistence contracts verified');

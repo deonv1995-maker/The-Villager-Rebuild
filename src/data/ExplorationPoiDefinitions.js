@@ -50,7 +50,7 @@ export const EXPLORATION_POIS = Object.freeze([
       // Static vegetation is cleared only around the exposed mouth so grass and
       // ground cover never float across the tunnel opening.
       vegetationExclusionCenterZ: -3.8,
-      vegetationExclusionRadius: 4.0,
+      vegetationExclusionRadius: 5.0,
 
       // Pickaxe excavation is intentionally local and mobile-friendly. Boundary
       // padding keeps the finite volume sealed at its side/back/bottom edges.
