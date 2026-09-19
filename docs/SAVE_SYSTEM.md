@@ -54,6 +54,7 @@ The current save preserves:
 - inventory quantities, including inventory-backed Logs;
 - equipped tool selection and per-tool durability units;
 - tree and rock harvest state;
+- mineable cave excavation operations, restored before Ranger placement;
 - initial/dynamic world gatherables and harvested grass patches;
 - campfire built state and position;
 - **semantic panel construction registry/grid state**;
@@ -89,17 +90,18 @@ Ordering is deliberate because the Ranger may have been saved on player construc
 
 The effective ordering is:
 
-1. semantic panel construction runtime/collision;
-2. inventory baseline;
-3. tree/rock harvest state;
-4. world gatherables and grass depletion;
-5. campfire;
-6. retained legacy transition construction state (normally empty for schema 2 player-facing construction);
-7. retained legacy wall/roof presentation state where applicable;
-8. transient thrown-spear normalization;
-9. tool durability and equipped selection;
-10. Ranger save-point placement;
-11. tree-regrowth/resource-renewal timers.
+1. mineable cave volume/excavation geometry and volumetric support;
+2. semantic panel construction runtime/collision;
+3. inventory baseline;
+4. tree/rock harvest state;
+5. world gatherables and grass depletion;
+6. campfire;
+7. retained legacy transition construction state (normally empty for schema 2 player-facing construction);
+8. retained legacy wall/roof presentation state where applicable;
+9. transient thrown-spear normalization;
+10. tool durability and equipped selection;
+11. Ranger save-point placement;
+12. tree-regrowth/resource-renewal timers.
 
 This keeps standable building collision available before the saved Ranger transform is applied.
 
