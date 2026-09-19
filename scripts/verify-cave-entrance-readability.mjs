@@ -239,10 +239,29 @@ for (let tri = 0; tri < retainedIndex.count; tri += 3) {
   );
 }
 
+const miningLocalZ = 3;
+const miningWorld = localToWorld(0, miningLocalZ);
+const miningProgress = THREE.MathUtils.clamp(
+  (miningLocalZ - config.tunnelStartZ) / (config.tunnelEndZ - config.tunnelStartZ),
+  0,
+  1
+);
+const miningExpectedFloorY = THREE.MathUtils.lerp(
+  entryFloorY,
+  entryFloorY - config.tunnelDrop,
+  miningProgress
+);
+const miningSupportY = caves.supportHeightAt(miningWorld.x, miningWorld.z, {
+  referenceY: miningExpectedFloorY + 0.12,
+  maxStepUp: 0.58,
+  airborne: false
+});
+assert.equal(Number.isFinite(miningSupportY), true, 'deeper tunnel must retain a walkable support for mining verification');
+
 const aimOrigin = new THREE.Vector3(
-  tunnelWorld.x,
-  supportY + PLAYER_TRAVERSAL_TUNING.body.eyeHeight,
-  tunnelWorld.z
+  miningWorld.x,
+  miningSupportY + PLAYER_TRAVERSAL_TUNING.body.eyeHeight,
+  miningWorld.z
 );
 const aimDirection = localDirectionToWorld(1, 0);
 const target = caves.getMineTarget({
@@ -264,14 +283,14 @@ assert.equal(
   'newly excavated volume behind the struck surface must become empty'
 );
 assert.equal(
-  caves.isSolidAt(carvedProbe.x, supportY + 0.12, carvedProbe.z),
+  caves.isSolidAt(carvedProbe.x, miningSupportY + 0.12, carvedProbe.z),
   false,
   'one forward mining cut must clear the Ranger foot zone instead of leaving a blocking lower lip'
 );
 assert.equal(
   caves.isSolidAt(
     carvedProbe.x,
-    supportY + PLAYER_TRAVERSAL_TUNING.body.height + 0.12,
+    miningSupportY + PLAYER_TRAVERSAL_TUNING.body.height + 0.12,
     carvedProbe.z
   ),
   false,
