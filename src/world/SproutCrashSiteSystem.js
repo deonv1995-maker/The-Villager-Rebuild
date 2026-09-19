@@ -86,6 +86,8 @@ export class SproutCrashSiteSystem {
     this.impactFlashAge = Number.POSITIVE_INFINITY;
     this.rescueStart = null;
     this.rescueTarget = null;
+    this.impactPrewarmPromise = null;
+    this.impactPresentationPrewarmed = false;
     this.disposed = false;
   }
 
@@ -156,6 +158,36 @@ export class SproutCrashSiteSystem {
     this.impactTreeAnchor.position.set(this.site.x, this.site.y, this.site.z);
     this.#positionIncomingAt(0);
     return { ...this.site };
+  }
+
+  prewarmImpactPresentation() {
+    this.resolveSite();
+    if (this.impactPresentationPrewarmed) {
+      return this.impactPrewarmPromise ?? Promise.resolve(true);
+    }
+
+    const renderer = this.game.sceneSystem?.renderer;
+    const camera = this.game.sceneSystem?.camera;
+    if (!renderer?.compileAsync || !camera || !this.root) return Promise.resolve(false);
+
+    this.impactPresentationPrewarmed = true;
+    const wasVisible = this.root.visible;
+    this.root.visible = true;
+    try {
+      this.impactPrewarmPromise = renderer
+        .compileAsync(this.root, camera, this.scene)
+        .then(() => true)
+        .catch(error => {
+          console.warn('[SPROUT CRASH] Impact presentation prewarm failed', error);
+          return false;
+        });
+    } catch (error) {
+      console.warn('[SPROUT CRASH] Impact presentation prewarm failed', error);
+      this.impactPrewarmPromise = Promise.resolve(false);
+    } finally {
+      this.root.visible = wasVisible;
+    }
+    return this.impactPrewarmPromise;
   }
 
   beginImpact() {
@@ -345,6 +377,7 @@ export class SproutCrashSiteSystem {
     this.impactTreeVisual = null;
     this.incomingLight = null;
     this.impactShockwave = null;
+    this.impactPrewarmPromise = null;
   }
 
   #setCrashPresentationExclusion(active) {
