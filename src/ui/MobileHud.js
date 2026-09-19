@@ -196,7 +196,7 @@ export class MobileHud {
       .filter(entry => entry.quantity > 0 || (entry.kind === 'resource' && alwaysVisible.has(entry.id)));
 
     this.inventoryElement.replaceChildren(...visible.map(entry => {
-      const selectable = entry.quantity > 0 && (entry.kind === 'placeable' || entry.edible);
+      const selectable = entry.quantity > 0 && (entry.kind === 'placeable' || entry.edible || entry.cookable);
       const card = document.createElement(selectable ? 'button' : 'div');
       card.className = 'inventory-card';
       card.dataset.resource = entry.id;
@@ -206,7 +206,14 @@ export class MobileHud {
       }
       card.classList.toggle('placeable', entry.kind === 'placeable' && selectable);
       card.classList.toggle('edible', Boolean(entry.edible && selectable));
-      const tapAction = entry.edible ? 'eat' : entry.kind === 'placeable' ? 'place' : null;
+      card.classList.toggle('cookable', Boolean(entry.cookable && selectable));
+      const tapAction = entry.edible
+        ? 'eat'
+        : entry.cookable
+          ? 'cook'
+          : entry.kind === 'placeable'
+            ? 'place'
+            : null;
       card.setAttribute('aria-label', `${entry.label}: ${entry.quantity}${tapAction ? `, tap to ${tapAction}` : ''}`);
       card.title = tapAction
         ? `${entry.label}: ${entry.quantity} · Tap to ${tapAction}`
@@ -230,7 +237,7 @@ export class MobileHud {
       card.append(icon, label, quantity);
       if (selectable) {
         const hint = document.createElement('small');
-        hint.textContent = entry.edible ? 'EAT' : 'PLACE';
+        hint.textContent = entry.edible ? 'EAT' : entry.cookable ? 'COOK' : 'PLACE';
         hint.setAttribute('aria-hidden', 'true');
         card.append(hint);
       }

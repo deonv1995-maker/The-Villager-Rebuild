@@ -20,6 +20,11 @@ Foundation 0.3.8 keeps the established gathering, crafting, tools, combat, terra
 - Cooked Meat restores 45 hunger through `PlayerSurvivalSystem.restoreHunger()`. The inventory UI only requests the consume action; it does not mutate hunger directly.
 - Eating at full hunger is rejected without consuming the food.
 - The current cooking path is intentionally station-driven so later pots, ovens or village cooking workplaces can extend food production without replacing the shared inventory/survival authorities.
+- `CookingRecipeDefinitions.js` is the shared recipe authority. Raw Meat remains a one-input campfire recipe, while Mushroom Stew consumes three gathered Mushrooms and produces one edible stew after 5.5 seconds.
+- Mushrooms are ordinary `GatherableSystem` inventory pickups distributed primarily through forest habitat. They do not create a second foraging inventory or ecology runtime.
+- Mushroom Stew restores 60 hunger through `PlayerSurvivalSystem.restoreHunger()`. Cooked Meat remains at 45 hunger restoration.
+- Cookable raw ingredients are selectable in the suitcase. When the Ranger is close to a built campfire, tapping the ingredient starts its matching recipe; finished foods remain normal edible inventory actions.
+- In-progress recipes persist by recipe id, while restore retains compatibility with the previous raw-meat/cooked-meat in-progress save shape.
 
 ## Resource storage
 

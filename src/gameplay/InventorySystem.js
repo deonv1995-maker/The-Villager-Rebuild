@@ -1,4 +1,5 @@
 import { INVENTORY_DEFINITIONS } from '../data/ItemDefinitions.js';
+import { isCookingIngredient } from '../data/CookingRecipeDefinitions.js';
 import {
   INVENTORY_ITEM_BULK,
   INVENTORY_STORAGE_MODE,
@@ -135,6 +136,7 @@ export class InventorySystem {
       kind: definition.kind ?? 'resource',
       storageCategory: definition.storageCategory ?? null,
       edible: Boolean(definition.food?.edible),
+      cookable: isCookingIngredient(definition.id),
       quantity: this.get(definition.id)
     }));
   }
