@@ -205,6 +205,9 @@ export class TestIslandSystem {
     this.waterVisuals.create();
     const mountainCount = this.mountains.create();
     const explorationPoiCount = this.explorationPois.create();
+    for (const exclusion of this.explorationPois.getPresentationExclusions?.() ?? []) {
+      this.setPresentationExclusion(exclusion.id, exclusion);
+    }
 
     let environmentLoaded = false;
     let chunkedTreeCount = 0;
