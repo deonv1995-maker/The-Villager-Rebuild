@@ -199,9 +199,11 @@ A Roof preview is valid only when:
 - no covered cell already belongs to another Roof zone;
 - no covered cell is reserved by the current Stair opening contract;
 - there is no higher Floor directly above the candidate cells;
-- every exposed perimeter edge of the exact candidate footprint has a semantic Wall-family support.
+- every exposed perimeter edge of the exact candidate footprint has semantic Wall-family support at the Roof seating level.
 
-Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support.
+Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support. A lower Roof wing attached to a taller adjoining section may use the exact Wall-family edge one storey above as its boundary when that Wall starts at the lower Roof's seating height. This permits an open-plan lower room with no artificial divider Wall while still requiring real semantic structure where the lower Roof meets the taller storey.
+
+Each committed Roof zone stores the exact semantic Wall edge keys that were used as perimeter support. These support dependencies are part of Roof state rather than being reconstructed from presentation geometry. They survive Save/Continue and keep a raised abutment Wall demolition-protected until the dependent lower Roof is removed.
 
 A floorless upper wall ring seats the Roof at that ring's exact wall `topY`; no Floor mesh or Floor collider is generated underneath it. When third-person targeting has vertically aligned completed rings with effectively the same horizontal score, the highest valid completed support wins so a high Roof does not fall back to the lower storey.
 
@@ -262,7 +264,7 @@ Roof uses its stored exact covered-cell count when resolving the refund, so irre
 
 ## Persistence boundary
 
-The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves. Complex Roof footprints, semantic upper Floors, floorless stacked wall-family tiers and wall-supported high Roofs require no new mesh fields and no panel-grid schema bump: Wall records already store explicit edge/storey/base/top state, Roof zones already store arbitrary canonical cell-key sets, and Floor records already store explicit integer `storey` plus `levelY`.
+The game save boundary remains schema **2** / world revision **2**. The panel-grid schema remains compatible with prior semantic saves. Complex Roof footprints, semantic upper Floors, floorless stacked wall-family tiers and wall-supported high Roofs require no new mesh fields and no panel-grid schema bump: Wall records already store explicit edge/storey/base/top state, Roof zones already store arbitrary canonical cell-key sets, and Floor records already store explicit integer `storey` plus `levelY`. Roof zones may also carry additive `supportEdgeKeys` metadata for exact Wall dependencies; older saves without that field remain valid.
 
 `PanelConstructionSystem.snapshot()` stores semantic registry/grid state. Save/Continue recreates runtime visuals and collision from that state without re-consuming Logs.
 
@@ -336,6 +338,8 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - exact 5-Logs-per-real-cell cost;
 - one semantic Roof zone owning the exact irregular cell set;
 - incremental Roof extension coalescing with existing connected zones while charging only new cells;
+- a prebuilt upper Roof leaving two lower side-wing Roofs placeable against the exact upper Wall tier without requiring ground-floor divider Walls;
+- persisted raised-Wall support dependencies that still block demolition after Save/Continue;
 - Continue-time repair of older adjacent same-structure Roof zones;
 - multi-wing materialization;
 - Save/Continue re-planning from semantic state;
@@ -358,6 +362,8 @@ Using the same style of build shown in the report, verify:
 - a supporting lower wall cannot be demolished while an existing floorless upper wall depends on that enclosure;
 - a completed floorless upper ring allows Roof placement at the **top of that upper ring**, not at the lower storey;
 - the high Roof does not create an invisible or walkable Floor underneath it and keeps the existing Roof cost;
+- after a central upper Roof is complete, lower side-wing Roofs can still be placed against the taller upper Wall tier on both sides without adding divider Walls across the open ground floor;
+- removing the high Roof alone does not free an upper Wall that is still supporting a lower side-wing Roof;
 - existing Floor-backed upper-storey construction still behaves as before, including Stair openings and optional unbuilt Floor cells;
 - beside a Stair/open Floor void, a Wall can fill a single wall-width gap between two aligned upper-level wall sections while the opening itself remains un-floored and traversable;
 - removing either flanking upper Wall is blocked until that bridge Wall is removed;
