@@ -266,7 +266,7 @@ export class GameApp {
     // intermittent mining failure on mobile.
     const pickaxeReady = toolId === 'pickaxe' && !(this.toolPresentation?.isBusy() ?? false);
     const miningAim = pickaxeReady ? this.#currentConstructionAim() : null;
-    const caveMineTarget = miningAim
+    const groundMineTarget = miningAim
       ? this.island?.explorationPois?.getMineTarget?.({
         aim: miningAim,
         playerPosition: this.playerPosition
@@ -274,7 +274,7 @@ export class GameApp {
       : null;
     const rockTarget = this.rockHarvest?.update(
       this.playerPosition,
-      pickaxeReady && !caveMineTarget
+      pickaxeReady && !groundMineTarget
     ) ?? null;
     const panelDemolitionTarget = panelHammerOwned
       ? this.panelConstructionRuntime?.getHammerInteractionTarget?.() ?? null
@@ -302,7 +302,7 @@ export class GameApp {
       ? panelDemolitionTarget
       : carcassTarget
         ?? treeTarget
-        ?? caveMineTarget
+        ?? groundMineTarget
         ?? rockTarget
         ?? legacyDemolitionTarget
         ?? resourceTarget;
@@ -354,15 +354,14 @@ export class GameApp {
       return;
     }
 
-    // Preserve the cave target that was actually shown on the HUD. Re-running
-    // targeting on the tap frame can land on the opposite side of a low-poly
-    // surface boundary after tiny camera motion, making a visible MINE button
-    // appear to do nothing.
-    const displayedCaveTarget = this.currentInteractionTarget?.type === 'mineable-cave'
+    // Preserve the tunneling target that was actually shown on the HUD. Re-running
+    // targeting on the tap frame can shift the density-field boundary after tiny
+    // camera motion, making a visible MINE button appear to do nothing.
+    const displayedGroundTarget = this.currentInteractionTarget?.type === 'mineable-ground'
       ? this.currentInteractionTarget
       : null;
     this.#refreshTargets(0);
-    const target = displayedCaveTarget ?? this.currentInteractionTarget;
+    const target = displayedGroundTarget ?? this.currentInteractionTarget;
     if (!target) return;
 
     if (target.type === 'carcass') {
@@ -391,7 +390,7 @@ export class GameApp {
       return;
     }
 
-    if (target.type === 'mineable-cave' && toolId === 'pickaxe') {
+    if (target.type === 'mineable-ground' && toolId === 'pickaxe') {
       if (!this.player.isFirstPerson?.() || this.toolPresentation?.isBusy()) return;
       if (!this.toolPresentation?.playSwing('pickaxe')) return;
       const hit = this.island?.explorationPois?.mine?.(target);
@@ -399,7 +398,11 @@ export class GameApp {
       this.equipmentRuntime?.recordUse?.('pickaxe');
       this.#refreshTargets(0);
       this.#syncProgress();
-      this.setStatus(`CAVE GROUND MINED · ${hit.excavationCount} CUT${hit.excavationCount === 1 ? '' : 'S'}`);
+      if (hit.discoveredPockets?.length) {
+        this.setStatus(`UNDERGROUND POCKET DISCOVERED · ${hit.excavationCount} CUT${hit.excavationCount === 1 ? '' : 'S'}`);
+      } else {
+        this.setStatus(`GROUND TUNNELED · ${hit.excavationCount} CUT${hit.excavationCount === 1 ? '' : 'S'}`);
+      }
       return;
     }
 
@@ -723,6 +726,12 @@ export class GameApp {
     if (this.currentInteractionTarget?.type === 'tree') {
       this.setStatus('AXE · TREE IN RANGE');
       this.hud?.setObjective('Axe action · chop tree into physical logs');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'mineable-ground') {
+      this.setStatus('PICKAXE · GROUND TARGET');
+      this.hud?.setObjective('Pickaxe action · tunnel in the white-dot direction');
       return;
     }
 
