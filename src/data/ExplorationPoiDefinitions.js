@@ -1,3 +1,9 @@
+import { PLAYER_TRAVERSAL_TUNING } from './PlayerTraversalTuning.js';
+
+const RANGER_CLEAR_MINE_MARGIN = 0.4;
+const RANGER_CLEAR_MINE_RADIUS = (PLAYER_TRAVERSAL_TUNING.body.height + RANGER_CLEAR_MINE_MARGIN) * 0.5;
+const RANGER_MINE_CENTER_DROP = PLAYER_TRAVERSAL_TUNING.body.eyeHeight - PLAYER_TRAVERSAL_TUNING.body.height * 0.5;
+
 export const EXPLORATION_POIS = Object.freeze([
   Object.freeze({
     id: 'northern-cave-01',
@@ -49,7 +55,8 @@ export const EXPLORATION_POIS = Object.freeze([
       // Pickaxe excavation is intentionally local and mobile-friendly. Boundary
       // padding keeps the finite volume sealed at its side/back/bottom edges.
       mineReach: 3.45,
-      mineRadius: 1.05,
+      mineRadius: RANGER_CLEAR_MINE_RADIUS,
+      mineCenterDrop: RANGER_MINE_CENTER_DROP,
       mineInset: 0.38,
       boundaryPadding: 1.05
     })
