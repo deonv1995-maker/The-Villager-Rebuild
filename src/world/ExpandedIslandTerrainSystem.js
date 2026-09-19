@@ -244,7 +244,10 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         const needsCaveDetail = EXPLORATION_POIS.some(definition => (
           caveTerrainNeedsRefinement(definition, centerX, centerZ, chunkSize)
         ));
-        const segments = needsCaveDetail ? this.chunkTerrainSegments * 2 : this.chunkTerrainSegments;
+        // The cave mouth is the only place where the heightfield is cut away.
+        // Refine that local mesh enough that triangle removal follows the authored
+        // opening instead of leaving large jagged overhangs or oversized gaps.
+        const segments = needsCaveDetail ? this.chunkTerrainSegments * 4 : this.chunkTerrainSegments;
         const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
         geometry.rotateX(-Math.PI / 2);
         const position = geometry.attributes.position;
