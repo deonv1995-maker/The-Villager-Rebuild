@@ -78,10 +78,11 @@ assert.equal(terrain.isPlayable(caveDefinition.x, caveDefinition.z), true, 'cave
 const poiGroup = new THREE.Group();
 const poiSystem = new ExplorationPoiSystem({ group: poiGroup, terrain });
 assert.equal(poiSystem.create(), 1, 'first exploration POI pass must create the cave entrance');
-const caveRoot = poiGroup.getObjectByName(`exploration-poi-${caveDefinition.id}`);
-assert.ok(caveRoot, 'cave entrance must create a named world presentation root');
-assert.ok(caveRoot.getObjectByName(`${caveDefinition.id}-dark-interior`), 'cave entrance must include a clearly readable dark interior');
-assert.ok(caveRoot.getObjectByName(`${caveDefinition.id}-floor`), 'cave entrance must include a walk-in floor presentation');
+const caveRoot = poiGroup.getObjectByName(`mineable-cave-${caveDefinition.id}`);
+assert.ok(caveRoot, 'cave entrance must create a named mineable ground-volume root');
+const caveGround = caveRoot.getObjectByName(`${caveDefinition.id}-mineable-ground`);
+assert.ok(caveGround, 'cave entrance must expose one continuous generated ground mesh');
+assert.equal(caveGround.userData.mineableCave, true, 'streamed cave presentation must retain mineable-volume identity');
 
 const satellites = terrain.getSatelliteIslands();
 assert.equal(satellites.length, 9, 'expanded archipelago must keep a deterministic set of nine satellite islands');
