@@ -75,6 +75,7 @@ On Android Chrome or a Chromium desktop browser, use the browser-owned **Install
 - `docs/WORLD_AND_PROGRESSION.md` — island design and settlement progression.
 - `docs/WORLD_STREAMING.md` — expanded mainland, render chunks, shallow water and tree-instance ownership.
 - `docs/SURVIVAL_INTERACTION_MODEL.md` — inventory resources, physical Logs, toolbelt roles, building and combat boundaries.
+- `docs/FOOD_GATHERING_AND_COOKING.md` — gathered foods, shared recipe definitions and campfire cooking expansion.
 - `docs/TECHNICAL_ARCHITECTURE.md` — intended technical foundation.
 - `docs/DEVELOPMENT_RULES.md` — implementation and stability rules.
 - `docs/ROADMAP.md` — staged development plan.
