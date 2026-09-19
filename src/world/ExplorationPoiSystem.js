@@ -25,6 +25,10 @@ export class ExplorationPoiSystem {
     return EXPLORATION_POIS.map(definition => ({ ...definition }));
   }
 
+  getPresentationExclusions() {
+    return this.mineableCaves.getPresentationExclusions();
+  }
+
   getMineTarget(options) {
     return this.mineableCaves.getMineTarget(options);
   }
