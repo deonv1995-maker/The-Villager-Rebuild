@@ -305,7 +305,10 @@ export class PanelConstructionGrid {
   removeWall(edgeKey) {
     const wall = this.walls.get(edgeKey);
     if (!wall) return false;
-    const dependentRoof = [...this.roofZones.values()].some(zone => roofZoneUsesEdge(zone, edgeKey));
+    const dependentRoof = [...this.roofZones.values()].some(zone => (
+      roofZoneUsesEdge(zone, edgeKey) ||
+      roofZoneUsesRaisedBoundaryEdge(zone, edgeKey, this.walls)
+    ));
     if (dependentRoof) return false;
 
     const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
