@@ -260,7 +260,17 @@ export class GameApp {
       && (this.panelConstructionRuntime?.ownsHammerInteraction?.() ?? false);
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
-    const rockTarget = this.rockHarvest?.update(this.playerPosition, toolId === 'pickaxe') ?? null;
+    const miningAim = toolId === 'pickaxe' ? this.#currentConstructionAim() : null;
+    const caveMineTarget = miningAim
+      ? this.island?.explorationPois?.getMineTarget?.({
+        aim: miningAim,
+        playerPosition: this.playerPosition
+      }) ?? null
+      : null;
+    const rockTarget = this.rockHarvest?.update(
+      this.playerPosition,
+      toolId === 'pickaxe' && !caveMineTarget
+    ) ?? null;
     const panelDemolitionTarget = panelHammerOwned
       ? this.panelConstructionRuntime?.getHammerInteractionTarget?.() ?? null
       : null;
@@ -287,6 +297,7 @@ export class GameApp {
       ? panelDemolitionTarget
       : carcassTarget
         ?? treeTarget
+        ?? caveMineTarget
         ?? rockTarget
         ?? legacyDemolitionTarget
         ?? resourceTarget;
@@ -365,6 +376,18 @@ export class GameApp {
       } else {
         this.setStatus(`TREE DOWN · ${hit.dropCount} PHYSICAL LOGS`);
       }
+      return;
+    }
+
+    if (target.type === 'mineable-cave' && toolId === 'pickaxe') {
+      if (!this.player.isFirstPerson?.() || this.toolPresentation?.isBusy()) return;
+      if (!this.toolPresentation?.playSwing('pickaxe')) return;
+      const hit = this.island?.explorationPois?.mine?.(target);
+      if (!hit) return;
+      this.equipmentRuntime?.recordUse?.('pickaxe');
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(`CAVE GROUND MINED · ${hit.excavationCount} CUT${hit.excavationCount === 1 ? '' : 'S'}`);
       return;
     }
 
