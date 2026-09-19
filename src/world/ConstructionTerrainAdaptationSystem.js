@@ -20,6 +20,9 @@ export class ConstructionTerrainAdaptationSystem {
     this.revision = 0;
     this.soilColor = new THREE.Color(0x72593d);
     this.tempWorldPosition = new THREE.Vector3();
+    this.terrainGeometryUnsubscribe = this.terrain.onTerrainChunkGeometryChanged?.(
+      mesh => this.refreshTerrainMesh(mesh)
+    ) ?? null;
   }
 
   captureTerrainMeshes() {
@@ -55,6 +58,47 @@ export class ConstructionTerrainAdaptationSystem {
     });
 
     return this.meshRecords.length;
+  }
+
+  refreshTerrainMesh(mesh) {
+    const recordIndex = this.meshRecords.findIndex(record => record.mesh === mesh);
+    if (recordIndex < 0) return false;
+
+    const position = mesh.geometry?.getAttribute?.('position');
+    if (!position) return false;
+    const color = mesh.geometry?.getAttribute?.('color') ?? null;
+    mesh.geometry.computeBoundingBox();
+    const bounds = mesh.geometry.boundingBox;
+    mesh.getWorldPosition(this.tempWorldPosition);
+    const renderSamplingPadding = this.#renderSamplingPadding(bounds, position);
+    this.renderSamplingPadding = Math.max(this.renderSamplingPadding, renderSamplingPadding);
+
+    const record = {
+      mesh,
+      position,
+      color,
+      naturalY: Float32Array.from(
+        { length: position.count },
+        (_, index) => position.getY(index)
+      ),
+      naturalColors: color ? new Float32Array(color.array) : null,
+      originX: this.tempWorldPosition.x,
+      originZ: this.tempWorldPosition.z,
+      renderSamplingPadding,
+      horizontalRadius: bounds
+        ? Math.hypot(
+            (bounds.max.x - bounds.min.x) * 0.5,
+            (bounds.max.z - bounds.min.z) * 0.5
+          )
+        : (this.chunks?.chunkSize ?? 72) * Math.SQRT1_2
+    };
+    this.meshRecords[recordIndex] = record;
+    mesh.userData.constructionTerrainTracked = true;
+
+    // Dynamic tunneling geometry is rebuilt from immutable terrain. Reapply any
+    // active construction floor cuts to the replacement geometry immediately.
+    this.#rebuildMesh(record);
+    return true;
   }
 
   getRevision() {
