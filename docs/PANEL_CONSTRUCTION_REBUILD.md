@@ -360,6 +360,7 @@ Using the same style of build shown in the report, verify:
 - a supporting lower wall cannot be demolished while an existing floorless upper wall depends on that enclosure;
 - a completed floorless upper ring allows Roof placement at the **top of that upper ring**, not at the lower storey;
 - the high Roof does not create an invisible or walkable Floor underneath it and keeps the existing Roof cost;
+- after a central upper Roof is complete, lower side-wing Roofs can still be placed against the taller upper Wall tier on both sides without adding divider Walls across the open ground floor;
 - existing Floor-backed upper-storey construction still behaves as before, including Stair openings and optional unbuilt Floor cells;
 - beside a Stair/open Floor void, a Wall can fill a single wall-width gap between two aligned upper-level wall sections while the opening itself remains un-floored and traversable;
 - removing either flanking upper Wall is blocked until that bridge Wall is removed;
