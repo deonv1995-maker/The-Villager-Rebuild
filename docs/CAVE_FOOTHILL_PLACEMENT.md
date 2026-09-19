@@ -19,12 +19,12 @@ This is the foundation for directional Pickaxe excavation and later underground 
 - initial tunnel shape and descending floor grade;
 - Pickaxe reach/radius/inset;
 - finite-volume safety padding;
-- a local surface-mouth cut profile;
+- a local surface-mouth cut profile plus a conservative terrain-owner overlap margin;
 - a vegetation-clearance radius for the exposed entrance.
 
-\`ExpandedIslandTerrainSystem\` continues to generate the island normally. Around the cave mouth it uses a locally refined terrain grid, then removes every heightfield render triangle that intersects the authored opening. \`MineableCaveSystem\` generates a matching top surface from the same terrain-height samples, so the cave reads as part of the hill rather than an object placed on it. The tighter local grid keeps the cut close to the authored ellipse instead of allowing large coarse terrain triangles to create oversized holes.
+\`ExpandedIslandTerrainSystem\` continues to generate the island normally. Around the cave mouth it uses a locally refined terrain grid, then removes every heightfield render triangle that intersects a conservative opening envelope slightly larger than the authored visible mouth. \`MineableCaveSystem\` generates a matching top surface from the same terrain-height samples, so that overlap is still filled by cave-owned ground wherever the initial tunnel is solid. This prevents a retained island triangle from bridging the generated cave mouth while avoiding an oversized sky hole.
 
-There is exactly one visible ground owner at a given cave-footprint surface location. Cave-adjacent heightfield chunks render both faces so the retained hill surface remains visible from underground even when the volumetric roof is mined very close to it. The vegetation presentation exclusion intentionally extends beyond the opening far enough to cover the small triangle spill at its rim, so grass, ferns and ground-cover instances cannot remain suspended over removed heightfield triangles.
+There is exactly one visible ground owner at a given cave-footprint surface location. The authored mouth still defines where the cave surface is considered exposed for gameplay targeting; the wider terrain-owner cut exists only to make render ownership robust. Cave-adjacent heightfield chunks render both faces so the retained hill surface remains visible from underground even when the volumetric roof is mined very close to it. The vegetation presentation exclusion covers the full terrain-owner overlap, so grass, ferns and ground-cover instances cannot remain suspended over removed heightfield triangles.
 
 \`caveTerrainOffsetAt()\` returns zero for mineable caves. The former carved heightfield trench is deliberately not combined with the volume system.
 
@@ -41,7 +41,7 @@ Initial density combines:
 
 The generated surface is continuous across cave mouth, walls, roof, floor and an overlapping top-ground skin. Outside the natural mouth that top skin sits behind the retained island terrain and exists only to seal the volumetric boundary. It does not use Minecraft-style visible cubes.
 
-The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. The normal island heightfield remains the authoritative surface outside the authored mouth, and cave-adjacent heightfield chunks render both faces so that surface cannot disappear when viewed from underground. This keeps Ranger-clear cuts possible beneath shallow overburden without exposing either the edge of the density domain or blue sky through a culled terrain backface. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
+The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. The authored floor depth includes explicit clearance below the initial walkable floor so a Ranger-clear downward strike is legal instead of being rejected by the bottom safety margin. The normal island heightfield remains the authoritative surface outside the authored mouth, and cave-adjacent heightfield chunks render both faces so that surface cannot disappear when viewed from underground. This keeps Ranger-clear cuts possible beneath shallow overburden without exposing either the edge of the density domain or blue sky through a culled terrain backface. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
 
 ## First-person Pickaxe excavation
 
@@ -61,7 +61,7 @@ The density field, not the low-poly render triangles, is the mining-target autho
 
 For mostly horizontal mining, the cut centre is lowered from first-person eye height to the Ranger body centreline. The cut diameter is derived from the shared Ranger body height plus walking clearance, so one forward strike produces a roughly character-sized opening instead of a small pocket that has to be widened manually. Aiming toward the floor or roof still follows the reticle direction within the current protected volume boundaries.
 
-The unified mobile Action policy treats `mineable-cave` as a Pickaxe work target, so the MINE button is enabled when the reticle has a valid cave surface. Third-person Pickaxe behaviour for the existing large overworld rocks is preserved.
+The unified mobile Action policy treats `mineable-cave` as a Pickaxe work target. A cave MINE target is published only while the Pickaxe is ready to accept a new swing; the HUD therefore no longer advertises an action during the short busy window in which the interaction handler would reject the tap. Third-person Pickaxe behaviour for the existing large overworld rocks is preserved.
 
 ## Collision and grounding
 
@@ -113,11 +113,12 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - one authored mineable volume;
 - no simultaneous legacy terrain cut or portal/roof/liner stack;
 - one continuous generated cave-ground mesh;
-- terrain render ownership removed only at the authored mouth, with every intersecting terrain triangle removed so no green cap can bridge the opening;
+- terrain render ownership removed through a conservative overlap around the authored mouth, with the cave top skin filling solid overlap and no retained green cap bridging the generated opening;
 - genuine underground floor support;
 - empty traversable initial tunnel and solid mineable walls;
 - first-person density-field target acquisition with no dependency on render-triangle seams;
-- validation that every exposed MINE action has a legal, state-changing excavation;
+- validation that every exposed MINE action has a legal, state-changing excavation and is not published while the Pickaxe is busy;
+- enough protected solid depth below the initial cave floor for a Ranger-clear downward excavation;
 - sealed finite-volume side/rear/bottom margins plus double-sided cave-adjacent heightfield surface ownership outside the authored mouth;
 - directional excavation and Ranger-clear forward cut size;
 - shared volumetric collision support;
@@ -133,7 +134,7 @@ After merge and Pages deployment, verify on Android/PWA:
 - from outside, the entrance reads as a hole naturally cut into the foothill with no brown triangular wings, rectangular green lid, freestanding rock ring or grass/ground-cover suspended over the opening;
 - walk into the initial cave without snapping to the surface above;
 - in first person equip Pickaxe and sweep the white dot slowly across the left/right wall, floor and roof; valid mineable ground should keep the MINE action stable instead of flickering at polygon boundaries;
-- when MINE is visible, tapping it should always produce the corresponding excavation unless the Pickaxe is already busy;
+- while the Pickaxe swing is busy the MINE action should not be advertised; whenever MINE is visible, tapping it should produce the corresponding excavation;
 - each valid strike visibly removes a Ranger-clear section of ground in the aimed direction; forward mining should produce an even walkable shaft without repeated widening;
 - mine repeatedly near the roof and finite-volume edges and confirm the retained hill surface remains visible from below with no blue-sky holes outside the authored entrance;
 - Ranger cannot walk through unmined solid wall;
