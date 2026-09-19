@@ -72,6 +72,18 @@ for (const [id, fileName] of Object.entries(cosyToolIcons)) {
 for (const [id, fileName] of Object.entries(cosyResourceIcons)) {
   assertCosyIcon(id, fileName, 'Resource');
 }
+for (const [id, fileName] of Object.entries({
+  mushroom: 'icon-resource-mushroom.svg',
+  mushroom_stew: 'icon-resource-mushroom-stew.svg'
+})) {
+  const iconPath = `ui/mobile/${fileName}`;
+  assert.match(
+    assetPathsSource,
+    new RegExp(`${id}: asset\\('${iconPath.replaceAll('.', '\\.')}'+\\)`),
+    `Resource ${id} must resolve through the shared mobile icon registry`
+  );
+  assert.ok(fs.existsSync(new URL(`../public/assets/${iconPath}`, import.meta.url)), `Resource ${id} SVG must exist`);
+}
 for (const [id, fileName] of Object.entries(cosyBuildIcons)) {
   assertCosyIcon(id, fileName, 'Build');
 }
