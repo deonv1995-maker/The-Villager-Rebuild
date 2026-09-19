@@ -40,7 +40,11 @@ export class GatherableSystem {
       stickGeometry: new THREE.CylinderGeometry(0.075, 0.095, 1.05, 6),
       stickMaterial: new THREE.MeshStandardMaterial({ color: 0x6b4930, roughness: 1 }),
       stoneGeometry: new THREE.DodecahedronGeometry(0.34, 0),
-      stoneMaterial: new THREE.MeshStandardMaterial({ color: 0x77766f, roughness: 1, flatShading: true })
+      stoneMaterial: new THREE.MeshStandardMaterial({ color: 0x77766f, roughness: 1, flatShading: true }),
+      mushroomStemGeometry: new THREE.CylinderGeometry(0.055, 0.075, 0.3, 6),
+      mushroomCapGeometry: new THREE.SphereGeometry(0.18, 8, 5),
+      mushroomStemMaterial: new THREE.MeshStandardMaterial({ color: 0xe2cfaa, roughness: 0.96, flatShading: true }),
+      mushroomCapMaterial: new THREE.MeshStandardMaterial({ color: 0xa64f3b, roughness: 0.9, flatShading: true })
     };
     this.scene.userData.services ??= {};
     this.scene.userData.services.gatherables = this;
@@ -492,6 +496,18 @@ export class GatherableSystem {
       return THREE.MathUtils.clamp(exposedGround, 0.28, 0.94);
     }
 
+    if (resourceId === 'mushroom') {
+      const minimumForest = config.minForestCover ?? 0.5;
+      if (forest < minimumForest) return 0;
+      const vegetation = this.ecology.vegetationSuitabilityAt?.(x, z, config.maxSlope) ?? 0.7;
+      const forestStrength = THREE.MathUtils.clamp(
+        (forest - minimumForest) / Math.max(0.001, 1 - minimumForest),
+        0,
+        1
+      );
+      return THREE.MathUtils.clamp(vegetation * (0.38 + forestStrength * 0.62), 0.16, 0.94);
+    }
+
     return 0;
   }
 
@@ -719,6 +735,7 @@ export class GatherableSystem {
     if (resourceId === 'stone') return this.#createStone(index);
     if (resourceId === 'grass') return this.#createGrass(index);
     if (resourceId === 'meat') return this.#createMeat(index);
+    if (resourceId === 'mushroom') return this.#createMushroom(index);
     if (resourceId === 'log') return this.#createLog(index);
     throw new Error(`No world pickup presentation for resource: ${resourceId}`);
   }
@@ -814,6 +831,45 @@ export class GatherableSystem {
     fat.rotation.y = -0.24 + index * 0.13;
     fat.castShadow = true;
     group.add(fat);
+
+    return group;
+  }
+
+  #createMushroom(index) {
+    const group = new THREE.Group();
+    const variants = [
+      { x: -0.1, z: 0.02, scale: 1, tilt: -0.08 },
+      { x: 0.13, z: -0.08, scale: 0.72, tilt: 0.1 }
+    ];
+
+    for (let variantIndex = 0; variantIndex < variants.length; variantIndex += 1) {
+      const variant = variants[variantIndex];
+      const stem = new THREE.Mesh(
+        this.sharedVisuals.mushroomStemGeometry,
+        this.sharedVisuals.mushroomStemMaterial
+      );
+      stem.scale.setScalar(variant.scale);
+      stem.position.set(variant.x, 0.15 * variant.scale, variant.z);
+      stem.rotation.z = variant.tilt;
+      stem.castShadow = true;
+      stem.receiveShadow = true;
+      group.add(stem);
+
+      const cap = new THREE.Mesh(
+        this.sharedVisuals.mushroomCapGeometry,
+        this.sharedVisuals.mushroomCapMaterial
+      );
+      cap.scale.set(variant.scale, variant.scale * 0.48, variant.scale);
+      cap.position.set(
+        variant.x + variant.tilt * 0.1,
+        0.31 * variant.scale,
+        variant.z
+      );
+      cap.rotation.y = index * 0.37 + variantIndex * 0.83;
+      cap.castShadow = true;
+      cap.receiveShadow = true;
+      group.add(cap);
+    }
 
     return group;
   }
