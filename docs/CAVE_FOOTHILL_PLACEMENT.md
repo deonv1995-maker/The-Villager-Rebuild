@@ -18,7 +18,9 @@ This is the foundation for directional Pickaxe excavation and later underground 
 - mobile-oriented density-cell size;
 - initial tunnel shape and descending floor grade;
 - Pickaxe reach/radius/inset;
-- finite-volume safety padding.
+- finite-volume safety padding;
+- a local surface-mouth cut profile;
+- a vegetation-clearance radius for the exposed entrance.
 
 \`ExpandedIslandTerrainSystem\` continues to generate the island normally. Within the mineable cave footprint it removes only the heightfield render triangles whose centroids belong to the volume. \`MineableCaveSystem\` generates a matching top surface from the same terrain-height samples, so the cave reads as part of the hill rather than an object placed on it.
 
@@ -37,7 +39,7 @@ Initial density combines:
 1. the natural island surface sampled from \`ExpandedIslandTerrainSystem.heightAt()\`;
 2. one authored elliptical tunnel void that begins at the downhill edge and descends gently beneath the rising foothill.
 
-The generated surface is continuous across top ground, cave mouth, walls, roof and floor. It does not use Minecraft-style visible cubes.
+The generated surface is continuous across cave mouth, walls, roof, floor and an overlapping top-ground skin. Outside the natural mouth that top skin sits behind the retained island terrain and exists only to seal the volumetric boundary. It does not use Minecraft-style visible cubes.
 
 The current volume is finite by design. Side, rear and bottom margins cannot be excavated through. This keeps the first implementation bounded for mobile performance and prevents exposing the edge of the density domain. Surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
 
@@ -56,7 +58,7 @@ When Pickaxe is equipped in first person:
 
 This means aiming into the wall tunnels sideways, aiming toward the floor removes ground downward, and aiming toward the roof removes ground upward, within the current protected volume boundaries.
 
-Third-person Pickaxe behaviour for the existing large overworld rocks is preserved.
+The unified mobile Action policy treats `mineable-cave` as a Pickaxe work target, so the MINE button is enabled when the reticle has a valid cave surface. Third-person Pickaxe behaviour for the existing large overworld rocks is preserved.
 
 ## Collision and grounding
 
@@ -108,12 +110,14 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - one authored mineable volume;
 - no simultaneous legacy terrain cut or portal/roof/liner stack;
 - one continuous generated cave-ground mesh;
-- terrain render ownership removed under the volume footprint;
+- terrain render ownership removed only at the authored mouth, with most of the hill surface retained;
 - genuine underground floor support;
 - empty traversable initial tunnel and solid mineable walls;
 - first-person ray acquisition and directional excavation;
 - shared volumetric collision support;
 - compact versioned excavation persistence;
+- cave-mouth vegetation exclusion so grass/ferns/ground cover do not float over the opening;
+- unified mobile MINE action for `mineable-cave`;
 - absence of the old impact scar, overburden sheet, mouth shell and tunnel liner.
 
 ## Device verification
