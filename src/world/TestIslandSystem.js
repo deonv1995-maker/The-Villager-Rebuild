@@ -47,11 +47,15 @@ export class TestIslandSystem {
       terrain: this.terrain,
       collision: this.collision
     });
+    this.presentationExclusions = new Map();
+    this.tunnelingPresentationExclusionIds = new Set();
     this.explorationPois = new ExplorationPoiSystem({
       group: this.group,
       terrain: this.terrain,
       chunks: this.chunks,
-      collision: this.collision
+      collision: this.collision,
+      onPresentationExclusionsChanged: exclusions =>
+        this.#replaceTunnelingPresentationExclusions(exclusions)
     });
     this.collision.setVolumeQuery({
       supportHeightAt: (x, z, options) => this.explorationPois.supportHeightAt(x, z, options),
@@ -109,7 +113,6 @@ export class TestIslandSystem {
     });
     this.treeOcclusion = null;
     this.assetMode = 'terrain-only';
-    this.presentationExclusions = new Map();
   }
 
   getSpawnPoint() {
@@ -178,6 +181,24 @@ export class TestIslandSystem {
     return true;
   }
 
+  #replaceTunnelingPresentationExclusions(exclusions = []) {
+    const nextIds = new Set();
+    for (const exclusion of exclusions) {
+      if (!exclusion?.id) continue;
+      nextIds.add(exclusion.id);
+      this.presentationExclusions.set(exclusion.id, {
+        x: exclusion.x,
+        z: exclusion.z,
+        radius: exclusion.radius
+      });
+    }
+    for (const id of this.tunnelingPresentationExclusionIds) {
+      if (!nextIds.has(id)) this.presentationExclusions.delete(id);
+    }
+    this.tunnelingPresentationExclusionIds = nextIds;
+    this.#syncPresentationExclusions();
+  }
+
   #syncPresentationExclusions() {
     const exclusions = Array.from(this.presentationExclusions.values());
     this.groundCover.setPresentationExclusions?.(exclusions);
@@ -205,9 +226,9 @@ export class TestIslandSystem {
     this.waterVisuals.create();
     const mountainCount = this.mountains.create();
     const explorationPoiCount = this.explorationPois.create();
-    for (const exclusion of this.explorationPois.getPresentationExclusions?.() ?? []) {
-      this.setPresentationExclusion(exclusion.id, exclusion);
-    }
+    this.#replaceTunnelingPresentationExclusions(
+      this.explorationPois.getPresentationExclusions?.() ?? []
+    );
 
     let environmentLoaded = false;
     let chunkedTreeCount = 0;
