@@ -1,9 +1,13 @@
 import * as THREE from 'three';
-import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { EXPLORATION_WORLD } from '../data/ExplorationRegionDefinitions.js';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
 import { ExplorationRegionSystem } from './ExplorationRegionSystem.js';
-import { caveMineableSurfaceTriangleIntersects, caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
+import {
+  normalizeTunnelingOpenings,
+  sameTunnelingOpenings,
+  tunnelingOpeningIntersectsChunk,
+  tunnelingOpeningIntersectsTriangle
+} from './TunnelingTerrainProfile.js';
 import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const MAINLAND_SCALE = EXPLORATION_WORLD.mainlandScale;
@@ -46,8 +50,12 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       ...this.satelliteIslands.map(island => Math.abs(island.z - this.centerZ) + island.halfZ + 28)
     );
     this.terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
-    this.caveTerrainMaterial = this.terrainMaterial.clone();
-    this.caveTerrainMaterial.side = THREE.DoubleSide;
+    this.tunnelTerrainMaterial = this.terrainMaterial.clone();
+    this.tunnelTerrainMaterial.side = THREE.DoubleSide;
+    this.tunnelTerrainSegments = this.chunkTerrainSegments * 4;
+    this.tunnelingOpenings = [];
+    this.terrainChunkRecords = new Map();
+    this.terrainChunkGeometryListeners = new Set();
   }
 
   coastRadiusAt(angle) {
@@ -138,9 +146,6 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const explorationTerrain = this.explorationRegions.terrainOffsetAt(x, z);
 
     height += shoreFade * (outerFeatures + longNoise + explorationTerrain);
-    for (const definition of EXPLORATION_POIS) {
-      height += caveTerrainOffsetAt(definition, x, z);
-    }
     return height;
   }
 
@@ -167,6 +172,48 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       ...island,
       bar: { ...island.bar }
     }));
+  }
+
+  setTunnelingOpenings(openings = []) {
+    const next = normalizeTunnelingOpenings(openings);
+    if (sameTunnelingOpenings(this.tunnelingOpenings, next)) return false;
+
+    const signature = opening =>
+      `${opening.x.toFixed(5)}:${opening.z.toFixed(5)}:${opening.radius.toFixed(5)}`;
+    const previousBySignature = new Map(
+      this.tunnelingOpenings.map(opening => [signature(opening), opening])
+    );
+    const nextBySignature = new Map(next.map(opening => [signature(opening), opening]));
+    const changed = [
+      ...this.tunnelingOpenings.filter(opening => !nextBySignature.has(signature(opening))),
+      ...next.filter(opening => !previousBySignature.has(signature(opening)))
+    ];
+
+    this.tunnelingOpenings = next;
+    const affectedKeys = new Set();
+    for (const record of this.terrainChunkRecords.values()) {
+      if (changed.some(opening => tunnelingOpeningIntersectsChunk(
+        opening,
+        record.centerX,
+        record.centerZ,
+        record.chunkSize,
+        this.chunkTerrainSegments > 0 ? record.chunkSize / this.tunnelTerrainSegments : 0
+      ))) {
+        affectedKeys.add(record.key);
+      }
+    }
+    for (const key of affectedKeys) this.#rebuildTerrainChunk(key);
+    return affectedKeys.size > 0;
+  }
+
+  getTunnelingOpenings() {
+    return this.tunnelingOpenings.map(opening => ({ ...opening }));
+  }
+
+  onTerrainChunkGeometryChanged(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.terrainChunkGeometryListeners.add(listener);
+    return () => this.terrainChunkGeometryListeners.delete(listener);
   }
 
   create() {
@@ -241,85 +288,122 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
     for (let ix = minIx; ix <= maxIx; ix += 1) {
       for (let iz = minIz; iz <= maxIz; iz += 1) {
-        const centerX = (ix + 0.5) * chunkSize;
-        const centerZ = (iz + 0.5) * chunkSize;
-        const needsCaveDetail = EXPLORATION_POIS.some(definition => (
-          caveTerrainNeedsRefinement(definition, centerX, centerZ, chunkSize)
-        ));
-        // The cave mouth is the only place where the heightfield is cut away.
-        // Refine that local mesh enough that triangle removal follows the authored
-        // opening instead of leaving large jagged overhangs or oversized gaps.
-        const segments = needsCaveDetail ? this.chunkTerrainSegments * 4 : this.chunkTerrainSegments;
-        const geometry = new THREE.PlaneGeometry(chunkSize, chunkSize, segments, segments);
-        geometry.rotateX(-Math.PI / 2);
-        const position = geometry.attributes.position;
-        const colors = [];
-        const color = new THREE.Color();
-
-        for (let index = 0; index < position.count; index += 1) {
-          const worldX = centerX + position.getX(index);
-          const worldZ = centerZ + position.getZ(index);
-          const y = this.heightAt(worldX, worldZ);
-          const slope = this.slopeAt(worldX, worldZ, 1.35);
-          const sand = this.isSandAt(worldX, worldZ);
-          const explorationRegion = sand ? null : this.explorationRegions.regionAt(worldX, worldZ);
-          const jungleSoilStrength = explorationRegion?.biome === 'jungle'
-            ? explorationRegion.strength * (explorationRegion.ground?.soilStrength ?? 0)
-            : 0;
-          position.setY(index, y);
-
-          terrainSurfaceColorAt({
-            x: worldX,
-            z: worldZ,
-            y,
-            slope,
-            sand,
-            forestCover: sand ? 0 : this.forestCoverAt(worldX, worldZ),
-            grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ),
-            jungleSoilStrength
-          }, color);
-          colors.push(color.r, color.g, color.b);
-        }
-
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-
-        // The normal island surface stays authoritative above the underground
-        // cave volume. Remove every terrain triangle that intersects the authored
-        // natural mouth; the locally refined grid keeps that cut close to the
-        // ellipse while the cave mesh overlaps underneath the retained hill.
-        const sourceIndex = geometry.getIndex();
-        if (sourceIndex) {
-          const keptIndices = [];
-          for (let tri = 0; tri < sourceIndex.count; tri += 3) {
-            const ia = sourceIndex.getX(tri);
-            const ib = sourceIndex.getX(tri + 1);
-            const ic = sourceIndex.getX(tri + 2);
-            const triangle = [ia, ib, ic].map(index => ({
-              x: centerX + position.getX(index),
-              z: centerZ + position.getZ(index)
-            }));
-            const intersectsMineableMouth = EXPLORATION_POIS.some(definition => (
-              caveMineableSurfaceTriangleIntersects(definition, triangle)
-            ));
-            if (!intersectsMineableMouth) keptIndices.push(ia, ib, ic);
-          }
-          geometry.setIndex(keptIndices);
-        }
-
-        geometry.computeVertexNormals();
-        geometry.computeBoundingSphere();
+        const key = `${ix}:${iz}`;
+        const record = {
+          key,
+          ix,
+          iz,
+          chunkSize,
+          centerX: (ix + 0.5) * chunkSize,
+          centerZ: (iz + 0.5) * chunkSize,
+          mesh: null
+        };
+        const built = this.#buildTerrainGeometry(record);
         const mesh = new THREE.Mesh(
-          geometry,
-          needsCaveDetail ? this.caveTerrainMaterial : this.terrainMaterial
+          built.geometry,
+          built.detailed ? this.tunnelTerrainMaterial : this.terrainMaterial
         );
         mesh.name = `terrain-chunk-${ix}-${iz}`;
-        mesh.userData.terrainSegments = segments;
-        mesh.position.set(centerX, 0, centerZ);
+        mesh.userData.terrainSegments = built.segments;
+        mesh.userData.tunnelingSurfaceOwner = built.detailed;
+        mesh.position.set(record.centerX, 0, record.centerZ);
         mesh.receiveShadow = true;
-        if (this.chunks) this.chunks.addObjectToKey(mesh, `${ix}:${iz}`);
+        if (this.chunks) this.chunks.addObjectToKey(mesh, key);
         else this.group.add(mesh);
+        record.mesh = mesh;
+        this.terrainChunkRecords.set(key, record);
       }
     }
+  }
+
+  #buildTerrainGeometry(record) {
+    const openings = this.tunnelingOpenings.filter(opening =>
+      tunnelingOpeningIntersectsChunk(
+        opening,
+        record.centerX,
+        record.centerZ,
+        record.chunkSize,
+        record.chunkSize / this.tunnelTerrainSegments
+      )
+    );
+    const detailed = openings.length > 0;
+    const segments = detailed ? this.tunnelTerrainSegments : this.chunkTerrainSegments;
+    const geometry = new THREE.PlaneGeometry(
+      record.chunkSize,
+      record.chunkSize,
+      segments,
+      segments
+    );
+    geometry.rotateX(-Math.PI / 2);
+    const position = geometry.attributes.position;
+    const colors = [];
+    const color = new THREE.Color();
+
+    for (let index = 0; index < position.count; index += 1) {
+      const worldX = record.centerX + position.getX(index);
+      const worldZ = record.centerZ + position.getZ(index);
+      const y = this.heightAt(worldX, worldZ);
+      const slope = this.slopeAt(worldX, worldZ, 1.35);
+      const sand = this.isSandAt(worldX, worldZ);
+      const explorationRegion = sand ? null : this.explorationRegions.regionAt(worldX, worldZ);
+      const jungleSoilStrength = explorationRegion?.biome === 'jungle'
+        ? explorationRegion.strength * (explorationRegion.ground?.soilStrength ?? 0)
+        : 0;
+      position.setY(index, y);
+
+      terrainSurfaceColorAt({
+        x: worldX,
+        z: worldZ,
+        y,
+        slope,
+        sand,
+        forestCover: sand ? 0 : this.forestCoverAt(worldX, worldZ),
+        grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ),
+        jungleSoilStrength
+      }, color);
+      colors.push(color.r, color.g, color.b);
+    }
+
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    const sourceIndex = geometry.getIndex();
+    if (sourceIndex && openings.length > 0) {
+      const keptIndices = [];
+      for (let tri = 0; tri < sourceIndex.count; tri += 3) {
+        const ia = sourceIndex.getX(tri);
+        const ib = sourceIndex.getX(tri + 1);
+        const ic = sourceIndex.getX(tri + 2);
+        const triangle = [ia, ib, ic].map(index => ({
+          x: record.centerX + position.getX(index),
+          z: record.centerZ + position.getZ(index)
+        }));
+        const removed = openings.some(opening =>
+          tunnelingOpeningIntersectsTriangle(opening, triangle)
+        );
+        if (!removed) keptIndices.push(ia, ib, ic);
+      }
+      geometry.setIndex(keptIndices);
+    }
+
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return { geometry, segments, detailed };
+  }
+
+  #rebuildTerrainChunk(key) {
+    const record = this.terrainChunkRecords.get(key);
+    if (!record?.mesh) return false;
+    const built = this.#buildTerrainGeometry(record);
+    const previous = record.mesh.geometry;
+    record.mesh.geometry = built.geometry;
+    record.mesh.material = built.detailed
+      ? this.tunnelTerrainMaterial
+      : this.terrainMaterial;
+    record.mesh.userData.terrainSegments = built.segments;
+    record.mesh.userData.tunnelingSurfaceOwner = built.detailed;
+    previous?.dispose?.();
+    for (const listener of this.terrainChunkGeometryListeners) listener(record.mesh);
+    return true;
   }
 
   #createWater() {
