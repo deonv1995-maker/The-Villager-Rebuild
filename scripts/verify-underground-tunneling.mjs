@@ -214,8 +214,8 @@ const samePocket = world.tunneling.getPocketAtCell(pocket.ix, pocket.iz);
 assert.deepEqual(samePocket, pocket, 'underground pocket generation must be stable for the same world cell');
 
 const discoveryCenter = new THREE.Vector3(
-  pocket.x + pocket.radius * 0.82,
-  pocket.y,
+  pocket.x,
+  pocket.y + pocket.radius - UNDERGROUND_TUNNELING.mineRadius * 0.45,
   pocket.z
 );
 const discoveryTarget = {
