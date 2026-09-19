@@ -259,7 +259,7 @@ class MineableCaveVolume {
       if (
         ![local.x, local.y, local.z, radius].every(Number.isFinite) ||
         radius <= 0 ||
-        !this.#canExcavateAtLocal(local)
+        !this.#canExcavateSphereAtLocal(local, radius)
       ) continue;
       this.#applyExcavationLocal(local, radius, true);
     }
