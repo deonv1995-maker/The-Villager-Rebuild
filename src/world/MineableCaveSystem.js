@@ -8,17 +8,7 @@ const TERRAIN_COLOR_DEPTH = 0.42;
 const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
-const SURFACE_SKIN_FRACTION = 0.45;
-const EXCAVATION_SURFACE_RING = Object.freeze([
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-  [Math.SQRT1_2, Math.SQRT1_2],
-  [-Math.SQRT1_2, Math.SQRT1_2],
-  [Math.SQRT1_2, -Math.SQRT1_2],
-  [-Math.SQRT1_2, -Math.SQRT1_2]
-]);
+const SURFACE_SEAL_DEPTH_CELLS = 1.25;
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -176,10 +166,7 @@ class MineableCaveVolume {
     direction.normalize();
 
     const hitPoint = this.#findDensitySurfaceHit(aim.origin, direction);
-    if (!hitPoint) {
-      console.warn('[CAVE TARGET DEBUG] density ray found no surface');
-      return null;
-    }
+    if (!hitPoint) return null;
     if (
       playerPosition &&
       hitPoint.distanceTo(playerPosition) > this.config.mineReach + 1.2
@@ -200,17 +187,8 @@ class MineableCaveVolume {
     // legal. This keeps the visible MINE action and the tap result in agreement.
     const centerWorld = this.#excavationCenterWorld(hitPoint, direction, this.tempB);
     const centerLocal = this.#worldPointToLocal(centerWorld, this.tempC);
-    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) {
-      console.warn('[CAVE TARGET DEBUG] cut rejected', {
-        hit: hitPoint.toArray(),
-        center: centerLocal.toArray(),
-        bounds: [this.xMin, this.xMax, this.yMin, this.yMax, this.zMin, this.zMax],
-        surfaceY: this.#surfaceYAtLocal(centerLocal.x, centerLocal.z),
-        radius: this.config.mineRadius,
-        padding: this.config.boundaryPadding
-      });
-      return null;
-    }
+    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) return null;
+    if (!this.#applyExcavationLocal(centerLocal, this.config.mineRadius, false, true)) return null;
 
     return {
       type: 'mineable-cave',
@@ -429,7 +407,7 @@ class MineableCaveVolume {
     );
   }
 
-  #applyExcavationLocal(center, radius, record) {
+  #applyExcavationLocal(center, radius, record, dryRun = false) {
     const minX = Math.max(0, Math.floor((center.x - radius - this.xMin) / this.stepX) - 1);
     const maxX = Math.min(this.countX - 1, Math.ceil((center.x + radius - this.xMin) / this.stepX) + 1);
     const minY = Math.max(0, Math.floor((center.y - radius - this.yMin) / this.stepY) - 1);
@@ -444,9 +422,11 @@ class MineableCaveVolume {
         const y = this.yMin + iy * this.stepY;
         for (let ix = minX; ix <= maxX; ix += 1) {
           const x = this.xMin + ix * this.stepX;
+          if (this.#isProtectedSurfaceSample(x, y, z)) continue;
           const sphereDensity = Math.hypot(x - center.x, y - center.y, z - center.z) - radius;
           const index = this.#index(ix, iy, iz);
           if (sphereDensity < this.field[index] - 0.00001) {
+            if (dryRun) return true;
             this.field[index] = sphereDensity;
             changed = true;
           }
@@ -454,7 +434,7 @@ class MineableCaveVolume {
       }
     }
 
-    if (changed && record) {
+    if (changed && record && !dryRun) {
       this.excavations.push({
         x: center.x,
         y: center.y,
@@ -468,38 +448,19 @@ class MineableCaveVolume {
   #canExcavateSphereAtLocal(local, radius) {
     const padding = this.config.boundaryPadding;
     const safeRadius = Math.max(0, Number(radius) || 0);
-    if (
+    return !(
       Math.abs(local.x) > this.config.halfWidth - padding - safeRadius ||
       local.z < this.zMin + padding * 0.35 + safeRadius ||
       local.z > this.zMax - padding - safeRadius ||
       local.y < this.yMin + padding + safeRadius
-    ) return false;
-
-    return this.#excavationStaysBelowSurface(local, safeRadius);
+    );
   }
 
-  #excavationStaysBelowSurface(local, radius) {
-    if (radius <= 0) return true;
-    const skin = this.config.cellSize * SURFACE_SKIN_FRACTION;
-    const centerWorld = this.#localPointToWorld(local);
-    if (
-      !caveMineableSurfaceOwnedAt(this.definition, centerWorld.x, centerWorld.z) &&
-      local.y + radius > this.#surfaceYAtLocal(local.x, local.z) - skin
-    ) return false;
-
-    const ringDistance = radius * 0.7;
-    const ringVerticalExtent = Math.sqrt(Math.max(0, radius * radius - ringDistance * ringDistance));
-    for (const [dx, dz] of EXCAVATION_SURFACE_RING) {
-      const sampleX = local.x + dx * ringDistance;
-      const sampleZ = local.z + dz * ringDistance;
-      const sampleWorld = this.#localToWorldXZ(sampleX, sampleZ);
-      if (caveMineableSurfaceOwnedAt(this.definition, sampleWorld.x, sampleWorld.z)) continue;
-      if (
-        local.y + ringVerticalExtent >
-        this.#surfaceYAtLocal(sampleX, sampleZ) - skin
-      ) return false;
-    }
-    return true;
+  #isProtectedSurfaceSample(localX, localY, localZ) {
+    const world = this.#localToWorldXZ(localX, localZ);
+    if (caveMineableSurfaceOwnedAt(this.definition, world.x, world.z)) return false;
+    const sealDepth = this.config.cellSize * SURFACE_SEAL_DEPTH_CELLS;
+    return localY >= this.#surfaceYAtLocal(localX, localZ) - sealDepth;
   }
 
   #rebuildGeometry() {
