@@ -203,6 +203,8 @@ class MineableCaveVolume {
     direction.normalize();
 
     const centerWorld = this.tempB.copy(target.point).addScaledVector(direction, this.config.mineInset);
+    const horizontalAlignment = 1 - THREE.MathUtils.clamp(Math.abs(direction.y) / 0.7, 0, 1);
+    centerWorld.y -= (this.config.mineCenterDrop ?? 0) * horizontalAlignment;
     const centerLocal = this.#worldPointToLocal(centerWorld);
     if (!this.#canExcavateAtLocal(centerLocal)) return null;
 

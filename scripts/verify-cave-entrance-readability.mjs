@@ -4,8 +4,10 @@ import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
 import {
   caveMineableSurfaceOwnedAt,
+  caveMineableSurfaceTriangleIntersects,
   caveTerrainOffsetAt
 } from '../src/world/CaveTerrainProfile.js';
+import { PLAYER_TRAVERSAL_TUNING } from '../src/data/PlayerTraversalTuning.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
@@ -100,6 +102,19 @@ const localDirectionToWorld = (localX, localZ) => {
 };
 
 const config = caveDefinition.mineableVolume;
+assert.equal(
+  config.mineRadius * 2 >= PLAYER_TRAVERSAL_TUNING.body.height + 0.35,
+  true,
+  'one forward Pickaxe cut must be tall enough for the Ranger plus practical walking clearance'
+);
+assert.equal(
+  Math.abs(
+    config.mineCenterDrop
+      - (PLAYER_TRAVERSAL_TUNING.body.eyeHeight - PLAYER_TRAVERSAL_TUNING.body.height * 0.5)
+  ) < 0.000001,
+  true,
+  'forward mining cuts must center from eye aim onto the Ranger body centreline'
+);
 const tunnelLocalZ = 0;
 const tunnelProgress = THREE.MathUtils.clamp(
   (tunnelLocalZ - config.tunnelStartZ) /
@@ -207,7 +222,47 @@ assert.equal(
 );
 assert.equal(mesh.material.polygonOffset, true, 'overlapping cave ground must use depth bias to seal terrain seams without z-fighting');
 
-const aimOrigin = new THREE.Vector3(tunnelWorld.x, supportY + 1.22, tunnelWorld.z);
+const retainedIndex = caveTerrainChunk.geometry.getIndex();
+const retainedPosition = caveTerrainChunk.geometry.getAttribute('position');
+for (let tri = 0; tri < retainedIndex.count; tri += 3) {
+  const triangle = [0, 1, 2].map(offset => {
+    const index = retainedIndex.getX(tri + offset);
+    return {
+      x: caveTerrainChunk.position.x + retainedPosition.getX(index),
+      z: caveTerrainChunk.position.z + retainedPosition.getZ(index)
+    };
+  });
+  assert.equal(
+    caveMineableSurfaceTriangleIntersects(caveDefinition, triangle),
+    false,
+    'no retained island terrain triangle may bridge across any part of the exposed cave mouth'
+  );
+}
+
+const miningLocalZ = 3;
+const miningWorld = localToWorld(0, miningLocalZ);
+const miningProgress = THREE.MathUtils.clamp(
+  (miningLocalZ - config.tunnelStartZ) / (config.tunnelEndZ - config.tunnelStartZ),
+  0,
+  1
+);
+const miningExpectedFloorY = THREE.MathUtils.lerp(
+  entryFloorY,
+  entryFloorY - config.tunnelDrop,
+  miningProgress
+);
+const miningSupportY = caves.supportHeightAt(miningWorld.x, miningWorld.z, {
+  referenceY: miningExpectedFloorY + 0.12,
+  maxStepUp: 0.58,
+  airborne: false
+});
+assert.equal(Number.isFinite(miningSupportY), true, 'deeper tunnel must retain a walkable support for mining verification');
+
+const aimOrigin = new THREE.Vector3(
+  miningWorld.x,
+  miningSupportY + PLAYER_TRAVERSAL_TUNING.body.eyeHeight,
+  miningWorld.z
+);
 const aimDirection = localDirectionToWorld(1, 0);
 const target = caves.getMineTarget({
   aim: { origin: aimOrigin, direction: aimDirection },
@@ -221,10 +276,25 @@ const hit = caves.mine(target);
 assert.ok(hit?.mined, 'pickaxe excavation must remove ground from the reticle direction');
 assert.equal(hit.excavationCount, 1, 'successful excavation must append one compact persistent cut');
 const carvedProbe = target.point.clone().addScaledVector(aimDirection, config.mineInset);
+carvedProbe.y -= config.mineCenterDrop;
 assert.equal(
   caves.isSolidAt(carvedProbe.x, carvedProbe.y, carvedProbe.z),
   false,
   'newly excavated volume behind the struck surface must become empty'
+);
+assert.equal(
+  caves.isSolidAt(carvedProbe.x, miningSupportY + 0.12, carvedProbe.z),
+  false,
+  'one forward mining cut must clear the Ranger foot zone instead of leaving a blocking lower lip'
+);
+assert.equal(
+  caves.isSolidAt(
+    carvedProbe.x,
+    miningSupportY + PLAYER_TRAVERSAL_TUNING.body.height + 0.12,
+    carvedProbe.z
+  ),
+  false,
+  'one forward mining cut must clear above the Ranger head for an even walkable mineshaft'
 );
 
 const collisionSupport = collision.supportHeightAt(
@@ -265,4 +335,4 @@ assert.equal(
   'restored density field must reproduce the excavated void'
 );
 
-console.log('mineable cave mouth seam, vegetation clearance, mobile-ready targeting, collision support and persistence contracts verified');
+console.log('mineable cave mouth cut, Ranger-clear mining profile, mobile-ready targeting, collision support and persistence contracts verified');

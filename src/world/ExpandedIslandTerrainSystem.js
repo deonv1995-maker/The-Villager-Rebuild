@@ -3,7 +3,7 @@ import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { EXPLORATION_WORLD } from '../data/ExplorationRegionDefinitions.js';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
 import { ExplorationRegionSystem } from './ExplorationRegionSystem.js';
-import { caveMineableSurfaceOwnedAt, caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
+import { caveMineableSurfaceTriangleIntersects, caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
 import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const MAINLAND_SCALE = EXPLORATION_WORLD.mainlandScale;
@@ -289,16 +289,14 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
             const ia = sourceIndex.getX(tri);
             const ib = sourceIndex.getX(tri + 1);
             const ic = sourceIndex.getX(tri + 2);
-            const worldX = centerX + (
-              position.getX(ia) + position.getX(ib) + position.getX(ic)
-            ) / 3;
-            const worldZ = centerZ + (
-              position.getZ(ia) + position.getZ(ib) + position.getZ(ic)
-            ) / 3;
-            const ownedByMineableCave = EXPLORATION_POIS.some(definition => (
-              caveMineableSurfaceOwnedAt(definition, worldX, worldZ)
+            const triangle = [ia, ib, ic].map(index => ({
+              x: centerX + position.getX(index),
+              z: centerZ + position.getZ(index)
+            }));
+            const intersectsMineableMouth = EXPLORATION_POIS.some(definition => (
+              caveMineableSurfaceTriangleIntersects(definition, triangle)
             ));
-            if (!ownedByMineableCave) keptIndices.push(ia, ib, ic);
+            if (!intersectsMineableMouth) keptIndices.push(ia, ib, ic);
           }
           geometry.setIndex(keptIndices);
         }
