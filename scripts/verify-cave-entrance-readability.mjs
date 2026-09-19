@@ -180,6 +180,25 @@ assert.equal(
   false,
   'surface cutting must stay inset from the finite volume boundary so the two terrain owners overlap safely'
 );
+
+const terrainPaddingProbeX = config.surfaceOpeningHalfWidth + Math.max(0.2, (config.surfaceOpeningTerrainPadding ?? 0) * 0.6);
+const terrainPaddingProbe = localToWorld(terrainPaddingProbeX, config.surfaceOpeningCenterZ);
+assert.equal(
+  caveMineableSurfaceOwnedAt(caveDefinition, terrainPaddingProbe.x, terrainPaddingProbe.z),
+  false,
+  'the visible mineable surface owner must remain limited to the authored mouth'
+);
+const paddedTerrainTriangle = [
+  localToWorld(terrainPaddingProbeX - 0.08, config.surfaceOpeningCenterZ - 0.08),
+  localToWorld(terrainPaddingProbeX + 0.08, config.surfaceOpeningCenterZ - 0.08),
+  localToWorld(terrainPaddingProbeX, config.surfaceOpeningCenterZ + 0.08)
+];
+assert.equal(
+  caveMineableSurfaceTriangleIntersects(caveDefinition, paddedTerrainTriangle),
+  true,
+  'terrain ownership must be removed through the conservative overlap outside the authored mouth so no green cap can bridge the generated cave opening'
+);
+
 const outsideWorld = localToWorld(config.halfWidth + 2, 0);
 assert.equal(
   caveMineableSurfaceOwnedAt(caveDefinition, outsideWorld.x, outsideWorld.z),
@@ -189,10 +208,14 @@ assert.equal(
 
 const exclusions = caves.getPresentationExclusions();
 assert.equal(exclusions.length, 1, 'mineable cave must publish one vegetation-clearance zone for its exposed mouth');
+const terrainOpeningPadding = Math.max(0, config.surfaceOpeningTerrainPadding ?? 0);
 assert.equal(
-  exclusions[0].radius >= Math.max(config.surfaceOpeningHalfWidth, config.surfaceOpeningHalfDepth) + 1.5,
+  exclusions[0].radius >= Math.max(
+    config.surfaceOpeningHalfWidth + terrainOpeningPadding,
+    config.surfaceOpeningHalfDepth + terrainOpeningPadding
+  ) + 0.75,
   true,
-  'cave mouth vegetation clearance must cover the refined terrain-cut spill as well as the authored opening'
+  'cave mouth vegetation clearance must cover the conservative terrain-owner overlap as well as the authored opening'
 );
 
 const caveSource = fs.readFileSync(new URL('../src/world/MineableCaveSystem.js', import.meta.url), 'utf8');
@@ -215,6 +238,18 @@ assert.match(
   caveSource,
   /#applyExcavationLocal\(centerLocal, this\.config\.mineRadius, false, true\)/,
   'MINE must be published only when the prospective cut would actually change the cave density field'
+);
+
+const gameAppSource = fs.readFileSync(new URL('../src/core/GameApp.js', import.meta.url), 'utf8');
+assert.match(
+  gameAppSource,
+  /const pickaxeReady = toolId === 'pickaxe'[\s\S]*toolPresentation\?\.isBusy/,
+  'mobile MINE targeting must not publish an action while the Pickaxe swing is still busy'
+);
+assert.match(
+  gameAppSource,
+  /const miningAim = pickaxeReady \? this\.#currentConstructionAim\(\) : null/,
+  'cave targeting must use the same Pickaxe-ready state that the interaction handler can accept'
 );
 
 const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
@@ -329,6 +364,27 @@ assert.equal(
   'one forward mining cut must clear above the Ranger head for an even walkable mineshaft'
 );
 
+// Device verification exposed a second failure mode: the old finite-volume floor
+// was only just deep enough to render the tunnel, so the full Ranger-clear mining
+// sphere failed the protected-bottom check when the reticle pointed at the floor.
+assert.equal(
+  config.floorDepth - config.mineInset > config.boundaryPadding + config.mineRadius,
+  true,
+  'the protected cave floor must leave enough solid depth for a legal Ranger-clear downward cut'
+);
+const floorTarget = caves.getMineTarget({
+  aim: {
+    origin: aimOrigin,
+    direction: new THREE.Vector3(0, -1, 0)
+  },
+  playerPosition: aimOrigin
+});
+assert.ok(floorTarget, 'first-person reticle aimed at cave ground must publish MINE instead of failing the bottom-boundary check');
+assert.equal(floorTarget.type, 'mineable-cave');
+const floorHit = caves.mine(floorTarget);
+assert.ok(floorHit?.mined, 'a visible floor MINE target must produce a real excavation');
+assert.equal(floorHit.excavationCount, 2, 'wall and floor mining must both commit through the same cave excavation authority');
+
 const collisionSupport = collision.supportHeightAt(
   tunnelWorld.x,
   tunnelWorld.z,
@@ -347,7 +403,7 @@ assert.equal(
 
 const savedState = caves.captureState();
 assert.equal(savedState.schemaVersion, 1, 'cave excavation state must be explicitly versioned');
-assert.equal(savedState.caves[0].excavations.length, 1, 'save state must store only compact excavation operations');
+assert.equal(savedState.caves[0].excavations.length, 2, 'save state must store only compact excavation operations');
 
 const restoredGroup = new THREE.Group();
 const restoredCaves = new ExplorationPoiSystem({
@@ -358,7 +414,7 @@ restoredCaves.create();
 assert.equal(restoredCaves.restoreState(savedState), true, 'mineable cave excavation state must restore');
 assert.equal(
   restoredCaves.getDebugState(caveDefinition.id).excavationCount,
-  1,
+  2,
   'restored cave must reproduce the same excavation count'
 );
 assert.equal(
