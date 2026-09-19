@@ -97,7 +97,7 @@ Current tool roles remain:
 - Spear — projectile hunting weapon with authored Throw release and retrievable projectile durability;
 - Axe — tree harvesting;
 - Hammer — demolition, including semantic panel demolition;
-- Pickaxe — rock harvesting;
+- Pickaxe — existing overworld rock harvesting plus first-person directional excavation of mineable cave ground;
 - Shovel — stump removal;
 - Sword — short-range forward-hitbox melee with an always-available strike action while equipped. Ground strikes cycle through three authored full-body KayKit combat actions so Hero M's torso, arms and visible hand move with the blade. Pressing Strike while airborne interrupts the normal jump presentation with a dedicated downward air attack; jump physics remain owned by `RangerController`, while Hero M adds only a presentation-local forward slam posture.
 
@@ -148,6 +148,7 @@ Schema-1 placed-Log construction saves are intentionally incompatible and are no
 - `FloorSupportVisual` remains construction-owned support/fill presentation and never mutates island terrain permanently.
 - `EquipmentRuntimeController` remains the shared tool durability/crafting runtime.
 - `TreeHarvestSystem`, `RockHarvestSystem`, `CampfireSystem`, `SpearProjectileSystem` and `DayOneHuntSystem` retain their established responsibilities.
+- `MineableCaveSystem` owns only bounded cave density, generated ground geometry, directional excavation, volumetric support/collision queries and compact excavation state; later ore/inventory effects layer on top rather than moving into collision code.
 
 ## Deferred construction systems
 
