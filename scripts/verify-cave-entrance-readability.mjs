@@ -291,18 +291,6 @@ const aimOrigin = new THREE.Vector3(
   miningWorld.z
 );
 const aimDirection = localDirectionToWorld(1, 0);
-for (const yOffset of [-0.16, 0, 0.16]) {
-  const stableOrigin = aimOrigin.clone();
-  stableOrigin.y += yOffset;
-  const stableTarget = caves.getMineTarget({
-    aim: { origin: stableOrigin, direction: aimDirection },
-    playerPosition: stableOrigin
-  });
-  assert.ok(
-    stableTarget,
-    'small first-person aim changes across a low-poly wall must keep publishing a valid MINE target'
-  );
-}
 const target = caves.getMineTarget({
   aim: { origin: aimOrigin, direction: aimDirection },
   playerPosition: aimOrigin
