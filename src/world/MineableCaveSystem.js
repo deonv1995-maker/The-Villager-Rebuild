@@ -362,8 +362,8 @@ class MineableCaveVolume {
     let previousDensity = null;
     let previousInside = false;
 
-    for (let distance = 0; distance <= this.config.mineReach + 0.000001; distance += step) {
-      const sampleDistance = Math.min(distance, this.config.mineReach);
+    for (let distance = 0; ; distance = Math.min(this.config.mineReach, distance + step)) {
+      const sampleDistance = distance;
       const world = this.tempD.copy(origin).addScaledVector(direction, sampleDistance);
       const local = this.#worldPointToLocal(world, this.tempE);
       const inside = this.#containsLocalPoint(local);
