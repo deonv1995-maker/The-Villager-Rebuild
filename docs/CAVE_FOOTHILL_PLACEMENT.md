@@ -41,7 +41,7 @@ Initial density combines:
 
 The generated surface is continuous across cave mouth, walls, roof, floor and an overlapping top-ground skin. Outside the natural mouth that top skin sits behind the retained island terrain and exists only to seal the volumetric boundary. It does not use Minecraft-style visible cubes.
 
-The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. Outside the authored cave mouth, that same validation preserves a thin natural-ground skin above every cut. This keeps the first implementation bounded for mobile performance and prevents exposing either the edge of the density domain or the sky through the hill. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
+The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. Outside the authored cave mouth, excavation samples in the top terrain-cell shell are never removed; a Ranger-clear cut can therefore approach the roof without punching through the hill. This keeps the first implementation bounded for mobile performance and prevents exposing either the edge of the density domain or the sky through the hill. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
 
 ## First-person Pickaxe excavation
 
@@ -51,9 +51,9 @@ When Pickaxe is equipped in first person:
 
 1. \`GameApp\` obtains the established camera aim ray;
 2. \`MineableCaveSystem\` samples that ray through the authoritative scalar-density field and refines the first empty-to-solid transition;
-3. the exact prospective excavation centre and full cut sphere are validated before \`Mine ground\` is published;
+3. the prospective excavation centre is checked against the finite-volume margins and the system confirms that the cut would remove at least one unprotected density sample before \`Mine ground\` is published;
 4. the HUD keeps the target it actually displayed through the tap frame, preventing tiny camera movement from cancelling a visible MINE action;
-5. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction;
+5. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction, clipped against the protected natural-roof shell outside the authored mouth;
 6. the cave mesh is regenerated from the modified density field;
 7. normal Pickaxe durability is consumed through \`EquipmentRuntimeController\`.
 
@@ -117,8 +117,8 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - genuine underground floor support;
 - empty traversable initial tunnel and solid mineable walls;
 - first-person density-field target acquisition with no dependency on render-triangle seams;
-- validation of the exact full excavation sphere before the MINE action is exposed;
-- sealed finite-volume margins and preserved hill skin outside the authored mouth;
+- validation that every exposed MINE action has a legal, state-changing excavation;
+- sealed finite-volume margins plus a protected top density shell outside the authored mouth;
 - directional excavation and Ranger-clear forward cut size;
 - shared volumetric collision support;
 - compact versioned excavation persistence;
