@@ -282,9 +282,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
         // The normal island surface stays authoritative above the underground
-        // cave volume. Remove only triangles whose centroids fall inside the
-        // authored natural mouth; the cave mesh overlaps underneath the retained
-        // hill surface so the seam cannot open into sky/water cracks.
+        // cave volume. Remove every terrain triangle that intersects the authored
+        // natural mouth; the locally refined grid keeps that cut close to the
+        // ellipse while the cave mesh overlaps underneath the retained hill.
         const sourceIndex = geometry.getIndex();
         if (sourceIndex) {
           const keptIndices = [];
