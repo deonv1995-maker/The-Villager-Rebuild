@@ -66,23 +66,24 @@ assert.equal(
   'jungle centre must favour fern understory over generic meadow grass'
 );
 assert.equal(westernJungle.poiTypes.includes('ruin'), true, 'jungle region must remain ready for later abandoned-structure placement');
-assert.equal(northernHighlands.poiTypes.includes('cave'), true, 'mountain region must remain ready for cave placement');
+assert.equal(explorationRegions.every(region => !region.poiTypes.includes('cave')), true, 'exploration regions must no longer reserve the removed cave POI category');
 assert.equal(terrain.heightAt(-28, -198) > 11, true, 'northern highlands must rise clearly above hill-scale terrain');
 assert.equal(terrain.explorationRegions.terrainOffsetAt(-28, -198) > 10, true, 'mountain macro terrain must contribute a substantial authoritative elevation offset');
 
-assert.equal(EXPLORATION_POIS.length >= 1, true, 'exploration foundation must contain at least one authored POI');
-const caveDefinition = EXPLORATION_POIS.find(poi => poi.type === 'cave');
-assert.ok(caveDefinition, 'first exploration POI set must include a cave');
-assert.equal(terrain.regionAt(caveDefinition.x, caveDefinition.z).name, caveDefinition.region, 'cave entrance must sit inside its declared exploration region');
-assert.equal(terrain.isPlayable(caveDefinition.x, caveDefinition.z), true, 'cave entrance must remain on playable terrain');
+assert.equal(EXPLORATION_POIS.length, 0, 'fixed exploration cave POIs must be removed');
 const poiGroup = new THREE.Group();
 const poiSystem = new ExplorationPoiSystem({ group: poiGroup, terrain });
-assert.equal(poiSystem.create(), 1, 'first exploration POI pass must create the cave entrance');
-const caveRoot = poiGroup.getObjectByName(`mineable-cave-${caveDefinition.id}`);
-assert.ok(caveRoot, 'cave entrance must create a named mineable ground-volume root');
-const caveGround = caveRoot.getObjectByName(`${caveDefinition.id}-mineable-ground`);
-assert.ok(caveGround, 'cave entrance must expose one continuous generated ground mesh');
-assert.equal(caveGround.userData.mineableCave, true, 'streamed cave presentation must retain mineable-volume identity');
+assert.equal(poiSystem.create(), 0, 'exploration world boot must not create a prebuilt cave');
+assert.equal(
+  poiGroup.children.some(child => child.name.startsWith('mineable-cave-')),
+  false,
+  'streamed world must contain no mineable-cave scene root'
+);
+assert.equal(
+  poiSystem.getDebugState().kind,
+  'global-tunneling-v1',
+  'exploration facade must expose the generic tunneling system instead of a cave volume'
+);
 
 const satellites = terrain.getSatelliteIslands();
 assert.equal(satellites.length, 9, 'expanded archipelago must keep a deterministic set of nine satellite islands');
