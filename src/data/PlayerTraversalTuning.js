@@ -1,4 +1,9 @@
 export const PLAYER_TRAVERSAL_TUNING = Object.freeze({
+  body: Object.freeze({
+    radius: 0.42,
+    height: 2.2,
+    eyeHeight: 1.72
+  }),
   jump: Object.freeze({
     launchSpeed: 6.8,
     doubleJumpSpeed: 6.4,
