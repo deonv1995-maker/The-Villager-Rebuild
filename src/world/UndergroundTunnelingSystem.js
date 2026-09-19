@@ -802,7 +802,7 @@ export class UndergroundTunnelingSystem {
     // the conservative overlap outside the actual void so no heightfield
     // triangle can bridge the opening.
     let intersectsSurface = false;
-    const radialFractions = [0, 0.5, 0.82];
+    const radialFractions = [0, 0.5, 0.82, 0.96];
     for (const fraction of radialFractions) {
       const horizontalDistance = excavation.radius * fraction;
       const verticalHalf = Math.sqrt(Math.max(
