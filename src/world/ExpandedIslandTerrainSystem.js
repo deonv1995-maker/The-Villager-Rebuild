@@ -3,7 +3,7 @@ import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { EXPLORATION_WORLD } from '../data/ExplorationRegionDefinitions.js';
 import { IslandTerrainSystem } from './IslandTerrainSystem.js';
 import { ExplorationRegionSystem } from './ExplorationRegionSystem.js';
-import { caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
+import { caveMineableSurfaceOwnedAt, caveTerrainNeedsRefinement, caveTerrainOffsetAt } from './CaveTerrainProfile.js';
 import { GROUND_SURFACE_COLORS, terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 
 const MAINLAND_SCALE = EXPLORATION_WORLD.mainlandScale;
@@ -277,6 +277,32 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         }
 
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+        // Mineable caves own the complete ground surface inside their bounded
+        // footprint. Remove only terrain triangles whose centroids fall inside
+        // that footprint; the cave volume supplies the matching top surface and
+        // all underground walls/floors there.
+        const sourceIndex = geometry.getIndex();
+        if (sourceIndex) {
+          const keptIndices = [];
+          for (let tri = 0; tri < sourceIndex.count; tri += 3) {
+            const ia = sourceIndex.getX(tri);
+            const ib = sourceIndex.getX(tri + 1);
+            const ic = sourceIndex.getX(tri + 2);
+            const worldX = centerX + (
+              position.getX(ia) + position.getX(ib) + position.getX(ic)
+            ) / 3;
+            const worldZ = centerZ + (
+              position.getZ(ia) + position.getZ(ib) + position.getZ(ic)
+            ) / 3;
+            const ownedByMineableCave = EXPLORATION_POIS.some(definition => (
+              caveMineableSurfaceOwnedAt(definition, worldX, worldZ)
+            ));
+            if (!ownedByMineableCave) keptIndices.push(ia, ib, ic);
+          }
+          geometry.setIndex(keptIndices);
+        }
+
         geometry.computeVertexNormals();
         geometry.computeBoundingSphere();
         const mesh = new THREE.Mesh(geometry, this.terrainMaterial);
