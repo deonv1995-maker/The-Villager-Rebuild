@@ -446,7 +446,7 @@ export class GameApp {
   }
 
   #tryUseInventoryItem(itemId) {
-    if (this.foodRuntime?.consumeInventoryItem?.(itemId)) return true;
+    if (this.foodRuntime?.useInventoryItem?.(itemId)) return true;
     return Boolean(this.placeableUtilityRuntime?.selectInventoryItem?.(itemId));
   }
 
