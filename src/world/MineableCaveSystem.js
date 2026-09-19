@@ -176,7 +176,10 @@ class MineableCaveVolume {
     direction.normalize();
 
     const hitPoint = this.#findDensitySurfaceHit(aim.origin, direction);
-    if (!hitPoint) return null;
+    if (!hitPoint) {
+      console.warn('[CAVE TARGET DEBUG] density ray found no surface');
+      return null;
+    }
     if (
       playerPosition &&
       hitPoint.distanceTo(playerPosition) > this.config.mineReach + 1.2
@@ -197,7 +200,17 @@ class MineableCaveVolume {
     // legal. This keeps the visible MINE action and the tap result in agreement.
     const centerWorld = this.#excavationCenterWorld(hitPoint, direction, this.tempB);
     const centerLocal = this.#worldPointToLocal(centerWorld, this.tempC);
-    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) return null;
+    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) {
+      console.warn('[CAVE TARGET DEBUG] cut rejected', {
+        hit: hitPoint.toArray(),
+        center: centerLocal.toArray(),
+        bounds: [this.xMin, this.xMax, this.yMin, this.yMax, this.zMin, this.zMax],
+        surfaceY: this.#surfaceYAtLocal(centerLocal.x, centerLocal.z),
+        radius: this.config.mineRadius,
+        padding: this.config.boundaryPadding
+      });
+      return null;
+    }
 
     return {
       type: 'mineable-cave',
