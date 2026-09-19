@@ -199,9 +199,9 @@ A Roof preview is valid only when:
 - no covered cell already belongs to another Roof zone;
 - no covered cell is reserved by the current Stair opening contract;
 - there is no higher Floor directly above the candidate cells;
-- every exposed perimeter edge of the exact candidate footprint has a semantic Wall-family support.
+- every exposed perimeter edge of the exact candidate footprint has semantic Wall-family support at the Roof seating level.
 
-Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support.
+Internal edges shared by covered Roof cells do not require Walls. If the Roof surrounds an open notch or courtyard, that inner exposed perimeter also needs Wall-family support. Door and Window count as structural wall-family support. A lower Roof wing attached to a taller adjoining section may use the exact Wall-family edge one storey above as its boundary when that Wall starts at the lower Roof's seating height. This permits an open-plan lower room with no artificial divider Wall while still requiring real semantic structure where the lower Roof meets the taller storey. The raised Wall remains demolition-protected while the lower Roof depends on it.
 
 A floorless upper wall ring seats the Roof at that ring's exact wall `topY`; no Floor mesh or Floor collider is generated underneath it. When third-person targeting has vertically aligned completed rings with effectively the same horizontal score, the highest valid completed support wins so a high Roof does not fall back to the lower storey.
 
