@@ -70,7 +70,7 @@ assert.equal(cookAction?.caption, 'COOK', 'Nearby campfire plus raw meat must ex
 assert.equal(cookAction.onTrigger(), true, 'COOK action must begin one timed cook');
 assert.equal(inventory.get('meat'), 1, 'Starting a cook must reserve exactly one raw meat');
 assert.ok(campfireRoot.getObjectByName('campfire-cooking-meat'), 'Cooking must have a visible roasting presentation');
-assert.equal(runtime.captureState().cooking.itemId, 'meat', 'In-progress cooking must be serializable');
+assert.equal(runtime.captureState().cooking.recipeId, 'cooked_meat', 'In-progress cooking must serialize the shared recipe id');
 
 runtime.update(COOKING_RECIPES.cooked_meat.cookSeconds + 0.1);
 assert.equal(inventory.get('cooked_meat'), 1, 'Completed cooking must create exactly one cooked meat');
