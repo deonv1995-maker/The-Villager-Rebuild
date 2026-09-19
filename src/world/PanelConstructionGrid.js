@@ -275,14 +275,17 @@ export class PanelConstructionGrid {
     return true;
   }
 
-  removeWall(edgeKey) {
-    const wall = this.walls.get(edgeKey);
-    if (!wall) return false;
-    const dependentRoof = [...this.roofZones.values()].some(zone => (
+  roofDependsOnWallEdge(edgeKey) {
+    return [...this.roofZones.values()].some(zone => (
       roofZoneUsesEdge(zone, edgeKey) ||
       (zone.supportEdgeKeys ?? []).includes(edgeKey)
     ));
-    if (dependentRoof) return false;
+  }
+
+  removeWall(edgeKey) {
+    const wall = this.walls.get(edgeKey);
+    if (!wall) return false;
+    if (this.roofDependsOnWallEdge(edgeKey)) return false;
 
     const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
     const upperFloors = [...this.floors.values()]
