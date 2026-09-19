@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import * as THREE from 'three';
 import { EXPLORATION_POIS } from '../src/data/ExplorationPoiDefinitions.js';
 import {
@@ -177,6 +178,13 @@ assert.equal(
   exclusions[0].radius >= config.tunnelHalfWidth + 1,
   true,
   'cave mouth vegetation clearance must cover the tunnel opening and immediate rim'
+);
+
+const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
+assert.match(
+  islandSource,
+  /explorationPois\.getPresentationExclusions[\s\S]*setPresentationExclusion/,
+  'island boot must feed cave mouth exclusions into grass, fern and ground-cover presentation'
 );
 
 const chunkSize = 72;
