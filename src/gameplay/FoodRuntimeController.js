@@ -45,7 +45,7 @@ export class FoodRuntimeController {
     }
 
     if (!this.game.campfire?.isBuilt?.()) {
-      this.#cancelCooking({ refund: true, reason: 'CAMPFIRE LOST · RAW MEAT RETURNED' });
+      this.#cancelCooking({ refund: true, reason: 'CAMPFIRE LOST · INGREDIENTS RETURNED' });
       return;
     }
 
