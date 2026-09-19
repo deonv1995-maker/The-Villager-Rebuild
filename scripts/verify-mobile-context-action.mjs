@@ -35,14 +35,14 @@ const mine = resolveContextAction({
 assert.equal(mine.source, 'interaction');
 assert.equal(mine.caption, 'MINE');
 
-const caveMine = resolveContextAction({
+const tunnelMine = resolveContextAction({
   toolId: 'pickaxe',
-  interactionTarget: { type: 'mineable-cave', actionLabel: 'Mine ground' }
+  interactionTarget: { type: 'mineable-ground', actionLabel: 'Tunnel ground' }
 });
-assert.equal(caveMine.source, 'interaction', 'Mineable cave ground must use the unified Pickaxe action');
-assert.equal(caveMine.available, true, 'Mineable cave ground must expose an enabled mobile action');
-assert.equal(caveMine.icon, 'pickaxe');
-assert.equal(caveMine.caption, 'MINE');
+assert.equal(tunnelMine.source, 'interaction', 'Mineable ground must use the unified Pickaxe action');
+assert.equal(tunnelMine.available, true, 'Mineable ground must expose an enabled mobile action');
+assert.equal(tunnelMine.icon, 'pickaxe');
+assert.equal(tunnelMine.caption, 'MINE');
 
 const demolish = resolveContextAction({
   toolId: 'hammer',
