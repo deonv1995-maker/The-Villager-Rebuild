@@ -336,6 +336,8 @@ Older rectangular semantic Roof saves remain valid: their exact cell set simply 
 - exact 5-Logs-per-real-cell cost;
 - one semantic Roof zone owning the exact irregular cell set;
 - incremental Roof extension coalescing with existing connected zones while charging only new cells;
+- a prebuilt upper Roof leaving two lower side-wing Roofs placeable against the exact upper Wall tier without requiring ground-floor divider Walls;
+- reverse demolition protection for an upper Wall that acts as a lower Roof abutment;
 - Continue-time repair of older adjacent same-structure Roof zones;
 - multi-wing materialization;
 - Save/Continue re-planning from semantic state;
