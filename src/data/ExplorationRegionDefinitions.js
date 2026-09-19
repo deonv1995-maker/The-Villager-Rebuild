@@ -17,7 +17,7 @@ export const EXPLORATION_WORLD = Object.freeze({
       vegetationFloor: 0.08,
       forestFloor: 0.04,
       scatter: Object.freeze({ treeQuota: 20, coreScale: 0.72, spacingScale: 1.08, heroChance: 0.16 }),
-      poiTypes: Object.freeze(['cave', 'mountain-pass', 'lookout'])
+      poiTypes: Object.freeze(['mountain-pass', 'lookout'])
     }),
     Object.freeze({
       id: 'westernJungle',
@@ -48,7 +48,7 @@ export const EXPLORATION_WORLD = Object.freeze({
           fallenLogDensity: 0.4
         })
       }),
-      poiTypes: Object.freeze(['cave', 'ruin', 'hidden-clearing'])
+      poiTypes: Object.freeze(['ruin', 'hidden-clearing'])
     }),
     Object.freeze({
       id: 'easternWilds',
@@ -65,7 +65,7 @@ export const EXPLORATION_WORLD = Object.freeze({
       vegetationFloor: 0.38,
       forestFloor: 0.32,
       scatter: Object.freeze({ treeQuota: 55, coreScale: 0.74, spacingScale: 0.9, heroChance: 0.11 }),
-      poiTypes: Object.freeze(['ruin', 'cave', 'lookout'])
+      poiTypes: Object.freeze(['ruin', 'lookout'])
     }),
     Object.freeze({
       id: 'southernFrontier',
