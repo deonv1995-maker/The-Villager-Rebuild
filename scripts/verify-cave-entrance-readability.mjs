@@ -190,9 +190,31 @@ assert.equal(
 const exclusions = caves.getPresentationExclusions();
 assert.equal(exclusions.length, 1, 'mineable cave must publish one vegetation-clearance zone for its exposed mouth');
 assert.equal(
-  exclusions[0].radius >= config.tunnelHalfWidth + 1,
+  exclusions[0].radius >= Math.max(config.surfaceOpeningHalfWidth, config.surfaceOpeningHalfDepth) + 1.5,
   true,
-  'cave mouth vegetation clearance must cover the tunnel opening and immediate rim'
+  'cave mouth vegetation clearance must cover the refined terrain-cut spill as well as the authored opening'
+);
+
+const caveSource = fs.readFileSync(new URL('../src/world/MineableCaveSystem.js', import.meta.url), 'utf8');
+assert.doesNotMatch(
+  caveSource,
+  /intersectObject\(this\.mesh/,
+  'Pickaxe targeting must not depend on low-poly render-triangle seams'
+);
+assert.match(
+  caveSource,
+  /#findDensitySurfaceHit\(origin, direction\)/,
+  'Pickaxe targeting must ray-march the authoritative cave density field'
+);
+assert.match(
+  caveSource,
+  /#canExcavateSphereAtLocal\(local, radius\)/,
+  'the complete excavation sphere must be validated before MINE is published'
+);
+assert.match(
+  caveSource,
+  /#excavationStaysBelowSurface\(local, radius\)/,
+  'current bounded cave mining must preserve the intact hill skin outside the authored mouth'
 );
 
 const islandSource = fs.readFileSync(new URL('../src/world/TestIslandSystem.js', import.meta.url), 'utf8');
@@ -208,6 +230,11 @@ const caveChunkZ = Math.floor(caveDefinition.z / chunkSize);
 const caveTerrainChunk = terrainGroup.getObjectByName(`terrain-chunk-${caveChunkX}-${caveChunkZ}`);
 assert.ok(caveTerrainChunk, 'terrain renderer must retain the chunk containing the cave footprint');
 const terrainSegments = caveTerrainChunk.userData.terrainSegments;
+assert.equal(
+  terrainSegments >= 72,
+  true,
+  'terrain around the cave mouth must use the refined grid so the cut does not expand by large coarse triangles'
+);
 const fullTriangleIndexCount = terrainSegments * terrainSegments * 6;
 const retainedIndexCount = caveTerrainChunk.geometry.getIndex().count;
 assert.equal(
@@ -264,6 +291,18 @@ const aimOrigin = new THREE.Vector3(
   miningWorld.z
 );
 const aimDirection = localDirectionToWorld(1, 0);
+for (const yOffset of [-0.16, 0, 0.16]) {
+  const stableOrigin = aimOrigin.clone();
+  stableOrigin.y += yOffset;
+  const stableTarget = caves.getMineTarget({
+    aim: { origin: stableOrigin, direction: aimDirection },
+    playerPosition: stableOrigin
+  });
+  assert.ok(
+    stableTarget,
+    'small first-person aim changes across a low-poly wall must keep publishing a valid MINE target'
+  );
+}
 const target = caves.getMineTarget({
   aim: { origin: aimOrigin, direction: aimDirection },
   playerPosition: aimOrigin
@@ -335,4 +374,4 @@ assert.equal(
   'restored density field must reproduce the excavated void'
 );
 
-console.log('mineable cave mouth cut, Ranger-clear mining profile, mobile-ready targeting, collision support and persistence contracts verified');
+console.log('mineable cave mouth cut, density-field targeting, sealed excavation bounds, vegetation clearance, Ranger-clear mining, collision support and persistence contracts verified');
