@@ -235,6 +235,11 @@ assert.equal(
   true,
   'terrain around the cave mouth must use the refined grid so the cut does not expand by large coarse triangles'
 );
+assert.equal(
+  caveTerrainChunk.material.side,
+  THREE.DoubleSide,
+  'cave-adjacent terrain must render its underside so protected hill surface cannot disappear into sky from underground'
+);
 const fullTriangleIndexCount = terrainSegments * terrainSegments * 6;
 const retainedIndexCount = caveTerrainChunk.geometry.getIndex().count;
 assert.equal(
