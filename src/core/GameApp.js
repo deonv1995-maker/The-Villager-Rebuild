@@ -260,7 +260,12 @@ export class GameApp {
       && (this.panelConstructionRuntime?.ownsHammerInteraction?.() ?? false);
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
-    const miningAim = toolId === 'pickaxe' ? this.#currentConstructionAim() : null;
+    // Do not advertise a Pickaxe action while the current swing is still
+    // occupying the tool. Previously MINE could remain visible during this
+    // busy window even though #tryInteract would reject the tap, which read as
+    // intermittent mining failure on mobile.
+    const pickaxeReady = toolId === 'pickaxe' && !(this.toolPresentation?.isBusy() ?? false);
+    const miningAim = pickaxeReady ? this.#currentConstructionAim() : null;
     const caveMineTarget = miningAim
       ? this.island?.explorationPois?.getMineTarget?.({
         aim: miningAim,
@@ -269,7 +274,7 @@ export class GameApp {
       : null;
     const rockTarget = this.rockHarvest?.update(
       this.playerPosition,
-      toolId === 'pickaxe' && !caveMineTarget
+      pickaxeReady && !caveMineTarget
     ) ?? null;
     const panelDemolitionTarget = panelHammerOwned
       ? this.panelConstructionRuntime?.getHammerInteractionTarget?.() ?? null
