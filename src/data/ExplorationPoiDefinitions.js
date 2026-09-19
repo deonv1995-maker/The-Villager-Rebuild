@@ -27,7 +27,7 @@ export const EXPLORATION_POIS = Object.freeze([
       backDepth: 14.4,
       cellSize: 0.72,
       surfaceHeadroom: 1.25,
-      floorDepth: 2.6,
+      floorDepth: 4.4,
 
       // The initial void is a naturally open tunnel entering from the downhill
       // edge and descending gently beneath the rising foothill.
@@ -47,10 +47,16 @@ export const EXPLORATION_POIS = Object.freeze([
       surfaceOpeningHalfDepth: 2.55,
       surfaceOpeningBoundaryInset: 0.5,
 
-      // Static vegetation is cleared only around the exposed mouth so grass and
-      // ground cover never float across the tunnel opening.
+      // The island heightfield cut is deliberately more conservative than the
+      // authored visible opening. The cave volume's matching top skin owns this
+      // overlap, preventing coarse/refined heightfield triangles from leaving a
+      // green cap across the generated mouth.
+      surfaceOpeningTerrainPadding: 1.1,
+
+      // Static vegetation is cleared across the full terrain-owner overlap so
+      // grass and ground cover cannot remain suspended above the entrance.
       vegetationExclusionCenterZ: -3.8,
-      vegetationExclusionRadius: 5.0,
+      vegetationExclusionRadius: 5.5,
 
       // Pickaxe excavation is intentionally local and mobile-friendly. Boundary
       // padding keeps the finite volume sealed at its side/back/bottom edges.
