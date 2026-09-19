@@ -104,6 +104,8 @@ export const ASSET_PATHS = Object.freeze({
         grass: asset('ui/cosy/icon-resource-grass.webp'),
         meat: asset('ui/cosy/icon-resource-meat.webp'),
         cooked_meat: asset('ui/cosy/icon-resource-meat.webp'),
+        mushroom: asset('ui/mobile/icon-resource-mushroom.svg'),
+        mushroom_stew: asset('ui/mobile/icon-resource-mushroom-stew.svg'),
         log: asset('ui/cosy/icon-build-raw.webp')
       }),
       build: Object.freeze({
