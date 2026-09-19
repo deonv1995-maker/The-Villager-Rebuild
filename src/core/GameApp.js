@@ -265,17 +265,20 @@ export class GameApp {
     // busy window even though #tryInteract would reject the tap, which read as
     // intermittent mining failure on mobile.
     const pickaxeReady = toolId === 'pickaxe' && !(this.toolPresentation?.isBusy() ?? false);
-    const miningAim = pickaxeReady ? this.#currentConstructionAim() : null;
+    // Preserve the established overworld rock interaction. Generic ground is
+    // everywhere, so it must be the fallback Pickaxe target rather than masking
+    // a nearby large rock that was already mineable before tunneling existed.
+    const rockTarget = this.rockHarvest?.update(
+      this.playerPosition,
+      pickaxeReady
+    ) ?? null;
+    const miningAim = pickaxeReady && !rockTarget ? this.#currentConstructionAim() : null;
     const groundMineTarget = miningAim
       ? this.island?.explorationPois?.getMineTarget?.({
         aim: miningAim,
         playerPosition: this.playerPosition
       }) ?? null
       : null;
-    const rockTarget = this.rockHarvest?.update(
-      this.playerPosition,
-      pickaxeReady && !groundMineTarget
-    ) ?? null;
     const panelDemolitionTarget = panelHammerOwned
       ? this.panelConstructionRuntime?.getHammerInteractionTarget?.() ?? null
       : null;
