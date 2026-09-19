@@ -14,6 +14,10 @@ export class SaveGameController {
     this.intervalId = null;
     this.lastFingerprint = null;
     this.lastSavedAt = null;
+    this.pendingSaveReason = null;
+    this.pendingSaveFrameId = null;
+    this.pendingSaveIdleId = null;
+    this.pendingSaveTimeoutId = null;
 
     this.onPageHide = () => this.saveNow('pagehide');
     this.onVisibilityChange = () => {
@@ -65,8 +69,71 @@ export class SaveGameController {
     if (saveImmediately) this.saveNow('gameplay-start');
   }
 
+  queueSave(reason = 'autosave', { delayMs = 700, idleTimeoutMs = 1400 } = {}) {
+    if (!this.running) return false;
+    this.pendingSaveReason = reason;
+    if (
+      this.pendingSaveFrameId !== null
+      || this.pendingSaveIdleId !== null
+      || this.pendingSaveTimeoutId !== null
+    ) return true;
+
+    const commitQueuedSave = () => {
+      this.pendingSaveIdleId = null;
+      this.pendingSaveTimeoutId = null;
+      const queuedReason = this.pendingSaveReason ?? reason;
+      this.pendingSaveReason = null;
+      if (!this.running) return;
+      this.saveNow(queuedReason);
+    };
+
+    const scheduleIdleSave = () => {
+      this.pendingSaveTimeoutId = null;
+      if (!this.running) {
+        this.pendingSaveReason = null;
+        return;
+      }
+      if (typeof this.windowRef?.requestIdleCallback === 'function') {
+        this.pendingSaveIdleId = this.windowRef.requestIdleCallback(
+          commitQueuedSave,
+          { timeout: Math.max(0, idleTimeoutMs) }
+        );
+        return;
+      }
+      if (typeof this.windowRef?.setTimeout === 'function') {
+        this.pendingSaveTimeoutId = this.windowRef.setTimeout(commitQueuedSave, 0);
+        return;
+      }
+      commitQueuedSave();
+    };
+
+    const afterImpactFrame = () => {
+      this.pendingSaveFrameId = null;
+      if (!this.running) {
+        this.pendingSaveReason = null;
+        return;
+      }
+      if (typeof this.windowRef?.setTimeout === 'function') {
+        this.pendingSaveTimeoutId = this.windowRef.setTimeout(
+          scheduleIdleSave,
+          Math.max(0, delayMs)
+        );
+        return;
+      }
+      scheduleIdleSave();
+    };
+
+    if (typeof this.windowRef?.requestAnimationFrame === 'function') {
+      this.pendingSaveFrameId = this.windowRef.requestAnimationFrame(afterImpactFrame);
+    } else {
+      afterImpactFrame();
+    }
+    return true;
+  }
+
   saveNow(reason = 'autosave') {
     if (!this.running && reason !== 'gameplay-start') return null;
+    this.#cancelQueuedSave();
     try {
       const state = captureGameState(this.game);
       state.worldTime = this.game.worldTime?.captureState?.() ?? null;
@@ -88,7 +155,10 @@ export class SaveGameController {
         };
       }
 
-      const record = this.store.write(state, { reason });
+      const record = this.store.write(state, {
+        reason,
+        serializedState: fingerprint
+      });
       if (!record) return null;
       this.lastFingerprint = fingerprint;
       this.lastSavedAt = record.savedAt;
@@ -101,6 +171,22 @@ export class SaveGameController {
       console.error('[SAVE] Autosave failed', error);
       return null;
     }
+  }
+
+  #cancelQueuedSave() {
+    if (this.pendingSaveFrameId !== null) {
+      this.windowRef?.cancelAnimationFrame?.(this.pendingSaveFrameId);
+    }
+    if (this.pendingSaveIdleId !== null) {
+      this.windowRef?.cancelIdleCallback?.(this.pendingSaveIdleId);
+    }
+    if (this.pendingSaveTimeoutId !== null) {
+      this.windowRef?.clearTimeout?.(this.pendingSaveTimeoutId);
+    }
+    this.pendingSaveFrameId = null;
+    this.pendingSaveIdleId = null;
+    this.pendingSaveTimeoutId = null;
+    this.pendingSaveReason = null;
   }
 
   dispose() {
