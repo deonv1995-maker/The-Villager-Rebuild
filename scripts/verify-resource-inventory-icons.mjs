@@ -79,7 +79,7 @@ for (const [id, fileName] of Object.entries({
   const iconPath = `ui/mobile/${fileName}`;
   assert.match(
     assetPathsSource,
-    new RegExp(`${id}: asset\\('${iconPath.replaceAll('.', '\\.')}'+\\)`),
+    new RegExp(`${id}: asset\\('${iconPath.replaceAll('.', '\\.')}'\\)`),
     `Resource ${id} must resolve through the shared mobile icon registry`
   );
   assert.ok(fs.existsSync(new URL(`../public/assets/${iconPath}`, import.meta.url)), `Resource ${id} SVG must exist`);
