@@ -37,6 +37,65 @@ export const caveMineableSurfaceOwnedAt = (definition, x, z) => {
   return nx * nx + nz * nz <= 1;
 };
 
+const distanceSqToSegment = (px, pz, ax, az, bx, bz) => {
+  const abx = bx - ax;
+  const abz = bz - az;
+  const lengthSq = abx * abx + abz * abz;
+  if (lengthSq <= 0.000001) {
+    const dx = px - ax;
+    const dz = pz - az;
+    return dx * dx + dz * dz;
+  }
+  const t = clamp01(((px - ax) * abx + (pz - az) * abz) / lengthSq);
+  const qx = ax + abx * t;
+  const qz = az + abz * t;
+  const dx = px - qx;
+  const dz = pz - qz;
+  return dx * dx + dz * dz;
+};
+
+const triangleContainsOrigin = (a, b, c) => {
+  const sign = (p1, p2) => p1.x * p2.z - p2.x * p1.z;
+  const ab = { x: b.x - a.x, z: b.z - a.z };
+  const bc = { x: c.x - b.x, z: c.z - b.z };
+  const ca = { x: a.x - c.x, z: a.z - c.z };
+  const ao = { x: -a.x, z: -a.z };
+  const bo = { x: -b.x, z: -b.z };
+  const co = { x: -c.x, z: -c.z };
+  const s1 = sign(ab, ao);
+  const s2 = sign(bc, bo);
+  const s3 = sign(ca, co);
+  const hasNegative = s1 < 0 || s2 < 0 || s3 < 0;
+  const hasPositive = s1 > 0 || s2 > 0 || s3 > 0;
+  return !(hasNegative && hasPositive);
+};
+
+export const caveMineableSurfaceTriangleIntersects = (definition, points) => {
+  const volume = definition?.mineableVolume;
+  if (definition?.type !== 'cave' || !volume || !Array.isArray(points) || points.length !== 3) return false;
+
+  const halfWidth = Math.max(0.01, volume.surfaceOpeningHalfWidth ?? definition.mouthWidth * 0.55);
+  const halfDepth = Math.max(0.01, volume.surfaceOpeningHalfDepth ?? 2.4);
+  const centerZ = volume.surfaceOpeningCenterZ ?? volume.tunnelStartZ;
+  const normalized = points.map(point => {
+    const local = caveLocalCoordinates(definition, point.x, point.z);
+    return {
+      x: local.x / halfWidth,
+      z: (local.z - centerZ) / halfDepth
+    };
+  });
+
+  if (normalized.some(point => point.x * point.x + point.z * point.z <= 1)) return true;
+  if (triangleContainsOrigin(normalized[0], normalized[1], normalized[2])) return true;
+
+  for (let index = 0; index < 3; index += 1) {
+    const a = normalized[index];
+    const b = normalized[(index + 1) % 3];
+    if (distanceSqToSegment(0, 0, a.x, a.z, b.x, b.z) <= 1) return true;
+  }
+  return false;
+};
+
 // Legacy heightfield cuts remain supported for older authored cave definitions,
 // but a mineable cave owns its underground volume without depressing the legacy
 // heightfield. Only its explicitly authored natural mouth removes surface triangles.
