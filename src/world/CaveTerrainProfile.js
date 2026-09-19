@@ -21,16 +21,25 @@ export const caveMineableSurfaceOwnedAt = (definition, x, z) => {
   const volume = definition?.mineableVolume;
   if (definition?.type !== 'cave' || !volume) return false;
   const local = caveLocalCoordinates(definition, x, z);
-  return (
-    Math.abs(local.x) <= volume.halfWidth &&
-    local.z >= -volume.frontDepth &&
-    local.z <= volume.backDepth
+  const boundaryInset = Math.max(0, volume.surfaceOpeningBoundaryInset ?? 0);
+  const insideVolume = (
+    Math.abs(local.x) <= volume.halfWidth - boundaryInset &&
+    local.z >= -volume.frontDepth + boundaryInset &&
+    local.z <= volume.backDepth - boundaryInset
   );
+  if (!insideVolume) return false;
+
+  const halfWidth = Math.max(0.01, volume.surfaceOpeningHalfWidth ?? definition.mouthWidth * 0.55);
+  const halfDepth = Math.max(0.01, volume.surfaceOpeningHalfDepth ?? 2.4);
+  const centerZ = volume.surfaceOpeningCenterZ ?? volume.tunnelStartZ;
+  const nx = local.x / halfWidth;
+  const nz = (local.z - centerZ) / halfDepth;
+  return nx * nx + nz * nz <= 1;
 };
 
 // Legacy heightfield cuts remain supported for older authored cave definitions,
-// but a mineable cave owns its complete local ground volume and therefore must
-// not also depress the island heightfield underneath itself.
+// but a mineable cave owns its underground volume without depressing the legacy
+// heightfield. Only its explicitly authored natural mouth removes surface triangles.
 export const caveTerrainOffsetAt = (definition, x, z) => {
   if (definition?.type !== 'cave' || definition.mineableVolume) return 0;
 
