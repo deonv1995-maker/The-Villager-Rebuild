@@ -27,10 +27,7 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     storage: 'inventory',
     storageCategory: 'food',
     food: Object.freeze({
-      edible: false,
-      cookAt: 'campfire',
-      cookSeconds: 3.2,
-      cookedItemId: 'cooked_meat'
+      edible: false
     })
   }),
   cooked_meat: Object.freeze({
@@ -42,6 +39,27 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     food: Object.freeze({
       edible: true,
       hungerRestore: 45
+    })
+  }),
+  mushroom: Object.freeze({
+    id: 'mushroom',
+    label: 'Mushroom',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'food',
+    food: Object.freeze({
+      edible: false
+    })
+  }),
+  mushroom_stew: Object.freeze({
+    id: 'mushroom_stew',
+    label: 'Mushroom Stew',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'food',
+    food: Object.freeze({
+      edible: true,
+      hungerRestore: 60
     })
   }),
   log: Object.freeze({
