@@ -74,8 +74,15 @@ export const caveMineableSurfaceTriangleIntersects = (definition, points) => {
   const volume = definition?.mineableVolume;
   if (definition?.type !== 'cave' || !volume || !Array.isArray(points) || points.length !== 3) return false;
 
-  const halfWidth = Math.max(0.01, volume.surfaceOpeningHalfWidth ?? definition.mouthWidth * 0.55);
-  const halfDepth = Math.max(0.01, volume.surfaceOpeningHalfDepth ?? 2.4);
+  // Heightfield ownership is cut slightly wider than the authored visible
+  // opening. The mineable cave volume has a matching terrain-height top skin,
+  // so this overlap is filled by cave ground while guaranteeing no island
+  // triangle can bridge the generated mouth.
+  const terrainPadding = Math.max(0, volume.surfaceOpeningTerrainPadding ?? 0);
+  const halfWidth = Math.max(0.01, volume.surfaceOpeningHalfWidth ?? definition.mouthWidth * 0.55)
+    + terrainPadding;
+  const halfDepth = Math.max(0.01, volume.surfaceOpeningHalfDepth ?? 2.4)
+    + terrainPadding;
   const centerZ = volume.surfaceOpeningCenterZ ?? volume.tunnelStartZ;
   const normalized = points.map(point => {
     const local = caveLocalCoordinates(definition, point.x, point.z);
