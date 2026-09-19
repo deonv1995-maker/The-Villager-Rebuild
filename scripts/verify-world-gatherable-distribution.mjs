@@ -69,6 +69,20 @@ const representedRegions = new Set(ambient.map(item => ecology.regionAt(item.roo
 assert.ok(representedRegions.size >= 3, 'world resources should span multiple terrain regions instead of one small patch');
 assert.ok(WORLD_RESOURCE_DISTRIBUTION.resources.stick.count >= 150, 'island should carry substantially more loose sticks');
 assert.ok(WORLD_RESOURCE_DISTRIBUTION.resources.stone.count >= 120, 'island should carry substantially more loose stones');
+assert.ok(WORLD_RESOURCE_DISTRIBUTION.resources.mushroom.count >= 60, 'island should carry a meaningful forageable mushroom supply');
+const ambientMushrooms = gatherables.items.filter(item => item.id.startsWith('ambient-mushroom-'));
+assert.equal(
+  ambientMushrooms.every(item => (
+    ecology.forestCoverAt(item.root.position.x, item.root.position.z)
+      >= WORLD_RESOURCE_DISTRIBUTION.resources.mushroom.minForestCover
+  )),
+  true,
+  'mushrooms should stay biased to the configured forest habitat'
+);
+assert.ok(
+  ambientMushrooms.every(item => item.root.children.filter(child => child.isMesh).length >= 4),
+  'world mushrooms should read as visible two-mushroom clusters'
+);
 
 const grassStats = gatherables.getGrassPatchStats();
 assert.ok(grassStats.total >= 20, 'visible field grass should resolve into multiple harvestable patches');
