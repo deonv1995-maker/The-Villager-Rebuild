@@ -53,6 +53,10 @@ export class TestIslandSystem {
       chunks: this.chunks,
       collision: this.collision
     });
+    this.collision.setVolumeQuery({
+      supportHeightAt: (x, z, options) => this.explorationPois.supportHeightAt(x, z, options),
+      isSolidAt: (x, y, z) => this.explorationPois.isSolidAt(x, y, z)
+    });
     this.groundCover = new GroundCoverPresentationSystem({
       group: this.group,
       terrain: this.terrain,
