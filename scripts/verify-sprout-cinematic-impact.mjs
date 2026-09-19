@@ -117,6 +117,7 @@ titleEvent.update(0.3, {
 assert.equal(entryRing.visible, false, 'Atmospheric entry ring must fully dissipate before the sighting ends');
 
 const controllerSource = read('src/gameplay/SproutArrivalController.js');
+const crashSiteSource = read('src/world/SproutCrashSiteSystem.js');
 const sceneSource = read('src/rendering/SceneSystem.js');
 const shadowSource = read('src/rendering/CelestialShadowSystem.js');
 const terrainSource = read('src/world/ExpandedIslandTerrainSystem.js');
@@ -134,6 +135,16 @@ const checks = [
     'impact completion drives dust and shake through the dedicated effect boundary',
     controllerSource.includes('this.crashSite.completeImpact();') &&
       controllerSource.includes('this.impactEffects.triggerImpact();')
+  ],
+  [
+    'final crash presentation is prewarmed before the descent reaches ground contact',
+    controllerSource.includes('void this.crashSite.prewarmImpactPresentation();') &&
+      crashSiteSource.includes('compileAsync(this.root, camera, this.scene)')
+  ],
+  [
+    'impact checkpoint yields the contact frame instead of synchronously serializing the world',
+    controllerSource.includes("this.game.saveController?.queueSave?.('sprout-impact')") &&
+      !controllerSource.includes("this.game.saveController?.saveNow?.('sprout-impact')")
   ],
   [
     'gameplay camera shake is temporary and restores the authored camera transform after rendering',

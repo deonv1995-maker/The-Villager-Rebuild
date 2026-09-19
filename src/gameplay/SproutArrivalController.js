@@ -72,6 +72,7 @@ export class SproutArrivalController {
   beginAfterArrival() {
     if (this.phase !== PHASE.DORMANT) return false;
     this.site = this.crashSite.resolveSite();
+    void this.crashSite.prewarmImpactPresentation();
     this.phase = PHASE.IMPACT_DELAY;
     this.phaseElapsed = 0;
     this.noticeShown = false;
@@ -278,7 +279,7 @@ export class SproutArrivalController {
         this.phaseElapsed = 0;
         this.setStatus?.('IMPACT · SOMETHING CRASHED INLAND');
         this.#syncInvestigateObjective();
-        this.game.saveController?.saveNow?.('sprout-impact');
+        this.game.saveController?.queueSave?.('sprout-impact');
       }
       return;
     }

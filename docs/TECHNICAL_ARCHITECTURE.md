@@ -125,6 +125,8 @@ The current browser persistence boundary has two layers:
 
 Every named profile therefore receives its own save-key namespace while reusing the same `SaveGameController` and `GameStatePersistence` serialization path. Profile code must not duplicate construction, inventory, survival, Sprout, world-time or other gameplay persistence. The title profile picker may list an index entry even when its world save is missing so the user can delete that stranded profile without exposing it as resumable. The historical global save key is retained only for one-time migration into a **Previous Save** profile.
 
+Full world checkpoints triggered by high-motion presentation events must not serialize or write browser storage on the same animation frame as the visual event. `SaveGameController.queueSave()` yields at least one rendered frame, waits through the short impact window and then prefers browser idle time before committing through the same authoritative save path. Reliability-critical page-hide/background/dispose saves remain immediate and cancel any queued checkpoint. When a full state fingerprint has already been serialized, `SaveGameStore` reuses that JSON for the storage record instead of serializing the world tree a second time.
+
 Persistent state includes player survival state, discoveries, inventory/storage, world resource changes where necessary, settlement buildings/designations, recruited villagers, villager homes/jobs, time/day and progression stage.
 
 Future save-schema changes must remain versioned independently from the profile index so profile/menu evolution does not force gameplay-state schema churn.

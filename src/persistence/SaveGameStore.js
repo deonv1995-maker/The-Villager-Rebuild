@@ -38,21 +38,37 @@ export class SaveGameStore {
     return Boolean(this.read());
   }
 
-  write(state, { reason = 'autosave' } = {}) {
+  write(state, { reason = 'autosave', serializedState = null } = {}) {
     if (!isRecord(state)) throw new Error('SaveGameStore.write requires a state object');
     const storage = this.#resolveStorage();
     if (!storage) return null;
 
+    const savedAt = this.now();
     const record = {
       schemaVersion: SAVE_SCHEMA_VERSION,
       worldRevision: SAVE_WORLD_REVISION,
-      savedAt: this.now(),
+      savedAt,
       reason,
       state
     };
+    const serializedRecord = typeof serializedState === 'string'
+      ? [
+          '{"schemaVersion":',
+          String(SAVE_SCHEMA_VERSION),
+          ',"worldRevision":',
+          String(SAVE_WORLD_REVISION),
+          ',"savedAt":',
+          JSON.stringify(savedAt),
+          ',"reason":',
+          JSON.stringify(reason),
+          ',"state":',
+          serializedState,
+          '}'
+        ].join('')
+      : JSON.stringify(record);
 
     try {
-      storage.setItem(this.storageKey, JSON.stringify(record));
+      storage.setItem(this.storageKey, serializedRecord);
       return record;
     } catch (error) {
       console.warn('[SAVE] Unable to write save game', error);
