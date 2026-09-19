@@ -494,13 +494,39 @@ export class UndergroundTunnelingSystem {
       return null;
     }
 
+    const centerSurfaceY = this.terrain.heightAt(x, z);
+    let minimumNearbySurfaceY = centerSurfaceY;
+    for (let sample = 0; sample < 8; sample += 1) {
+      const angle = sample * Math.PI * 0.25;
+      const sampleX = x + Math.cos(angle) * radius * 1.1;
+      const sampleZ = z + Math.sin(angle) * radius * 1.1;
+      minimumNearbySurfaceY = Math.min(
+        minimumNearbySurfaceY,
+        this.terrain.heightAt(sampleX, sampleZ)
+      );
+    }
+
+    const hiddenCenterCeiling = minimumNearbySurfaceY - radius - 1.5;
+    const protectedCenterFloor =
+      centerSurfaceY - this.config.maxDepth
+      + this.config.bottomPadding + radius + 0.6;
+    if (protectedCenterFloor >= hiddenCenterCeiling) {
+      this.pocketCache.set(key, null);
+      return null;
+    }
+
     const depth = lerp(minDepth, maxDepth, hash01(ix, iz, 151));
+    const candidateY = centerSurfaceY - depth;
     const pocket = Object.freeze({
       id: `pocket:${ix}:${iz}`,
       ix,
       iz,
       x,
-      y: this.terrain.heightAt(x, z) - depth,
+      y: THREE.MathUtils.clamp(
+        candidateY,
+        protectedCenterFloor,
+        hiddenCenterCeiling
+      ),
       z,
       radius
     });
@@ -769,17 +795,39 @@ export class UndergroundTunnelingSystem {
   }
 
   #surfaceOpeningFor(excavation) {
-    const surfaceY = this.terrain.heightAt(excavation.x, excavation.z);
-    const verticalDistance = Math.abs(surfaceY - excavation.y);
-    if (verticalDistance >= excavation.radius) return null;
-    const crossSection = Math.sqrt(
-      Math.max(0, excavation.radius * excavation.radius - verticalDistance * verticalDistance)
-    );
-    if (crossSection <= 0.05) return null;
+    // A horizontal/diagonal strike can breach a slope away from the sphere
+    // centre even when the centre itself sits more than one radius underground.
+    // Sample the natural surface across the excavation footprint and, when any
+    // point intersects, cut the full projected circle. The density mesh fills
+    // the conservative overlap outside the actual void so no heightfield
+    // triangle can bridge the opening.
+    let intersectsSurface = false;
+    const radialFractions = [0, 0.5, 0.82];
+    for (const fraction of radialFractions) {
+      const horizontalDistance = excavation.radius * fraction;
+      const verticalHalf = Math.sqrt(Math.max(
+        0,
+        excavation.radius * excavation.radius
+          - horizontalDistance * horizontalDistance
+      ));
+      const samples = fraction === 0 ? 1 : 8;
+      for (let sample = 0; sample < samples; sample += 1) {
+        const angle = samples === 1 ? 0 : sample * Math.PI * 2 / samples;
+        const x = excavation.x + Math.cos(angle) * horizontalDistance;
+        const z = excavation.z + Math.sin(angle) * horizontalDistance;
+        const surfaceY = this.terrain.heightAt(x, z);
+        if (Math.abs(surfaceY - excavation.y) <= verticalHalf) {
+          intersectsSurface = true;
+          break;
+        }
+      }
+      if (intersectsSurface) break;
+    }
+    if (!intersectsSurface) return null;
     return {
       x: excavation.x,
       z: excavation.z,
-      radius: crossSection + this.config.surfaceOpeningPadding
+      radius: excavation.radius + this.config.surfaceOpeningPadding
     };
   }
 
