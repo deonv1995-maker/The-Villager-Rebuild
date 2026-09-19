@@ -56,7 +56,7 @@ When Pickaxe is equipped in first person:
 5. the cave mesh is regenerated from the modified density field;
 6. normal Pickaxe durability is consumed through \`EquipmentRuntimeController\`.
 
-This means aiming into the wall tunnels sideways, aiming toward the floor removes ground downward, and aiming toward the roof removes ground upward, within the current protected volume boundaries.
+For mostly horizontal mining, the cut centre is lowered from first-person eye height to the Ranger body centreline. The cut diameter is derived from the shared Ranger body height plus walking clearance, so one forward strike produces a roughly character-sized opening instead of a small pocket that has to be widened manually. Aiming toward the floor or roof still follows the reticle direction within the current protected volume boundaries.
 
 The unified mobile Action policy treats `mineable-cave` as a Pickaxe work target, so the MINE button is enabled when the reticle has a valid cave surface. Third-person Pickaxe behaviour for the existing large overworld rocks is preserved.
 
@@ -110,10 +110,10 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - one authored mineable volume;
 - no simultaneous legacy terrain cut or portal/roof/liner stack;
 - one continuous generated cave-ground mesh;
-- terrain render ownership removed only at the authored mouth, with most of the hill surface retained;
+- terrain render ownership removed only at the authored mouth, with every intersecting terrain triangle removed so no green cap can bridge the opening;
 - genuine underground floor support;
 - empty traversable initial tunnel and solid mineable walls;
-- first-person ray acquisition and directional excavation;
+- first-person ray acquisition, directional excavation and Ranger-clear forward cut size;
 - shared volumetric collision support;
 - compact versioned excavation persistence;
 - cave-mouth vegetation exclusion so grass/ferns/ground cover do not float over the opening;
@@ -127,7 +127,7 @@ After merge and Pages deployment, verify on Android/PWA:
 - from outside, the entrance reads as a hole naturally cut into the foothill with no brown triangular wings, rectangular green lid or freestanding rock ring;
 - walk into the initial cave without snapping to the surface above;
 - in first person equip Pickaxe and aim the white dot at the left/right wall, floor and roof;
-- each valid strike visibly removes ground in the aimed direction;
+- each valid strike visibly removes a Ranger-clear section of ground in the aimed direction; forward mining should produce an even walkable shaft without repeated widening;
 - Ranger cannot walk through unmined solid wall;
 - Ranger can step onto newly exposed floor surfaces without being teleported to the hilltop;
 - switch to third person outside and confirm ordinary large-rock Pickaxe mining is unchanged;
