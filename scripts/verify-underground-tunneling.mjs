@@ -61,6 +61,11 @@ collision.setVolumeQuery({
 
 assert.equal(world.create(), 0, 'world boot must not create a prebuilt cave entrance');
 assert.equal(
+  world.getDebugState().activeChunkCount,
+  0,
+  'world boot must allocate no 3D tunneling chunks before the player excavates'
+);
+assert.equal(
   tunnelGroup.children.some(child => child.name.startsWith('mineable-cave-')),
   false,
   'no cave ground root may remain in the scene'
@@ -120,6 +125,11 @@ assert.equal(firstTarget.actionLabel, 'Tunnel ground');
 const firstHit = world.mine(firstTarget);
 assert.ok(firstHit?.mined, 'first surface strike must create a tunnel excavation');
 assert.equal(firstHit.excavationCount, 1);
+assert.equal(
+  world.getDebugState().activeChunkCount <= 8,
+  true,
+  'one Ranger-clear strike must activate only a small local set of 3D chunks'
+);
 assert.equal(publishedExclusions.length > 0, true, 'surface breakthrough must publish vegetation exclusions');
 
 assert.equal(
