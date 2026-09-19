@@ -41,7 +41,7 @@ Initial density combines:
 
 The generated surface is continuous across cave mouth, walls, roof, floor and an overlapping top-ground skin. Outside the natural mouth that top skin sits behind the retained island terrain and exists only to seal the volumetric boundary. It does not use Minecraft-style visible cubes.
 
-The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. Outside the authored cave mouth, a thin near-surface density guard is never removed, while the cave-adjacent heightfield is double-sided. That combination lets Ranger-clear cuts approach the roof without producing a see-through sky hole. This keeps the first implementation bounded for mobile performance and prevents exposing either the edge of the density domain or the sky through the hill. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
+The current volume is finite by design. A Pickaxe cut is accepted only when the complete excavation sphere remains inside the protected side, rear and bottom margins. The normal island heightfield remains the authoritative surface outside the authored mouth, and cave-adjacent heightfield chunks render both faces so that surface cannot disappear when viewed from underground. This keeps Ranger-clear cuts possible beneath shallow overburden without exposing either the edge of the density domain or blue sky through a culled terrain backface. Dynamic surface breakthrough can be expanded deliberately after the core mining/traversal slice is device-verified.
 
 ## First-person Pickaxe excavation
 
@@ -51,9 +51,9 @@ When Pickaxe is equipped in first person:
 
 1. \`GameApp\` obtains the established camera aim ray;
 2. \`MineableCaveSystem\` samples that ray through the authoritative scalar-density field and refines the first empty-to-solid transition;
-3. the prospective excavation centre is checked against the finite-volume margins and the system confirms that the cut would remove at least one unprotected density sample before \`Mine ground\` is published;
+3. the prospective excavation centre is checked against the finite-volume margins and the system confirms that the cut would actually change the density field before \`Mine ground\` is published;
 4. the HUD keeps the target it actually displayed through the tap frame, preventing tiny camera movement from cancelling a visible MINE action;
-5. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction, clipped against the protected natural-roof shell outside the authored mouth;
+5. a successful Pickaxe swing subtracts one spherical density volume slightly behind the hit point, in the ray direction;
 6. the cave mesh is regenerated from the modified density field;
 7. normal Pickaxe durability is consumed through \`EquipmentRuntimeController\`.
 
@@ -118,7 +118,7 @@ Deposits should be generated from stable cave/world seeds and revealed by excava
 - empty traversable initial tunnel and solid mineable walls;
 - first-person density-field target acquisition with no dependency on render-triangle seams;
 - validation that every exposed MINE action has a legal, state-changing excavation;
-- sealed finite-volume margins plus a protected near-surface density guard and double-sided cave-adjacent heightfield outside the authored mouth;
+- sealed finite-volume side/rear/bottom margins plus double-sided cave-adjacent heightfield surface ownership outside the authored mouth;
 - directional excavation and Ranger-clear forward cut size;
 - shared volumetric collision support;
 - compact versioned excavation persistence;
@@ -135,7 +135,7 @@ After merge and Pages deployment, verify on Android/PWA:
 - in first person equip Pickaxe and sweep the white dot slowly across the left/right wall, floor and roof; valid mineable ground should keep the MINE action stable instead of flickering at polygon boundaries;
 - when MINE is visible, tapping it should always produce the corresponding excavation unless the Pickaxe is already busy;
 - each valid strike visibly removes a Ranger-clear section of ground in the aimed direction; forward mining should produce an even walkable shaft without repeated widening;
-- mine repeatedly near the roof and finite-volume edges and confirm intact ground remains between the tunnel and sky; this milestone must not expose blue-sky holes outside the authored entrance;
+- mine repeatedly near the roof and finite-volume edges and confirm the retained hill surface remains visible from below with no blue-sky holes outside the authored entrance;
 - Ranger cannot walk through unmined solid wall;
 - Ranger can step onto newly exposed floor surfaces without being teleported to the hilltop;
 - switch to third person outside and confirm ordinary large-rock Pickaxe mining is unchanged;
