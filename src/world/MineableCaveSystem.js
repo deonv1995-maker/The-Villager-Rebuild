@@ -6,6 +6,19 @@ const ISO_LEVEL = 0;
 const STATE_SCHEMA_VERSION = 1;
 const TERRAIN_COLOR_DEPTH = 0.42;
 const SUPPORT_SCAN_FRACTION = 0.25;
+const TARGET_RAY_STEP_FRACTION = 0.22;
+const TARGET_REFINE_STEPS = 7;
+const SURFACE_SKIN_FRACTION = 0.45;
+const EXCAVATION_SURFACE_RING = Object.freeze([
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [Math.SQRT1_2, Math.SQRT1_2],
+  [-Math.SQRT1_2, Math.SQRT1_2],
+  [Math.SQRT1_2, -Math.SQRT1_2],
+  [-Math.SQRT1_2, -Math.SQRT1_2]
+]);
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -41,12 +54,13 @@ class MineableCaveVolume {
     this.terrain = terrain;
     this.config = definition.mineableVolume;
     this.excavations = [];
-    this.raycaster = new THREE.Raycaster();
     this.tempColor = new THREE.Color();
     this.tempSurfaceColor = new THREE.Color();
     this.tempA = new THREE.Vector3();
     this.tempB = new THREE.Vector3();
     this.tempC = new THREE.Vector3();
+    this.tempD = new THREE.Vector3();
+    this.tempE = new THREE.Vector3();
     this.tempNormal = new THREE.Vector3();
 
     this.root = new THREE.Group();
@@ -161,19 +175,14 @@ class MineableCaveVolume {
     if (direction.lengthSq() < 0.000001) return null;
     direction.normalize();
 
-    this.root.updateMatrixWorld(true);
-    this.raycaster.set(aim.origin, direction);
-    this.raycaster.near = 0;
-    this.raycaster.far = this.config.mineReach;
-    const hit = this.raycaster.intersectObject(this.mesh, false)[0];
-    if (!hit) return null;
+    const hitPoint = this.#findDensitySurfaceHit(aim.origin, direction);
+    if (!hitPoint) return null;
     if (
       playerPosition &&
-      hit.point.distanceTo(playerPosition) > this.config.mineReach + 1.2
+      hitPoint.distanceTo(playerPosition) > this.config.mineReach + 1.2
     ) return null;
 
-    const local = this.#worldPointToLocal(hit.point);
-    if (!this.#canExcavateAtLocal(local)) return null;
+    const local = this.#worldPointToLocal(hitPoint, this.tempC);
 
     // Outside the authored mouth, the normal hill surface still visually owns
     // the top of this finite underground volume. Do not let the Pickaxe target
@@ -181,8 +190,14 @@ class MineableCaveVolume {
     const depthBelowSurface = this.#surfaceYAtLocal(local.x, local.z) - local.y;
     if (
       depthBelowSurface < this.config.cellSize * 0.55 &&
-      !caveMineableSurfaceOwnedAt(this.definition, hit.point.x, hit.point.z)
+      !caveMineableSurfaceOwnedAt(this.definition, hitPoint.x, hitPoint.z)
     ) return null;
+
+    // The button is published only when the exact cut that mine() will apply is
+    // legal. This keeps the visible MINE action and the tap result in agreement.
+    const centerWorld = this.#excavationCenterWorld(hitPoint, direction, this.tempB);
+    const centerLocal = this.#worldPointToLocal(centerWorld, this.tempC);
+    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) return null;
 
     return {
       type: 'mineable-cave',
@@ -190,8 +205,8 @@ class MineableCaveVolume {
       label: 'Cave ground',
       icon: 'pickaxe',
       actionLabel: 'Mine ground',
-      position: hit.point.clone(),
-      point: hit.point.clone(),
+      position: hitPoint.clone(),
+      point: hitPoint.clone(),
       direction: direction.clone()
     };
   }
@@ -202,11 +217,9 @@ class MineableCaveVolume {
     if (direction.lengthSq() < 0.000001) return null;
     direction.normalize();
 
-    const centerWorld = this.tempB.copy(target.point).addScaledVector(direction, this.config.mineInset);
-    const horizontalAlignment = 1 - THREE.MathUtils.clamp(Math.abs(direction.y) / 0.7, 0, 1);
-    centerWorld.y -= (this.config.mineCenterDrop ?? 0) * horizontalAlignment;
-    const centerLocal = this.#worldPointToLocal(centerWorld);
-    if (!this.#canExcavateAtLocal(centerLocal)) return null;
+    const centerWorld = this.#excavationCenterWorld(target.point, direction, this.tempB);
+    const centerLocal = this.#worldPointToLocal(centerWorld, this.tempC);
+    if (!this.#canExcavateSphereAtLocal(centerLocal, this.config.mineRadius)) return null;
 
     const changed = this.#applyExcavationLocal(centerLocal, this.config.mineRadius, true);
     if (!changed) return null;
@@ -343,6 +356,66 @@ class MineableCaveVolume {
     return Math.min(terrainDensity, tunnelDensity);
   }
 
+  #findDensitySurfaceHit(origin, direction) {
+    const step = Math.max(0.08, this.config.cellSize * TARGET_RAY_STEP_FRACTION);
+    let previousDistance = 0;
+    let previousDensity = null;
+    let previousInside = false;
+
+    for (let distance = 0; distance <= this.config.mineReach + 0.000001; distance += step) {
+      const sampleDistance = Math.min(distance, this.config.mineReach);
+      const world = this.tempD.copy(origin).addScaledVector(direction, sampleDistance);
+      const local = this.#worldPointToLocal(world, this.tempE);
+      const inside = this.#containsLocalPoint(local);
+
+      if (!inside) {
+        previousInside = false;
+        previousDensity = null;
+        previousDistance = sampleDistance;
+        continue;
+      }
+
+      const density = this.#sampleField(local.x, local.y, local.z);
+      if (previousInside && previousDensity < ISO_LEVEL && density >= ISO_LEVEL) {
+        let low = previousDistance;
+        let high = sampleDistance;
+        for (let refine = 0; refine < TARGET_REFINE_STEPS; refine += 1) {
+          const mid = (low + high) * 0.5;
+          const midWorld = this.tempD.copy(origin).addScaledVector(direction, mid);
+          const midLocal = this.#worldPointToLocal(midWorld, this.tempE);
+          if (this.#sampleField(midLocal.x, midLocal.y, midLocal.z) >= ISO_LEVEL) high = mid;
+          else low = mid;
+        }
+        return new THREE.Vector3().copy(origin).addScaledVector(direction, high);
+      }
+
+      previousInside = true;
+      previousDensity = density;
+      previousDistance = sampleDistance;
+      if (sampleDistance >= this.config.mineReach) break;
+    }
+
+    return null;
+  }
+
+  #excavationCenterWorld(point, direction, target) {
+    target.copy(point).addScaledVector(direction, this.config.mineInset);
+    const horizontalAlignment = 1 - THREE.MathUtils.clamp(Math.abs(direction.y) / 0.7, 0, 1);
+    target.y -= (this.config.mineCenterDrop ?? 0) * horizontalAlignment;
+    return target;
+  }
+
+  #containsLocalPoint(local) {
+    return (
+      local.x >= this.xMin &&
+      local.x <= this.xMax &&
+      local.y >= this.yMin &&
+      local.y <= this.yMax &&
+      local.z >= this.zMin &&
+      local.z <= this.zMax
+    );
+  }
+
   #applyExcavationLocal(center, radius, record) {
     const minX = Math.max(0, Math.floor((center.x - radius - this.xMin) / this.stepX) - 1);
     const maxX = Math.min(this.countX - 1, Math.ceil((center.x + radius - this.xMin) / this.stepX) + 1);
@@ -379,14 +452,41 @@ class MineableCaveVolume {
     return changed;
   }
 
-  #canExcavateAtLocal(local) {
+  #canExcavateSphereAtLocal(local, radius) {
     const padding = this.config.boundaryPadding;
-    return (
-      Math.abs(local.x) <= this.config.halfWidth - padding &&
-      local.z >= this.zMin + padding * 0.35 &&
-      local.z <= this.zMax - padding &&
-      local.y >= this.yMin + padding
-    );
+    const safeRadius = Math.max(0, Number(radius) || 0);
+    if (
+      Math.abs(local.x) > this.config.halfWidth - padding - safeRadius ||
+      local.z < this.zMin + padding * 0.35 + safeRadius ||
+      local.z > this.zMax - padding - safeRadius ||
+      local.y < this.yMin + padding + safeRadius
+    ) return false;
+
+    return this.#excavationStaysBelowSurface(local, safeRadius);
+  }
+
+  #excavationStaysBelowSurface(local, radius) {
+    if (radius <= 0) return true;
+    const skin = this.config.cellSize * SURFACE_SKIN_FRACTION;
+    const centerWorld = this.#localPointToWorld(local);
+    if (
+      !caveMineableSurfaceOwnedAt(this.definition, centerWorld.x, centerWorld.z) &&
+      local.y + radius > this.#surfaceYAtLocal(local.x, local.z) - skin
+    ) return false;
+
+    const ringDistance = radius * 0.7;
+    const ringVerticalExtent = Math.sqrt(Math.max(0, radius * radius - ringDistance * ringDistance));
+    for (const [dx, dz] of EXCAVATION_SURFACE_RING) {
+      const sampleX = local.x + dx * ringDistance;
+      const sampleZ = local.z + dz * ringDistance;
+      const sampleWorld = this.#localToWorldXZ(sampleX, sampleZ);
+      if (caveMineableSurfaceOwnedAt(this.definition, sampleWorld.x, sampleWorld.z)) continue;
+      if (
+        local.y + ringVerticalExtent >
+        this.#surfaceYAtLocal(sampleX, sampleZ) - skin
+      ) return false;
+    }
+    return true;
   }
 
   #rebuildGeometry() {
@@ -582,9 +682,9 @@ class MineableCaveVolume {
     return { x: xz.x, y: point.y, z: xz.z };
   }
 
-  #worldPointToLocal(point) {
+  #worldPointToLocal(point, target = new THREE.Vector3()) {
     const xz = this.#worldToLocalXZ(point.x, point.z);
-    return new THREE.Vector3(xz.x, point.y, xz.z);
+    return target.set(xz.x, point.y, xz.z);
   }
 
   #index(ix, iy, iz) {
