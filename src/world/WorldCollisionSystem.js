@@ -23,6 +23,13 @@ export class WorldCollisionSystem {
     this.revision = 0;
     this.typeRevisions = new Map();
     this.supportReferenceY = null;
+    this.volumeSupportAt = null;
+    this.volumeSolidAt = null;
+  }
+
+  setVolumeQuery({ supportHeightAt = null, isSolidAt = null } = {}) {
+    this.volumeSupportAt = typeof supportHeightAt === 'function' ? supportHeightAt : null;
+    this.volumeSolidAt = typeof isSolidAt === 'function' ? isSolidAt : null;
   }
 
   clear() {
@@ -211,6 +218,13 @@ export class WorldCollisionSystem {
       : Number.isFinite(this.supportReferenceY)
         ? this.supportReferenceY
         : baseHeight;
+    const volumeSupport = this.volumeSupportAt?.(x, z, {
+      referenceY: reference,
+      maxStepUp,
+      airborne,
+      baseHeight
+    });
+    if (Number.isFinite(volumeSupport)) baseHeight = volumeSupport;
     const upwardAllowance = airborne
       ? AIRBORNE_SUPPORT_TOLERANCE
       : Math.max(0, maxStepUp);
@@ -269,6 +283,28 @@ export class WorldCollisionSystem {
     }
 
     return { x: from.x, z: from.z, blocked: true };
+  }
+
+  #volumeBlocksActor(x, z, feetY, radius, actorHeight) {
+    if (!this.volumeSolidAt) return false;
+    const horizontalSamples = [
+      [0, 0],
+      [radius * 0.82, 0],
+      [-radius * 0.82, 0],
+      [0, radius * 0.82],
+      [0, -radius * 0.82]
+    ];
+    const verticalSamples = [
+      feetY + 0.28,
+      feetY + actorHeight * 0.52,
+      feetY + actorHeight - 0.18
+    ];
+    for (const y of verticalSamples) {
+      for (const [offsetX, offsetZ] of horizontalSamples) {
+        if (this.volumeSolidAt(x + offsetX, y, z + offsetZ)) return true;
+      }
+    }
+    return false;
   }
 
   #bumpTypeRevision(type) {
@@ -340,9 +376,20 @@ export class WorldCollisionSystem {
     const dirX = dx / distance;
     const dirZ = dz / distance;
     const d = this.slopeSampleDistance;
-    const center = this.baseHeightAt(x, z);
-    const behind = this.baseHeightAt(x - dirX * d, z - dirZ * d);
-    const ahead = this.baseHeightAt(x + dirX * d, z + dirZ * d);
+    const referenceY = Number.isFinite(from?.y) ? from.y : this.baseHeightAt(from.x, from.z);
+    const sampleBase = (sampleX, sampleZ) => {
+      const base = this.baseHeightAt(sampleX, sampleZ);
+      const volume = this.volumeSupportAt?.(sampleX, sampleZ, {
+        referenceY,
+        maxStepUp: DEFAULT_SUPPORT_STEP_HEIGHT,
+        airborne: false,
+        baseHeight: base
+      });
+      return Number.isFinite(volume) ? volume : base;
+    };
+    const center = sampleBase(x, z);
+    const behind = sampleBase(x - dirX * d, z - dirZ * d);
+    const ahead = sampleBase(x + dirX * d, z + dirZ * d);
     const uphillRise = Math.max(0, center - behind, ahead - center);
     return uphillRise <= this.maxSlopeGradient * d;
   }
@@ -363,6 +410,7 @@ export class WorldCollisionSystem {
     const feetY = Number.isFinite(from.y) ? from.y : fallbackBase;
     const fromGround = this.#walkableHeightAt(from.x, from.z, feetY, airborne);
     const headY = feetY + actorHeight;
+    if (this.#volumeBlocksActor(x, z, feetY, radius, actorHeight)) return false;
     const standingOnResolvedSupport = !airborne && Math.abs(feetY - fromGround) <= AIRBORNE_SUPPORT_TOLERANCE;
     for (const obstacle of this.obstacles) {
       if (!this.#overlapsObstacle(obstacle, x, z, radius)) continue;
