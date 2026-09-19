@@ -318,6 +318,151 @@ assert.equal(incrementalRoofEntry?.roofWingCount, 2);
 assert.equal(incrementalRoofEntry?.root.userData.semanticRoofIntegratedJunctions, 1, 'Merged cross-gable must use one real valley junction instead of overlapping finished roofs');
 assert.equal(incrementalRuntime.system.getDemolitionTarget(porchPlayer, incrementalRoofEntry.id)?.cost?.[0]?.quantity, 35, 'Merged Roof removal must preserve cumulative 5 Logs per covered cell');
 
+// A taller central storey may be roofed before the two lower side wings. The ground
+// floor stays one open enclosure, so there is deliberately no lower divider Wall between
+// each side wing and the central cell. Each lower Roof must be allowed to seat against
+// the exact upper-storey Wall above that open edge without merging into the high Roof.
+const steppedRoofRuntime = makeRuntime(10);
+const steppedRoofStructure = steppedRoofRuntime.system.registry.createStructure({
+  originX: 0,
+  originZ: 0,
+  yaw: 0
+});
+const steppedGroundLevel = 0.08;
+const steppedGroundCells = [
+  { x: -1, z: 0 },
+  { x: 0, z: 0 },
+  { x: 1, z: 0 }
+];
+for (const cell of steppedGroundCells) {
+  assert.equal(
+    steppedRoofStructure.grid.placeFloor({
+      ...cell,
+      storey: 0,
+      levelY: steppedGroundLevel
+    }).ok,
+    true
+  );
+}
+addPerimeterWalls(steppedRoofStructure.grid, steppedGroundCells);
+
+const steppedUpperLevel = steppedGroundLevel + PANEL_GRID.storeyHeight;
+assert.equal(
+  steppedRoofStructure.grid.placeFloor({
+    x: 0,
+    z: 0,
+    storey: 1,
+    levelY: steppedUpperLevel
+  }).ok,
+  true,
+  'Central upper Floor must be present before its Wall ring and high Roof'
+);
+
+const steppedUpperWallKeys = {};
+for (const direction of Object.values(PANEL_DIRECTIONS)) {
+  const result = steppedRoofStructure.grid.placeWall({
+    x: 0,
+    z: 0,
+    storey: 1,
+    direction: direction.id
+  });
+  assert.equal(result.ok, true, `Upper ${direction.id} Wall must be placeable`);
+  steppedUpperWallKeys[direction.id] = result.wall.key;
+}
+
+const prebuiltHighRoof = steppedRoofStructure.grid.placeRoofZone({
+  cells: [{ x: 0, z: 0 }],
+  storey: 1,
+  form: 'gable'
+});
+assert.equal(prebuiltHighRoof.ok, true, 'Upper Roof must already exist before lower-wing placement');
+
+steppedRoofRuntime.system.restore(steppedRoofRuntime.system.snapshot());
+steppedRoofRuntime.system.setBuildMode('roof');
+steppedRoofRuntime.system.setActive(true);
+const liveSteppedRoofStructure = [...steppedRoofRuntime.system.registry.structures.values()][0];
+
+for (const wing of [
+  { x: -1, z: 0, label: 'left' },
+  { x: 1, z: 0, label: 'right' }
+]) {
+  const center = steppedRoofRuntime.system.registry.cellCenterWorld(
+    liveSteppedRoofStructure,
+    wing
+  );
+  const wingPlayer = new THREE.Vector3(center.x, steppedGroundLevel, center.z);
+  const wingPreview = steppedRoofRuntime.system.update(wingPlayer, facing);
+  assert.equal(
+    wingPreview.previewValid,
+    true,
+    `The ${wing.label} lower Roof must stay green after the upper Roof is already built`
+  );
+  assert.equal(steppedRoofRuntime.system.previewPlacement?.storey, 0);
+  assert.equal(steppedRoofRuntime.system.previewPlacement?.roofCellCount, 1);
+  assert.deepEqual(
+    steppedRoofRuntime.system.previewPlacement?.cells,
+    [{ x: wing.x, z: wing.z }],
+    `The ${wing.label} preview must target only its lower wing`
+  );
+
+  const builtWing = steppedRoofRuntime.system.build(wingPlayer, facing);
+  assert.equal(builtWing?.kind, 'roof');
+  assert.equal(builtWing?.cost?.[0]?.quantity, 5);
+}
+
+assert.equal(
+  steppedRoofRuntime.inventory.get('log'),
+  0,
+  'Two lower one-cell Roof wings must consume 10 Logs total'
+);
+assert.equal(
+  liveSteppedRoofStructure.grid.roofZones.size,
+  3,
+  'High Roof plus two disconnected lower wings must remain three semantic Roof zones'
+);
+
+const leftLowerRoofBeforeSave = [...liveSteppedRoofStructure.grid.roofZones.values()]
+  .find(zone => (
+    zone.storey === 0 &&
+    zone.cellKeys.includes(panelCellKey({ x: -1, z: 0, storey: 0 }))
+  ));
+assert.ok(
+  leftLowerRoofBeforeSave?.supportEdgeKeys?.includes(steppedUpperWallKeys.west),
+  'The lower left Roof must record the exact raised Wall edge it structurally depends on'
+);
+
+const steppedReloadedRuntime = makeRuntime(0);
+assert.equal(
+  steppedReloadedRuntime.system.restore(steppedRoofRuntime.system.snapshot()),
+  true,
+  'Stepped Roof dependency state must survive Save/Continue reconstruction'
+);
+const reloadedSteppedStructure = [...steppedReloadedRuntime.system.registry.structures.values()][0];
+const reloadedHighRoof = [...reloadedSteppedStructure.grid.roofZones.values()]
+  .find(zone => zone.storey === 1);
+const reloadedLeftLowerRoof = [...reloadedSteppedStructure.grid.roofZones.values()]
+  .find(zone => (
+    zone.storey === 0 &&
+    zone.cellKeys.includes(panelCellKey({ x: -1, z: 0, storey: 0 }))
+  ));
+assert.ok(reloadedHighRoof && reloadedLeftLowerRoof);
+assert.ok(
+  reloadedLeftLowerRoof.supportEdgeKeys.includes(steppedUpperWallKeys.west),
+  'Continue must preserve the raised Wall dependency for the lower Roof'
+);
+assert.equal(reloadedSteppedStructure.grid.removeRoofZone(reloadedHighRoof.key), true);
+assert.equal(
+  reloadedSteppedStructure.grid.removeWall(steppedUpperWallKeys.west),
+  false,
+  'An upper Wall used as the lower Roof abutment must stay protected after the high Roof is removed'
+);
+assert.equal(reloadedSteppedStructure.grid.removeRoofZone(reloadedLeftLowerRoof.key), true);
+assert.equal(
+  reloadedSteppedStructure.grid.removeWall(steppedUpperWallKeys.west),
+  true,
+  'The raised abutment Wall may be removed after its dependent lower Roof is gone'
+);
+
 const splitSaveRuntime = makeRuntime(0);
 const splitSaveStructure = splitSaveRuntime.system.registry.createStructure({ originX: 0, originZ: 0, yaw: 0 });
 for (const cell of oneCellDoorProjection) {
@@ -343,4 +488,4 @@ assert.ok(
   'Live Hammer runtime must use the complex Roof specialization while preserving the existing controller boundary'
 );
 
-console.log('Connected L/T/U Roof planning, cross-gable appendage joins, exterior-only eaves, exact cost/state, save/Continue and demolition verified');
+console.log('Connected L/T/U Roof planning, stepped upper/lower Roof support, cross-gable appendage joins, exterior-only eaves, exact cost/state, save/Continue and demolition verified');

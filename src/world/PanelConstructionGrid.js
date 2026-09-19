@@ -275,11 +275,17 @@ export class PanelConstructionGrid {
     return true;
   }
 
+  roofDependsOnWallEdge(edgeKey) {
+    return [...this.roofZones.values()].some(zone => (
+      roofZoneUsesEdge(zone, edgeKey) ||
+      (zone.supportEdgeKeys ?? []).includes(edgeKey)
+    ));
+  }
+
   removeWall(edgeKey) {
     const wall = this.walls.get(edgeKey);
     if (!wall) return false;
-    const dependentRoof = [...this.roofZones.values()].some(zone => roofZoneUsesEdge(zone, edgeKey));
-    if (dependentRoof) return false;
+    if (this.roofDependsOnWallEdge(edgeKey)) return false;
 
     const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
     const upperFloors = [...this.floors.values()]
@@ -398,11 +404,26 @@ export class PanelConstructionGrid {
     return this.stairs.delete(key);
   }
 
-  placeRoofZone({ cells, storey = 0, form = 'gable', ridgeAxis = null }) {
+  placeRoofZone({
+    cells,
+    storey = 0,
+    form = 'gable',
+    ridgeAxis = null,
+    supportEdgeKeys = []
+  }) {
     requireRoofForm(form);
     if (ridgeAxis !== null && ridgeAxis !== 'x' && ridgeAxis !== 'z') {
       throw new Error(`Unknown roof ridge axis: ${ridgeAxis}`);
     }
+    if (!Array.isArray(supportEdgeKeys)) {
+      throw new Error('Roof supportEdgeKeys must be an array');
+    }
+    const normalizedSupportEdgeKeys = [...new Set(supportEdgeKeys.map(key => String(key)))].sort();
+    const missingSupportEdgeKey = normalizedSupportEdgeKeys.find(edgeKey => !this.walls.has(edgeKey));
+    if (missingSupportEdgeKey) {
+      return { ok: false, reason: 'missing-roof-support-edge', edgeKey: missingSupportEdgeKey };
+    }
+
     const key = panelRoofZoneKey({ cells, storey });
     if (this.roofZones.has(key)) return { ok: false, reason: 'occupied-roof-zone', key };
 
@@ -428,9 +449,23 @@ export class PanelConstructionGrid {
       }
     }
 
-    const zone = { key, storey, cellKeys, form, ridgeAxis };
+    const zone = {
+      key,
+      storey,
+      cellKeys,
+      form,
+      ridgeAxis,
+      supportEdgeKeys: normalizedSupportEdgeKeys
+    };
     this.roofZones.set(key, zone);
-    return { ok: true, roofZone: { ...zone, cellKeys: [...cellKeys] } };
+    return {
+      ok: true,
+      roofZone: {
+        ...zone,
+        cellKeys: [...cellKeys],
+        supportEdgeKeys: [...normalizedSupportEdgeKeys]
+      }
+    };
   }
 
   removeRoofZone(key) {
@@ -447,7 +482,11 @@ export class PanelConstructionGrid {
       walls: [...this.walls.values()].map(wall => this.#cloneWall(wall)).sort((a, b) => a.key.localeCompare(b.key)),
       stairs: [...this.stairs.values()].map(stair => ({ ...stair })).sort((a, b) => a.key.localeCompare(b.key)),
       roofZones: [...this.roofZones.values()]
-        .map(zone => ({ ...zone, cellKeys: [...zone.cellKeys] }))
+        .map(zone => ({
+          ...zone,
+          cellKeys: [...zone.cellKeys],
+          supportEdgeKeys: [...(zone.supportEdgeKeys ?? [])]
+        }))
         .sort((a, b) => a.key.localeCompare(b.key))
     };
   }
@@ -512,7 +551,8 @@ export class PanelConstructionGrid {
         cells,
         storey: zone.storey,
         form: zone.form,
-        ridgeAxis: zone.ridgeAxis ?? null
+        ridgeAxis: zone.ridgeAxis ?? null,
+        supportEdgeKeys: zone.supportEdgeKeys ?? []
       });
       if (!result.ok) throw new Error(`Invalid persisted roof zone: ${zone.key ?? 'unknown'}`);
     }

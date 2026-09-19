@@ -1,11 +1,6 @@
-import {
-  PANEL_DIRECTIONS,
-  PANEL_GRID
-} from '../data/PanelConstructionDefinitions.js';
+import { PANEL_GRID } from '../data/PanelConstructionDefinitions.js';
 import {
   panelCellKey,
-  panelEdgeDescriptor,
-  parsePanelCellKey,
   PanelConstructionGrid
 } from './PanelConstructionGrid.js';
 import { panelUpperFloorsRemainSupported } from './PanelFloorSupportRules.js';
@@ -14,17 +9,6 @@ import { collectPanelUpperWallSupports } from './PanelUpperStoreyRules.js';
 const stairUsesCell = (stair, cellKey) => (
   stair.sourceCellKey === cellKey || stair.targetCellKey === cellKey
 );
-
-const roofZoneUsesEdge = (zone, edgeKey) => {
-  for (const cellKey of zone.cellKeys ?? []) {
-    const cell = parsePanelCellKey(cellKey);
-    if (!cell) continue;
-    for (const direction of Object.keys(PANEL_DIRECTIONS)) {
-      if (panelEdgeDescriptor({ ...cell, direction }).key === edgeKey) return true;
-    }
-  }
-  return false;
-};
 
 /**
  * Runtime semantic grid with structural dependency checks for supported upper-floor
@@ -55,7 +39,7 @@ export class SupportedPanelConstructionGrid extends PanelConstructionGrid {
   removeWall(edgeKey) {
     const wall = this.walls.get(edgeKey);
     if (!wall) return false;
-    if ([...this.roofZones.values()].some(zone => roofZoneUsesEdge(zone, edgeKey))) return false;
+    if (this.roofDependsOnWallEdge(edgeKey)) return false;
 
     const remainingWalls = [...this.walls.values()].filter(candidate => candidate.key !== edgeKey);
     if (!panelUpperFloorsRemainSupported(

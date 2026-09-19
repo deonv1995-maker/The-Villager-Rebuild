@@ -100,7 +100,12 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
       cells: placement.cells,
       storey: placement.storey,
       form: 'gable',
-      ridgeAxis: placement.plan.primaryAxis
+      ridgeAxis: placement.plan.primaryAxis,
+      supportEdgeKeys: this.#roofSupportEdgeKeys(
+        structure,
+        placement.cells,
+        placement.storey
+      )
     });
     if (!stateResult?.ok) {
       this.#restoreRoofZones(structure, absorbedRoofZones);
@@ -168,7 +173,8 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
           cells,
           storey: zone.storey,
           form: zone.form ?? 'gable',
-          ridgeAxis: zone.ridgeAxis ?? null
+          ridgeAxis: zone.ridgeAxis ?? null,
+          supportEdgeKeys: zone.supportEdgeKeys ?? []
         });
         if (!result.ok) {
           throw new Error(`Invalid persisted roof zone: ${zone.key ?? 'unknown'}`);
@@ -413,7 +419,12 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
           cells: plan.cells,
           storey: seedZone.storey,
           form: 'gable',
-          ridgeAxis: plan.primaryAxis
+          ridgeAxis: plan.primaryAxis,
+          supportEdgeKeys: this.#roofSupportEdgeKeys(
+            structure,
+            plan.cells,
+            seedZone.storey
+          )
         });
         if (!merged.ok) {
           this.#restoreRoofZones(structure, backups);
@@ -432,7 +443,8 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
         cells: cells.map(cell => ({ x: cell.x, z: cell.z })),
         storey: zone.storey,
         form: zone.form ?? 'gable',
-        ridgeAxis: zone.ridgeAxis ?? null
+        ridgeAxis: zone.ridgeAxis ?? null,
+        supportEdgeKeys: zone.supportEdgeKeys ?? []
       });
       if (!result.ok) {
         throw new Error(`Could not restore semantic Roof zone ${zone.key}`);
@@ -482,16 +494,57 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
           storey
         });
         if (candidateKeys.has(neighbourKey) || existingRoofKeys.has(neighbourKey)) continue;
-        const edge = panelEdgeDescriptor({
-          x: cell.x,
-          z: cell.z,
-          storey,
-          direction: direction.id
-        });
-        if (!structure.grid.walls.has(edge.key)) return false;
+        if (!this.#roofBoundarySupportKey(structure, cell, direction, storey)) return false;
       }
     }
     return true;
+  }
+
+  #roofBoundarySupportKey(structure, cell, direction, storey) {
+    const edge = panelEdgeDescriptor({
+      x: cell.x,
+      z: cell.z,
+      storey,
+      direction: direction.id
+    });
+    if (structure.grid.walls.has(edge.key)) return edge.key;
+
+    // A lower Roof wing may terminate against the exact Wall-family edge of a
+    // taller adjoining storey. This keeps the lower room open underneath while
+    // still requiring a real semantic wall at the Roof seating height.
+    const roofBaseY = this.#roofBaseYForCell(structure, cell, storey);
+    if (!Number.isFinite(roofBaseY)) return null;
+    const raisedEdge = panelEdgeDescriptor({
+      x: cell.x,
+      z: cell.z,
+      storey: storey + 1,
+      direction: direction.id
+    });
+    const raisedWall = structure.grid.walls.get(raisedEdge.key);
+    if (!raisedWall) return null;
+    return Math.abs(raisedWall.baseY - roofBaseY) <= LEVEL_TOLERANCE
+      ? raisedEdge.key
+      : null;
+  }
+
+  #roofSupportEdgeKeys(structure, cells, storey) {
+    const candidateKeys = new Set(cells.map(cell => panelCellKey({ ...cell, storey })));
+    const supportKeys = new Set();
+
+    for (const cell of cells) {
+      for (const direction of directionEntries) {
+        const neighbourKey = panelCellKey({
+          x: cell.x + direction.dx,
+          z: cell.z + direction.dz,
+          storey
+        });
+        if (candidateKeys.has(neighbourKey)) continue;
+        const supportKey = this.#roofBoundarySupportKey(structure, cell, direction, storey);
+        if (supportKey) supportKeys.add(supportKey);
+      }
+    }
+
+    return [...supportKeys].sort();
   }
 
   #roofBaseYForCell(structure, cell, storey) {
