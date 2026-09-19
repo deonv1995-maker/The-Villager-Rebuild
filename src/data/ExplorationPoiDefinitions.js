@@ -3,38 +3,42 @@ export const EXPLORATION_POIS = Object.freeze([
     id: 'northern-cave-01',
     type: 'cave',
     region: 'northernHighlands',
-    // Keep the first cave on the southern foothill rather than on the elevated
-    // mountain core. The ground rises behind the entrance and falls toward the
-    // approach, so the cave reads as being cut into the base of the mountain.
+    // The first cave remains on the southern foothill and faces the established
+    // mainland approach. Cave-local -Z is outside; +Z continues into the hill.
     x: -52,
     z: -113,
-    // Cave-local -Z is the exterior/approach side and +Z is tunnel depth.
-    // Face the mouth back toward the southern mainland route players arrive from.
     yaw: 3.32,
-    // The authored aperture remains human-scale. Presentation places the visible
-    // portal farther into the terrain cut so its brow can sit under the real hill
-    // instead of becoming a freestanding ring above the threshold.
     mouthWidth: 6.2,
     mouthHeight: 3.4,
     depth: 8.5,
-    presentation: Object.freeze({
-      portalInset: 2.35,
-      shellDepth: 1.35,
-      overburdenLead: 0.78,
-      impactScar: true,
-      impactDebris: true
-    }),
-    // The authoritative terrain owns the descending floor. A deeper threshold and
-    // longer approach place the walkable tunnel below the untouched shoulders while
-    // keeping the descent traversable; the rear presentation overburden then bridges
-    // the cut back to the original hillside surface above the tunnel.
-    terrainCut: Object.freeze({
-      approachLength: 6.8,
-      backFadeLength: 2.8,
-      mouthDrop: 2.65,
-      depthDrop: 6.3,
-      innerWidthRatio: 0.36,
-      outerWidthRatio: 0.82
+
+    // The cave now owns a bounded volumetric ground section instead of a visual
+    // arch/roof/liner assembled on top of the heightfield. The normal island
+    // heightfield remains authoritative everywhere outside this footprint.
+    mineableVolume: Object.freeze({
+      halfWidth: 7.2,
+      frontDepth: 5.6,
+      backDepth: 14.4,
+      cellSize: 0.72,
+      surfaceHeadroom: 1.25,
+      floorDepth: 2.6,
+
+      // The initial void is a naturally open tunnel entering from the downhill
+      // edge and descending gently beneath the rising foothill.
+      tunnelStartZ: -5.05,
+      tunnelEndZ: 8.7,
+      tunnelHalfWidth: 2.55,
+      tunnelHalfHeight: 2.05,
+      tunnelEndCapDepth: 1.15,
+      entranceFloorOffset: 0.2,
+      tunnelDrop: 1.15,
+
+      // Pickaxe excavation is intentionally local and mobile-friendly. Boundary
+      // padding keeps the finite volume sealed at its side/back/bottom edges.
+      mineReach: 3.45,
+      mineRadius: 1.05,
+      mineInset: 0.38,
+      boundaryPadding: 1.05
     })
   })
 ]);
