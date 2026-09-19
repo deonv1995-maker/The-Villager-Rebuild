@@ -55,6 +55,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     this.tunnelTerrainSegments = this.chunkTerrainSegments * 4;
     this.tunnelingOpenings = [];
     this.terrainChunkRecords = new Map();
+    this.terrainChunkGeometryListeners = new Set();
   }
 
   coastRadiusAt(angle) {
@@ -207,6 +208,12 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
   getTunnelingOpenings() {
     return this.tunnelingOpenings.map(opening => ({ ...opening }));
+  }
+
+  onTerrainChunkGeometryChanged(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.terrainChunkGeometryListeners.add(listener);
+    return () => this.terrainChunkGeometryListeners.delete(listener);
   }
 
   create() {
@@ -395,6 +402,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     record.mesh.userData.terrainSegments = built.segments;
     record.mesh.userData.tunnelingSurfaceOwner = built.detailed;
     previous?.dispose?.();
+    for (const listener of this.terrainChunkGeometryListeners) listener(record.mesh);
     return true;
   }
 
