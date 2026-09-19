@@ -482,16 +482,37 @@ export class ComplexRoofPanelConstructionSystem extends StackedWallPanelConstruc
           storey
         });
         if (candidateKeys.has(neighbourKey) || existingRoofKeys.has(neighbourKey)) continue;
-        const edge = panelEdgeDescriptor({
-          x: cell.x,
-          z: cell.z,
-          storey,
-          direction: direction.id
-        });
-        if (!structure.grid.walls.has(edge.key)) return false;
+        if (!this.#roofBoundarySupported(structure, cell, direction, storey)) return false;
       }
     }
     return true;
+  }
+
+  #roofBoundarySupported(structure, cell, direction, storey) {
+    const edge = panelEdgeDescriptor({
+      x: cell.x,
+      z: cell.z,
+      storey,
+      direction: direction.id
+    });
+    if (structure.grid.walls.has(edge.key)) return true;
+
+    // A lower Roof wing may terminate against the exact Wall-family edge of a
+    // taller adjoining storey. This keeps the lower room open underneath while
+    // still requiring a real semantic wall at the Roof seating height.
+    const roofBaseY = this.#roofBaseYForCell(structure, cell, storey);
+    if (!Number.isFinite(roofBaseY)) return false;
+    const raisedEdge = panelEdgeDescriptor({
+      x: cell.x,
+      z: cell.z,
+      storey: storey + 1,
+      direction: direction.id
+    });
+    const raisedWall = structure.grid.walls.get(raisedEdge.key);
+    return Boolean(
+      raisedWall &&
+      Math.abs(raisedWall.baseY - roofBaseY) <= LEVEL_TOLERANCE
+    );
   }
 
   #roofBaseYForCell(structure, cell, storey) {
