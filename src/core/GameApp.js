@@ -305,8 +305,8 @@ export class GameApp {
       ? panelDemolitionTarget
       : carcassTarget
         ?? treeTarget
-        ?? groundMineTarget
         ?? rockTarget
+        ?? groundMineTarget
         ?? legacyDemolitionTarget
         ?? resourceTarget;
 
