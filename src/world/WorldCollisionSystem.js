@@ -27,11 +27,17 @@ export class WorldCollisionSystem {
     this.supportReferenceY = null;
     this.volumeSupportAt = null;
     this.volumeSolidAt = null;
+    this.volumeActivityAt = null;
   }
 
-  setVolumeQuery({ supportHeightAt = null, isSolidAt = null } = {}) {
+  setVolumeQuery({
+    supportHeightAt = null,
+    isSolidAt = null,
+    hasActivityAt = null
+  } = {}) {
     this.volumeSupportAt = typeof supportHeightAt === 'function' ? supportHeightAt : null;
     this.volumeSolidAt = typeof isSolidAt === 'function' ? isSolidAt : null;
+    this.volumeActivityAt = typeof hasActivityAt === 'function' ? hasActivityAt : null;
   }
 
   clear() {
@@ -256,6 +262,104 @@ export class WorldCollisionSystem {
     return Math.max(baseHeight, highestSupport);
   }
 
+  resolveCameraPosition(origin, desired, {
+    radius = 0.24,
+    step = 0.14,
+    surfacePadding = 0.06
+  } = {}) {
+    if (
+      !origin ||
+      !desired ||
+      ![origin.x, origin.y, origin.z, desired.x, desired.y, desired.z].every(Number.isFinite)
+    ) {
+      return desired;
+    }
+
+    const dx = desired.x - origin.x;
+    const dy = desired.y - origin.y;
+    const dz = desired.z - origin.z;
+    const distance = Math.hypot(dx, dy, dz);
+    if (distance <= 0.000001) {
+      return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
+    }
+
+    const invDistance = 1 / distance;
+    const dirX = dx * invDistance;
+    const dirY = dy * invDistance;
+    const dirZ = dz * invDistance;
+    const sampleStep = Math.max(0.06, Number(step) || 0.14);
+    const safeRadius = Math.max(0, Number(radius) || 0);
+    let safeDistance = 0;
+
+    for (
+      let travel = Math.min(sampleStep, distance);
+      travel <= distance + 0.000001;
+      travel = Math.min(distance, travel + sampleStep)
+    ) {
+      const x = origin.x + dirX * travel;
+      const y = origin.y + dirY * travel;
+      const z = origin.z + dirZ * travel;
+      if (this.#cameraVolumeBlocked(x, y, z, safeRadius, surfacePadding)) {
+        const retreat = Math.max(0, safeDistance - safeRadius * 0.18);
+        return {
+          x: origin.x + dirX * retreat,
+          y: origin.y + dirY * retreat,
+          z: origin.z + dirZ * retreat,
+          blocked: true
+        };
+      }
+      safeDistance = travel;
+      if (travel >= distance) break;
+    }
+
+    return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
+  }
+
+  resolveVerticalMove(from, desiredY, {
+    radius = DEFAULT_PLAYER_RADIUS,
+    height = DEFAULT_PLAYER_HEIGHT
+  } = {}) {
+    if (!Number.isFinite(from?.x) || !Number.isFinite(from?.y) || !Number.isFinite(from?.z)) {
+      return { y: desiredY, blocked: false };
+    }
+    if (!Number.isFinite(desiredY) || desiredY <= from.y || !this.volumeSolidAt) {
+      return { y: desiredY, blocked: false };
+    }
+
+    const actorHeight = Number.isFinite(height) && height > 0
+      ? height
+      : DEFAULT_PLAYER_HEIGHT;
+    const actorRadius = Number.isFinite(radius) && radius > 0
+      ? radius
+      : DEFAULT_PLAYER_RADIUS;
+    const travel = desiredY - from.y;
+    const sampleStep = Math.max(0.06, Math.min(0.14, actorHeight * 0.08));
+    const steps = Math.max(1, Math.ceil(travel / sampleStep));
+    let safeY = from.y;
+
+    for (let index = 1; index <= steps; index += 1) {
+      const testY = from.y + travel * (index / steps);
+      if (!this.#volumeBlocksActor(from.x, from.z, testY, actorRadius, actorHeight)) {
+        safeY = testY;
+        continue;
+      }
+
+      let low = safeY;
+      let high = testY;
+      for (let refine = 0; refine < 7; refine += 1) {
+        const mid = (low + high) * 0.5;
+        if (this.#volumeBlocksActor(from.x, from.z, mid, actorRadius, actorHeight)) {
+          high = mid;
+        } else {
+          low = mid;
+        }
+      }
+      return { y: low, blocked: true };
+    }
+
+    return { y: desiredY, blocked: false };
+  }
+
   resolveMove(from, desired, {
     radius = DEFAULT_PLAYER_RADIUS,
     height = DEFAULT_PLAYER_HEIGHT,
@@ -299,7 +403,7 @@ export class WorldCollisionSystem {
     const verticalSamples = [
       feetY + 0.28,
       feetY + actorHeight * 0.52,
-      feetY + actorHeight - 0.18
+      feetY + actorHeight - 0.08
     ];
     for (const y of verticalSamples) {
       for (const [offsetX, offsetZ] of horizontalSamples) {
@@ -307,6 +411,35 @@ export class WorldCollisionSystem {
       }
     }
     return false;
+  }
+
+  #worldSolidAt(x, y, z, surfacePadding = 0.06) {
+    if (this.volumeActivityAt?.(x, z)) {
+      return Boolean(this.volumeSolidAt?.(x, y, z));
+    }
+    return y < this.baseHeightAt(x, z) - Math.max(0, surfacePadding);
+  }
+
+  #cameraVolumeBlocked(x, y, z, radius, surfacePadding) {
+    const offsets = radius > 0
+      ? [
+        [0, 0, 0],
+        [radius, 0, 0],
+        [-radius, 0, 0],
+        [0, radius, 0],
+        [0, -radius, 0],
+        [0, 0, radius],
+        [0, 0, -radius]
+      ]
+      : [[0, 0, 0]];
+    return offsets.some(([offsetX, offsetY, offsetZ]) =>
+      this.#worldSolidAt(
+        x + offsetX,
+        y + offsetY,
+        z + offsetZ,
+        surfacePadding
+      )
+    );
   }
 
   #bumpTypeRevision(type) {
