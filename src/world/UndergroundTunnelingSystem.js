@@ -166,15 +166,16 @@ export class UndergroundTunnelingSystem {
     if (direction.lengthSq() < 0.000001) return null;
     direction.normalize();
 
+    const sculptReach = TERRAIN_SCULPTING.reach;
     const hitPoint = this.#findDensitySurfaceHit(
       aim.origin,
       direction,
-      this.config.mineReach
+      sculptReach
     );
     if (!hitPoint) return null;
     if (
       playerPosition &&
-      hitPoint.distanceTo(playerPosition) > this.config.mineReach + 1.2
+      hitPoint.distanceTo(playerPosition) > sculptReach + 1.2
     ) return null;
 
     const outwardNormal = this.#densitySurfaceNormalAt(hitPoint, this.tempC);
