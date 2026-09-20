@@ -298,7 +298,7 @@ const roofSupport = world.supportHeightAt(
   }
 );
 assert.equal(Number.isFinite(roofSupport), true, 'extended tunnel must expose support below its roof');
-const roofCeiling = world.ceilingHeightAt(
+const roofCeiling = world.tunneling.ceilingHeightAt(
   recoveredWallTarget.point.x,
   recoveredWallTarget.point.z,
   { referenceY: roofSupport + 0.45 }
