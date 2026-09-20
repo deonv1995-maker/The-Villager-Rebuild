@@ -198,10 +198,11 @@ export class UndergroundTunnelingSystem {
     if (!this.#columnHasActivity(x, z)) return null;
 
     const surfaceY = this.terrain.heightAt(x, z);
+    const naturalSurfaceY = this.#naturalSurfaceHeightAt(x, z);
     const reference = Number.isFinite(referenceY) ? referenceY : surfaceY;
     const allowance = airborne ? 0.18 : Math.max(0, Number(maxStepUp) || 0);
     const scanStep = Math.max(0.08, this.config.cellSize * SUPPORT_SCAN_FRACTION);
-    const bottomY = surfaceY - this.config.maxDepth;
+    const bottomY = naturalSurfaceY - this.config.maxDepth;
 
     let previousY = Math.min(surfaceY + this.config.cellSize, reference + allowance + scanStep);
     let previousDensity = this.#densityAt(x, previousY, z);
@@ -236,8 +237,9 @@ export class UndergroundTunnelingSystem {
   isSolidAt(x, y, z) {
     if (!this.#columnHasActivity(x, z)) return false;
     const surfaceY = this.terrain.heightAt(x, z);
+    const naturalSurfaceY = this.#naturalSurfaceHeightAt(x, z);
     if (y > surfaceY + this.config.cellSize * 0.5) return false;
-    if (y < surfaceY - this.config.maxDepth - this.config.cellSize) return false;
+    if (y < naturalSurfaceY - this.config.maxDepth - this.config.cellSize) return false;
     return this.#densityAt(x, y, z) >= ISO_LEVEL;
   }
 
@@ -343,6 +345,12 @@ export class UndergroundTunnelingSystem {
     return this.#pocketForCell(ix, iz);
   }
 
+  #naturalSurfaceHeightAt(x, z) {
+    return typeof this.terrain.naturalHeightAt === 'function'
+      ? this.terrain.naturalHeightAt(x, z)
+      : this.terrain.heightAt(x, z);
+  }
+
   #findDensitySurfaceHit(origin, direction) {
     const step = Math.max(0.08, this.config.cellSize * TARGET_RAY_STEP_FRACTION);
     let previousDistance = 0;
@@ -386,9 +394,9 @@ export class UndergroundTunnelingSystem {
   #canExcavateSphereAtWorld(center, radius) {
     const safeRadius = Math.max(0, Number(radius) || 0);
     if (!this.terrain.isPlayable?.(center.x, center.z, safeRadius + 0.35)) return false;
-    const surfaceY = this.terrain.heightAt(center.x, center.z);
+    const naturalSurfaceY = this.#naturalSurfaceHeightAt(center.x, center.z);
     const protectedBottom =
-      surfaceY - this.config.maxDepth + this.config.bottomPadding;
+      naturalSurfaceY - this.config.maxDepth + this.config.bottomPadding;
     return center.y - safeRadius >= protectedBottom;
   }
 
@@ -514,7 +522,7 @@ export class UndergroundTunnelingSystem {
       return null;
     }
 
-    const centerSurfaceY = this.terrain.heightAt(x, z);
+    const centerSurfaceY = this.#naturalSurfaceHeightAt(x, z);
     let minimumNearbySurfaceY = centerSurfaceY;
     for (let sample = 0; sample < 8; sample += 1) {
       const angle = sample * Math.PI * 0.25;
@@ -522,7 +530,7 @@ export class UndergroundTunnelingSystem {
       const sampleZ = z + Math.sin(angle) * radius * 1.1;
       minimumNearbySurfaceY = Math.min(
         minimumNearbySurfaceY,
-        this.terrain.heightAt(sampleX, sampleZ)
+        this.#naturalSurfaceHeightAt(sampleX, sampleZ)
       );
     }
 
