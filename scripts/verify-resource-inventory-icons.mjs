@@ -74,7 +74,9 @@ for (const [id, fileName] of Object.entries(cosyResourceIcons)) {
 }
 for (const [id, fileName] of Object.entries({
   mushroom: 'icon-resource-mushroom.svg',
-  mushroom_stew: 'icon-resource-mushroom-stew.svg'
+  mushroom_stew: 'icon-resource-mushroom-stew.svg',
+  ancient_relic: 'icon-resource-ancient-relic.svg',
+  sprout_shard: 'icon-resource-sprout-shard.svg'
 })) {
   const iconPath = `ui/mobile/${fileName}`;
   assert.match(
