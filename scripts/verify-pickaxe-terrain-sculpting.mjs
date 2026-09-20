@@ -320,6 +320,12 @@ assert.ok(
   'surface terraforming must keep Dig separate and consume normal Pickaxe use/durability'
 );
 assert.ok(
+  controllerSource.includes('getFloorSculptTarget?.({') &&
+  controllerSource.includes('applyFloorSculpt?.(this.mode, target)') &&
+  controllerSource.includes('point.y + 0.045'),
+  'Raise/Lower/Smoothen/Level must fall through to the shared 3D tunnel-floor authority and preview at underground height'
+);
+assert.ok(
   constructionTerrainSource.includes('this.revision += 1;'),
   'terrain-geometry replacement must publish a revision for vegetation reprojection'
 );
