@@ -56,6 +56,8 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     this.tunnelingOpenings = [];
     this.terrainChunkRecords = new Map();
     this.terrainChunkGeometryListeners = new Set();
+    this.heightModifier = null;
+    this.naturalWaterGeometry = null;
   }
 
   coastRadiusAt(angle) {
@@ -125,7 +127,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     );
   }
 
-  heightAt(x, z) {
+  naturalHeightAt(x, z) {
     let height = super.heightAt(x, z);
     const normalized = this.normalizedRadius(x, z);
     if (normalized >= 0.99) return height;
@@ -147,6 +149,13 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
     height += shoreFade * (outerFeatures + longNoise + explorationTerrain);
     return height;
+  }
+
+  heightAt(x, z) {
+    const naturalY = this.naturalHeightAt(x, z);
+    return this.heightModifier
+      ? this.heightModifier(naturalY, x, z)
+      : naturalY;
   }
 
   shallowWaterStrengthAt(x, z) {
@@ -172,6 +181,96 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       ...island,
       bar: { ...island.bar }
     }));
+  }
+
+  setHeightModifier(modifier) {
+    this.heightModifier = typeof modifier === 'function' ? modifier : null;
+  }
+
+  rebuildTerrainForCircles(circles = []) {
+    if (!this.terrainChunkRecords.size || !Array.isArray(circles) || !circles.length) return 0;
+    const affected = new Set();
+    for (const record of this.terrainChunkRecords.values()) {
+      const half = record.chunkSize * 0.5;
+      const renderPadding = record.chunkSize / Math.max(1, this.tunnelTerrainSegments);
+      for (const circle of circles) {
+        const x = Number(circle?.x);
+        const z = Number(circle?.z);
+        const radius = Number(circle?.radius);
+        if (!Number.isFinite(x) || !Number.isFinite(z) || !Number.isFinite(radius) || radius <= 0) continue;
+        const dx = Math.max(Math.abs(x - record.centerX) - half, 0);
+        const dz = Math.max(Math.abs(z - record.centerZ) - half, 0);
+        const paddedRadius = radius + renderPadding;
+        if (dx * dx + dz * dz <= paddedRadius * paddedRadius) {
+          affected.add(record.key);
+          break;
+        }
+      }
+    }
+    for (const key of affected) this.#rebuildTerrainChunk(key);
+    return affected.size;
+  }
+
+  rebuildAllTerrainChunks() {
+    for (const key of this.terrainChunkRecords.keys()) this.#rebuildTerrainChunk(key);
+    return this.terrainChunkRecords.size;
+  }
+
+  isNaturalWaterAt(x, z, clearance = 0.04) {
+    return this.naturalHeightAt(x, z) <= this.waterLevel + clearance;
+  }
+
+  createNaturalWaterGeometry() {
+    if (this.naturalWaterGeometry) return this.naturalWaterGeometry;
+
+    const width = this.extentX * 2 + 520;
+    const depth = this.extentZ * 2 + 520;
+    const cellSize = 12;
+    const columns = Math.max(1, Math.ceil(width / cellSize));
+    const rows = Math.max(1, Math.ceil(depth / cellSize));
+    const stepX = width / columns;
+    const stepZ = depth / rows;
+    const halfWidth = width * 0.5;
+    const halfDepth = depth * 0.5;
+    const positions = [];
+
+    const wet = (localX, localZ) =>
+      this.isNaturalWaterAt(localX, this.centerZ + localZ);
+
+    const appendTriangle = (a, b, d) => {
+      if (!wet(a.x, a.z) || !wet(b.x, b.z) || !wet(d.x, d.z)) return;
+      positions.push(
+        a.x, 0, a.z,
+        b.x, 0, b.z,
+        d.x, 0, d.z
+      );
+    };
+
+    for (let ix = 0; ix < columns; ix += 1) {
+      const x0 = -halfWidth + ix * stepX;
+      const x1 = x0 + stepX;
+      for (let iz = 0; iz < rows; iz += 1) {
+        const z0 = -halfDepth + iz * stepZ;
+        const z1 = z0 + stepZ;
+        const a = { x: x0, z: z0 };
+        const b = { x: x1, z: z0 };
+        const d = { x: x1, z: z1 };
+        const e = { x: x0, z: z1 };
+        appendTriangle(a, b, d);
+        appendTriangle(a, d, e);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    if (positions.length) {
+      geometry.computeVertexNormals();
+      geometry.computeBoundingSphere();
+    }
+    geometry.userData.naturalWaterMask = true;
+    geometry.userData.cellSize = cellSize;
+    this.naturalWaterGeometry = geometry;
+    return geometry;
   }
 
   setTunnelingOpenings(openings = []) {
@@ -408,7 +507,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
   #createWater() {
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(this.extentX * 2 + 520, this.extentZ * 2 + 520),
+      this.createNaturalWaterGeometry(),
       new THREE.MeshStandardMaterial({
         color: 0x4faebb,
         transparent: true,
@@ -417,9 +516,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
         metalness: 0.01
       })
     );
-    water.geometry.rotateX(-Math.PI / 2);
     water.position.set(0, this.waterLevel, this.centerZ);
     water.name = 'foundation-water';
+    water.userData.naturalWaterMask = true;
     this.group.add(water);
   }
 
