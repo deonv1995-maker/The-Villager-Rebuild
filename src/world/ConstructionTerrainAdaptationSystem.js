@@ -95,9 +95,11 @@ export class ConstructionTerrainAdaptationSystem {
     this.meshRecords[recordIndex] = record;
     mesh.userData.constructionTerrainTracked = true;
 
-    // Dynamic tunneling geometry is rebuilt from immutable terrain. Reapply any
-    // active construction floor cuts to the replacement geometry immediately.
+    // Dynamic terrain geometry may be replaced by tunneling or Pickaxe surface
+    // sculpting. Reapply construction floor cuts immediately and advance the
+    // shared terrain revision so vegetation consumers reproject to the new Y.
     this.#rebuildMesh(record);
+    this.revision += 1;
     return true;
   }
 
