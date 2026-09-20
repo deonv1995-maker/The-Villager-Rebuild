@@ -383,8 +383,16 @@ assert.equal(state.schemaVersion, UNDERGROUND_TUNNELING.schemaVersion);
 assert.equal(state.excavations.length, discoveryHit.excavationCount);
 assert.equal(state.floorEdits.length, 4, 'tunnel floor sculpt edits must persist with tunneling state');
 assert.equal(state.discoveredPocketIds.includes(pocket.id), true);
-assert.equal('resources' in state, false, 'resource spawning must remain outside this tunneling milestone');
-assert.equal('treasure' in state, false, 'treasure spawning must remain outside this tunneling milestone');
+assert.equal(
+  state.content?.kind,
+  'underground-pocket-content-v1',
+  'discovered pockets must persist their separate content collection state'
+);
+assert.equal(
+  state.content?.collectedIds?.length,
+  0,
+  'discovering a pocket must activate rewards without marking them collected'
+);
 
 const restoredGroup = new THREE.Group();
 const restored = new ExplorationPoiSystem({
@@ -409,6 +417,11 @@ assert.equal(
   'restored world must preserve discovered pocket identity'
 );
 assert.equal(
+  restored.getDebugState().pocketContent.pocketCount >= 1,
+  true,
+  'restored discovered pockets must rebuild deterministic cave content'
+);
+assert.equal(
   restored.isSolidAt(firstGround.x, firstCenterY, firstGround.z),
   false,
   'restored density must reproduce the first tunnel opening'
@@ -427,4 +440,4 @@ assert.doesNotMatch(explorationSource, /MineableCaveSystem/, 'obsolete cave impl
 assert.doesNotMatch(terrainSource, /CaveTerrainProfile|caveMineable/, 'terrain must not retain cave-specific cutting');
 assert.doesNotMatch(gameSource, /mineable-cave|CAVE GROUND/, 'game interaction must be generic tunneling, not cave mining');
 
-console.log('global lazy tunneling, longer first-person reach, underground floor sculpting, collision support, distant excavation, deterministic pockets and persistence verified');
+console.log('global lazy tunneling, cave-safe traversal, deterministic pockets, content activation and persistence verified');
