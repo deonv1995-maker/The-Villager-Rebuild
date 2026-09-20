@@ -58,7 +58,7 @@ The terrain menu reuses the established compact top-right hammer/shovel presenta
 
 ## Terrain rendering, construction and vegetation
 
-A surface edit rebuilds only terrain chunks intersecting the brush.
+A surface edit rebuilds only terrain chunks intersecting the brush. Ordinary world chunks keep the established coarse mobile lattice; chunks containing surface edits move to a scoped medium-detail lattice so the 2.4 m brush is represented by visible geometry rather than only by collision math. Tunnel-opening chunks retain their higher-detail lattice because they also have to cut a real 3D hole through the heightfield.
 
 `ConstructionTerrainAdaptationSystem` already listens for terrain geometry replacement. It refreshes its tracked natural vertex data, reapplies active floor cuts, and now advances the shared terrain revision when the underlying terrain geometry changes.
 
