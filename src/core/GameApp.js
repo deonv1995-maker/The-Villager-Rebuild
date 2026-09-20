@@ -301,6 +301,15 @@ export class GameApp {
           ?? this.campfire?.getDemolitionTarget(this.playerPosition)
           ?? null
       : null;
+    const undergroundTarget = panelHammerOwned
+      ? null
+      : this.island?.explorationPois?.getInteractionTarget?.(this.playerPosition) ?? null;
+    if (undergroundTarget) {
+      undergroundTarget.available = this.inventory?.canAdd?.(
+        undergroundTarget.resourceId,
+        undergroundTarget.quantity
+      ) ?? true;
+    }
     const resourceTarget = panelHammerOwned
       ? (this.gatherables?.update(this.playerPosition, () => false), null)
       : this.gatherables?.update(this.playerPosition) ?? null;
@@ -308,6 +317,7 @@ export class GameApp {
     this.currentInteractionTarget = panelHammerOwned
       ? panelDemolitionTarget
       : carcassTarget
+        ?? undergroundTarget
         ?? treeTarget
         ?? rockTarget
         ?? groundMineTarget
@@ -377,6 +387,26 @@ export class GameApp {
       this.inventory.add(loot.itemId, loot.quantity);
       this.#refreshTargets(0);
       this.#syncProgress();
+      return;
+    }
+
+    if (target.type === 'underground-collectible') {
+      const pickup = this.island?.explorationPois?.collectUndergroundTarget?.(target, {
+        playerPosition: this.playerPosition,
+        canStore: (itemId, quantity) => this.inventory.canAdd(itemId, quantity)
+      });
+      if (!pickup) return;
+      if (!pickup.collected) {
+        if (pickup.reason === 'capacity') {
+          this.setStatus(`${pickup.label.toUpperCase()} · STORAGE FULL`);
+          this.hud?.setObjective('Free shared inventory space before collecting this underground find');
+        }
+        return;
+      }
+      this.inventory.add(pickup.resourceId, pickup.quantity);
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(`${pickup.label.toUpperCase()} · COLLECTED`);
       return;
     }
 
@@ -733,6 +763,22 @@ export class GameApp {
     if (this.currentInteractionTarget?.type === 'tree') {
       this.setStatus('AXE · TREE IN RANGE');
       this.hud?.setObjective('Axe action · chop tree into physical logs');
+      return;
+    }
+
+    if (this.currentInteractionTarget?.type === 'underground-collectible') {
+      const target = this.currentInteractionTarget;
+      const full = target.available === false;
+      this.setStatus(
+        full
+          ? `${target.label.toUpperCase()} · STORAGE FULL`
+          : `${target.label.toUpperCase()} · HIDDEN FIND`
+      );
+      this.hud?.setObjective(
+        full
+          ? 'Free shared inventory space before collecting this underground find'
+          : `Hand / E · collect ${target.label}`
+      );
       return;
     }
 
