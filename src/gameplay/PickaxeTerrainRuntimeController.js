@@ -97,7 +97,7 @@ export class PickaxeTerrainRuntimeController {
 
     const definition = TERRAIN_SCULPT_DEFINITIONS[result.mode];
     this.game.setStatus(
-      `GROUND ${definition.caption}D · ${result.editCount} TERRAIN EDIT${result.editCount === 1 ? '' : 'S'}`
+      `${definition.label.toUpperCase()} COMPLETE · ${result.editCount} TERRAIN EDIT${result.editCount === 1 ? '' : 'S'}`
     );
     return result;
   }
