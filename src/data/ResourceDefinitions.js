@@ -62,6 +62,20 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
       hungerRestore: 60
     })
   }),
+  ancient_relic: Object.freeze({
+    id: 'ancient_relic',
+    label: 'Ancient Relic',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'treasure'
+  }),
+  sprout_shard: Object.freeze({
+    id: 'sprout_shard',
+    label: 'Sprout Upgrade Shard',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'progression'
+  }),
   log: Object.freeze({
     id: 'log',
     label: 'Log',
