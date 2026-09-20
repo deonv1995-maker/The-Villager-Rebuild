@@ -241,6 +241,26 @@ export class UndergroundTunnelingSystem {
     return this.#densityAt(x, y, z) >= ISO_LEVEL;
   }
 
+  refreshTerrainSurface(change = null) {
+    const hasLocalChange =
+      Number.isFinite(change?.x) &&
+      Number.isFinite(change?.z) &&
+      Number.isFinite(change?.radius) &&
+      change.radius > 0;
+
+    for (const [key, chunk] of this.activeChunks) {
+      if (!hasLocalChange) {
+        this.#rebuildChunk(key);
+        continue;
+      }
+      const dx = Math.max(chunk.bounds.minX - change.x, 0, change.x - chunk.bounds.maxX);
+      const dz = Math.max(chunk.bounds.minZ - change.z, 0, change.z - chunk.bounds.maxZ);
+      if (dx * dx + dz * dz <= change.radius * change.radius) this.#rebuildChunk(key);
+    }
+    this.#syncSurfaceState();
+    return true;
+  }
+
   getPresentationExclusions() {
     return this.surfaceOpenings.map((opening, index) => ({
       id: `tunnel-opening:${index}`,
