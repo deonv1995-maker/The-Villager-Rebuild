@@ -164,6 +164,7 @@ export class TerrainSculptingSystem {
 
     if (!edit) return null;
     this.#registerEdit(edit);
+    this.terrain.setSurfaceSculptRegions?.(this.edits);
     this.terrain.rebuildTerrainForCircles?.([edit]);
     this.onChanged?.({
       mode,
@@ -209,6 +210,7 @@ export class TerrainSculptingSystem {
   }
 
   restoreState(state) {
+    const previousEdits = [...this.edits];
     this.edits.length = 0;
     this.editBuckets.clear();
     this.nextEditId = 1;
@@ -217,7 +219,8 @@ export class TerrainSculptingSystem {
       state?.kind !== this.config.stateKind ||
       state?.schemaVersion !== this.config.schemaVersion
     ) {
-      this.terrain.rebuildAllTerrainChunks?.();
+      this.terrain.setSurfaceSculptRegions?.([]);
+      if (previousEdits.length) this.terrain.rebuildTerrainForCircles?.(previousEdits);
       this.onChanged?.({ restored: true, editCount: 0 });
       return false;
     }
@@ -231,7 +234,9 @@ export class TerrainSculptingSystem {
       this.nextEditId = Math.max(this.nextEditId, edit.id + 1);
     }
 
-    if (restored.length) this.terrain.rebuildTerrainForCircles?.(restored);
+    this.terrain.setSurfaceSculptRegions?.(restored);
+    const changedRegions = [...previousEdits, ...restored];
+    if (changedRegions.length) this.terrain.rebuildTerrainForCircles?.(changedRegions);
     this.onChanged?.({ restored: true, editCount: this.edits.length });
     return true;
   }
