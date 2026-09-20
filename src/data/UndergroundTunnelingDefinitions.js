@@ -1,6 +1,6 @@
 import { PLAYER_TRAVERSAL_TUNING } from './PlayerTraversalTuning.js';
 
-const RANGER_CLEAR_MINE_MARGIN = 0.4;
+const RANGER_CLEAR_MINE_MARGIN = 0.8;
 
 export const UNDERGROUND_TUNNELING = Object.freeze({
   schemaVersion: 1,
@@ -15,6 +15,14 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   mineCenterDrop:
     PLAYER_TRAVERSAL_TUNING.body.eyeHeight - PLAYER_TRAVERSAL_TUNING.body.height * 0.5,
   mineInset: 0.38,
+
+  // Each Pickaxe strike carves a walking-oriented arch rather than a sphere.
+  // The lower section keeps a flat floor and generous side clearance while the
+  // upper section narrows into an oval roof for smoother tunnel traversal.
+  tunnelWidthScale: 1.08,
+  tunnelFloorDropScale: 0.68,
+  tunnelShoulderRiseScale: 0.12,
+  tunnelRoofRiseScale: 1.28,
 
   // The first tunneling milestone is intentionally bounded vertically while
   // remaining available anywhere on playable land.
