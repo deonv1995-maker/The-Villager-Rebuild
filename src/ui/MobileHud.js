@@ -46,6 +46,7 @@ export class MobileHud {
     this.currentCraftPlacementAction = null;
     this.externalActions = new Map();
     this.activeAction = null;
+    this.actionPress = null;
     this.root = document.createElement('div');
     this.root.className = 'mobile-hud';
 
@@ -499,8 +500,16 @@ export class MobileHud {
 
   setExternalAction(id, action = null) {
     if (!id) return;
-    if (!action) this.externalActions.delete(id);
-    else this.externalActions.set(id, { ...action, id });
+    if (!action) {
+      const existing = this.externalActions.get(id);
+      if (this.actionPress?.externalId === id) {
+        this.actionPress = null;
+        existing?.onPressEnd?.();
+      }
+      this.externalActions.delete(id);
+    } else {
+      this.externalActions.set(id, { ...action, id });
+    }
     this.#renderAction();
   }
 
@@ -558,6 +567,38 @@ export class MobileHud {
     this.actionCaption.textContent = action.caption ?? 'ACTION';
     this.actionButton.dataset.actionSource = action.source ?? 'none';
     this.actionButton.classList.toggle('work-tool', WORK_ACTION_TOOLS.has(equippedTool));
+  }
+
+  #beginActionPress(event) {
+    const action = this.activeAction;
+    if (!action?.available) return;
+    if (action.source === 'external') {
+      const external = this.externalActions.get(action.externalId);
+      if (external?.onPressStart) {
+        this.actionPress = {
+          pointerId: event?.pointerId ?? null,
+          externalId: action.externalId
+        };
+        if (Number.isFinite(event?.pointerId)) {
+          this.actionButton.setPointerCapture?.(event.pointerId);
+        }
+        external.onPressStart();
+        return;
+      }
+    }
+    this.#triggerAction();
+  }
+
+  #endActionPress(event = null) {
+    if (!this.actionPress) return;
+    if (
+      Number.isFinite(event?.pointerId) &&
+      Number.isFinite(this.actionPress.pointerId) &&
+      event.pointerId !== this.actionPress.pointerId
+    ) return;
+    const { externalId } = this.actionPress;
+    this.actionPress = null;
+    this.externalActions.get(externalId)?.onPressEnd?.();
   }
 
   #triggerAction() {
@@ -647,8 +688,11 @@ export class MobileHud {
 
     this.actionButton.addEventListener('pointerdown', event => {
       event.preventDefault();
-      this.#triggerAction();
+      this.#beginActionPress(event);
     });
+    this.actionButton.addEventListener('pointerup', event => this.#endActionPress(event));
+    this.actionButton.addEventListener('pointercancel', event => this.#endActionPress(event));
+    this.actionButton.addEventListener('lostpointercapture', event => this.#endActionPress(event));
 
     this.cameraToggle?.addEventListener('pointerdown', event => {
       event.preventDefault();
