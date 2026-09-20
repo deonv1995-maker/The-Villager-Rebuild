@@ -15,7 +15,8 @@ While the Pickaxe is equipped, a compact top-right terrain dock exposes five mod
 The modes share one tool and one durability lifecycle, but they deliberately use two different terrain representations.
 
 - **Dig** remains true 3D excavation owned by `UndergroundTunnelingSystem`. It can create tunnels, caves, underground rooms, floors, walls and ceilings.
-- **Raise / Lower / Smoothen / Level** edit the 2D surface-height authority owned by `TerrainSculptingSystem`. They do not subtract arbitrary underground volume.
+- **Raise / Lower / Smoothen / Level** edit the 2D surface-height authority owned by `TerrainSculptingSystem` while above ground.
+- When the same reticle is inside an active tunnel, those four modes fall through to `UndergroundTunnelingSystem` and reshape only the local walkable floor band of the 3D density field. This is what lets stepped downward cuts be smoothed/levelled into ramps without inventing a second cave terrain system.
 
 This separation keeps surface terraforming simple and mobile-friendly without weakening the existing volumetric tunneling architecture.
 
@@ -45,11 +46,12 @@ Each operation uses a smooth radial falloff instead of a hard cylinder edge.
 
 The existing first-person white-dot aim remains the terrain targeting authority.
 
-When a surface mode is selected:
+When a non-Dig mode is selected:
 
 - normal Pickaxe rock mining and generic Dig targeting are suppressed;
 - the selected terrain operation owns the unified mobile Action button;
-- a circular brush preview is shown on the valid target surface;
+- targeting first tries the editable overworld surface and, when the camera is genuinely underground, falls through to the active tunnel-floor density surface;
+- the circular brush preview uses the actual selected Y position, so underground edits preview on the cave floor rather than on the terrain surface above;
 - the normal Pickaxe swing presentation and durability consumption still apply.
 
 When **Dig** is selected, the terrain controller releases Action ownership completely. Existing overworld rock mining and `UndergroundTunnelingSystem` targeting then behave exactly as before.
@@ -74,7 +76,7 @@ Large authored/scattered props such as trees and rocks remain owned by their exi
 
 The visible density ceiling continues to use the current edited `heightAt()`, so a player can reshape the surface and then tunnel naturally through that reshaped ground.
 
-The protected tunneling-depth boundary and deterministic underground-pocket placement use `naturalHeightAt()` instead. This is intentional:
+The protected tunneling-depth boundary and deterministic underground-pocket placement use `naturalHeightAt()` instead. Underground floor edits are persisted with tunneling state and are evaluated after excavation/pocket subtraction so rendering and collision see exactly the same reshaped floor. This is intentional:
 
 - lowering the surface after digging must not invalidate an existing saved tunnel;
 - raising the surface must not silently increase the geological mining budget;
@@ -130,6 +132,7 @@ The terrain-sculpting payload has its own state kind/schema and serializes only 
 - GameApp suppression of ordinary mining while a surface mode owns the Pickaxe;
 - unified Action-button priority;
 - normal Pickaxe swing/durability usage;
+- underground Raise/Lower/Smoothen/Level targeting and persistence through the tunneling density authority;
 - dedicated semantic icons for all five terrain modes, with no construction-icon reuse;
 - Ranger-clear arched tunnel dimensions, a flat floor boundary and an oval roof profile.
 
@@ -145,6 +148,7 @@ After deployment, verify on Android/PWA:
 - switch to Dig and confirm ordinary rock mining still works;
 - Dig into ordinary inland solid ground and confirm no ocean/water sheet appears under the terrain;
 - continue horizontally/downward to create an underground room and confirm 3D walls, floor and ceiling remain mineable;
+- create a stepped downhill tunnel, select Lower/Smoothen/Level and confirm the tunnel floor can be reshaped into a continuous walkable ramp;
 - terraform near an existing tunnel entrance and confirm its opening and underground shell remain coherent;
 - confirm grass/ferns/ground-cover reproject to changed terrain rather than floating;
 - save, Continue, and confirm both surface edits and underground excavation return together;

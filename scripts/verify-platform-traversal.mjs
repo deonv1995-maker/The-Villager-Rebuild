@@ -293,4 +293,39 @@ assert.ok(
   'The lower-floor handoff must happen with physical capsule clearance still available before the Wall'
 );
 
-console.log('Ranger platform entry, overhang seam traversal, stair-foot egress and elevated-floor blocking verified.');
+// Underground movement uses the same shared collision authority. A jump may approach
+// a carved ceiling but must never move the Ranger body through solid density.
+const caveCollision = new WorldCollisionSystem({
+  heightAt: () => 4,
+  baseHeightAt: () => 4,
+  isPlayable: () => true
+});
+caveCollision.setVolumeQuery({
+  supportHeightAt: () => 0,
+  hasActivityAt: () => true,
+  isSolidAt: (x, y) => y >= 2.75 || x >= 2
+});
+
+const upward = caveCollision.resolveVerticalMove(
+  { x: 0, y: 0, z: 0 },
+  1,
+  { radius: PLAYER_RADIUS, height: 2.2 }
+);
+assert.equal(upward.blocked, true, 'solid cave ceilings must stop upward Ranger movement');
+assert.ok(
+  upward.y < 0.72,
+  'ceiling collision must keep the Ranger head below solid tunnel density'
+);
+
+const cameraResolved = caveCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 4, y: 1.35, z: 0 },
+  { radius: 0.26, step: 0.1 }
+);
+assert.equal(cameraResolved.blocked, true, 'third-person camera travel must stop at solid terrain');
+assert.ok(
+  cameraResolved.x < 2,
+  'third-person camera must remain on the visible side of a cave wall instead of seeing through ground'
+);
+
+console.log('Ranger platform entry, overhang seam traversal, stair-foot egress, cave ceiling blocking and terrain-aware camera collision verified.');

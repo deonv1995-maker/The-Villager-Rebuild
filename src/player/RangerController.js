@@ -6,6 +6,7 @@ import { rangerGroundHeightAt } from './RangerGrounding.js';
 
 const LOOPING_CLIPS = new Set(['Idle_A', 'Walking_A', 'Running_A']);
 const PLAYER_RADIUS = PLAYER_TRAVERSAL_TUNING.body.radius;
+const PLAYER_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.height;
 const DEFAULT_WALK_SPEED = 3.4;
 const ANALOG_WALK_MIN_SPEED = 1.35;
 const ANALOG_WALK_MAX_SPEED = 4.5;
@@ -19,6 +20,7 @@ const CAMERA_FOLLOW_RESPONSE = 0.78;
 const CAMERA_RETURN_RESPONSE = 0.5;
 const CAMERA_PITCH_RESPONSE = 0.7;
 const CAMERA_POSITION_RESPONSE = 4.2;
+const THIRD_PERSON_CAMERA_COLLISION_RADIUS = 0.26;
 const CAMERA_RETURN_DELAY = 1.25;
 const THIRD_PERSON_LOOK_AHEAD = 2;
 const THIRD_PERSON_TARGET_HEIGHT = 1.35;
@@ -105,6 +107,7 @@ export class RangerController {
     this.tempFirstPersonBobTarget = new THREE.Vector3();
     this.tempThirdPersonLookTarget = new THREE.Vector3();
     this.tempThirdPersonViewForward = new THREE.Vector3();
+    this.tempThirdPersonCameraPosition = new THREE.Vector3();
     this.cinematicDriver = null;
     this.#bindKeyboard();
   }
@@ -647,7 +650,14 @@ export class RangerController {
 
     if (!this.grounded) {
       this.jumpVelocity -= gravityForVerticalSpeed(this.jumpVelocity) * dt;
-      this.root.position.y += this.jumpVelocity * dt;
+      const desiredY = this.root.position.y + this.jumpVelocity * dt;
+      const verticalMove = this.collision?.resolveVerticalMove?.(
+        this.root.position,
+        desiredY,
+        { radius: PLAYER_RADIUS, height: PLAYER_HEIGHT }
+      ) ?? { y: desiredY, blocked: false };
+      this.root.position.y = verticalMove.y;
+      if (verticalMove.blocked && this.jumpVelocity > 0) this.jumpVelocity = 0;
       if (this.root.position.y <= ground) {
         this.root.position.y = ground;
         this.jumpVelocity = 0;
@@ -1011,8 +1021,28 @@ export class RangerController {
       target.y + 2.2 + Math.sin(-this.pitch) * distance,
       target.z + Math.cos(this.yaw) * horizontal
     );
-    if (immediate) this.camera.position.copy(desired);
-    else this.camera.position.lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
+    const cameraCandidate = this.tempThirdPersonCameraPosition;
+    if (immediate) cameraCandidate.copy(desired);
+    else {
+      cameraCandidate
+        .copy(this.camera.position)
+        .lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
+    }
+
+    if (!this.cinematicDriver && this.collision?.resolveCameraPosition) {
+      const resolvedCamera = this.collision.resolveCameraPosition(
+        target,
+        cameraCandidate,
+        { radius: THIRD_PERSON_CAMERA_COLLISION_RADIUS }
+      );
+      this.camera.position.set(
+        resolvedCamera.x,
+        resolvedCamera.y,
+        resolvedCamera.z
+      );
+    } else {
+      this.camera.position.copy(cameraCandidate);
+    }
 
     // The Ranger's feet legitimately rise one tread at a time, but aiming the camera at
     // that raw stepped Y makes each tread read as a camera kick. Keep horizontal tracking

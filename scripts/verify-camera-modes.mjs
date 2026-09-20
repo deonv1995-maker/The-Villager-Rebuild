@@ -51,6 +51,36 @@ assert.ok(
   'Third-person Ranger must sit below screen centre so more forward landscape stays visible'
 );
 
+let cameraCollisionCalls = 0;
+const collisionCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const collisionPlayer = new RangerController({
+  scene,
+  camera: collisionCamera,
+  terrain,
+  collision: {
+    resolveCameraPosition(origin) {
+      cameraCollisionCalls += 1;
+      return {
+        x: origin.x,
+        y: origin.y + 0.35,
+        z: origin.z + 0.45,
+        blocked: true
+      };
+    }
+  }
+});
+collisionPlayer.model = new THREE.Group();
+collisionPlayer.root.add(collisionPlayer.model);
+collisionPlayer.assetMode = 'kaykit';
+collisionPlayer.update(1 / 60);
+assert.ok(cameraCollisionCalls > 0, 'third-person Ranger camera must consult shared world collision');
+assert.ok(
+  collisionCamera.position.distanceTo(
+    collisionPlayer.root.position.clone().add(new THREE.Vector3(0, 1.7, 0.45))
+  ) < 0.02,
+  'third-person camera must use the collision-resolved position instead of the through-ground orbit point'
+);
+
 // Stair treads legitimately raise the Ranger in discrete steps. Third-person framing must
 // absorb that vertical step instead of snapping the look target upward in one frame.
 let steppedGroundY = 0;

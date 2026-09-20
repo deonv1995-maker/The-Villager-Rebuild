@@ -86,7 +86,9 @@ export class PickaxeTerrainRuntimeController {
     this.game.player?.faceWorldPoint(target.position ?? target.point);
     if (!this.game.toolPresentation?.playSwing('pickaxe')) return null;
 
-    const result = this.game.island.terrainSculpting.apply(this.mode, target);
+    const result = target.type === 'terraform-tunnel-floor'
+      ? this.game.island.explorationPois?.applyFloorSculpt?.(this.mode, target)
+      : this.game.island.terrainSculpting.apply(this.mode, target);
     if (!result) return null;
 
     this.game.equipmentRuntime?.recordUse?.('pickaxe');
@@ -146,7 +148,10 @@ export class PickaxeTerrainRuntimeController {
       ? this.game.island.terrainSculpting.getSurfaceTarget({
         aim,
         playerPosition: this.playerPosition
-      })
+      }) ?? this.game.island.explorationPois?.getFloorSculptTarget?.({
+        aim,
+        playerPosition: this.playerPosition
+      }) ?? null
       : null;
 
     this.#syncPreview();
@@ -174,7 +179,7 @@ export class PickaxeTerrainRuntimeController {
     });
 
     const targetKey = this.currentTarget
-      ? `${Math.round(this.currentTarget.point.x * 2)}:${Math.round(this.currentTarget.point.z * 2)}`
+      ? `${Math.round(this.currentTarget.point.x * 2)}:${Math.round(this.currentTarget.point.y * 2)}:${Math.round(this.currentTarget.point.z * 2)}`
       : 'none';
     const statusKey = `${this.mode}:${firstPerson}:${busy}:${targetKey}`;
     if (statusKey === this.lastStatusKey) return;
@@ -227,7 +232,7 @@ export class PickaxeTerrainRuntimeController {
     const point = this.currentTarget.point;
     this.preview.position.set(
       point.x,
-      this.game.island.terrain.heightAt(point.x, point.z) + 0.045,
+      point.y + 0.045,
       point.z
     );
     this.preview.visible = true;

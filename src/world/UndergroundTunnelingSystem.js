@@ -3,6 +3,7 @@ import {
   UNDERGROUND_TUNNELING,
   undergroundTunnelChunkSize
 } from '../data/UndergroundTunnelingDefinitions.js';
+import { TERRAIN_SCULPTING } from '../data/TerrainSculptingDefinitions.js';
 import { terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
 import {
   tunnelingExcavationCeilingY,
@@ -40,6 +41,10 @@ const CUBE_TETRAHEDRA = Object.freeze([
 ]);
 
 const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep01 = value => {
+  const t = THREE.MathUtils.clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+};
 const averagePoint = points => {
   const result = new THREE.Vector3();
   for (const point of points) result.add(point);
@@ -80,6 +85,9 @@ export class UndergroundTunnelingSystem {
 
     this.excavations = [];
     this.excavationBuckets = new Map();
+    this.floorEdits = [];
+    this.floorEditBuckets = new Map();
+    this.nextFloorEditId = 1;
     this.discoveredPocketIds = new Set();
     this.pocketCache = new Map();
     this.activeChunks = new Map();
@@ -116,6 +124,10 @@ export class UndergroundTunnelingSystem {
     return 0;
   }
 
+  hasActivityAt(x, z) {
+    return this.#columnHasActivity(x, z);
+  }
+
   getMineTarget({ aim, playerPosition = null } = {}) {
     if (!aim?.origin || !aim?.direction) return null;
     const direction = this.tempA.copy(aim.direction);
@@ -142,6 +154,128 @@ export class UndergroundTunnelingSystem {
       position: hitPoint.clone(),
       point: hitPoint.clone(),
       direction: direction.clone()
+    };
+  }
+
+  getFloorSculptTarget({ aim, playerPosition = null } = {}) {
+    if (!aim?.origin || !aim?.direction) return null;
+    if (!this.#columnHasActivity(aim.origin.x, aim.origin.z)) return null;
+    if (this.#densityAt(aim.origin.x, aim.origin.y, aim.origin.z) >= ISO_LEVEL) return null;
+
+    const direction = this.tempA.copy(aim.direction);
+    if (direction.lengthSq() < 0.000001) return null;
+    direction.normalize();
+
+    const hitPoint = this.#findDensitySurfaceHit(
+      aim.origin,
+      direction,
+      this.config.mineReach
+    );
+    if (!hitPoint) return null;
+    if (
+      playerPosition &&
+      hitPoint.distanceTo(playerPosition) > this.config.mineReach + 1.2
+    ) return null;
+
+    const outwardNormal = this.#densitySurfaceNormalAt(hitPoint, this.tempC);
+    if (outwardNormal.y < 0.18 && direction.y > -0.22) return null;
+
+    const supportY = this.supportHeightAt(hitPoint.x, hitPoint.z, {
+      referenceY: hitPoint.y + 0.7,
+      maxStepUp: 1.35,
+      airborne: false
+    });
+    if (!Number.isFinite(supportY)) return null;
+    if (Math.abs(hitPoint.y - supportY) > 1.25 && outwardNormal.y < 0.35) return null;
+
+    const point = new THREE.Vector3(hitPoint.x, supportY, hitPoint.z);
+    return {
+      type: 'terraform-tunnel-floor',
+      label: 'Tunnel floor',
+      icon: 'pickaxe',
+      point,
+      position: point.clone(),
+      normal: outwardNormal.clone(),
+      radius: TERRAIN_SCULPTING.brushRadius
+    };
+  }
+
+  applyFloorSculpt(mode, target) {
+    if (!['raise', 'lower', 'smooth', 'level'].includes(mode)) return null;
+    if (target?.type !== 'terraform-tunnel-floor' || !target.point) return null;
+
+    const x = Number(target.point.x);
+    const z = Number(target.point.z);
+    if (!Number.isFinite(x) || !Number.isFinite(z) || !this.#columnHasActivity(x, z)) {
+      return null;
+    }
+
+    const requestedY = Number(target.point.y);
+    const sourceY = this.supportHeightAt(x, z, {
+      referenceY: Number.isFinite(requestedY) ? requestedY + 0.45 : null,
+      maxStepUp: 1.35,
+      airborne: false
+    });
+    if (!Number.isFinite(sourceY)) return null;
+
+    let targetY = sourceY;
+    let strength = 1;
+    if (mode === 'raise') {
+      targetY += TERRAIN_SCULPTING.raiseAmount;
+    } else if (mode === 'lower') {
+      targetY -= TERRAIN_SCULPTING.lowerAmount;
+    } else if (mode === 'smooth') {
+      targetY = this.#averageFloorHeightAround(
+        x,
+        z,
+        sourceY,
+        TERRAIN_SCULPTING.brushRadius * 0.72
+      );
+      strength = TERRAIN_SCULPTING.smoothStrength;
+    } else if (mode === 'level') {
+      strength = TERRAIN_SCULPTING.levelStrength;
+    }
+
+    const protectedBottom =
+      this.#naturalSurfaceHeightAt(x, z)
+      - this.config.maxDepth
+      + this.config.bottomPadding
+      + this.config.cellSize * 0.12;
+    targetY = Math.max(targetY, protectedBottom);
+
+    const ceilingY = this.ceilingHeightAt(x, z, {
+      referenceY: sourceY + 0.16
+    });
+    if (Number.isFinite(ceilingY)) {
+      targetY = Math.min(
+        targetY,
+        ceilingY - this.config.floorSculptMinClearance
+      );
+    }
+    if (mode === 'raise' && targetY <= sourceY + 0.015) return null;
+
+    const edit = {
+      id: this.nextFloorEditId++,
+      mode,
+      x,
+      z,
+      sourceY,
+      targetY,
+      radius: TERRAIN_SCULPTING.brushRadius,
+      strength
+    };
+    this.#registerFloorEdit(edit);
+    this.#rebuildChunksForFloorEdit(edit);
+
+    return {
+      changed: true,
+      mode,
+      x,
+      y: targetY,
+      z,
+      radius: edit.radius,
+      editCount: this.floorEdits.length,
+      underground: true
     };
   }
 
@@ -245,6 +379,51 @@ export class UndergroundTunnelingSystem {
     return null;
   }
 
+  ceilingHeightAt(x, z, { referenceY = null } = {}) {
+    if (!this.#columnHasActivity(x, z)) return null;
+
+    const surfaceY = this.terrain.heightAt(x, z);
+    const scanStep = Math.max(0.08, this.config.cellSize * SUPPORT_SCAN_FRACTION);
+    let previousY = Number.isFinite(referenceY)
+      ? referenceY
+      : surfaceY - this.config.maxDepth + this.config.bottomPadding;
+    let previousDensity = this.#densityAt(x, previousY, z);
+
+    if (previousDensity >= ISO_LEVEL) {
+      let foundEmpty = false;
+      for (
+        let lift = scanStep;
+        lift <= this.config.floorSculptMinClearance;
+        lift += scanStep
+      ) {
+        const testY = previousY + lift;
+        const density = this.#densityAt(x, testY, z);
+        if (density < ISO_LEVEL) {
+          previousY = testY;
+          previousDensity = density;
+          foundEmpty = true;
+          break;
+        }
+      }
+      if (!foundEmpty) return null;
+    }
+
+    const topY = surfaceY + this.config.cellSize;
+    for (let y = previousY + scanStep; y <= topY; y += scanStep) {
+      const density = this.#densityAt(x, y, z);
+      if (previousDensity < ISO_LEVEL && density >= ISO_LEVEL) {
+        const span = density - previousDensity;
+        const t = Math.abs(span) > 0.000001
+          ? THREE.MathUtils.clamp(-previousDensity / span, 0, 1)
+          : 0;
+        return lerp(previousY, y, t);
+      }
+      previousY = y;
+      previousDensity = density;
+    }
+    return null;
+  }
+
   isSolidAt(x, y, z) {
     if (!this.#columnHasActivity(x, z)) return false;
     const surfaceY = this.terrain.heightAt(x, z);
@@ -293,6 +472,16 @@ export class UndergroundTunnelingSystem {
         z: Number(excavation.z.toFixed(4)),
         radius: Number(excavation.radius.toFixed(4))
       })),
+      floorEdits: this.floorEdits.map(edit => ({
+        id: edit.id,
+        mode: edit.mode,
+        x: Number(edit.x.toFixed(4)),
+        z: Number(edit.z.toFixed(4)),
+        sourceY: Number(edit.sourceY.toFixed(4)),
+        targetY: Number(edit.targetY.toFixed(4)),
+        radius: Number(edit.radius.toFixed(4)),
+        strength: Number(edit.strength.toFixed(4))
+      })),
       discoveredPocketIds: [...this.discoveredPocketIds].sort()
     };
   }
@@ -327,6 +516,22 @@ export class UndergroundTunnelingSystem {
       );
     }
 
+    for (const saved of Array.isArray(state.floorEdits) ? state.floorEdits : []) {
+      const edit = this.#normalizeSavedFloorEdit(saved);
+      if (!edit) continue;
+      this.#registerFloorEdit(edit);
+      this.nextFloorEditId = Math.max(this.nextFloorEditId, edit.id + 1);
+      const center = {
+        x: edit.x,
+        y: (edit.sourceY + edit.targetY) * 0.5,
+        z: edit.z
+      };
+      this.#ensureChunksForSphere(
+        center,
+        edit.radius + this.config.floorSculptVerticalBand + this.config.cellSize
+      );
+    }
+
     for (const id of Array.isArray(state.discoveredPocketIds) ? state.discoveredPocketIds : []) {
       if (typeof id !== 'string') continue;
       const pocket = this.#pocketFromId(id);
@@ -344,6 +549,7 @@ export class UndergroundTunnelingSystem {
     return {
       kind: STATE_KIND,
       excavationCount: this.excavations.length,
+      floorEditCount: this.floorEdits.length,
       activeChunkCount: this.activeChunks.size,
       activeColumnCount: this.activeColumns.size,
       surfaceOpeningCount: this.surfaceOpenings.length,
@@ -363,15 +569,15 @@ export class UndergroundTunnelingSystem {
       : this.terrain.heightAt(x, z);
   }
 
-  #findDensitySurfaceHit(origin, direction) {
+  #findDensitySurfaceHit(origin, direction, reach = this.config.mineReach) {
     const step = Math.max(0.08, this.config.cellSize * TARGET_RAY_STEP_FRACTION);
     let previousDistance = 0;
     let previousDensity = this.#densityAt(origin.x, origin.y, origin.z);
 
     for (
       let distance = step;
-      distance <= this.config.mineReach + 0.000001;
-      distance = Math.min(this.config.mineReach, distance + step)
+      distance <= reach + 0.000001;
+      distance = Math.min(reach, distance + step)
     ) {
       const world = this.tempD.copy(origin).addScaledVector(direction, distance);
       const density = this.#densityAt(world.x, world.y, world.z);
@@ -389,7 +595,7 @@ export class UndergroundTunnelingSystem {
 
       previousDistance = distance;
       previousDensity = density;
-      if (distance >= this.config.mineReach) break;
+      if (distance >= reach) break;
     }
 
     return null;
@@ -482,6 +688,13 @@ export class UndergroundTunnelingSystem {
         Math.hypot(x - pocket.x, y - pocket.y, z - pocket.z) - pocket.radius
       );
     }
+
+    const floorBucket = this.floorEditBuckets.get(this.#chunkKeyForPoint(x, y, z));
+    if (floorBucket) {
+      for (const edit of floorBucket) {
+        density = this.#applyFloorEditDensity(density, x, y, z, edit);
+      }
+    }
     return density;
   }
 
@@ -493,6 +706,126 @@ export class UndergroundTunnelingSystem {
       bucket.push(excavation);
       this.excavationBuckets.set(key, bucket);
     }
+  }
+
+  #registerFloorEdit(edit) {
+    this.floorEdits.push(edit);
+    const center = {
+      x: edit.x,
+      y: (edit.sourceY + edit.targetY) * 0.5,
+      z: edit.z
+    };
+    const extent =
+      edit.radius + this.config.floorSculptVerticalBand + this.config.cellSize;
+    for (const key of this.#chunkKeysForSphere(center, extent)) {
+      const bucket = this.floorEditBuckets.get(key) ?? [];
+      bucket.push(edit);
+      this.floorEditBuckets.set(key, bucket);
+    }
+  }
+
+  #applyFloorEditDensity(density, x, y, z, edit) {
+    const distance = Math.hypot(x - edit.x, z - edit.z);
+    if (distance >= edit.radius) return density;
+
+    const lowerY =
+      Math.min(edit.sourceY, edit.targetY) - this.config.floorSculptVerticalBand;
+    const upperY =
+      Math.max(edit.sourceY, edit.targetY) + this.config.floorSculptVerticalBand;
+    if (y < lowerY || y > upperY) return density;
+
+    const falloff = smoothstep01(1 - distance / edit.radius);
+    const strength = edit.mode === 'raise' || edit.mode === 'lower'
+      ? 1
+      : edit.strength;
+    const influence = THREE.MathUtils.clamp(falloff * strength, 0, 1);
+    if (influence <= 0.000001) return density;
+
+    const planeField = edit.targetY - y;
+    const candidate = THREE.MathUtils.lerp(density, planeField, influence);
+    if (edit.mode === 'raise') return Math.max(density, candidate);
+    if (edit.mode === 'lower') return Math.min(density, candidate);
+    return candidate;
+  }
+
+  #rebuildChunksForFloorEdit(edit) {
+    const center = {
+      x: edit.x,
+      y: (edit.sourceY + edit.targetY) * 0.5,
+      z: edit.z
+    };
+    const extent =
+      edit.radius + this.config.floorSculptVerticalBand + this.config.cellSize;
+    const affected = new Set(this.#ensureChunksForSphere(center, extent));
+    for (const [key, chunk] of this.activeChunks) {
+      if (sphereIntersectsAabb(center, extent, chunk.bounds)) affected.add(key);
+    }
+    for (const key of affected) this.#rebuildChunk(key);
+  }
+
+  #averageFloorHeightAround(x, z, referenceY, radius) {
+    const heights = [];
+    const sample = (sampleX, sampleZ) => {
+      const height = this.supportHeightAt(sampleX, sampleZ, {
+        referenceY: referenceY + 0.75,
+        maxStepUp: 1.45,
+        airborne: false
+      });
+      if (Number.isFinite(height)) heights.push(height);
+    };
+    sample(x, z);
+    for (let index = 0; index < 12; index += 1) {
+      const angle = index * Math.PI * 2 / 12;
+      sample(
+        x + Math.cos(angle) * radius,
+        z + Math.sin(angle) * radius
+      );
+    }
+    if (!heights.length) return referenceY;
+    return heights.reduce((sum, height) => sum + height, 0) / heights.length;
+  }
+
+  #densitySurfaceNormalAt(point, target) {
+    const epsilon = Math.max(0.08, this.config.cellSize * 0.16);
+    target.set(
+      -(this.#densityAt(point.x + epsilon, point.y, point.z)
+        - this.#densityAt(point.x - epsilon, point.y, point.z)),
+      -(this.#densityAt(point.x, point.y + epsilon, point.z)
+        - this.#densityAt(point.x, point.y - epsilon, point.z)),
+      -(this.#densityAt(point.x, point.y, point.z + epsilon)
+        - this.#densityAt(point.x, point.y, point.z - epsilon))
+    );
+    if (target.lengthSq() <= 0.000001) return target.set(0, 1, 0);
+    return target.normalize();
+  }
+
+  #normalizeSavedFloorEdit(saved) {
+    const edit = {
+      id: Number(saved?.id),
+      mode: typeof saved?.mode === 'string' ? saved.mode : '',
+      x: Number(saved?.x),
+      z: Number(saved?.z),
+      sourceY: Number(saved?.sourceY),
+      targetY: Number(saved?.targetY),
+      radius: Number(saved?.radius),
+      strength: Number(saved?.strength)
+    };
+    if (
+      !['raise', 'lower', 'smooth', 'level'].includes(edit.mode) ||
+      ![
+        edit.id,
+        edit.x,
+        edit.z,
+        edit.sourceY,
+        edit.targetY,
+        edit.radius,
+        edit.strength
+      ].every(Number.isFinite) ||
+      edit.id < 1 ||
+      edit.radius <= 0 ||
+      edit.strength <= 0
+    ) return null;
+    return edit;
   }
 
   #discoverPocketsForSphere(center, radius) {
@@ -751,6 +1084,7 @@ export class UndergroundTunnelingSystem {
     chunk.mesh.geometry = geometry;
     previous?.dispose?.();
     chunk.mesh.userData.excavationCount = this.excavations.length;
+    chunk.mesh.userData.floorEditCount = this.floorEdits.length;
     chunk.mesh.userData.discoveredPocketCount = this.discoveredPocketIds.size;
   }
 
@@ -920,6 +1254,9 @@ export class UndergroundTunnelingSystem {
     }
     this.excavations.length = 0;
     this.excavationBuckets.clear();
+    this.floorEdits.length = 0;
+    this.floorEditBuckets.clear();
+    this.nextFloorEditId = 1;
     this.discoveredPocketIds.clear();
     this.activeChunks.clear();
     this.activeColumns.clear();

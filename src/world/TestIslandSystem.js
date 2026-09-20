@@ -64,7 +64,8 @@ export class TestIslandSystem {
     });
     this.collision.setVolumeQuery({
       supportHeightAt: (x, z, options) => this.explorationPois.supportHeightAt(x, z, options),
-      isSolidAt: (x, y, z) => this.explorationPois.isSolidAt(x, y, z)
+      isSolidAt: (x, y, z) => this.explorationPois.isSolidAt(x, y, z),
+      hasActivityAt: (x, z) => this.explorationPois.hasTunnelingActivityAt(x, z)
     });
     this.groundCover = new GroundCoverPresentationSystem({
       group: this.group,

@@ -42,6 +42,18 @@ export class ExplorationPoiSystem {
     return this.tunneling.getMineTarget(options);
   }
 
+  getFloorSculptTarget(options) {
+    return this.tunneling.getFloorSculptTarget(options);
+  }
+
+  applyFloorSculpt(mode, target) {
+    return this.tunneling.applyFloorSculpt(mode, target);
+  }
+
+  hasTunnelingActivityAt(x, z) {
+    return this.tunneling.hasActivityAt(x, z);
+  }
+
   mine(target) {
     return this.tunneling.mine(target);
   }
