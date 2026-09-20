@@ -247,6 +247,7 @@ const [
   contextSource,
   mainSource,
   saveSource,
+  assetPathsSource,
   menuSource,
   controllerSource,
   constructionTerrainSource,
@@ -257,6 +258,7 @@ const [
   readFile('src/ui/ContextActionPolicy.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
   readFile('src/persistence/SaveGameController.js', 'utf8'),
+  readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('src/ui/PickaxeTerrainMenu.js', 'utf8'),
   readFile('src/gameplay/PickaxeTerrainRuntimeController.js', 'utf8'),
   readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
@@ -293,6 +295,23 @@ assert.ok(
   menuSource.includes('data-terrain-mode="${mode}"') &&
   menuSource.includes('definition.label.toUpperCase()'),
   'menu rows must be generated from the centralized five-mode definition order'
+);
+assert.ok(
+  assetPathsSource.includes("terrain: Object.freeze({") &&
+  assetPathsSource.includes("icon-terrain-raise.svg") &&
+  assetPathsSource.includes("icon-terrain-lower.svg") &&
+  assetPathsSource.includes("icon-terrain-dig.svg") &&
+  assetPathsSource.includes("icon-terrain-smooth.svg") &&
+  assetPathsSource.includes("icon-terrain-level.svg"),
+  'terrain operations must resolve through dedicated semantic icon assets'
+);
+assert.equal(
+  menuSource.includes('ui.build.frame') ||
+  menuSource.includes('ui.build.stairs') ||
+  menuSource.includes('ui.build.roof') ||
+  menuSource.includes('ui.build.floor'),
+  false,
+  'Pickaxe terrain operations must not reuse unrelated construction icons'
 );
 assert.ok(
   controllerSource.includes("this.mode !== 'dig'") &&

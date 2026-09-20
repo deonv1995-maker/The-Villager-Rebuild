@@ -108,6 +108,13 @@ export const ASSET_PATHS = Object.freeze({
         mushroom_stew: asset('ui/mobile/icon-resource-mushroom-stew.svg'),
         log: asset('ui/cosy/icon-build-raw.webp')
       }),
+      terrain: Object.freeze({
+        raise: asset('ui/mobile/icon-terrain-raise.svg'),
+        lower: asset('ui/mobile/icon-terrain-lower.svg'),
+        dig: asset('ui/mobile/icon-terrain-dig.svg'),
+        smooth: asset('ui/mobile/icon-terrain-smooth.svg'),
+        level: asset('ui/mobile/icon-terrain-level.svg')
+      }),
       build: Object.freeze({
         raw: asset('ui/cosy/icon-build-raw.webp'),
         floor: asset('ui/cosy/icon-build-floor.webp'),

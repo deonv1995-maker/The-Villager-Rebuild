@@ -108,3 +108,52 @@ export const tunnelingOpeningIntersectsTriangle = (opening, points) => {
   }
   return false;
 };
+
+export const tunnelingExcavationHorizontalRadius = (radius, config) =>
+  Math.max(0, Number(radius) || 0) * Math.max(1, Number(config?.tunnelWidthScale) || 1);
+
+export const tunnelingExcavationExtent = (radius, config) => {
+  const safeRadius = Math.max(0, Number(radius) || 0);
+  return safeRadius * Math.max(
+    1,
+    Number(config?.tunnelWidthScale) || 1,
+    Number(config?.tunnelFloorDropScale) || 1,
+    Number(config?.tunnelRoofRiseScale) || 1
+  );
+};
+
+export const tunnelingExcavationFloorY = (excavation, config) =>
+  Number(excavation?.y) -
+  Math.max(0, Number(excavation?.radius) || 0) *
+  Math.max(0, Number(config?.tunnelFloorDropScale) || 0);
+
+export const tunnelingExcavationCeilingY = (excavation, config) =>
+  Number(excavation?.y) +
+  Math.max(0, Number(excavation?.radius) || 0) *
+  Math.max(0, Number(config?.tunnelRoofRiseScale) || 0);
+
+export const tunnelingExcavationFieldAt = (x, y, z, excavation, config) => {
+  const radius = Math.max(0, Number(excavation?.radius) || 0);
+  if (radius <= 0) return Number.POSITIVE_INFINITY;
+
+  const width = tunnelingExcavationHorizontalRadius(radius, config);
+  const floorY = tunnelingExcavationFloorY(excavation, config);
+  const shoulderY =
+    Number(excavation.y) +
+    radius * Math.max(0, Number(config?.tunnelShoulderRiseScale) || 0);
+  const ceilingY = tunnelingExcavationCeilingY(excavation, config);
+  const radial = Math.hypot(x - excavation.x, z - excavation.z);
+  const floorField = floorY - y;
+
+  if (y <= shoulderY) {
+    return Math.max(radial - width, floorField);
+  }
+
+  const roofSpan = Math.max(0.000001, ceilingY - shoulderY);
+  const roofT = (y - shoulderY) / roofSpan;
+  if (roofT >= 1) return Math.max(radial, floorField, y - ceilingY);
+
+  const roofWidth = width * Math.sqrt(Math.max(0, 1 - roofT * roofT));
+  return Math.max(radial - roofWidth, floorField, y - ceilingY);
+};
+
