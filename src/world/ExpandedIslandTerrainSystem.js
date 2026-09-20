@@ -52,7 +52,9 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     this.terrainMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97 });
     this.tunnelTerrainMaterial = this.terrainMaterial.clone();
     this.tunnelTerrainMaterial.side = THREE.DoubleSide;
+    this.sculptTerrainSegments = this.chunkTerrainSegments * 2;
     this.tunnelTerrainSegments = this.chunkTerrainSegments * 4;
+    this.surfaceSculptRegions = [];
     this.tunnelingOpenings = [];
     this.terrainChunkRecords = new Map();
     this.terrainChunkGeometryListeners = new Set();
@@ -273,6 +275,21 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     return geometry;
   }
 
+  setSurfaceSculptRegions(regions = []) {
+    this.surfaceSculptRegions = (Array.isArray(regions) ? regions : [])
+      .map(region => ({
+        x: Number(region?.x),
+        z: Number(region?.z),
+        radius: Number(region?.radius)
+      }))
+      .filter(region => (
+        Number.isFinite(region.x) &&
+        Number.isFinite(region.z) &&
+        Number.isFinite(region.radius) &&
+        region.radius > 0
+      ));
+  }
+
   setTunnelingOpenings(openings = []) {
     const next = normalizeTunnelingOpenings(openings);
     if (sameTunnelingOpenings(this.tunnelingOpenings, next)) return false;
@@ -426,7 +443,19 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       )
     );
     const detailed = openings.length > 0;
-    const segments = detailed ? this.tunnelTerrainSegments : this.chunkTerrainSegments;
+    const halfChunk = record.chunkSize * 0.5;
+    const sculpted = this.surfaceSculptRegions.some(region => {
+      const dx = Math.max(Math.abs(region.x - record.centerX) - halfChunk, 0);
+      const dz = Math.max(Math.abs(region.z - record.centerZ) - halfChunk, 0);
+      const padding = record.chunkSize / this.sculptTerrainSegments;
+      const radius = region.radius + padding;
+      return dx * dx + dz * dz <= radius * radius;
+    });
+    const segments = detailed
+      ? this.tunnelTerrainSegments
+      : sculpted
+        ? this.sculptTerrainSegments
+        : this.chunkTerrainSegments;
     const geometry = new THREE.PlaneGeometry(
       record.chunkSize,
       record.chunkSize,
@@ -486,7 +515,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
 
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    return { geometry, segments, detailed };
+    return { geometry, segments, detailed, sculpted };
   }
 
   #rebuildTerrainChunk(key) {
@@ -500,6 +529,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
       : this.terrainMaterial;
     record.mesh.userData.terrainSegments = built.segments;
     record.mesh.userData.tunnelingSurfaceOwner = built.detailed;
+    record.mesh.userData.surfaceSculpted = built.sculpted;
     previous?.dispose?.();
     for (const listener of this.terrainChunkGeometryListeners) listener(record.mesh);
     return true;
