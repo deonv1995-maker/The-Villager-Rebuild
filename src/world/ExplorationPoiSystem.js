@@ -20,7 +20,7 @@ export class ExplorationPoiSystem {
       chunks,
       onPresentationExclusionsChanged
     });
-    this.pocketContents = new UndergroundPocketContentSystem({ group });
+    this.pocketContents = new UndergroundPocketContentSystem({ group, chunks });
 
     // Keep the existing exploration-POI registry boundary stable for diagnostics
     // and future authored POIs. Tunneling is a world system, not a POI.
