@@ -288,6 +288,47 @@ const wallHit = world.mine(recoveredWallTarget);
 assert.ok(wallHit?.mined, 'recovered close-range targeting must still extend the tunnel');
 assert.equal(wallHit.excavationCount, 2);
 
+const roofSupport = world.supportHeightAt(
+  recoveredWallTarget.point.x,
+  recoveredWallTarget.point.z,
+  {
+    referenceY: recoveredWallTarget.point.y,
+    maxStepUp: 1.35,
+    airborne: false
+  }
+);
+assert.equal(Number.isFinite(roofSupport), true, 'extended tunnel must expose support below its roof');
+const roofCeiling = world.ceilingHeightAt(
+  recoveredWallTarget.point.x,
+  recoveredWallTarget.point.z,
+  { referenceY: roofSupport + 0.45 }
+);
+assert.equal(Number.isFinite(roofCeiling), true, 'extended tunnel must expose a solid ceiling boundary');
+
+const roofClippedOrigin = new THREE.Vector3(
+  recoveredWallTarget.point.x,
+  roofCeiling + UNDERGROUND_TUNNELING.cellSize * 0.08,
+  recoveredWallTarget.point.z
+);
+assert.equal(
+  world.isSolidAt(roofClippedOrigin.x, roofClippedOrigin.y, roofClippedOrigin.z),
+  true,
+  'regression setup must place the first-person eye slightly inside the tunnel roof'
+);
+const roofRecoveryTarget = world.getMineTarget({
+  aim: { origin: roofClippedOrigin, direction: horizontalDirection },
+  playerPosition: new THREE.Vector3(
+    recoveredWallTarget.point.x,
+    roofSupport,
+    recoveredWallTarget.point.z
+  )
+});
+assert.ok(
+  roofRecoveryTarget,
+  'MINE must recover when the camera clips into a sloped roof while aiming horizontally'
+);
+assert.equal(roofRecoveryTarget.type, 'mineable-ground');
+
 const floorAimOrigin = new THREE.Vector3(
   firstGround.x,
   undergroundSupport + 0.72,
