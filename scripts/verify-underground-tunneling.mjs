@@ -290,7 +290,7 @@ assert.equal(wallHit.excavationCount, 2);
 
 let perpendicularRecoveryCase = null;
 const recoveryProbeStep = UNDERGROUND_TUNNELING.cellSize * 0.18;
-const recoveryProbeReach = UNDERGROUND_TUNNELING.cellSize * 2.25;
+const recoveryProbeReach = UNDERGROUND_TUNNELING.cellSize * 1.5;
 const recoveryPlayerPosition = new THREE.Vector3(
   firstGround.x,
   undergroundSupport,
