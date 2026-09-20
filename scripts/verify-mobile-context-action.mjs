@@ -44,6 +44,22 @@ assert.equal(tunnelMine.available, true, 'Mineable ground must expose an enabled
 assert.equal(tunnelMine.icon, 'pickaxe');
 assert.equal(tunnelMine.caption, 'MINE');
 
+assert.match(
+  gameAppSource,
+  /const pickaxeEquipped = toolId === 'pickaxe';/,
+  'Pickaxe target acquisition must follow equipped state rather than animation readiness'
+);
+assert.match(
+  gameAppSource,
+  /const miningAim = pickaxeEquipped && !pickaxeSurfaceMode && !rockTarget/,
+  'Tunnel reticle targeting must stay active while the Pickaxe swing animation is busy'
+);
+assert.doesNotMatch(
+  gameAppSource,
+  /const pickaxeReady = toolId === 'pickaxe' && !\(this\.toolPresentation\?\.isBusy/,
+  'MINE must not disappear simply because a successful Pickaxe swing is still animating'
+);
+
 const demolish = resolveContextAction({
   toolId: 'hammer',
   interactionTarget: { type: 'placed-log', actionLabel: 'Demolish wall' }
@@ -130,6 +146,7 @@ const equipmentRuntimeSource = fs.readFileSync(new URL('../src/gameplay/Equipmen
 const placeableRuntimeSource = fs.readFileSync(new URL('../src/gameplay/PlaceableUtilityRuntimeController.js', import.meta.url), 'utf8');
 const thatchControllerSource = fs.readFileSync(new URL('../src/gameplay/RoofThatchController.js', import.meta.url), 'utf8');
 const rangerControllerSource = fs.readFileSync(new URL('../src/player/RangerController.js', import.meta.url), 'utf8');
+const gameAppSource = fs.readFileSync(new URL('../src/core/GameApp.js', import.meta.url), 'utf8');
 
 assert.match(mobileHudSource, /class="hud-button action"/, 'Mobile HUD must expose one primary Action button');
 assert.doesNotMatch(mobileHudSource, /class="hud-button interact"/, 'Legacy interact round button must be removed');
