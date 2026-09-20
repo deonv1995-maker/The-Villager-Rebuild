@@ -29,9 +29,10 @@ const finitePocket = pocket => (
 );
 
 export class UndergroundPocketContentSystem {
-  constructor({ group } = {}) {
+  constructor({ group, chunks = null } = {}) {
     if (!group) throw new Error('UndergroundPocketContentSystem requires a group');
     this.group = group;
+    this.chunks = chunks;
     this.config = UNDERGROUND_POCKET_CONTENT;
 
     this.root = new THREE.Group();
@@ -254,7 +255,8 @@ export class UndergroundPocketContentSystem {
       pocket.y - pocket.radius + 0.13,
       pocket.z
     );
-    this.root.add(pocketRoot);
+    if (this.chunks) this.chunks.addObjectAt(pocketRoot, pocket.x, pocket.z);
+    else this.root.add(pocketRoot);
     this.pocketRoots.set(pocket.id, pocketRoot);
 
     const ix = pocket.ix;
@@ -552,6 +554,9 @@ export class UndergroundPocketContentSystem {
   }
 
   #clearPocketPresentations() {
+    for (const pocketRoot of this.pocketRoots.values()) {
+      pocketRoot.parent?.remove(pocketRoot);
+    }
     this.root.clear();
     this.pocketRoots.clear();
     this.pocketSummaries.clear();
