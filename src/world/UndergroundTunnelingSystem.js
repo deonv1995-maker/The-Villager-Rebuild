@@ -19,7 +19,16 @@ const TERRAIN_COLOR_DEPTH = 0.42;
 const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
-const TARGET_ORIGIN_RECOVERY_CELLS = 2.25;
+const TARGET_ORIGIN_RECOVERY_CELLS = 1.5;
+const TARGET_ORIGIN_RECOVERY_OFFSETS = Object.freeze(
+  [-1, 0, 1].flatMap(x =>
+    [-1, 0, 1].flatMap(y =>
+      [-1, 0, 1]
+        .filter(z => x !== 0 || y !== 0 || z !== 0)
+        .map(z => Object.freeze([x, y, z]))
+    )
+  )
+);
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -634,6 +643,35 @@ export class UndergroundTunnelingSystem {
             break;
           }
           if (distance >= recoveryReach) break;
+        }
+      }
+
+      // Sloped/arched tunnel surfaces can clip the first-person eye in a direction
+      // unrelated to the current look vector. As a final bounded recovery, sample
+      // the nearest 3D shell around the eye and move the ray origin to the first
+      // empty density sample. This only runs when the eye is already in solid
+      // density, so normal targeting keeps its low-cost straight ray march.
+      if (!recoveredEmpty) {
+        for (
+          let distance = step;
+          distance <= recoveryReach + 0.000001 && !recoveredEmpty;
+          distance = Math.min(recoveryReach, distance + step)
+        ) {
+          for (const [offsetX, offsetY, offsetZ] of TARGET_ORIGIN_RECOVERY_OFFSETS) {
+            const length = Math.hypot(offsetX, offsetY, offsetZ);
+            const scale = distance / length;
+            const world = this.tempD.set(
+              origin.x + offsetX * scale,
+              origin.y + offsetY * scale,
+              origin.z + offsetZ * scale
+            );
+            const density = this.#densityAt(world.x, world.y, world.z);
+            if (density >= ISO_LEVEL) continue;
+            rayOrigin.copy(world);
+            previousDensity = density;
+            recoveredEmpty = true;
+            break;
+          }
         }
       }
 
