@@ -10,7 +10,7 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   cellSize: 0.72,
   chunkCells: 12,
 
-  mineReach: 3.45,
+  mineReach: 4.6,
   mineRadius: (PLAYER_TRAVERSAL_TUNING.body.height + RANGER_CLEAR_MINE_MARGIN) * 0.5,
   mineCenterDrop:
     PLAYER_TRAVERSAL_TUNING.body.eyeHeight - PLAYER_TRAVERSAL_TUNING.body.height * 0.5,
@@ -23,6 +23,12 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   tunnelFloorDropScale: 0.68,
   tunnelShoulderRiseScale: 0.12,
   tunnelRoofRiseScale: 1.28,
+
+  // Underground Raise / Lower / Smoothen / Level reuse the player-facing
+  // terrain brush but modify only the local tunnel floor band. The clearance
+  // guard prevents a Raise operation from sealing the Ranger into the roof.
+  floorSculptVerticalBand: 0.82,
+  floorSculptMinClearance: PLAYER_TRAVERSAL_TUNING.body.height + 0.45,
 
   // The first tunneling milestone is intentionally bounded vertically while
   // remaining available anywhere on playable land.
