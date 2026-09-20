@@ -264,8 +264,28 @@ const wallTarget = world.getMineTarget({
 });
 assert.ok(wallTarget, 'reticle inside the first cut must acquire the tunnel wall');
 assert.equal(wallTarget.type, 'mineable-ground');
-const wallHit = world.mine(wallTarget);
-assert.ok(wallHit?.mined, 'horizontal tunneling must extend the excavation in the aimed direction');
+
+const clippedAimOrigin = wallTarget.point.clone().addScaledVector(
+  horizontalDirection,
+  UNDERGROUND_TUNNELING.cellSize * 0.12
+);
+assert.equal(
+  world.isSolidAt(clippedAimOrigin.x, clippedAimOrigin.y, clippedAimOrigin.z),
+  true,
+  'regression setup must place the camera aim origin just inside the tunnel wall'
+);
+const recoveredWallTarget = world.getMineTarget({
+  aim: { origin: clippedAimOrigin, direction: horizontalDirection },
+  playerPosition: horizontalOrigin
+});
+assert.ok(
+  recoveredWallTarget,
+  'MINE must remain targetable when the first-person camera begins slightly inside solid density'
+);
+assert.equal(recoveredWallTarget.type, 'mineable-ground');
+
+const wallHit = world.mine(recoveredWallTarget);
+assert.ok(wallHit?.mined, 'recovered close-range targeting must still extend the tunnel');
 assert.equal(wallHit.excavationCount, 2);
 
 const floorAimOrigin = new THREE.Vector3(
