@@ -278,7 +278,7 @@ const [
 
 assert.ok(
   gameSource.includes('pickaxeSurfaceMode') &&
-  gameSource.includes('pickaxeReady && !pickaxeSurfaceMode'),
+  gameSource.includes('pickaxeEquipped && !pickaxeSurfaceMode'),
   'GameApp must suppress rock/tunnel targeting while a surface Pickaxe mode owns the action'
 );
 assert.ok(
