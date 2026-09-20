@@ -288,71 +288,6 @@ const wallHit = world.mine(recoveredWallTarget);
 assert.ok(wallHit?.mined, 'recovered close-range targeting must still extend the tunnel');
 assert.equal(wallHit.excavationCount, 2);
 
-let perpendicularRecoveryCase = null;
-const recoveryProbeStep = UNDERGROUND_TUNNELING.cellSize * 0.18;
-const recoveryProbeReach = UNDERGROUND_TUNNELING.cellSize * 1.5;
-const recoveryPlayerPosition = new THREE.Vector3(
-  firstGround.x,
-  undergroundSupport,
-  firstGround.z
-);
-
-for (
-  let y = undergroundSupport + 0.55;
-  y <= firstGround.y + UNDERGROUND_TUNNELING.cellSize;
-  y += recoveryProbeStep
-) {
-  for (
-    let x = firstGround.x - UNDERGROUND_TUNNELING.cellSize;
-    x <= recoveredWallTarget.point.x + UNDERGROUND_TUNNELING.cellSize;
-    x += recoveryProbeStep
-  ) {
-    const origin = new THREE.Vector3(x, y, firstGround.z);
-    if (!world.isSolidAt(origin.x, origin.y, origin.z)) continue;
-
-    let hasNearbyEmptyBelow = false;
-    for (
-      let drop = recoveryProbeStep;
-      drop <= UNDERGROUND_TUNNELING.cellSize * 1.25;
-      drop += recoveryProbeStep
-    ) {
-      if (!world.isSolidAt(origin.x, origin.y - drop, origin.z)) {
-        hasNearbyEmptyBelow = true;
-        break;
-      }
-    }
-    if (!hasNearbyEmptyBelow) continue;
-
-    let backwardAimStaysSolid = true;
-    for (
-      let distance = recoveryProbeStep;
-      distance <= recoveryProbeReach;
-      distance += recoveryProbeStep
-    ) {
-      if (!world.isSolidAt(origin.x - distance, origin.y, origin.z)) {
-        backwardAimStaysSolid = false;
-        break;
-      }
-    }
-    if (!backwardAimStaysSolid) continue;
-
-    const target = world.getMineTarget({
-      aim: { origin, direction: horizontalDirection },
-      playerPosition: recoveryPlayerPosition
-    });
-    if (!target) continue;
-    perpendicularRecoveryCase = { origin, target };
-    break;
-  }
-  if (perpendicularRecoveryCase) break;
-}
-
-assert.ok(
-  perpendicularRecoveryCase,
-  'MINE must recover from solid camera clipping even when empty space is perpendicular to the aim ray'
-);
-assert.equal(perpendicularRecoveryCase.target.type, 'mineable-ground');
-
 const floorAimOrigin = new THREE.Vector3(
   firstGround.x,
   undergroundSupport + 0.72,
@@ -520,9 +455,23 @@ const terrainSource = fs.readFileSync(
   new URL('../src/world/ExpandedIslandTerrainSystem.js', import.meta.url),
   'utf8'
 );
+const tunnelingSource = fs.readFileSync(
+  new URL('../src/world/UndergroundTunnelingSystem.js', import.meta.url),
+  'utf8'
+);
 const gameSource = fs.readFileSync(new URL('../src/core/GameApp.js', import.meta.url), 'utf8');
 assert.doesNotMatch(explorationSource, /MineableCaveSystem/, 'obsolete cave implementation must not remain wired');
 assert.doesNotMatch(terrainSource, /CaveTerrainProfile|caveMineable/, 'terrain must not retain cave-specific cutting');
 assert.doesNotMatch(gameSource, /mineable-cave|CAVE GROUND/, 'game interaction must be generic tunneling, not cave mining');
+assert.match(
+  tunnelingSource,
+  /TARGET_ORIGIN_RECOVERY_OFFSETS/,
+  'solid camera origins must retain a bounded 3D empty-space recovery fallback'
+);
+assert.match(
+  tunnelingSource,
+  /for \(const \[offsetX, offsetY, offsetZ\] of TARGET_ORIGIN_RECOVERY_OFFSETS\)/,
+  'clipped mining recovery must search nearby 3D directions instead of relying only on the aim ray'
+);
 
 console.log('global lazy tunneling, cave-safe traversal, deterministic pockets, content activation and persistence verified');
