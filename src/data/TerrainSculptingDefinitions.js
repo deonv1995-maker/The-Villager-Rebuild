@@ -11,7 +11,7 @@ export const TERRAIN_SCULPT_DEFAULT_MODE = 'dig';
 export const TERRAIN_SCULPTING = Object.freeze({
   schemaVersion: 1,
   stateKind: 'terrain-sculpting-v1',
-  reach: 3.45,
+  reach: 5.4,
   brushRadius: 2.4,
   raiseAmount: 0.38,
   lowerAmount: 0.38,
