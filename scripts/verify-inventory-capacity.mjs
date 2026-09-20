@@ -9,6 +9,7 @@ import {
 import { RESOURCE_DEFINITIONS } from '../src/data/ResourceDefinitions.js';
 import { InventoryCapacityController } from '../src/gameplay/InventoryCapacityController.js';
 import { InventorySystem } from '../src/gameplay/InventorySystem.js';
+import { resolveContextAction } from '../src/ui/ContextActionPolicy.js';
 
 const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 
@@ -165,7 +166,18 @@ assert.ok(
     && gatherables.includes('setCollectionHidden?.(patch.entries, false)'),
   'Sprout reservation commit must restore normal pickups and grass patches if capacity changes before transfer'
 );
-assert.ok(contextPolicy.includes("? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')") && contextPolicy.includes(": 'FULL'"), 'Full storage must disable the unified mobile pickup action visibly');
+const fullPickupAction = resolveContextAction({
+  interactionTarget: {
+    type: 'underground-collectible',
+    label: 'Sprout Upgrade Shard',
+    icon: 'sprout_shard',
+    available: false
+  },
+  toolId: 'hand'
+});
+assert.equal(fullPickupAction.available, false, 'Full storage must disable underground collection');
+assert.equal(fullPickupAction.caption, 'FULL', 'Full storage must expose the unified FULL pickup caption');
+assert.ok(contextPolicy.includes("'underground-collectible'"), 'Underground rewards must stay inside the shared mobile interaction policy');
 assert.ok(
   capacityControllerSource.includes('const state = this.inventory.getStorageState();')
     && capacityControllerSource.includes('hud?.setInventoryCapacity?.(state);'),
