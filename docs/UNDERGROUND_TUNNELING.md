@@ -96,7 +96,20 @@ A pocket becomes **discovered** when a player excavation sphere first intersects
 
 Discovery identity is persisted.
 
-This milestone deliberately adds **no Stone, Iron, Gold, treasure, or Sprout shards** to pockets. Those systems should be layered onto the verified density/pocket authority later instead of coupling loot to Pickaxe swings.
+Pocket contents are layered on top of that geometry through `UndergroundPocketContentSystem`; the density function still knows nothing about loot or decorations. On first discovery, the existing `ExplorationPoiSystem` façade resolves the stable pocket descriptor and activates deterministic content for that pocket.
+
+The current content pass adds:
+
+- scattered cave rocks and rubble;
+- stalagmites and muted crystal clusters for underground variation;
+- optional small ruined-stone structures that imply older hidden spaces;
+- collectible Stone piles;
+- optional Ancient Relic treasure caches;
+- collectible Sprout Upgrade Shards.
+
+The ruin, rock, stalagmite and crystal dressing is presentation-only and deliberately non-colliding in this pass, so adding atmosphere cannot trap the Ranger or create a second collision authority. Collectible rewards use a separate interaction transaction: the world item remains present when shared inventory capacity rejects the pickup, and it disappears only after the inventory preflight succeeds.
+
+`sprout_shard` is now a real shared-inventory progression resource. This slice does **not** spend shards or apply Sprout upgrade effects yet; those later progression systems must consume the same item authority instead of adding a parallel shard counter.
 
 ## Collision and grounding
 
@@ -139,11 +152,12 @@ The payload contains:
 - state kind/schema;
 - world-space excavation profiles;
 - compact ordered tunnel-floor sculpt edits;
-- discovered pocket IDs.
+- discovered pocket IDs;
+- nested pocket-content collection state containing only collected deterministic reward IDs.
 
 The floor-edit field is additive within the existing tunneling schema, so saves made before underground floor shaping simply restore with an empty floor-edit list.
 
-Deterministic pocket geometry is regenerated from world coordinates and does not need to be serialized.
+Deterministic pocket geometry and deterministic pocket dressing/reward placement are regenerated from world coordinates and do not need to be serialized. Only reward IDs that have already been collected are stored, so save size does not grow with undiscovered underground content.
 
 The retired `state.caveMining` payload is intentionally not restored. Older saves remain otherwise compatible; their former cave excavation state is discarded because that world feature no longer exists.
 
@@ -167,8 +181,10 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
 - deterministic pocket generation and discovery;
-- compact tunneling persistence;
-- absence of resource/treasure state in this milestone.
+- deterministic content activation without rerolling or duplicating pocket rewards;
+- capacity-safe underground collection;
+- collected reward persistence under the existing tunneling save façade;
+- compact tunneling persistence.
 
 ## Device verification
 
@@ -186,7 +202,10 @@ After CI and Pages deployment, verify on Android/PWA:
 - create stepped downward cuts, switch to Raise/Lower/Smoothen/Level, aim at the tunnel floor and reshape the steps into a walkable ramp;
 - the original terrain surface remains closed anywhere not actually excavated;
 - create a second tunnel far from the first and confirm it behaves identically;
-- continue tunneling until a larger empty underground pocket is opened;
-- save/Continue after several cuts and confirm both tunnel geometry and discovered-pocket state return;
+- continue tunneling until a larger underground pocket is opened and confirm rocks, cave formations and pocket dressing appear only after discovery;
+- confirm some pockets can contain hidden ruined-stone structures, Ancient Relic treasure and cyan Sprout Upgrade Shards;
+- collect a cave Stone pile/relic/shard and confirm the inventory icon/count updates;
+- fill shared storage, approach another underground collectible and confirm FULL is shown without deleting the find;
+- save/Continue after several cuts and collections and confirm tunnel geometry, discovered-pocket content and already-collected rewards restore correctly;
 - verify building floors near a tunnel opening still deform terrain normally;
 - verify ordinary overworld rock mining remains unchanged.
