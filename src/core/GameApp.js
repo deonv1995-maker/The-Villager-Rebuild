@@ -260,21 +260,21 @@ export class GameApp {
       && (this.panelConstructionRuntime?.ownsHammerInteraction?.() ?? false);
     const carcassTarget = this.hunt?.getHarvestTarget(this.playerPosition) ?? null;
     const treeTarget = this.treeHarvest?.update(this.playerPosition, toolId === 'axe') ?? null;
-    // Do not advertise a Pickaxe action while the current swing is still
-    // occupying the tool. Previously MINE could remain visible during this
-    // busy window even though #tryInteract would reject the tap, which read as
-    // intermittent mining failure on mobile.
-    const pickaxeReady = toolId === 'pickaxe' && !(this.toolPresentation?.isBusy() ?? false);
-    const pickaxeSurfaceMode = pickaxeReady
+    // Target acquisition follows the equipped Pickaxe, not the animation busy
+    // window. The interaction handler still rejects a second swing while the
+    // current swing is active, but keeping the target published prevents MINE
+    // from blinking out after every successful cut on mobile.
+    const pickaxeEquipped = toolId === 'pickaxe';
+    const pickaxeSurfaceMode = pickaxeEquipped
       && (this.pickaxeTerrainRuntime?.ownsSurfaceInteraction?.() ?? false);
     // Preserve the established overworld rock interaction in DIG mode. Surface
     // terraforming modes own the Pickaxe action instead, so a rock or generic
     // tunneling target cannot fire underneath Raise/Lower/Smoothen/Level.
     const rockTarget = this.rockHarvest?.update(
       this.playerPosition,
-      pickaxeReady && !pickaxeSurfaceMode
+      pickaxeEquipped && !pickaxeSurfaceMode
     ) ?? null;
-    const miningAim = pickaxeReady && !pickaxeSurfaceMode && !rockTarget
+    const miningAim = pickaxeEquipped && !pickaxeSurfaceMode && !rockTarget
       ? this.#currentConstructionAim()
       : null;
     const groundMineTarget = miningAim
