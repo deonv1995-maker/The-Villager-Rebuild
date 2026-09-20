@@ -21,6 +21,7 @@ export class PickaxeTerrainRuntimeController {
     this.rafId = null;
     this.menu = null;
     this.currentTarget = null;
+    this.holdingAction = false;
     this.playerPosition = new THREE.Vector3();
     this.aim = {
       origin: new THREE.Vector3(),
@@ -41,6 +42,7 @@ export class PickaxeTerrainRuntimeController {
     this.running = false;
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.rafId = null;
+    this.holdingAction = false;
     this.game.hud?.setExternalAction(TERRAIN_ACTION_ID, null);
     this.preview?.parent?.remove(this.preview);
     this.preview?.geometry?.dispose?.();
@@ -62,6 +64,7 @@ export class PickaxeTerrainRuntimeController {
 
   setMode(mode) {
     if (!MODE_SET.has(mode)) return false;
+    this.holdingAction = false;
     this.mode = mode;
     this.currentTarget = null;
     this.#sync();
@@ -72,6 +75,17 @@ export class PickaxeTerrainRuntimeController {
         : `PICKAXE · ${definition.label.toUpperCase()} MODE`
     );
     return true;
+  }
+
+  startContinuousApply() {
+    if (!this.ownsSurfaceInteraction()) return false;
+    this.holdingAction = true;
+    this.applyCurrentMode();
+    return true;
+  }
+
+  stopContinuousApply() {
+    this.holdingAction = false;
   }
 
   applyCurrentMode() {
@@ -91,8 +105,6 @@ export class PickaxeTerrainRuntimeController {
       : this.game.island.terrainSculpting.apply(this.mode, target);
     if (!result) return null;
 
-    this.game.equipmentRuntime?.recordUse?.('pickaxe');
-    this.game.equipmentRuntime?.syncHud?.();
     this.game.saveController?.queueSave?.('terrain-sculpt');
     this.currentTarget = null;
     this.#sync();
@@ -107,6 +119,13 @@ export class PickaxeTerrainRuntimeController {
   #frame = () => {
     if (!this.running) return;
     this.#sync();
+    if (
+      this.holdingAction &&
+      this.currentTarget &&
+      !this.game.toolPresentation?.isBusy?.()
+    ) {
+      this.applyCurrentMode();
+    }
     this.rafId = requestAnimationFrame(this.#frame);
   };
 
@@ -120,6 +139,7 @@ export class PickaxeTerrainRuntimeController {
     const busy = Boolean(this.game.toolPresentation?.isBusy?.());
 
     if (!pickaxeEquipped) {
+      this.holdingAction = false;
       this.currentTarget = null;
       this.preview.visible = false;
       hud.setExternalAction(TERRAIN_ACTION_ID, null);
@@ -129,6 +149,7 @@ export class PickaxeTerrainRuntimeController {
     }
 
     if (this.mode === 'dig') {
+      this.holdingAction = false;
       this.currentTarget = null;
       this.preview.visible = false;
       hud.setExternalAction(TERRAIN_ACTION_ID, null);
@@ -142,9 +163,10 @@ export class PickaxeTerrainRuntimeController {
       return;
     }
 
+    if (!firstPerson) this.holdingAction = false;
     this.game.player.getPosition(this.playerPosition);
     const aim = firstPerson ? this.#currentAim() : null;
-    this.currentTarget = !busy && aim
+    this.currentTarget = aim
       ? this.game.island.terrainSculpting.getSurfaceTarget({
         aim,
         playerPosition: this.playerPosition
@@ -156,7 +178,10 @@ export class PickaxeTerrainRuntimeController {
 
     this.#syncPreview();
     const definition = TERRAIN_SCULPT_DEFINITIONS[this.mode];
-    const available = Boolean(this.currentTarget) && !busy && firstPerson;
+    const available =
+      Boolean(this.currentTarget) &&
+      firstPerson &&
+      (!busy || this.holdingAction);
     hud.setAttackTarget(null, 'pickaxe');
     hud.setExternalAction(TERRAIN_ACTION_ID, {
       available,
@@ -168,7 +193,9 @@ export class PickaxeTerrainRuntimeController {
           : `${definition.label} requires first person`,
       caption: definition.caption,
       priority: 230,
-      onTrigger: () => this.applyCurrentMode()
+      onTrigger: () => this.applyCurrentMode(),
+      onPressStart: () => this.startContinuousApply(),
+      onPressEnd: () => this.stopContinuousApply()
     });
     this.menu?.setState({
       open: true,

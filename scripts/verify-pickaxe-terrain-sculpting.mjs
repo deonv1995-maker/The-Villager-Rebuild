@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
-import { TERRAIN_SCULPT_MODES } from '../src/data/TerrainSculptingDefinitions.js';
+import {
+  TERRAIN_SCULPT_MODES,
+  TERRAIN_SCULPTING
+} from '../src/data/TerrainSculptingDefinitions.js';
 import { ConstructionTerrainAdaptationSystem } from '../src/world/ConstructionTerrainAdaptationSystem.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
@@ -42,6 +45,11 @@ assert.deepEqual(
   TERRAIN_SCULPT_MODES,
   ['raise', 'lower', 'dig', 'smooth', 'level'],
   'Pickaxe terrain menu order must remain Raise, Lower, Dig, Smoothen, Level'
+);
+assert.equal(
+  TERRAIN_SCULPTING.reach,
+  5.4,
+  'surface sculpt targeting and preview must extend beyond the original short-range brush reach'
 );
 
 const group = new THREE.Group();
@@ -249,6 +257,7 @@ const [
   saveSource,
   assetPathsSource,
   menuSource,
+  mobileHudSource,
   controllerSource,
   constructionTerrainSource,
   tunnelingSource,
@@ -260,6 +269,7 @@ const [
   readFile('src/persistence/SaveGameController.js', 'utf8'),
   readFile('src/data/AssetPaths.js', 'utf8'),
   readFile('src/ui/PickaxeTerrainMenu.js', 'utf8'),
+  readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/gameplay/PickaxeTerrainRuntimeController.js', 'utf8'),
   readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
   readFile('src/world/UndergroundTunnelingSystem.js', 'utf8'),
@@ -316,8 +326,28 @@ assert.equal(
 assert.ok(
   controllerSource.includes("this.mode !== 'dig'") &&
   controllerSource.includes("playSwing('pickaxe')") &&
-  controllerSource.includes("recordUse?.('pickaxe')"),
-  'surface terraforming must keep Dig separate and consume normal Pickaxe use/durability'
+  controllerSource.includes('startContinuousApply()') &&
+  controllerSource.includes('stopContinuousApply()') &&
+  controllerSource.includes('this.holdingAction') &&
+  !controllerSource.includes("recordUse?.('pickaxe')"),
+  'Raise/Lower/Smoothen/Level must repeat while held without consuming Pickaxe durability'
+);
+assert.ok(
+  controllerSource.includes('onPressStart: () => this.startContinuousApply()') &&
+  controllerSource.includes('onPressEnd: () => this.stopContinuousApply()'),
+  'terrain sculpting must publish press lifecycle handlers through the unified Action surface'
+);
+assert.ok(
+  mobileHudSource.includes('#beginActionPress(event)') &&
+  mobileHudSource.includes('#endActionPress(event = null)') &&
+  mobileHudSource.includes('external?.onPressStart') &&
+  mobileHudSource.includes('onPressEnd?.()'),
+  'MobileHud must preserve generic external-action hold start/release semantics'
+);
+assert.ok(
+  tunnelingSource.includes('const sculptReach = TERRAIN_SCULPTING.reach') &&
+  tunnelingSource.includes('hitPoint.distanceTo(playerPosition) > sculptReach + 1.2'),
+  'underground floor sculpt targeting must use the same extended reach as the preview brush'
 );
 assert.ok(
   controllerSource.includes('getFloorSculptTarget?.({') &&
@@ -339,4 +369,4 @@ assert.ok(
   'Pickaxe terrain menu layout must be loaded by the app shell'
 );
 
-console.log('Pickaxe terrain modes, persistent surface sculpting, 3D Dig ownership and inland water masking verified');
+console.log('Pickaxe terrain modes, continuous no-durability sculpting, extended reach, 3D Dig ownership and inland water masking verified');
