@@ -47,10 +47,13 @@ export class WaterVisualSystem {
   }
 
   #createOceanShimmer() {
-    const width = this.terrain.extentX * 2 + 520;
-    const depth = this.terrain.extentZ * 2 + 520;
-    const geometry = new THREE.PlaneGeometry(width, depth, 1, 1);
-    geometry.rotateX(-Math.PI / 2);
+    let geometry = this.terrain.createNaturalWaterGeometry?.() ?? null;
+    if (!geometry) {
+      const width = this.terrain.extentX * 2 + 520;
+      const depth = this.terrain.extentZ * 2 + 520;
+      geometry = new THREE.PlaneGeometry(width, depth, 1, 1);
+      geometry.rotateX(-Math.PI / 2);
+    }
 
     this.waveMaterial = new THREE.ShaderMaterial({
       transparent: true,
@@ -87,6 +90,7 @@ export class WaterVisualSystem {
     shimmer.name = 'stylized-ocean-shimmer';
     shimmer.position.set(0, this.terrain.waterLevel + 0.022, this.terrain.centerZ);
     shimmer.renderOrder = OCEAN_SHIMMER_RENDER_ORDER;
+    shimmer.userData.naturalWaterMask = Boolean(geometry.userData?.naturalWaterMask);
     this.group.add(shimmer);
   }
 
