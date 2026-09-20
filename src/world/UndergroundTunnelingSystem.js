@@ -4,6 +4,13 @@ import {
   undergroundTunnelChunkSize
 } from '../data/UndergroundTunnelingDefinitions.js';
 import { terrainSurfaceColorAt } from './TerrainSurfacePresentation.js';
+import {
+  tunnelingExcavationCeilingY,
+  tunnelingExcavationExtent,
+  tunnelingExcavationFieldAt,
+  tunnelingExcavationFloorY,
+  tunnelingExcavationHorizontalRadius
+} from './TunnelingTerrainProfile.js';
 
 const ISO_LEVEL = 0;
 const STATE_KIND = 'global-tunneling-v1';
@@ -157,8 +164,12 @@ export class UndergroundTunnelingSystem {
     };
     this.#registerExcavation(excavation);
 
+    const excavationExtent = tunnelingExcavationExtent(radius, this.config);
     const affectedKeys = new Set(
-      this.#ensureChunksForSphere(center, radius + this.config.cellSize * 1.5)
+      this.#ensureChunksForSphere(
+        center,
+        excavationExtent + this.config.cellSize * 1.5
+      )
     );
     const discoveredPockets = this.#discoverPocketsForSphere(center, radius);
     for (const pocket of discoveredPockets) {
@@ -171,7 +182,7 @@ export class UndergroundTunnelingSystem {
       if (
         sphereIntersectsAabb(
           center,
-          radius + this.config.cellSize * 1.5,
+          excavationExtent + this.config.cellSize * 1.5,
           chunk.bounds
         )
       ) {
@@ -311,7 +322,8 @@ export class UndergroundTunnelingSystem {
       this.#registerExcavation(excavation);
       this.#ensureChunksForSphere(
         excavation,
-        excavation.radius + this.config.cellSize * 1.5
+        tunnelingExcavationExtent(excavation.radius, this.config)
+          + this.config.cellSize * 1.5
       );
     }
 
@@ -393,19 +405,50 @@ export class UndergroundTunnelingSystem {
 
   #canExcavateSphereAtWorld(center, radius) {
     const safeRadius = Math.max(0, Number(radius) || 0);
-    if (!this.terrain.isPlayable?.(center.x, center.z, safeRadius + 0.35)) return false;
+    const horizontalRadius =
+      tunnelingExcavationHorizontalRadius(safeRadius, this.config);
+    if (!this.terrain.isPlayable?.(center.x, center.z, horizontalRadius + 0.35)) {
+      return false;
+    }
     const naturalSurfaceY = this.#naturalSurfaceHeightAt(center.x, center.z);
     const protectedBottom =
       naturalSurfaceY - this.config.maxDepth + this.config.bottomPadding;
-    return center.y - safeRadius >= protectedBottom;
+    const excavation = {
+      x: center.x,
+      y: center.y,
+      z: center.z,
+      radius: safeRadius
+    };
+    return tunnelingExcavationFloorY(excavation, this.config) >= protectedBottom;
   }
 
   #wouldExcavate(center, radius) {
+    const excavation = {
+      x: center.x,
+      y: center.y,
+      z: center.z,
+      radius
+    };
+    const horizontalRadius =
+      tunnelingExcavationHorizontalRadius(radius, this.config);
+    const floorY = tunnelingExcavationFloorY(excavation, this.config);
+    const ceilingY = tunnelingExcavationCeilingY(excavation, this.config);
     const sampleStep = Math.max(0.24, this.config.cellSize * 0.55);
-    for (let z = center.z - radius; z <= center.z + radius; z += sampleStep) {
-      for (let y = center.y - radius; y <= center.y + radius; y += sampleStep) {
-        for (let x = center.x - radius; x <= center.x + radius; x += sampleStep) {
-          if (Math.hypot(x - center.x, y - center.y, z - center.z) > radius) continue;
+
+    for (
+      let z = center.z - horizontalRadius;
+      z <= center.z + horizontalRadius;
+      z += sampleStep
+    ) {
+      for (let y = floorY; y <= ceilingY; y += sampleStep) {
+        for (
+          let x = center.x - horizontalRadius;
+          x <= center.x + horizontalRadius;
+          x += sampleStep
+        ) {
+          if (
+            tunnelingExcavationFieldAt(x, y, z, excavation, this.config) > 0
+          ) continue;
           if (this.#densityAt(x, y, z) >= ISO_LEVEL) return true;
         }
       }
@@ -422,11 +465,13 @@ export class UndergroundTunnelingSystem {
       for (const excavation of bucket) {
         density = Math.min(
           density,
-          Math.hypot(
-            x - excavation.x,
-            y - excavation.y,
-            z - excavation.z
-          ) - excavation.radius
+          tunnelingExcavationFieldAt(
+            x,
+            y,
+            z,
+            excavation,
+            this.config
+          )
         );
       }
     }
@@ -442,7 +487,8 @@ export class UndergroundTunnelingSystem {
 
   #registerExcavation(excavation) {
     this.excavations.push(excavation);
-    for (const key of this.#chunkKeysForSphere(excavation, excavation.radius)) {
+    const extent = tunnelingExcavationExtent(excavation.radius, this.config);
+    for (const key of this.#chunkKeysForSphere(excavation, extent)) {
       const bucket = this.excavationBuckets.get(key) ?? [];
       bucket.push(excavation);
       this.excavationBuckets.set(key, bucket);
@@ -823,42 +869,42 @@ export class UndergroundTunnelingSystem {
   }
 
   #surfaceOpeningFor(excavation) {
-    // A horizontal/diagonal strike can breach a slope away from the sphere
-    // centre even when the centre itself sits more than one radius underground.
-    // Sample the natural surface across the excavation footprint and, when any
-    // point intersects, cut the full projected circle. The density mesh fills
-    // the conservative overlap outside the actual void so no heightfield
-    // triangle can bridge the opening.
+    const horizontalRadius =
+      tunnelingExcavationHorizontalRadius(excavation.radius, this.config);
     let intersectsSurface = false;
-    const radialFractions = [0, 0.5, 0.82, 0.96];
+    const radialFractions = [0, 0.45, 0.7, 0.88, 0.98];
+
     for (const fraction of radialFractions) {
-      const horizontalDistance = excavation.radius * fraction;
-      const verticalHalf = Math.sqrt(Math.max(
-        0,
-        excavation.radius * excavation.radius
-          - horizontalDistance * horizontalDistance
-      ));
-      const samples = fraction === 0 ? 1 : 8;
+      const horizontalDistance = horizontalRadius * fraction;
+      const samples = fraction === 0 ? 1 : 12;
       for (let sample = 0; sample < samples; sample += 1) {
         const angle = samples === 1 ? 0 : sample * Math.PI * 2 / samples;
         const x = excavation.x + Math.cos(angle) * horizontalDistance;
         const z = excavation.z + Math.sin(angle) * horizontalDistance;
         const surfaceY = this.terrain.heightAt(x, z);
-        if (Math.abs(surfaceY - excavation.y) <= verticalHalf) {
+        if (
+          tunnelingExcavationFieldAt(
+            x,
+            surfaceY,
+            z,
+            excavation,
+            this.config
+          ) <= this.config.cellSize * 0.08
+        ) {
           intersectsSurface = true;
           break;
         }
       }
       if (intersectsSurface) break;
     }
+
     if (!intersectsSurface) return null;
     return {
       x: excavation.x,
       z: excavation.z,
-      radius: excavation.radius + this.config.surfaceOpeningPadding
+      radius: horizontalRadius + this.config.surfaceOpeningPadding
     };
   }
-
   #syncSurfaceState() {
     this.surfaceOpenings = this.excavations
       .map(excavation => this.#surfaceOpeningFor(excavation))
