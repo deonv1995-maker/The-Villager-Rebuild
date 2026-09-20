@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
 import { TERRAIN_SCULPT_MODES } from '../src/data/TerrainSculptingDefinitions.js';
+import { ConstructionTerrainAdaptationSystem } from '../src/world/ConstructionTerrainAdaptationSystem.js';
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 import { TerrainSculptingSystem } from '../src/world/TerrainSculptingSystem.js';
@@ -101,6 +102,12 @@ let rebuiltChunks = 0;
 terrain.onTerrainChunkGeometryChanged(() => {
   rebuiltChunks += 1;
 });
+const constructionTerrain = new ConstructionTerrainAdaptationSystem({
+  group,
+  terrain
+});
+constructionTerrain.captureTerrainMeshes();
+const terrainRevisionBeforeSculpt = constructionTerrain.getRevision();
 const sculpting = new TerrainSculptingSystem({ terrain });
 
 const startHeight = terrain.heightAt(inland.x, inland.z);
@@ -120,6 +127,10 @@ assert.ok(
   'Raise must increase the shared terrain height authority'
 );
 assert.ok(rebuiltChunks > 0, 'a surface edit must rebuild only affected terrain chunks');
+assert.ok(
+  constructionTerrain.getRevision() > terrainRevisionBeforeSculpt,
+  'surface edits must advance the shared terrain revision so grass and ground cover can reproject'
+);
 
 const distant = findGround(terrain, {
   minDistanceFrom: inland,
@@ -224,6 +235,7 @@ const [
   saveSource,
   menuSource,
   controllerSource,
+  constructionTerrainSource,
   indexSource
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
@@ -232,6 +244,7 @@ const [
   readFile('src/persistence/SaveGameController.js', 'utf8'),
   readFile('src/ui/PickaxeTerrainMenu.js', 'utf8'),
   readFile('src/gameplay/PickaxeTerrainRuntimeController.js', 'utf8'),
+  readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
   readFile('index.html', 'utf8')
 ]);
 
@@ -270,6 +283,10 @@ assert.ok(
   controllerSource.includes("playSwing('pickaxe')") &&
   controllerSource.includes("recordUse?.('pickaxe')"),
   'surface terraforming must keep Dig separate and consume normal Pickaxe use/durability'
+);
+assert.ok(
+  constructionTerrainSource.includes('this.revision += 1;'),
+  'terrain-geometry replacement must publish a revision for vegetation reprojection'
 );
 assert.ok(
   indexSource.includes('./src/pickaxe-terrain-menu.css'),
