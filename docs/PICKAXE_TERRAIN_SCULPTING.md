@@ -56,6 +56,8 @@ When **Dig** is selected, the terrain controller releases Action ownership compl
 
 The terrain menu reuses the established compact top-right hammer/shovel presentation contract instead of adding another independent HUD layout.
 
+Each mode has its own semantic terrain-operation glyph resolved through `ASSET_PATHS.ui.mobile.terrain`. Raise, Lower, Dig, Smoothen and Level must not borrow construction-part artwork such as Frame, Stairs, Roof or Floor merely because those assets already exist. These diagrammatic terrain glyphs remain lightweight SVG control assets so the operation itself is readable at mobile menu size, while the equipped Pickaxe continues to use the approved cosy tool icon.
+
 ## Terrain rendering, construction and vegetation
 
 A surface edit rebuilds only terrain chunks intersecting the brush. Ordinary world chunks keep the established coarse mobile lattice; chunks containing surface edits move to a scoped medium-detail lattice so the 2.4 m brush is represented by visible geometry rather than only by collision math. Tunnel-opening chunks retain their higher-detail lattice because they also have to cut a real 3D hole through the heightfield.
@@ -79,6 +81,8 @@ The protected tunneling-depth boundary and deterministic underground-pocket plac
 - deterministic pockets must not move because the player terraformed above them.
 
 After a surface edit, active tunneling chunks intersecting that brush are rebuilt and surface openings are recalculated against the edited surface.
+
+Player-made tunnel cuts use a traversal-oriented arch profile instead of a sphere. The lower part of each strike has a shared flat floor plane and wider side clearance, while the upper part narrows through an oval roof. The profile is derived from the persisted excavation radius, so existing save payloads do not need a new schema field. Tunnel chunk activation, density subtraction and surface-opening detection all use the same profile authority to prevent collision and visible geometry from disagreeing.
 
 ## Water ownership
 
@@ -125,7 +129,9 @@ The terrain-sculpting payload has its own state kind/schema and serializes only 
 - active tunneling refresh after surface changes;
 - GameApp suppression of ordinary mining while a surface mode owns the Pickaxe;
 - unified Action-button priority;
-- normal Pickaxe swing/durability usage.
+- normal Pickaxe swing/durability usage;
+- dedicated semantic icons for all five terrain modes, with no construction-icon reuse;
+- Ranger-clear arched tunnel dimensions, a flat floor boundary and an oval roof profile.
 
 ## Device verification
 
