@@ -259,9 +259,12 @@ assert.ok(
   saveSource.includes('state.terrainSculpting = this.game.island?.terrainSculpting?.captureState?.() ?? null'),
   'surface terraforming must use the existing save record'
 );
-for (const mode of TERRAIN_SCULPT_MODES) {
-  assert.ok(menuSource.includes(`data-terrain-mode="${mode}"`), `menu must expose ${mode}`);
-}
+assert.ok(
+  menuSource.includes('TERRAIN_SCULPT_MODES.map') &&
+  menuSource.includes('data-terrain-mode="${mode}"') &&
+  menuSource.includes('definition.label.toUpperCase()'),
+  'menu rows must be generated from the centralized five-mode definition order'
+);
 assert.ok(
   controllerSource.includes("this.mode !== 'dig'") &&
   controllerSource.includes("playSwing('pickaxe')") &&
