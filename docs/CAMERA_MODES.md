@@ -1,6 +1,6 @@
 # Ranger camera modes
 
-The Ranger has one shared movement/look controller with two presentation modes. First person does not introduce a second movement, interaction, building or combat system.
+The Ranger has one shared movement/look controller with two presentation modes. First person does not introduce a second movement, interaction, building or combat system. Terrain and tunnel collision remain shared between both views.
 
 ## Third person
 
@@ -10,7 +10,9 @@ Third person remains the default mode and preserves the established follow camer
 - right-side touch/mouse drag orbits the camera;
 - after manual look is released, the camera can recover behind the Ranger;
 - the camera keeps its established follow position and distance but aims 2 m ahead along the current horizontal view direction, placing the Ranger below screen centre so more of the forward landscape remains visible;
-- discrete support-height changes such as stair treads are damped only at the vertical look-target layer, so climbing does not kick the camera while Ranger grounding, collision and jump physics remain unchanged;
+- the final third-person camera position is ray-resolved through the shared world collision authority. Outdoors it cannot move behind the terrain heightfield, and inside an active tunnel it uses the same volumetric solid-density query as Ranger traversal, preventing orbiting through cave walls/roof and exposing the outside of the world;
+- discrete support-height changes such as stair treads are damped only at the vertical look-target layer, so climbing does not kick the camera;
+- airborne Ranger movement is vertically resolved against active tunnel density, so a jump can contact a cave ceiling but the Ranger body/camera cannot pass through the roof into hidden terrain;
 - the forward framing bias is presentation-only: it does not alter horizontal movement direction, orbit controls or cinematic camera targeting;
 - the Ranger body and equipped third-person tool presentation remain visible;
 - structure occlusion/transparency remains active to keep the Ranger readable around buildings.
@@ -62,6 +64,8 @@ The Sprout rescue introduction uses this boundary deliberately. When the fallen 
 Camera mode is presentation/session state, not gameplay progression, and is not added to the save schema. A new gameplay session starts in third person. Story-camera framing itself is also presentation-only; only the owning story checkpoint (such as Sprout's pending first-Log demonstration) is persisted when continuity requires it.
 
 ## Verification
+
+`scripts/verify-platform-traversal.mjs` also verifies that active tunnel ceilings stop upward Ranger movement and that a third-person camera ray stops on the visible side of solid cave density.
 
 `scripts/verify-camera-modes.mjs` verifies the forward-biased third-person composition and established follow distance, default third-person behavior, first-person eye placement, near-vertical sky/ground pitch without camera roll, restoration of the third-person pitch envelope, resolved-motion walk bob, relaxed/non-metronomic walking cadence, stronger run bob, neutral recentering, suppression while collision prevents travel, persistent manual look, view-relative movement/facing, body/tool presentation visibility, desktop `P` toggling, restoration to third person and the first-person handoff away from third-person building occlusion.
 
