@@ -178,7 +178,10 @@ export class PickaxeTerrainRuntimeController {
 
     this.#syncPreview();
     const definition = TERRAIN_SCULPT_DEFINITIONS[this.mode];
-    const available = Boolean(this.currentTarget) && !busy && firstPerson;
+    const available =
+      Boolean(this.currentTarget) &&
+      firstPerson &&
+      (!busy || this.holdingAction);
     hud.setAttackTarget(null, 'pickaxe');
     hud.setExternalAction(TERRAIN_ACTION_ID, {
       available,
