@@ -41,7 +41,7 @@ This means ordinary heightfield ground is targetable before any underground geom
 A valid Pickaxe action:
 
 1. ray-marches from the camera through the global density field;
-2. if the camera starts slightly inside solid density at close range, searches a bounded distance backward along the aim ray to recover the tunnel-side empty sample;
+2. if the camera starts slightly inside solid density at close range, follows the local density normal toward empty tunnel space, with backward-along-aim recovery as a fallback;
 3. refines the first empty-to-solid transition;
 4. derives the Ranger-clear excavation sphere behind that point;
 5. verifies the complete cut remains above the protected depth boundary and on playable terrain;
@@ -50,6 +50,8 @@ A valid Pickaxe action:
 8. commits the excavation only when MINE is tapped.
 
 The HUD never needs an authored cave trigger or entrance.
+
+Target acquisition remains active while the Pickaxe swing animation is busy. The interaction handler still prevents a second strike until the current swing finishes, but the MINE control no longer disappears between valid cuts.
 
 ## Dynamic surface openings
 
@@ -92,6 +94,8 @@ A pocket has:
 - enough bottom clearance to remain inside the current tunneling depth.
 
 Pockets exist in the density function from world creation but generate no scene geometry until nearby tunneling activates their chunks.
+
+There is currently no surface marker, compass marker, or detector for an undiscovered pocket. Generation uses 28 m world-space cells; each eligible cell has a 34% deterministic pocket chance. Pocket centers sit about 5.2–14.2 m below the local natural surface, with radii of about 2.7–4.4 m. In play, the practical search pattern is to descend several metres, then drive longer horizontal/branch tunnels so excavation crosses multiple world cells instead of repeatedly widening one chamber.
 
 A pocket becomes **discovered** when a player excavation sphere first intersects it. Its complete local geometry is then activated so the cut can open naturally into a larger chamber.
 
@@ -180,6 +184,8 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - persistent Raise/Lower/Smoothen/Level tunnel-floor shaping;
 - directional wall tunneling after entering the first cut;
 - close-range wall targeting when the first-person camera starts slightly inside solid density;
+- sloped wall/roof targeting when camera clipping is perpendicular to the current aim direction;
+- MINE target visibility throughout an active Pickaxe swing;
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
 - deterministic pocket generation and discovery;
@@ -198,6 +204,7 @@ After CI and Pages deployment, verify on Android/PWA:
 - one downward strike creates a visible opening without floating grass/ground;
 - enter the opening and mine forward, sideways, downward, and upward;
 - move very close to tunnel walls/roof while aiming into them and confirm MINE does not disappear because the camera is touching the density boundary;
+- after a successful strike, confirm MINE stays visible during the swing animation instead of blinking away;
 - every visible MINE action produces a cut;
 - tunnels remain Ranger-clear and walkable;
 - in third person, orbit the camera hard into the side wall/roof and confirm the view pulls inward instead of showing outside/under the map;

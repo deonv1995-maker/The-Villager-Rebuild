@@ -455,9 +455,23 @@ const terrainSource = fs.readFileSync(
   new URL('../src/world/ExpandedIslandTerrainSystem.js', import.meta.url),
   'utf8'
 );
+const tunnelingSource = fs.readFileSync(
+  new URL('../src/world/UndergroundTunnelingSystem.js', import.meta.url),
+  'utf8'
+);
 const gameSource = fs.readFileSync(new URL('../src/core/GameApp.js', import.meta.url), 'utf8');
 assert.doesNotMatch(explorationSource, /MineableCaveSystem/, 'obsolete cave implementation must not remain wired');
 assert.doesNotMatch(terrainSource, /CaveTerrainProfile|caveMineable/, 'terrain must not retain cave-specific cutting');
 assert.doesNotMatch(gameSource, /mineable-cave|CAVE GROUND/, 'game interaction must be generic tunneling, not cave mining');
+assert.match(
+  tunnelingSource,
+  /TARGET_ORIGIN_RECOVERY_OFFSETS/,
+  'solid camera origins must retain a bounded 3D empty-space recovery fallback'
+);
+assert.match(
+  tunnelingSource,
+  /for \(const \[offsetX, offsetY, offsetZ\] of TARGET_ORIGIN_RECOVERY_OFFSETS\)/,
+  'clipped mining recovery must search nearby 3D directions instead of relying only on the aim ray'
+);
 
 console.log('global lazy tunneling, cave-safe traversal, deterministic pockets, content activation and persistence verified');

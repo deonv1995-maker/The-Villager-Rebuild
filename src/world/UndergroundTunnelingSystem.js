@@ -20,6 +20,15 @@ const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
 const TARGET_ORIGIN_RECOVERY_CELLS = 1.5;
+const TARGET_ORIGIN_RECOVERY_OFFSETS = Object.freeze(
+  [-1, 0, 1].flatMap(x =>
+    [-1, 0, 1].flatMap(y =>
+      [-1, 0, 1]
+        .filter(z => x !== 0 || y !== 0 || z !== 0)
+        .map(z => Object.freeze([x, y, z]))
+    )
+  )
+);
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -586,20 +595,19 @@ export class UndergroundTunnelingSystem {
 
   #findDensitySurfaceHit(origin, direction, reach = this.config.mineReach) {
     const step = Math.max(0.08, this.config.cellSize * TARGET_RAY_STEP_FRACTION);
-    let previousDistance = 0;
-    let previousDensity = this.#densityAt(origin.x, origin.y, origin.z);
+    const rayOrigin = this.tempC.copy(origin);
+    let previousDensity = this.#densityAt(rayOrigin.x, rayOrigin.y, rayOrigin.z);
 
-    // First-person camera collision and the marching surface do not have identical
-    // resolution. At close range the camera can therefore sit a few centimetres
-    // inside solid density even while the Ranger remains correctly inside the
-    // tunnel. Recover the nearby empty side of that same boundary before marching
-    // forward so the MINE action does not disappear simply because the ray starts
-    // just past the wall.
+    // The first-person eye can enter the faceted density surface slightly around
+    // sloped walls/roofs. Recover toward the density field's empty-side normal
+    // first; backing up only along the aim ray is not enough when the clipping
+    // direction is perpendicular to where the player is looking.
     if (previousDensity >= ISO_LEVEL) {
       const recoveryReach = Math.min(
         reach,
         this.config.cellSize * TARGET_ORIGIN_RECOVERY_CELLS
       );
+      const outward = this.#densitySurfaceNormalAt(origin, this.tempNormal);
       let recoveredEmpty = false;
 
       for (
@@ -607,11 +615,10 @@ export class UndergroundTunnelingSystem {
         distance <= recoveryReach + 0.000001;
         distance = Math.min(recoveryReach, distance + step)
       ) {
-        const sampleDistance = -distance;
-        const world = this.tempD.copy(origin).addScaledVector(direction, sampleDistance);
+        const world = this.tempD.copy(origin).addScaledVector(outward, distance);
         const density = this.#densityAt(world.x, world.y, world.z);
         if (density < ISO_LEVEL) {
-          previousDistance = sampleDistance;
+          rayOrigin.copy(world);
           previousDensity = density;
           recoveredEmpty = true;
           break;
@@ -619,26 +626,76 @@ export class UndergroundTunnelingSystem {
         if (distance >= recoveryReach) break;
       }
 
+      // Keep the previous close-wall fallback for cases where the local gradient
+      // is ambiguous at a marching-tetrahedra edge.
+      if (!recoveredEmpty) {
+        for (
+          let distance = step;
+          distance <= recoveryReach + 0.000001;
+          distance = Math.min(recoveryReach, distance + step)
+        ) {
+          const world = this.tempD.copy(origin).addScaledVector(direction, -distance);
+          const density = this.#densityAt(world.x, world.y, world.z);
+          if (density < ISO_LEVEL) {
+            rayOrigin.copy(world);
+            previousDensity = density;
+            recoveredEmpty = true;
+            break;
+          }
+          if (distance >= recoveryReach) break;
+        }
+      }
+
+      // Sloped/arched tunnel surfaces can clip the first-person eye in a direction
+      // unrelated to the current look vector. As a final bounded recovery, sample
+      // the nearest 3D shell around the eye and move the ray origin to the first
+      // empty density sample. This only runs when the eye is already in solid
+      // density, so normal targeting keeps its low-cost straight ray march.
+      if (!recoveredEmpty) {
+        for (
+          let distance = step;
+          distance <= recoveryReach + 0.000001 && !recoveredEmpty;
+          distance = Math.min(recoveryReach, distance + step)
+        ) {
+          for (const [offsetX, offsetY, offsetZ] of TARGET_ORIGIN_RECOVERY_OFFSETS) {
+            const length = Math.hypot(offsetX, offsetY, offsetZ);
+            const scale = distance / length;
+            const world = this.tempD.set(
+              origin.x + offsetX * scale,
+              origin.y + offsetY * scale,
+              origin.z + offsetZ * scale
+            );
+            const density = this.#densityAt(world.x, world.y, world.z);
+            if (density >= ISO_LEVEL) continue;
+            rayOrigin.copy(world);
+            previousDensity = density;
+            recoveredEmpty = true;
+            break;
+          }
+        }
+      }
+
       if (!recoveredEmpty) return null;
     }
 
+    let previousDistance = 0;
     for (
-      let distance = Math.min(reach, previousDistance + step);
+      let distance = step;
       distance <= reach + 0.000001;
       distance = Math.min(reach, distance + step)
     ) {
-      const world = this.tempD.copy(origin).addScaledVector(direction, distance);
+      const world = this.tempD.copy(rayOrigin).addScaledVector(direction, distance);
       const density = this.#densityAt(world.x, world.y, world.z);
       if (previousDensity < ISO_LEVEL && density >= ISO_LEVEL) {
         let low = previousDistance;
         let high = distance;
         for (let refine = 0; refine < TARGET_REFINE_STEPS; refine += 1) {
           const mid = (low + high) * 0.5;
-          const midWorld = this.tempD.copy(origin).addScaledVector(direction, mid);
+          const midWorld = this.tempD.copy(rayOrigin).addScaledVector(direction, mid);
           if (this.#densityAt(midWorld.x, midWorld.y, midWorld.z) >= ISO_LEVEL) high = mid;
           else low = mid;
         }
-        return new THREE.Vector3().copy(origin).addScaledVector(direction, high);
+        return new THREE.Vector3().copy(rayOrigin).addScaledVector(direction, high);
       }
 
       previousDistance = distance;
