@@ -112,6 +112,14 @@ Inside an active tunneling column:
 - underground players resolve to the nearest valid tunnel floor below their current level;
 - excavated walls, floors, ceilings, and pockets all come from the same density function used to render the mesh.
 
+## Surface terraforming integration
+
+The Pickaxe now has one player-facing terrain menu, but **Dig** remains the only mode owned by the 3D density field. Raise, Lower, Smoothen and Level are surface-height operations documented in `docs/PICKAXE_TERRAIN_SCULPTING.md`.
+
+The density surface uses the current edited terrain height, and active tunnel chunks/surface openings refresh after a surface edit. The protected 18 m mining floor and deterministic underground-pocket placement remain anchored to the natural unedited geology so player terraforming cannot move pockets or invalidate previously valid excavation on save restore.
+
+The ocean presentation is also independent from tunnel openings: base water and shimmer use a natural-water render mask rather than a world-wide sea-level plane, so an inland tunnel breakthrough cannot reveal hidden ocean geometry.
+
 ## Persistence
 
 New saves store tunneling state under `state.tunneling`.

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { ExpandedIslandTerrainSystem } from './ExpandedIslandTerrainSystem.js';
+import { TerrainSculptingSystem } from './TerrainSculptingSystem.js';
 import { ConstructionTerrainAdaptationSystem } from './ConstructionTerrainAdaptationSystem.js';
 import { EnvironmentScatterSystem } from './EnvironmentScatterSystem.js';
 import { ExplorationPoiSystem } from './ExplorationPoiSystem.js';
@@ -30,6 +31,10 @@ export class TestIslandSystem {
       frustumPadding: 34
     });
     this.terrain = new ExpandedIslandTerrainSystem(this.group, { chunks: this.chunks });
+    this.terrainSculpting = new TerrainSculptingSystem({
+      terrain: this.terrain,
+      onChanged: change => this.#handleTerrainSculptChanged(change)
+    });
     this.constructionTerrain = new ConstructionTerrainAdaptationSystem({
       group: this.group,
       terrain: this.terrain,
@@ -179,6 +184,19 @@ export class TestIslandSystem {
     if (!this.presentationExclusions.delete(id)) return false;
     this.#syncPresentationExclusions();
     return true;
+  }
+
+  #handleTerrainSculptChanged(change) {
+    if (!this.explorationPois) return;
+    if (
+      Number.isFinite(change?.x) &&
+      Number.isFinite(change?.z) &&
+      Number.isFinite(change?.radius)
+    ) {
+      this.explorationPois.refreshTerrainSurface?.(change);
+    } else if (change?.restored) {
+      this.explorationPois.refreshTerrainSurface?.();
+    }
   }
 
   #replaceTunnelingPresentationExclusions(exclusions = []) {

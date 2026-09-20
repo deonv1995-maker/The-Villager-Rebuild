@@ -9,6 +9,7 @@ import { InventoryGainFeedbackController } from './gameplay/InventoryGainFeedbac
 import { LandscapingRuntimeController } from './gameplay/LandscapingRuntimeController.js';
 import { PanelConstructionRuntimeController } from './gameplay/PanelConstructionRuntimeController.js';
 import { PlaceableUtilityRuntimeController } from './gameplay/PlaceableUtilityRuntimeController.js';
+import { PickaxeTerrainRuntimeController } from './gameplay/PickaxeTerrainRuntimeController.js';
 import { RoofThatchController } from './gameplay/RoofThatchController.js';
 import { SproutArrivalController } from './gameplay/SproutArrivalController.js';
 import { SproutCompanionController } from './gameplay/SproutCompanionController.js';
@@ -116,6 +117,10 @@ async function bootGameplay(titleScene = null, { resume = false, profile = null 
     const foodRuntime = new FoodRuntimeController({ game });
     foodRuntime.start();
     game.foodRuntime = foodRuntime;
+
+    const pickaxeTerrainRuntime = new PickaxeTerrainRuntimeController({ game });
+    pickaxeTerrainRuntime.start();
+    game.pickaxeTerrainRuntime = pickaxeTerrainRuntime;
 
     const placeableUtilityRuntime = new PlaceableUtilityRuntimeController({ game });
     placeableUtilityRuntime.start();

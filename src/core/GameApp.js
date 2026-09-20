@@ -265,14 +265,18 @@ export class GameApp {
     // busy window even though #tryInteract would reject the tap, which read as
     // intermittent mining failure on mobile.
     const pickaxeReady = toolId === 'pickaxe' && !(this.toolPresentation?.isBusy() ?? false);
-    // Preserve the established overworld rock interaction. Generic ground is
-    // everywhere, so it must be the fallback Pickaxe target rather than masking
-    // a nearby large rock that was already mineable before tunneling existed.
+    const pickaxeSurfaceMode = pickaxeReady
+      && (this.pickaxeTerrainRuntime?.ownsSurfaceInteraction?.() ?? false);
+    // Preserve the established overworld rock interaction in DIG mode. Surface
+    // terraforming modes own the Pickaxe action instead, so a rock or generic
+    // tunneling target cannot fire underneath Raise/Lower/Smoothen/Level.
     const rockTarget = this.rockHarvest?.update(
       this.playerPosition,
-      pickaxeReady
+      pickaxeReady && !pickaxeSurfaceMode
     ) ?? null;
-    const miningAim = pickaxeReady && !rockTarget ? this.#currentConstructionAim() : null;
+    const miningAim = pickaxeReady && !pickaxeSurfaceMode && !rockTarget
+      ? this.#currentConstructionAim()
+      : null;
     const groundMineTarget = miningAim
       ? this.island?.explorationPois?.getMineTarget?.({
         aim: miningAim,

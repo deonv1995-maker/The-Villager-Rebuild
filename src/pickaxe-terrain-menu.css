@@ -1,0 +1,19 @@
+body.pickaxe-terrain-open .hud-note {
+  opacity: 0;
+  visibility: hidden;
+}
+
+body.pickaxe-terrain-open:not(.pickaxe-terrain-expanded) #boot-status {
+  max-width: min(52vw, calc(100vw - 222px));
+}
+
+body.pickaxe-terrain-expanded #boot-status:not([data-error="true"]) {
+  opacity: 0;
+  visibility: hidden;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  body.pickaxe-terrain-open:not(.pickaxe-terrain-expanded) #boot-status {
+    max-width: min(48vw, calc(100vw - 206px));
+  }
+}
