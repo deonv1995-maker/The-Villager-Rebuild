@@ -136,6 +136,8 @@ This keeps harvesting, world pickups and shared inventory as separate authoritie
 
 ## Upgrade direction
 
+Sprout Upgrade Shards now exist as a persistent shared-inventory progression resource discovered in deterministic underground pockets. Shard placement/collection is owned by the underground content layer and normal inventory; there is intentionally no second Sprout-specific shard counter. This pass establishes the exploration reward only and does not yet spend shards or alter companion statistics.
+
 Future Sprout upgrades may include:
 
 - storage-capacity upgrades and improved compression efficiency;
@@ -145,11 +147,11 @@ Future Sprout upgrades may include:
 - maximum compressible object size;
 - scanner, light, repair or story-specific utility systems.
 
-These are progression extensions and must build on the same companion/inventory boundaries.
+These are progression extensions and must build on the same companion/inventory boundaries. When upgrade spending is introduced, it should consume `sprout_shard` from `InventorySystem` and apply upgrades through a dedicated Sprout progression authority rather than embedding upgrade logic in cave generation.
 
 ## Architecture boundaries
 
-- `InventorySystem` remains the single item-count authority for the Ranger/Sprout pair. It owns storage profiles, bulk accounting and capacity checks while retaining an uncapped authoritative `add` path for save restore and internal state transformations.
+- `InventorySystem` remains the single item-count authority for the Ranger/Sprout pair, including collected `sprout_shard` progression resources. It owns storage profiles, bulk accounting and capacity checks while retaining an uncapped authoritative `add` path for save restore and internal state transformations.
 - `InventoryCapacityController` binds the active inventory profile to the existing Sprout allegiance checkpoint, exposes that capacity to world-pickup systems and presents the compact PACK/SPROUT capacity readout. It does not own quantities.
 - `GatherableSystem` remains responsible for loose world pickup identity, passive harvestable grass patches, player targeting, Ranger capacity preflight, Sprout reservation/release and legitimate committed removal. Inventory-backed resources, including Logs and Grass, use the same reservation/commit boundary; it never deletes a resource that fails the active capacity check.
 - `TreeHarvestSystem` remains responsible for axe hits, standing-tree state, felling completion, stump/regrowth state and creation of timber results.
@@ -173,4 +175,4 @@ Once allied, the same inventory changes to Sprout's 96-unit compressed profile. 
 
 For timber specifically, the Ranger's final axe hit starts a visible authored-tree fall. The tree must settle before its configured Log pickups are spawned. The Ranger may manually store a loose Log through the normal inventory pickup path, while allied Sprout may instead scan and compress those same legitimate pickups into the same shared inventory for larger-scale construction storage.
 
-This slice still does **not** implement storage-capacity upgrade progression, advanced companion utilities, multi-target collection or falling-tree damage/collision. Those remain later milestones.
+Underground exploration can now award Sprout Upgrade Shards into the same shared inventory, but this slice still does **not** implement shard spending, storage-capacity upgrade effects, advanced companion utilities, multi-target collection or falling-tree damage/collision. Those remain later milestones.
