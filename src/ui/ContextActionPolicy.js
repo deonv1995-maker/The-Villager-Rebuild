@@ -9,6 +9,7 @@ const GENERIC_INTERACTION_TARGETS = Object.freeze(new Set([
   'carcass',
   'physical-resource',
   'resource',
+  'underground-collectible',
   'thrown-spear'
 ]));
 const RETRIEVAL_ACTION_ID = 'spear-retrieve';
@@ -108,7 +109,13 @@ export function resolveContextAction({
       icon: interactionTarget?.icon ?? 'hand',
       label: interactionTarget?.actionLabel ?? `Pick up ${interactionTarget?.label ?? 'item'}`,
       caption: available
-        ? (interactionTarget?.type === 'carcass' ? 'GATHER' : 'PICK UP')
+        ? (
+          interactionTarget?.type === 'carcass'
+            ? 'GATHER'
+            : interactionTarget?.type === 'underground-collectible'
+              ? 'COLLECT'
+              : 'PICK UP'
+        )
         : 'FULL'
     };
   }

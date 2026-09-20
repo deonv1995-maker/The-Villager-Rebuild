@@ -1,5 +1,6 @@
 import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { UndergroundTunnelingSystem } from './UndergroundTunnelingSystem.js';
+import { UndergroundPocketContentSystem } from './UndergroundPocketContentSystem.js';
 
 export class ExplorationPoiSystem {
   constructor({
@@ -19,6 +20,7 @@ export class ExplorationPoiSystem {
       chunks,
       onPresentationExclusionsChanged
     });
+    this.pocketContents = new UndergroundPocketContentSystem({ group, chunks });
 
     // Keep the existing exploration-POI registry boundary stable for diagnostics
     // and future authored POIs. Tunneling is a world system, not a POI.
@@ -27,6 +29,7 @@ export class ExplorationPoiSystem {
 
   create() {
     this.tunneling.create();
+    this.pocketContents.create();
     return EXPLORATION_POIS.length;
   }
 
@@ -54,8 +57,28 @@ export class ExplorationPoiSystem {
     return this.tunneling.hasActivityAt(x, z);
   }
 
+  getInteractionTarget(playerPosition) {
+    return this.pocketContents.getInteractionTarget(playerPosition);
+  }
+
+  collectUndergroundTarget(target, options = {}) {
+    return this.pocketContents.collect(target, options);
+  }
+
   mine(target) {
-    return this.tunneling.mine(target);
+    const result = this.tunneling.mine(target);
+    if (!result?.discoveredPockets?.length) return result;
+
+    const discoveredPocketContents = result.discoveredPockets
+      .map(id => this.tunneling.getPocket(id))
+      .filter(Boolean)
+      .map(pocket => this.pocketContents.discoverPocket(pocket))
+      .filter(Boolean);
+
+    return {
+      ...result,
+      discoveredPocketContents
+    };
   }
 
   refreshTerrainSurface(change = null) {
@@ -71,14 +94,25 @@ export class ExplorationPoiSystem {
   }
 
   captureState() {
-    return this.tunneling.captureState();
+    return {
+      ...this.tunneling.captureState(),
+      content: this.pocketContents.captureState()
+    };
   }
 
   restoreState(state) {
-    return this.tunneling.restoreState(state);
+    const restored = this.tunneling.restoreState(state);
+    this.pocketContents.restoreState(
+      state?.content,
+      this.tunneling.getDiscoveredPockets()
+    );
+    return restored;
   }
 
   getDebugState() {
-    return this.tunneling.getDebugState();
+    return {
+      ...this.tunneling.getDebugState(),
+      pocketContent: this.pocketContents.getDebugState()
+    };
   }
 }
