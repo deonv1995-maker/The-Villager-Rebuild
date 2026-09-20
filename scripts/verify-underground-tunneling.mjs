@@ -11,12 +11,85 @@ import { ConstructionTerrainAdaptationSystem } from '../src/world/ConstructionTe
 import { ExpandedIslandTerrainSystem } from '../src/world/ExpandedIslandTerrainSystem.js';
 import { ExplorationPoiSystem } from '../src/world/ExplorationPoiSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
+import {
+  tunnelingExcavationCeilingY,
+  tunnelingExcavationFieldAt,
+  tunnelingExcavationFloorY,
+  tunnelingExcavationHorizontalRadius
+} from '../src/world/TunnelingTerrainProfile.js';
 
 assert.equal(EXPLORATION_POIS.length, 0, 'the fixed cave POI must be removed');
 assert.equal(
   UNDERGROUND_TUNNELING.mineRadius * 2 >= PLAYER_TRAVERSAL_TUNING.body.height + 0.35,
   true,
   'one tunneling strike must retain Ranger-clear excavation diameter'
+);
+
+const traversalExcavation = {
+  x: 0,
+  y: 0,
+  z: 0,
+  radius: UNDERGROUND_TUNNELING.mineRadius
+};
+const traversalFloorY = tunnelingExcavationFloorY(
+  traversalExcavation,
+  UNDERGROUND_TUNNELING
+);
+const traversalCeilingY = tunnelingExcavationCeilingY(
+  traversalExcavation,
+  UNDERGROUND_TUNNELING
+);
+const traversalWidth = tunnelingExcavationHorizontalRadius(
+  traversalExcavation.radius,
+  UNDERGROUND_TUNNELING
+);
+assert.equal(
+  traversalCeilingY - traversalFloorY >= PLAYER_TRAVERSAL_TUNING.body.height + 0.6,
+  true,
+  'arched tunneling must leave generous Ranger head clearance'
+);
+assert.equal(
+  traversalWidth - PLAYER_TRAVERSAL_TUNING.body.radius >= 0.9,
+  true,
+  'arched tunneling must leave generous Ranger side clearance'
+);
+for (const x of [0, traversalWidth * 0.45]) {
+  assert.equal(
+    tunnelingExcavationFieldAt(
+      x,
+      traversalFloorY + 0.04,
+      0,
+      traversalExcavation,
+      UNDERGROUND_TUNNELING
+    ) < 0,
+    true,
+    'tunnel floor must remain open immediately above one shared flat floor plane'
+  );
+  assert.equal(
+    tunnelingExcavationFieldAt(
+      x,
+      traversalFloorY - 0.04,
+      0,
+      traversalExcavation,
+      UNDERGROUND_TUNNELING
+    ) > 0,
+    true,
+    'tunnel floor must remain solid immediately below the flat walking plane'
+  );
+}
+const upperRoofY =
+  traversalExcavation.y +
+  traversalExcavation.radius * UNDERGROUND_TUNNELING.tunnelRoofRiseScale * 0.82;
+assert.equal(
+  tunnelingExcavationFieldAt(
+    traversalWidth * 0.88,
+    upperRoofY,
+    0,
+    traversalExcavation,
+    UNDERGROUND_TUNNELING
+  ) > 0,
+  true,
+  'upper tunnel profile must narrow into an oval roof instead of a vertical cylinder'
 );
 assert.equal(
   undergroundTunnelChunkSize() <= 10,
