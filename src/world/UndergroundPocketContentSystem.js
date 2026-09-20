@@ -260,6 +260,11 @@ export class UndergroundPocketContentSystem {
     const ix = pocket.ix;
     const iz = pocket.iz;
     const angleOffset = hash01(ix, iz, 203) * Math.PI * 2;
+    const floorRiseAtRadius = radialDistance =>
+      pocket.radius - Math.sqrt(Math.max(
+        0,
+        pocket.radius * pocket.radius - radialDistance * radialDistance
+      ));
 
     const decorativeRockCount = deterministicCount(
       this.config.decorativeRockMin,
@@ -272,7 +277,11 @@ export class UndergroundPocketContentSystem {
       const radius = pocket.radius * lerp(0.58, 0.82, hash01(ix, iz + index, 227));
       const scale = lerp(0.52, 1.22, hash01(ix + index, iz, 229));
       const rock = new THREE.Mesh(this.geometry.rock, this.material.rock);
-      rock.position.set(Math.cos(angle) * radius, 0.12 * scale, Math.sin(angle) * radius);
+      rock.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius) + 0.12 * scale,
+        Math.sin(angle) * radius
+      );
       rock.scale.set(scale, scale * lerp(0.55, 0.9, hash01(ix, iz + index, 233)), scale);
       rock.rotation.set(
         hash01(ix, iz + index, 239) * 0.6,
@@ -294,7 +303,11 @@ export class UndergroundPocketContentSystem {
       const radius = pocket.radius * lerp(0.58, 0.76, hash01(ix + index, iz, 263));
       const height = lerp(0.62, 1.35, hash01(ix, iz + index, 269));
       const spike = new THREE.Mesh(this.geometry.stalagmite, this.material.darkStone);
-      spike.position.set(Math.cos(angle) * radius, height * 0.5 - 0.02, Math.sin(angle) * radius);
+      spike.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius) + height * 0.5 - 0.02,
+        Math.sin(angle) * radius
+      );
       spike.scale.set(lerp(0.72, 1.16, hash01(ix, iz + index, 271)), height / 0.9, lerp(0.72, 1.16, hash01(ix + index, iz, 277)));
       spike.rotation.y = hash01(ix + index, iz, 281) * Math.PI * 2;
       spike.castShadow = false;
@@ -311,7 +324,11 @@ export class UndergroundPocketContentSystem {
       const angle = angleOffset + 1.1 + cluster * Math.PI * 2 / Math.max(1, crystalClusterCount);
       const radius = pocket.radius * lerp(0.5, 0.72, hash01(ix + cluster, iz, 293));
       const clusterRoot = new THREE.Group();
-      clusterRoot.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+      clusterRoot.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius),
+        Math.sin(angle) * radius
+      );
       for (let spike = 0; spike < 3; spike += 1) {
         const crystal = new THREE.Mesh(this.geometry.crystal, this.material.crystal);
         crystal.position.set((spike - 1) * 0.14, 0.25 + spike * 0.05, (spike % 2) * 0.09);
@@ -324,7 +341,14 @@ export class UndergroundPocketContentSystem {
     }
 
     const hasHiddenStructure = hash01(ix, iz, 311) <= this.config.hiddenStructureChance;
-    if (hasHiddenStructure) this.#addHiddenStructure(pocketRoot, pocket, angleOffset + 2.2);
+    if (hasHiddenStructure) {
+      this.#addHiddenStructure(
+        pocketRoot,
+        pocket,
+        angleOffset + 2.2,
+        floorRiseAtRadius
+      );
+    }
 
     const stoneCount = deterministicCount(
       this.config.collectibleStoneMin,
@@ -340,7 +364,11 @@ export class UndergroundPocketContentSystem {
         hash01(ix, iz + index, 331)
       );
       const root = this.#createStoneCollectible();
-      root.position.set(Math.cos(angle) * radius, 0.12, Math.sin(angle) * radius);
+      root.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius) + 0.12,
+        Math.sin(angle) * radius
+      );
       pocketRoot.add(root);
       this.#registerCollectible({
         id: `${pocket.id}:stone:${index}`,
@@ -357,7 +385,11 @@ export class UndergroundPocketContentSystem {
       const root = this.#createTreasureCollectible();
       const angle = angleOffset + 3.6;
       const radius = pocket.radius * (hasHiddenStructure ? 0.27 : 0.4);
-      root.position.set(Math.cos(angle) * radius, 0.24, Math.sin(angle) * radius);
+      root.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius) + 0.24,
+        Math.sin(angle) * radius
+      );
       root.rotation.y = angle + Math.PI * 0.5;
       pocketRoot.add(root);
       this.#registerCollectible({
@@ -381,7 +413,11 @@ export class UndergroundPocketContentSystem {
       const angle = angleOffset + 4.35 + index * 0.7;
       const radius = pocket.radius * lerp(0.16, 0.34, hash01(ix + index, iz, 353));
       const root = this.#createShardCollectible();
-      root.position.set(Math.cos(angle) * radius, 0.58, Math.sin(angle) * radius);
+      root.position.set(
+        Math.cos(angle) * radius,
+        floorRiseAtRadius(radius) + 0.58,
+        Math.sin(angle) * radius
+      );
       root.rotation.y = angle;
       pocketRoot.add(root);
       this.#registerCollectible({
@@ -406,11 +442,15 @@ export class UndergroundPocketContentSystem {
     }));
   }
 
-  #addHiddenStructure(parent, pocket, angle) {
+  #addHiddenStructure(parent, pocket, angle, floorRiseAtRadius) {
     const ruin = new THREE.Group();
     ruin.name = `hidden-ruin-${pocket.ix}-${pocket.iz}`;
     const radius = pocket.radius * 0.38;
-    ruin.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius);
+    ruin.position.set(
+      Math.cos(angle) * radius,
+      floorRiseAtRadius(radius),
+      Math.sin(angle) * radius
+    );
     ruin.rotation.y = angle + Math.PI * 0.5;
 
     for (const side of [-1, 1]) {
