@@ -131,6 +131,20 @@ assert.ok(
   constructionTerrain.getRevision() > terrainRevisionBeforeSculpt,
   'surface edits must advance the shared terrain revision so grass and ground cover can reproject'
 );
+const sculptChunkX = Math.floor(inland.x / 72);
+const sculptChunkZ = Math.floor(inland.z / 72);
+const sculptMesh = group.getObjectByName(`terrain-chunk-${sculptChunkX}-${sculptChunkZ}`);
+assert.ok(sculptMesh, 'edited terrain chunk must remain present');
+assert.equal(
+  sculptMesh.userData.surfaceSculpted,
+  true,
+  'a chunk containing surface edits must opt into the scoped sculpt render lattice'
+);
+assert.equal(
+  sculptMesh.userData.terrainSegments,
+  terrain.sculptTerrainSegments,
+  'surface editing must render at finer detail than the ordinary world lattice'
+);
 
 const distant = findGround(terrain, {
   minDistanceFrom: inland,
@@ -236,6 +250,7 @@ const [
   menuSource,
   controllerSource,
   constructionTerrainSource,
+  tunnelingSource,
   indexSource
 ] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
@@ -245,6 +260,7 @@ const [
   readFile('src/ui/PickaxeTerrainMenu.js', 'utf8'),
   readFile('src/gameplay/PickaxeTerrainRuntimeController.js', 'utf8'),
   readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
+  readFile('src/world/UndergroundTunnelingSystem.js', 'utf8'),
   readFile('index.html', 'utf8')
 ]);
 
@@ -287,6 +303,11 @@ assert.ok(
 assert.ok(
   constructionTerrainSource.includes('this.revision += 1;'),
   'terrain-geometry replacement must publish a revision for vegetation reprojection'
+);
+assert.ok(
+  tunnelingSource.includes('#naturalSurfaceHeightAt(x, z)') &&
+  tunnelingSource.includes('naturalSurfaceY - this.config.maxDepth'),
+  'tunnel safety depth must remain anchored to natural geology instead of mutable surface edits'
 );
 assert.ok(
   indexSource.includes('./src/pickaxe-terrain-menu.css'),
