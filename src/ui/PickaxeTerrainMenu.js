@@ -17,11 +17,11 @@ export class PickaxeTerrainMenu {
 
     const ui = ASSET_PATHS.ui.mobile;
     this.modeIcons = Object.freeze({
-      raise: ui.build.frame,
-      lower: ui.build.stairs,
-      dig: ui.pickaxe,
-      smooth: ui.build.roof,
-      level: ui.build.floor
+      raise: ui.terrain.raise,
+      lower: ui.terrain.lower,
+      dig: ui.terrain.dig,
+      smooth: ui.terrain.smooth,
+      level: ui.terrain.level
     });
 
     const rows = TERRAIN_SCULPT_MODES.map(mode => {
