@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Sprout upgrade shard">
+  <defs>
+    <linearGradient id="g" x1="20" y1="12" x2="72" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8fbff"/>
+      <stop offset=".45" stop-color="#68d9ef"/>
+      <stop offset="1" stop-color="#167d9a"/>
+    </linearGradient>
+  </defs>
+  <path d="M48 7 70 32 58 86 31 72 24 31Z" fill="url(#g)" stroke="#173e4d" stroke-width="5" stroke-linejoin="round"/>
+  <path d="m48 7 2 48 20-23M50 55 31 72M24 31l26 24" fill="none" stroke="#e7fdff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".8"/>
+</svg>
