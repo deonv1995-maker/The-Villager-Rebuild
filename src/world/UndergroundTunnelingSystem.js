@@ -19,6 +19,7 @@ const TERRAIN_COLOR_DEPTH = 0.42;
 const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
+const TARGET_ORIGIN_RECOVERY_CELLS = 1.5;
 
 const CUBE_CORNERS = Object.freeze([
   [0, 0, 0],
@@ -588,8 +589,41 @@ export class UndergroundTunnelingSystem {
     let previousDistance = 0;
     let previousDensity = this.#densityAt(origin.x, origin.y, origin.z);
 
+    // First-person camera collision and the marching surface do not have identical
+    // resolution. At close range the camera can therefore sit a few centimetres
+    // inside solid density even while the Ranger remains correctly inside the
+    // tunnel. Recover the nearby empty side of that same boundary before marching
+    // forward so the MINE action does not disappear simply because the ray starts
+    // just past the wall.
+    if (previousDensity >= ISO_LEVEL) {
+      const recoveryReach = Math.min(
+        reach,
+        this.config.cellSize * TARGET_ORIGIN_RECOVERY_CELLS
+      );
+      let recoveredEmpty = false;
+
+      for (
+        let distance = step;
+        distance <= recoveryReach + 0.000001;
+        distance = Math.min(recoveryReach, distance + step)
+      ) {
+        const sampleDistance = -distance;
+        const world = this.tempD.copy(origin).addScaledVector(direction, sampleDistance);
+        const density = this.#densityAt(world.x, world.y, world.z);
+        if (density < ISO_LEVEL) {
+          previousDistance = sampleDistance;
+          previousDensity = density;
+          recoveredEmpty = true;
+          break;
+        }
+        if (distance >= recoveryReach) break;
+      }
+
+      if (!recoveredEmpty) return null;
+    }
+
     for (
-      let distance = step;
+      let distance = Math.min(reach, previousDistance + step);
       distance <= reach + 0.000001;
       distance = Math.min(reach, distance + step)
     ) {

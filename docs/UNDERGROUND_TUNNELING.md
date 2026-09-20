@@ -41,12 +41,13 @@ This means ordinary heightfield ground is targetable before any underground geom
 A valid Pickaxe action:
 
 1. ray-marches from the camera through the global density field;
-2. refines the first empty-to-solid transition;
-3. derives the Ranger-clear excavation sphere behind that point;
-4. verifies the complete cut remains above the protected depth boundary and on playable terrain;
-5. verifies the cut would actually remove solid density;
-6. publishes `mineable-ground` to the unified mobile Action button;
-7. commits the excavation only when MINE is tapped.
+2. if the camera starts slightly inside solid density at close range, searches a bounded distance backward along the aim ray to recover the tunnel-side empty sample;
+3. refines the first empty-to-solid transition;
+4. derives the Ranger-clear excavation sphere behind that point;
+5. verifies the complete cut remains above the protected depth boundary and on playable terrain;
+6. verifies the cut would actually remove solid density;
+7. publishes `mineable-ground` to the unified mobile Action button;
+8. commits the excavation only when MINE is tapped.
 
 The HUD never needs an authored cave trigger or entrance.
 
@@ -178,6 +179,7 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - 4.6 m first-person mining reach;
 - persistent Raise/Lower/Smoothen/Level tunnel-floor shaping;
 - directional wall tunneling after entering the first cut;
+- close-range wall targeting when the first-person camera starts slightly inside solid density;
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
 - deterministic pocket generation and discovery;
@@ -195,6 +197,7 @@ After CI and Pages deployment, verify on Android/PWA:
 - aim the white dot at the ground and confirm MINE appears;
 - one downward strike creates a visible opening without floating grass/ground;
 - enter the opening and mine forward, sideways, downward, and upward;
+- move very close to tunnel walls/roof while aiming into them and confirm MINE does not disappear because the camera is touching the density boundary;
 - every visible MINE action produces a cut;
 - tunnels remain Ranger-clear and walkable;
 - in third person, orbit the camera hard into the side wall/roof and confirm the view pulls inward instead of showing outside/under the map;
