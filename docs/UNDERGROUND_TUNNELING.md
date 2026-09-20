@@ -27,7 +27,7 @@ Current tuning:
 - density cell: 0.72 m;
 - tunneling chunk: 12 cells per axis (8.64 m);
 - Ranger-clear Pickaxe cut diameter is derived from shared player body height;
-- mine reach remains 3.45 m;
+- first-person mine reach is 4.6 m so the MINE action appears before the Ranger has to stand against the wall;
 - current protected mining depth is 18 m below the local natural surface.
 
 The 18 m depth is an explicit first-milestone mobile/performance boundary, not a permanent world-design limit.
@@ -110,11 +110,21 @@ Inside an active tunneling column:
 - support scans use the Ranger's current vertical reference;
 - surface players resolve to the normal surface;
 - underground players resolve to the nearest valid tunnel floor below their current level;
+- upward jump motion is swept against the same solid-density query, preventing the Ranger from jumping through a cave ceiling;
+- third-person camera travel is ray-resolved against the same density, so orbiting the view cannot place the camera outside a tunnel wall/roof and reveal the underside of the world;
 - excavated walls, floors, ceilings, and pockets all come from the same density function used to render the mesh.
 
-## Surface terraforming integration
+## Terrain sculpting integration
 
-The Pickaxe now has one player-facing terrain menu, but **Dig** remains the only mode owned by the 3D density field. Raise, Lower, Smoothen and Level are surface-height operations documented in `docs/PICKAXE_TERRAIN_SCULPTING.md`.
+The Pickaxe keeps one player-facing terrain menu. **Dig** remains the excavation operation, while Raise, Lower, Smoothen and Level now select the correct terrain authority from the same reticle flow:
+
+- above ground they edit the 2D surface-height authority;
+- from inside an active tunnel they target an upward-facing/aimed tunnel floor surface and create bounded floor-profile edits inside the existing 3D density authority;
+- Lower can shave a step downward, Raise can fill a low patch upward, Smoothen blends a rough floor toward nearby support heights, and Level pulls the brush toward the selected floor plane;
+- underground floor edits are limited to a shallow vertical band so they reshape walkable floor/step geometry without punching through the cave roof;
+- Raise is clamped by Ranger body clearance, so floor shaping cannot intentionally seal the passage around the player.
+
+This keeps rendering, support collision and edited tunnel geometry on one density function rather than introducing a separate cave-floor mesh.
 
 The density surface uses the current edited terrain height, and active tunnel chunks/surface openings refresh after a surface edit. The protected 18 m mining floor and deterministic underground-pocket placement remain anchored to the natural unedited geology so player terraforming cannot move pockets or invalidate previously valid excavation on save restore.
 
@@ -124,11 +134,14 @@ The ocean presentation is also independent from tunnel openings: base water and 
 
 New saves store tunneling state under `state.tunneling`.
 
-The payload contains only:
+The payload contains:
 
 - state kind/schema;
-- world-space excavation spheres;
+- world-space excavation profiles;
+- compact ordered tunnel-floor sculpt edits;
 - discovered pocket IDs.
+
+The floor-edit field is additive within the existing tunneling schema, so saves made before underground floor shaping simply restore with an empty floor-edit list.
 
 Deterministic pocket geometry is regenerated from world coordinates and does not need to be serialized.
 
@@ -146,6 +159,10 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - local terrain refinement and triangle removal only after surface breakthrough;
 - construction-terrain tracking after dynamic terrain geometry replacement;
 - real underground support/collision;
+- camera collision against active tunnel density;
+- upward jump blocking at cave ceilings;
+- 4.6 m first-person mining reach;
+- persistent Raise/Lower/Smoothen/Level tunnel-floor shaping;
 - directional wall tunneling after entering the first cut;
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
@@ -164,6 +181,9 @@ After CI and Pages deployment, verify on Android/PWA:
 - enter the opening and mine forward, sideways, downward, and upward;
 - every visible MINE action produces a cut;
 - tunnels remain Ranger-clear and walkable;
+- in third person, orbit the camera hard into the side wall/roof and confirm the view pulls inward instead of showing outside/under the map;
+- jump repeatedly under a low tunnel roof and confirm the Ranger hits the ceiling and falls back rather than passing through;
+- create stepped downward cuts, switch to Raise/Lower/Smoothen/Level, aim at the tunnel floor and reshape the steps into a walkable ramp;
 - the original terrain surface remains closed anywhere not actually excavated;
 - create a second tunnel far from the first and confirm it behaves identically;
 - continue tunneling until a larger empty underground pocket is opened;
