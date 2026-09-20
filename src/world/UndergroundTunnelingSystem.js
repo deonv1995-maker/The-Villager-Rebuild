@@ -563,6 +563,19 @@ export class UndergroundTunnelingSystem {
     return this.#pocketForCell(ix, iz);
   }
 
+  getPocket(id) {
+    if (typeof id !== 'string') return null;
+    const pocket = this.#pocketFromId(id);
+    return pocket ? { ...pocket } : null;
+  }
+
+  getDiscoveredPockets() {
+    return [...this.discoveredPocketIds]
+      .sort()
+      .map(id => this.getPocket(id))
+      .filter(Boolean);
+  }
+
   #naturalSurfaceHeightAt(x, z) {
     return typeof this.terrain.naturalHeightAt === 'function'
       ? this.terrain.naturalHeightAt(x, z)
