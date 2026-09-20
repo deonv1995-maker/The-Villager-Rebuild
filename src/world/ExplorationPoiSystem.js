@@ -46,6 +46,10 @@ export class ExplorationPoiSystem {
     return this.tunneling.mine(target);
   }
 
+  refreshTerrainSurface(change = null) {
+    return this.tunneling.refreshTerrainSurface(change);
+  }
+
   supportHeightAt(x, z, options = {}) {
     return this.tunneling.supportHeightAt(x, z, options);
   }
