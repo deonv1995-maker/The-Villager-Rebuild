@@ -12,7 +12,7 @@ While the Pickaxe is equipped, a compact top-right terrain dock exposes five mod
 4. **Smoothen**
 5. **Level**
 
-The modes share one tool and one durability lifecycle, but they deliberately use two different terrain representations.
+The modes share one equipped Pickaxe, but they deliberately use two different terrain representations and durability rules. Dig/mining remains a durability-bearing Pickaxe action; Raise, Lower, Smoothen and Level are continuous terrain-shaping controls and do not consume Pickaxe durability.
 
 - **Dig** remains true 3D excavation owned by `UndergroundTunnelingSystem`. It can create tunnels, caves, underground rooms, floors, walls and ceilings.
 - **Raise / Lower / Smoothen / Level** edit the 2D surface-height authority owned by `TerrainSculptingSystem` while above ground.
@@ -33,8 +33,9 @@ Existing world consumers continue to call `heightAt()`, so collision, slope quer
 
 Current first-pass brush tuning:
 
+- target/preview reach: 5.4 m;
 - radius: 2.4 m;
-- Raise: +0.38 m at brush centre per use;
+- Raise: +0.38 m at brush centre per applied swing;
 - Lower: -0.38 m at brush centre per use;
 - Smoothen: blends toward a local surrounding-height average;
 - Level: blends toward the height under the selected white-dot point;
@@ -52,7 +53,9 @@ When a non-Dig mode is selected:
 - the selected terrain operation owns the unified mobile Action button;
 - targeting first tries the editable overworld surface and, when the camera is genuinely underground, falls through to the active tunnel-floor density surface;
 - the circular brush preview uses the actual selected Y position, so underground edits preview on the cave floor rather than on the terrain surface above;
-- the normal Pickaxe swing presentation and durability consumption still apply.
+- pressing Action once applies one edit; keeping Action held automatically applies the next edit whenever the Pickaxe swing is ready;
+- the Pickaxe swing presentation remains for readable feedback, but these four sculpt modes do not consume Pickaxe durability;
+- the target and circular preview can reach 5.4 m from the aim ray authority, including tunnel-floor sculpt targeting.
 
 When **Dig** is selected, the terrain controller releases Action ownership completely. Existing overworld rock mining and `UndergroundTunnelingSystem` targeting then behave exactly as before.
 
@@ -131,7 +134,9 @@ The terrain-sculpting payload has its own state kind/schema and serializes only 
 - active tunneling refresh after surface changes;
 - GameApp suppression of ordinary mining while a surface mode owns the Pickaxe;
 - unified Action-button priority;
-- normal Pickaxe swing/durability usage;
+- continuous press-and-hold Raise/Lower/Smoothen/Level through the unified Action lifecycle;
+- no Pickaxe durability consumption for the four sculpt modes while Dig/mining retains its existing durability behavior;
+- shared 5.4 m surface/tunnel-floor sculpt target reach without changing the 2.4 m brush radius;
 - underground Raise/Lower/Smoothen/Level targeting and persistence through the tunneling density authority;
 - dedicated semantic icons for all five terrain modes, with no construction-icon reuse;
 - Ranger-clear arched tunnel dimensions, a flat floor boundary and an oval roof profile.
@@ -143,8 +148,10 @@ After deployment, verify on Android/PWA:
 - equip Pickaxe and confirm the compact terrain dock appears top-right;
 - expand it and switch among Raise, Lower, Dig, Smoothen and Level;
 - in Raise/Lower/Smoothen/Level, confirm the circular brush follows reachable ground under the white dot and the correct Action caption is shown;
-- repeatedly Raise and Lower an open patch and confirm Ranger collision follows the changed surface;
-- create a rough patch, Smoothen it, then Level it and confirm the result is visibly progressive rather than a hard vertical step;
+- hold Raise and Lower on an open patch and confirm the brush keeps applying until Action is released while Ranger collision follows the changed surface;
+- confirm repeated sculpting does not reduce Pickaxe durability;
+- confirm the preview ring can target noticeably farther away while its 2.4 m brush size remains unchanged;
+- create a rough patch, hold Smoothen, then hold Level and confirm the result is visibly progressive rather than a hard vertical step;
 - switch to Dig and confirm ordinary rock mining still works;
 - Dig into ordinary inland solid ground and confirm no ocean/water sheet appears under the terrain;
 - continue horizontally/downward to create an underground room and confirm 3D walls, floor and ceiling remain mineable;
