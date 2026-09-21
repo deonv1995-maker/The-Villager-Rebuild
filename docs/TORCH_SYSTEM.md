@@ -15,7 +15,7 @@ The torch is a carried placeable item whose world illumination begins only after
 - Carrying or equipping a torch does not consume it. The torch remains available until the player places it.
 - Torches have no fuel meter or burnout timer. The tool-belt slot shows quantity only.
 - With a torch equipped, aiming at a valid nearby mount exposes the existing contextual action as **PLACE**. No separate torch-build menu is introduced.
-- Valid current mounts are solid semantic construction walls, existing physical split-log walls, and existing vertical frame/support posts. One torch may occupy a mount at a time.
+- Valid current placement surfaces are solid semantic construction walls, existing physical split-log walls, existing vertical frame/support posts, ordinary playable world ground, natural cave floors, and natural cave walls. One torch may occupy a quantized surface/mount anchor at a time.
 - Door and window openings are not treated as flat wall mounts. Jamb-specific mounting should be added only when those semantic geometry anchors are explicitly exposed.
 - The repository currently has no independent fence-post subsystem. Existing vertical frame/support posts provide the current post-mount contract. A future fence system should expose compatible wall/post mount targets instead of adding torch-specific fence logic.
 - Mounting transfers exactly one inventory torch into the world and reduces the available tool-belt quantity by one. Any remaining inventory torch can be equipped and placed normally.
@@ -32,7 +32,7 @@ The torch is a carried placeable item whose world illumination begins only after
 
 `HeroMArmMotionPresentation` owns the meaning of `steady-upright`: it blends down only the carried right hand's opposed locomotion swing/orientation while preserving common body translation and the free left-arm animation. This keeps item semantics and character rig implementation separated. The torch runtime does not become a second animation system, and Hero M does not gain fuel/inventory authority.
 
-`TorchPlacementTargetResolver` owns mount discovery. It reads semantic solid-wall geometry from `PanelStructureRegistry.wallPlacementWorld(...)`, allowing wall position, side normal and height to come from the construction source of truth. During the transition from legacy physical construction, it also exposes active physical wall entries and vertical `frame` entries as wall/post mounts. The resolver applies one centralized reach/aim policy and excludes mount ids already occupied by a placed torch.
+`TorchPlacementTargetResolver` owns mount discovery. It reads semantic solid-wall geometry from `PanelStructureRegistry.wallPlacementWorld(...)`, allowing wall position, side normal and height to come from the construction source of truth. During the transition from legacy physical construction, it also exposes active physical wall entries and vertical `frame` entries as wall/post mounts. The same resolver now asks the authoritative terrain/tunneling services for world-ground, cave-floor and cave-wall targets instead of inventing a second raycast geology model. The resolver applies one centralized reach/aim policy and excludes mount ids already occupied by a placed torch.
 
 The resolver's returned position remains the canonical gameplay/save anchor. `TorchRuntimeController` derives the mounted presentation from that anchor: the saved yaw reconstructs the outward horizontal normal, the shared `TORCH.placement.outwardTiltDegrees` rotates the torch's local up axis toward that normal using explicit `YXZ` Euler order, and wall visuals alone receive `wallVisualOutwardOffset` along the same normal. This keeps anti-clipping presentation tuning out of target selection and means existing saves automatically receive the corrected wall presentation without changing their persisted coordinates.
 
@@ -96,10 +96,26 @@ After merge/deploy, verify on a physical phone that every crafted tool slot show
 
 At night, equip a torch before placing it. Confirm that Hero M still visibly carries the torch and uses the steady upright carry pose, but the carried torch does **not** brighten the ground, nearby walls, vegetation or the Ranger and does not create a moving local torch shadow.
 
-Approach several solid building walls and vertical frame/support posts. Confirm that **PLACE** appears only for a sensible nearby aimed mount, that placing consumes exactly one available torch, and that illumination begins immediately from the mounted flame. Confirm that each mounted torch clearly leans outward and upward from the wall/post, that the handle is not buried inside the wall surface, that the flame stays visibly in front of the wall, and that the same mount does not accept a second torch.
+Approach several solid building walls and vertical frame/support posts, then repeat on open world ground, cave floors and cave walls. Confirm that **PLACE** appears only for a sensible nearby aimed surface, that ground torches stand upright, wall/cave-wall torches lean outward, that placing consumes exactly one available torch, and that illumination begins immediately from the mounted flame. Confirm that each mounted torch clearly leans outward and upward from the wall/post, that the handle is not buried inside the wall surface, that the flame stays visibly in front of the wall, and that the same mount does not accept a second torch.
 
 While the torch is held, walk, run, turn, stop and start repeatedly. The right arm should read as deliberately carrying an upright torch instead of swinging through the full empty-hand gait; it should still move naturally with the body rather than becoming rigid. The left arm should continue its normal walk/run swing. Putting the torch away should blend smoothly back to normal two-arm locomotion without a visible pose snap.
 
 Build a larger lit workspace/stronghold and place enough torches to exceed the eight-active-light budget. Walk through it and confirm that nearby areas remain warmly illuminated as the nearest active-light set changes without obvious popping, while distant mounted flames remain visible and frame rate stays comfortable on the target Android device.
 
 Leave several mounted torches in the world through multiple nights, then Save and Continue. Confirm that every torch remains present, active and at the same position/orientation, with no overnight disappearance or burnout.
+
+
+## World and cave placement — 2026-09-21
+
+Torch placement remains one inventory/save/light system. `TorchPlacementTargetResolver`
+now combines the existing construction anchors with authoritative environment targets:
+surface ground comes from the island terrain authority and underground floor/wall hits come
+from `UndergroundTunnelingSystem`'s density field. Cave ceilings are not valid mounts.
+Environment mount ids are spatially quantized so the existing occupied-anchor rule prevents
+stacking multiple torches into the same small patch.
+
+Ground and cave-floor torches stand vertically. Building walls, posts and cave walls retain
+the established outward/upward lean, and cave walls receive the same anti-clipping visual
+clearance as built walls. Persistence remains the existing `state.torch` record; no second
+camp/cave lighting save format is introduced. The nearest-eight active point-light budget
+still applies globally to placed torches.
