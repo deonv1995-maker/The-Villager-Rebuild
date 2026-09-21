@@ -23,6 +23,13 @@ assert.equal(
   'active rocket shoes should move at exactly 2.5x the centralized running speed'
 );
 assert.ok(PLAYER_TRAVERSAL_TUNING.movement.runSpeed > 0, 'running speed must remain centrally defined');
+assert.equal(PLAYER_TRAVERSAL_TUNING.flight.lockTapCount, 3, 'three jump presses should latch flight mode');
+assert.ok(
+  PLAYER_TRAVERSAL_TUNING.flight.lockTapWindowSeconds > PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds,
+  'triple-tap lock window should comfortably include the second-jump hold threshold'
+);
+assert.ok(PLAYER_TRAVERSAL_TUNING.flight.descendSpeed > 0, 'locked flight needs an explicit descent speed');
+assert.ok(PLAYER_TRAVERSAL_TUNING.flight.turnRateRadiansPerSecond > 0, 'locked flight needs a tunable turn rate');
 assert.ok(SPROUT_COMPANION.flightEnergyPerSecond > 0, 'Sprout flight must consume shared Sprout energy');
 assert.ok(SPROUT_COMPANION.flightMinimumEnergy > 0, 'flight should not start on an empty battery');
 assert.ok(
@@ -247,7 +254,83 @@ assert.ok(
 );
 ranger.setMove(0, 0);
 ranger.setJumpHeld(false);
-assert.equal(ranger.isFlying(), false, 'releasing the held second jump should end flight immediately');
+assert.equal(ranger.isFlying(), true, 'releasing boost should keep the transformed rocket boots active while airborne');
+assert.equal(ranger.isFlightLocked(), false, 'ordinary held-double-jump flight should remain manual until the third press');
+
+ranger.root.position.y = 20;
+ranger.jumpVelocity = 0;
+ranger.update(PLAYER_TRAVERSAL_TUNING.flight.lockTapWindowSeconds + 0.05);
+ranger.setJumpHeld(true);
+assert.equal(ranger.jump(), true, 'pressing jump again while boots are active should re-engage boost');
+ranger.jumpVelocity = 0;
+const reboostY = ranger.root.position.y;
+ranger.update(0.05);
+assert.ok(ranger.root.position.y > reboostY, 're-engaged jump hold should resume upward rocket boost');
+ranger.setJumpHeld(false);
+assert.equal(ranger.isFlying(), true, 'releasing a re-engaged boost should still keep the boots deployed');
+
+let lockedFlightActive = false;
+let lockedFlightStarts = 0;
+const lockedRanger = new RangerController({
+  scene: new THREE.Scene(),
+  camera: new THREE.PerspectiveCamera(),
+  terrain,
+  collision: null
+});
+lockedRanger.model = new THREE.Group();
+lockedRanger.assetMode = 'kaykit';
+lockedRanger.setFlightAssistProvider({
+  beginFlight() {
+    lockedFlightStarts += 1;
+    lockedFlightActive = true;
+    return true;
+  },
+  endFlight() {
+    const wasActive = lockedFlightActive;
+    lockedFlightActive = false;
+    return wasActive;
+  },
+  isFlightActive() {
+    return lockedFlightActive;
+  }
+});
+
+lockedRanger.setJumpHeld(true);
+assert.equal(lockedRanger.jump(), true, 'triple-tap sequence should begin with the normal first jump');
+lockedRanger.setJumpHeld(false);
+lockedRanger.setJumpHeld(true);
+assert.equal(lockedRanger.jump(), true, 'triple-tap sequence should retain the normal second jump');
+lockedRanger.setJumpHeld(false);
+lockedRanger.setJumpHeld(true);
+assert.equal(lockedRanger.jump(), true, 'third jump press should be consumed as the flight-lock gesture');
+assert.equal(lockedFlightStarts, 1, 'third jump press should deploy Sprout flight immediately');
+assert.equal(lockedRanger.isFlightLocked(), true, 'third jump press should latch hands-free flight');
+lockedRanger.setJumpHeld(false);
+assert.equal(lockedRanger.isFlying(), true, 'releasing the third press should leave the Ranger in flight');
+
+const initialLockedYaw = lockedRanger.yaw;
+lockedRanger.jumpVelocity = 0;
+lockedRanger.setFlightControl(1, 1);
+const climbY = lockedRanger.root.position.y;
+lockedRanger.update(0.1);
+assert.ok(lockedRanger.root.position.y > climbY, 'upward right-side flight input should climb');
+assert.notEqual(lockedRanger.yaw, initialLockedYaw, 'horizontal right-side flight input should turn the Ranger');
+
+lockedRanger.root.position.y = 10;
+lockedRanger.jumpVelocity = 0;
+lockedRanger.setFlightControl(0, -1);
+const descendY = lockedRanger.root.position.y;
+lockedRanger.update(0.1);
+assert.ok(lockedRanger.root.position.y < descendY, 'downward right-side flight input should descend');
+
+lockedRanger.root.position.y = 10;
+lockedRanger.jumpVelocity = 2;
+lockedRanger.setFlightControl(0, 0);
+lockedRanger.update(0.1);
+assert.ok(
+  Math.abs(lockedRanger.jumpVelocity) < 2,
+  'neutral locked-flight vertical input should damp toward a hover instead of applying gravity'
+);
 
 globalThis.window = originalWindow;
 
@@ -256,7 +339,21 @@ assert.ok(
   mobileHud.includes('this.player.setJumpHeld?.(true)')
     && mobileHud.includes("jump.addEventListener('pointerup', releaseJump)")
     && mobileHud.includes("jump.addEventListener('pointercancel', releaseJump)"),
-  'mobile jump input should expose both press and release for hold-to-fly'
+  'mobile jump input should expose both press and release for boost control'
+);
+assert.ok(
+  mobileHud.includes('this.player.isFlightLocked?.()')
+    && mobileHud.includes('this.player.setFlightControl?.(turn, vertical)')
+    && mobileHud.includes('data-role="flight-control-guide"')
+    && mobileHud.includes('onFlightModeChange'),
+  'locked flight should repurpose the right-side touch surface for turn and up/down control'
+);
+
+const mobileStyles = read('src/styles.css');
+assert.ok(
+  mobileStyles.includes('.flight-control-guide')
+    && mobileStyles.includes('.hud-button.jump.flight-locked'),
+  'locked flight should expose a visible right-side steering guide and active jump state'
 );
 
 const main = read('src/main.js');
