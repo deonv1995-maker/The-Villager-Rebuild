@@ -289,11 +289,10 @@ assert.ok(
 );
 const naturalMesherSource = tunnelingSource.slice(naturalMesherStart, naturalMesherEnd);
 assert.ok(
-  tunnelingSource.includes('this.pocketColumnBuckets = new Map()')
-    && tunnelingSource.includes('#pocketCandidatesForChunkKey(chunkKey)')
-    && naturalMesherSource.includes('const sampleBuckets = new Array(8)')
+  naturalMesherSource.includes('const sampleBuckets = new Array(8)')
+    && naturalMesherSource.includes('const columnPockets = this.#candidatePocketsAround(x, z)')
     && naturalMesherSource.includes('this.#densityAtFromBuckets('),
-  'streamed cave density sampling must reuse spatial buckets instead of rediscovering them for every lattice point'
+  'streamed cave density sampling must reuse authority buckets and one exact pocket candidate set per vertical lattice column'
 );
 const uniformCellSkipIndex =
   naturalMesherSource.indexOf('if (insideCornerCount === 0 || insideCornerCount === 8) continue;');
