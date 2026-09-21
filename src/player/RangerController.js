@@ -94,6 +94,8 @@ export class RangerController {
     this.cinematicRightHandBone = null;
     this.cinematicRightHandOffset = new THREE.Vector3();
     this.cinematicRightHandAppliedOffset = new THREE.Vector3();
+    this.tempCinematicHandOffset = new THREE.Vector3();
+    this.tempCinematicParentQuaternion = new THREE.Quaternion();
     this.spearRestPosition = new THREE.Vector3(0.48, 1.18, 0.1);
     this.spearRestQuaternion = new THREE.Quaternion();
     this.spearThrowDuration = 0.72;
@@ -810,9 +812,20 @@ export class RangerController {
 
   #applyCinematicRightHandOffset() {
     const bone = this.cinematicRightHandBone;
-    if (!bone || this.cinematicRightHandOffset.lengthSq() < 1e-8) return;
-    bone.position.add(this.cinematicRightHandOffset);
-    this.cinematicRightHandAppliedOffset.copy(this.cinematicRightHandOffset);
+    const parent = bone?.parent;
+    if (!bone || !parent || this.cinematicRightHandOffset.lengthSq() < 1e-8) return;
+
+    this.root.updateMatrixWorld(true);
+    parent.updateMatrixWorld(true);
+    this.root.getWorldQuaternion(this.tempRootQuaternion);
+    parent.getWorldQuaternion(this.tempCinematicParentQuaternion).invert();
+    this.tempCinematicHandOffset
+      .copy(this.cinematicRightHandOffset)
+      .applyQuaternion(this.tempRootQuaternion)
+      .applyQuaternion(this.tempCinematicParentQuaternion);
+
+    bone.position.add(this.tempCinematicHandOffset);
+    this.cinematicRightHandAppliedOffset.copy(this.tempCinematicHandOffset);
   }
 
   #removeCinematicRightHandOffset() {
