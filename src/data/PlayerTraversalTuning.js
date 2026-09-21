@@ -10,6 +10,11 @@ export const PLAYER_TRAVERSAL_TUNING = Object.freeze({
     gravity: 16,
     fallGravityMultiplier: 1.18,
     maxAirJumps: 1
+  }),
+  flight: Object.freeze({
+    holdDelaySeconds: 0.18,
+    ascentSpeed: 4.8,
+    verticalResponse: 10
   })
 });
 
