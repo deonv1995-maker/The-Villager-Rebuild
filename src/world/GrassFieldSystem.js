@@ -443,7 +443,7 @@ export class ReactiveVegetationFieldSystem {
 }
 
 export class GrassFieldSystem extends ReactiveVegetationFieldSystem {
-  constructor({ group, terrain, scatter, chunks = null, collision = null, constructionTerrain = null, maxInstances = 18000 }) {
+  constructor({ group, terrain, scatter, chunks = null, collision = null, constructionTerrain = null, maxInstances = 25920 }) {
     super({
       group,
       terrain,
