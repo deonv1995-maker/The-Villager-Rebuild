@@ -240,6 +240,7 @@ function fixture() {
   assert.equal(presentation.scanTerrainProjection, false);
   assert.equal(f.root.parent, f.hand, 'Underground scan keeps Mini Sprout in the Ranger hand');
   assert.equal(f.lastPocketSignalRequest?.options?.allowSurface, true, 'Sprout explicitly allows pocket sensing from the surface');
+  assert.equal(f.lastPocketSignalRequest?.options?.includeDiscovered, true, 'Manual scans always consider the closest pocket, including one already discovered');
   assert.equal(f.lastPocketSignalRequest?.range, tuning.undergroundScanRange, 'Sprout uses the configured surface scan range');
   const pocketGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
   assert.ok(pocketGlow, 'Closest underground pocket receives a faint world-space glow');
@@ -249,8 +250,21 @@ function fixture() {
   );
   assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['scan-underground'].energyCost);
 
-  f.tick(Math.ceil((tuning.undergroundSignalSeconds + 0.2) / 0.05));
-  assert.equal(f.scene.getObjectByName('sprout-underground-pocket-glow'), undefined, 'Underground glow fades completely after about five seconds');
+  for (let frame = 0; frame < 180 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+  const firstGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
+  assert.ok(firstGlow, 'Pocket cue remains visible after the held scan finishes');
+
+  assert.equal(f.controller.issueCommand('scan-underground'), true, 'A new manual scan can immediately reacquire the closest pocket');
+  f.tick(Math.ceil((tuning.scanRaiseSeconds + 0.2) / 0.05));
+  const repeatedGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
+  assert.ok(repeatedGlow, 'Repeated scan produces the pocket cue again');
+  assert.notEqual(repeatedGlow, firstGlow, 'Repeated scan replaces and restarts the existing cue');
+
+  f.tick(Math.ceil((tuning.undergroundSignalHoldSeconds + 0.2) / 0.05));
+  assert.ok(f.scene.getObjectByName('sprout-underground-pocket-glow'), 'Pocket cue remains present after the ten-second hold while the slow fade begins');
+
+  f.tick(Math.ceil((tuning.undergroundSignalFadeSeconds + 0.2) / 0.05));
+  assert.equal(f.scene.getObjectByName('sprout-underground-pocket-glow'), undefined, 'Pocket cue fades completely only after the extended slow fade');
 }
 
 {
