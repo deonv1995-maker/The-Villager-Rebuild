@@ -1082,12 +1082,12 @@ export class UndergroundTunnelingSystem {
       const radiusX = Math.min(desiredRadiusX, maximumAxis);
       const radiusZ = Math.min(desiredRadiusZ, maximumAxis);
       const resolvedCeilingY = Math.max(
-        floorY + 2.3,
+        floorY + 2.85,
         Math.min(ceilingY, y + radius * 0.96)
       );
       const resolvedDrop = Math.min(
         Math.max(0, ceilingDrop),
-        Math.max(0, (resolvedCeilingY - floorY) * 0.28)
+        Math.max(0, resolvedCeilingY - floorY - 2.55)
       );
 
       lobes.push(Object.freeze({
