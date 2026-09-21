@@ -160,6 +160,50 @@ assert.ok(
   'Wall-mounted torch visuals must be pulled forward by the configured anti-clipping clearance'
 );
 
+game.physicalLogs.builtLogs = [];
+game.island = {
+  explorationPois: {
+    getTorchPlacementTarget: () => ({
+      kind: 'cave-wall',
+      id: 'cave-wall:test',
+      label: 'cave wall',
+      position: { x: 0, y: 1.25, z: 2.35 },
+      yaw: 0
+    }),
+    getUndergroundDepth: () => 3
+  }
+};
+const caveWallTarget = torch.getPlacementTarget();
+assert.equal(caveWallTarget?.kind, 'cave-wall', 'Cave density surfaces must participate in the normal PLACE target flow');
+const caveWallTorch = torch.place(caveWallTarget);
+assert.ok(caveWallTorch, 'A cave wall must accept a persistent placed torch');
+const caveWallEntry = torch.placedTorches.find(entry => entry.mountId === 'cave-wall:test');
+assert.ok(caveWallEntry, 'Cave wall torch must retain its stable environment mount id');
+assert.ok(
+  mountedTorchAxis(caveWallEntry).dot(mountOutwardNormal(caveWallEntry)) > 0.5,
+  'Cave wall torches must use the same readable outward/upward mounting angle as built walls'
+);
+
+game.island = {
+  heightAt: () => 0,
+  isPlayable: () => true,
+  explorationPois: {
+    getTorchPlacementTarget: () => null,
+    getUndergroundDepth: () => 0
+  }
+};
+const worldGroundTarget = torch.getPlacementTarget();
+assert.equal(worldGroundTarget?.kind, 'world-ground', 'Third-person PLACE must resolve open terrain ahead of Ranger');
+const worldGroundTorch = torch.place(worldGroundTarget);
+assert.ok(worldGroundTorch, 'Open world ground must accept a persistent torch');
+const groundEntry = torch.placedTorches.find(entry => entry.mountId === worldGroundTarget.id);
+const groundAxis = mountedTorchAxis(groundEntry);
+assert.ok(groundAxis.y > 0.999, 'Ground torches must stand vertically instead of inheriting wall lean');
+assert.ok(
+  Math.hypot(groundAxis.x, groundAxis.z) < 0.02,
+  'Ground torches must not tilt sideways on flat terrain'
+);
+
 nowMs += 100;
 const placedCountBeforeTimeJump = torch.placedTorches.length;
 torch.apply({ day: 12, minuteOfDay: 4 * 60 });
@@ -243,6 +287,8 @@ const checks = [
   ['legacy vertical frame logs remain valid post mounts', resolverSource.includes("built.mode === 'frame'")],
   ['door/window openings are not treated as flat wall mounting surfaces', resolverSource.includes("(wall.variant ?? 'solid') !== 'solid'")],
   ['occupied mount ids are excluded from placement targeting', resolverSource.includes('occupiedMountIds.has(target.id)')],
+  ['world and cave surfaces share the existing torch placement resolver', resolverSource.includes('#environmentTargets()') && resolverSource.includes('getTorchPlacementTarget?.({') && resolverSource.includes("'world-ground'") && resolverSource.includes("'cave-ground'")],
+  ['ground and cave-wall mount kinds are oriented by the persistent torch runtime', read('src/gameplay/TorchRuntimeController.js').includes("mountKind === 'cave-wall'") && read('src/gameplay/TorchRuntimeController.js').includes("mountKind === 'world-ground'")],
   ['torch placement reuses the external contextual action channel', equipmentSource.includes("TORCH_PLACEMENT_ACTION_ID = 'torch-place'") && equipmentSource.includes("caption: 'PLACE'")],
   ['all actual tool slots expose quantity badges', mobileHudSource.includes("count.hidden = entry.id === 'hand'")],
   ['the hand pseudo-slot remains the only slot without a quantity badge', !mobileHudSource.includes("count.hidden = entry.id !== 'spear'")],
