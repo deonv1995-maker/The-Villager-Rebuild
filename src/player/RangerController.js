@@ -70,6 +70,10 @@ export class RangerController {
     this.grounded = true;
     this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
     this.jumpStage = 0;
+    this.jumpHeld = false;
+    this.flightHoldArmed = false;
+    this.flightHoldElapsed = 0;
+    this.flightAssist = null;
     this.walkPhase = 0;
     this.firstPersonMoveDistance = 0;
     this.firstPersonMoveRunning = false;
@@ -91,6 +95,7 @@ export class RangerController {
     this.spearVisual = null;
     this.spearMount = null;
     this.spearHandAnchor = null;
+    this.footAnchors = { left: null, right: null };
     this.cinematicRightHandBone = null;
     this.cinematicRightHandOffset = new THREE.Vector3();
     this.cinematicRightHandAppliedOffset = new THREE.Vector3();
@@ -151,6 +156,8 @@ export class RangerController {
     });
     this.root.add(this.model);
     this.spearHandAnchor = this.#findRightHandAnchor(this.model);
+    this.footAnchors.left = this.#findFootAnchor(this.model, 'left');
+    this.footAnchors.right = this.#findFootAnchor(this.model, 'right');
     this.cinematicRightHandBone = this.#findRightHandBone(this.model);
 
     this.mixer = new THREE.AnimationMixer(this.model);
@@ -246,10 +253,13 @@ export class RangerController {
     this.manualLookActive = false;
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
+    this.setJumpHeld(false);
     this.jumpVelocity = 0;
     this.grounded = true;
     this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
     this.jumpStage = 0;
+    this.flightHoldArmed = false;
+    this.flightHoldElapsed = 0;
     return true;
   }
 
@@ -472,6 +482,39 @@ export class RangerController {
     return this.grounded;
   }
 
+  setFlightAssistProvider(provider) {
+    this.flightAssist = provider ?? null;
+    return this.flightAssist;
+  }
+
+  setJumpHeld(active) {
+    this.jumpHeld = Boolean(active);
+    if (this.jumpHeld) return;
+    this.flightHoldArmed = false;
+    this.flightHoldElapsed = 0;
+    this.flightAssist?.endFlight?.('jump-released');
+  }
+
+  isFlying() {
+    return Boolean(this.flightAssist?.isFlightActive?.());
+  }
+
+  mountFootObject(side, object) {
+    if (!object || (side !== 'left' && side !== 'right')) return false;
+    const anchor = this.footAnchors?.[side] ?? null;
+    if (anchor) {
+      anchor.add(object);
+      object.position.set(0, -0.025, 0.08);
+      object.quaternion.identity();
+      return true;
+    }
+
+    this.root.add(object);
+    object.position.set(side === 'left' ? -0.18 : 0.18, 0.1, 0.08);
+    object.quaternion.identity();
+    return true;
+  }
+
   isSwordAirAttacking() {
     return this.isToolActing() && this.toolActionToolId === 'sword' && this.toolActionAirborne;
   }
@@ -576,6 +619,9 @@ export class RangerController {
     const { launchSpeed, doubleJumpSpeed, maxAirJumps } = PLAYER_TRAVERSAL_TUNING.jump;
 
     if (this.grounded) {
+      this.flightAssist?.endFlight?.('new-jump');
+      this.flightHoldArmed = false;
+      this.flightHoldElapsed = 0;
       this.grounded = false;
       this.airJumpsRemaining = maxAirJumps;
       this.jumpVelocity = launchSpeed;
@@ -585,6 +631,8 @@ export class RangerController {
       this.airJumpsRemaining -= 1;
       this.jumpVelocity = doubleJumpSpeed;
       this.jumpStage = 2;
+      this.flightHoldArmed = true;
+      this.flightHoldElapsed = 0;
     }
 
     if (this.assetMode === 'kaykit' && this.actions.has('Jump_Full_Short')) {
@@ -674,8 +722,26 @@ export class RangerController {
       this.root.position.y = previousGround;
     }
 
+    let flying = Boolean(this.flightAssist?.isFlightActive?.());
+    if (!this.grounded && this.flightHoldArmed && this.jumpHeld && this.jumpStage === 2 && !flying) {
+      this.flightHoldElapsed += dt;
+      if (this.flightHoldElapsed >= PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds) {
+        this.flightHoldArmed = false;
+        flying = Boolean(this.flightAssist?.beginFlight?.());
+      }
+    }
+
     if (!this.grounded) {
-      this.jumpVelocity -= gravityForVerticalSpeed(this.jumpVelocity) * dt;
+      if (flying) {
+        this.jumpVelocity = THREE.MathUtils.damp(
+          this.jumpVelocity,
+          PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed,
+          PLAYER_TRAVERSAL_TUNING.flight.verticalResponse,
+          dt
+        );
+      } else {
+        this.jumpVelocity -= gravityForVerticalSpeed(this.jumpVelocity) * dt;
+      }
       const desiredY = this.root.position.y + this.jumpVelocity * dt;
       const verticalMove = this.collision?.resolveVerticalMove?.(
         this.root.position,
@@ -690,6 +756,9 @@ export class RangerController {
         this.grounded = true;
         this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
         this.jumpStage = 0;
+        this.flightHoldArmed = false;
+        this.flightHoldElapsed = 0;
+        this.flightAssist?.endFlight?.('landed');
         if (!throwing && !toolActing) {
           this.#setAnimation(length > 0.08 ? (runningAnimation ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
@@ -698,6 +767,9 @@ export class RangerController {
       this.root.position.y = ground;
       this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
       this.jumpStage = 0;
+      this.flightHoldArmed = false;
+      this.flightHoldElapsed = 0;
+      if (flying) this.flightAssist?.endFlight?.('grounded');
     }
 
     this.mixer?.update(dt);
@@ -848,6 +920,32 @@ export class RangerController {
       if (name.includes('right')) score += 8;
       if (name === 'handr' || name.startsWith('rhand') || name.endsWith('handr')) score += 12;
       if (name.includes('wrist')) score += 2;
+      if (score > bestScore) {
+        best = object;
+        bestScore = score;
+      }
+    });
+    return best;
+  }
+
+  #findFootAnchor(root, side) {
+    const targetLong = side === 'left' ? 'left' : 'right';
+    const targetShort = side === 'left' ? 'l' : 'r';
+    const oppositeLong = side === 'left' ? 'right' : 'left';
+    let best = null;
+    let bestScore = -1;
+
+    root.traverse(object => {
+      if (!object.name) return;
+      const name = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!name.includes('foot') && !name.includes('ankle')) return;
+      if (name.includes(oppositeLong)) return;
+
+      let score = object.isBone ? 3 : 0;
+      if (name.includes(targetLong)) score += 16;
+      if (name === `foot${targetShort}` || name.endsWith(`foot${targetShort}`)) score += 14;
+      if (name.startsWith(`${targetShort}foot`) || name.startsWith(`${targetShort}ankle`)) score += 12;
+      if (name.includes('slot')) score -= 2;
       if (score > bestScore) {
         best = object;
         bestScore = score;
@@ -1151,12 +1249,16 @@ export class RangerController {
       this.keys.add(event.code);
       if (event.code === 'Space') {
         event.preventDefault();
+        this.setJumpHeld(true);
         if (!event.repeat) this.jump();
       } else if (event.code === 'KeyP' && !event.repeat) {
         event.preventDefault();
         this.toggleCameraMode();
       }
     });
-    window.addEventListener('keyup', event => this.keys.delete(event.code));
+    window.addEventListener('keyup', event => {
+      this.keys.delete(event.code);
+      if (event.code === 'Space') this.setJumpHeld(false);
+    });
   }
 }
