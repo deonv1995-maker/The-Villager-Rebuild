@@ -74,6 +74,12 @@ export class RangerController {
     this.flightHoldArmed = false;
     this.flightHoldElapsed = 0;
     this.flightAssist = null;
+    this.flightLocked = false;
+    this.flightVerticalInput = 0;
+    this.flightTurnInput = 0;
+    this.flightModeListeners = new Set();
+    this.jumpTapCount = 0;
+    this.jumpTapElapsed = 0;
     this.walkPhase = 0;
     this.firstPersonMoveDistance = 0;
     this.firstPersonMoveRunning = false;
@@ -254,6 +260,9 @@ export class RangerController {
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
     this.setJumpHeld(false);
+    this.flightAssist?.endFlight?.('cinematic');
+    this.#setFlightLocked(false);
+    this.#resetFlightControl();
     this.jumpVelocity = 0;
     this.grounded = true;
     this.airJumpsRemaining = PLAYER_TRAVERSAL_TUNING.jump.maxAirJumps;
@@ -484,6 +493,10 @@ export class RangerController {
 
   setFlightAssistProvider(provider) {
     this.flightAssist = provider ?? null;
+    if (!this.flightAssist) {
+      this.#setFlightLocked(false);
+      this.#resetFlightControl();
+    }
     return this.flightAssist;
   }
 
@@ -492,11 +505,31 @@ export class RangerController {
     if (this.jumpHeld) return;
     this.flightHoldArmed = false;
     this.flightHoldElapsed = 0;
-    this.flightAssist?.endFlight?.('jump-released');
   }
 
   isFlying() {
     return Boolean(this.flightAssist?.isFlightActive?.());
+  }
+
+  isFlightLocked() {
+    return this.flightLocked && this.isFlying();
+  }
+
+  onFlightModeChange(listener) {
+    if (typeof listener !== 'function') return () => {};
+    this.flightModeListeners.add(listener);
+    listener(this.isFlightLocked());
+    return () => this.flightModeListeners.delete(listener);
+  }
+
+  setFlightControl(turn = 0, vertical = 0) {
+    if (!this.isFlightLocked()) {
+      this.#resetFlightControl();
+      return false;
+    }
+    this.flightTurnInput = THREE.MathUtils.clamp(Number(turn) || 0, -1, 1);
+    this.flightVerticalInput = THREE.MathUtils.clamp(Number(vertical) || 0, -1, 1);
+    return true;
   }
 
   mountFootObject(side, object) {
@@ -617,9 +650,34 @@ export class RangerController {
   jump() {
     if (this.cinematicDriver) return false;
     const { launchSpeed, doubleJumpSpeed, maxAirJumps } = PLAYER_TRAVERSAL_TUNING.jump;
+    const tapCount = this.#registerJumpTap();
+    const flying = this.isFlying();
+
+    if (
+      !this.grounded
+      && this.jumpStage >= 2
+      && tapCount >= PLAYER_TRAVERSAL_TUNING.flight.lockTapCount
+    ) {
+      const flightReady = flying || Boolean(this.flightAssist?.beginFlight?.());
+      if (flightReady) {
+        this.flightHoldArmed = false;
+        this.flightHoldElapsed = 0;
+        this.jumpVelocity = Math.max(0, this.jumpVelocity);
+        this.#setFlightLocked(true);
+        return true;
+      }
+    }
+
+    if (flying) {
+      this.flightHoldArmed = false;
+      this.flightHoldElapsed = 0;
+      return true;
+    }
 
     if (this.grounded) {
       this.flightAssist?.endFlight?.('new-jump');
+      this.#setFlightLocked(false);
+      this.#resetFlightControl();
       this.flightHoldArmed = false;
       this.flightHoldElapsed = 0;
       this.grounded = false;
@@ -661,6 +719,28 @@ export class RangerController {
       return;
     }
 
+    if (this.jumpTapCount > 0) {
+      this.jumpTapElapsed += dt;
+      if (this.jumpTapElapsed > PLAYER_TRAVERSAL_TUNING.flight.lockTapWindowSeconds) {
+        this.jumpTapCount = 0;
+        this.jumpTapElapsed = 0;
+      }
+    }
+
+    const flyingAtFrameStart = Boolean(this.flightAssist?.isFlightActive?.());
+    if (!flyingAtFrameStart && this.flightLocked) {
+      this.#setFlightLocked(false);
+      this.#resetFlightControl();
+    }
+
+    if (flyingAtFrameStart && this.flightLocked && Math.abs(this.flightTurnInput) > 0.01) {
+      this.yaw -= this.flightTurnInput * PLAYER_TRAVERSAL_TUNING.flight.turnRateRadiansPerSecond * dt;
+      this.root.rotation.y = this.yaw - Math.PI;
+      this.manualLookActive = false;
+      this.cameraRecovering = false;
+      this.cameraReturnDelay = 0;
+    }
+
     const keyboardX = (this.keys.has('KeyD') ? 1 : 0) - (this.keys.has('KeyA') ? 1 : 0);
     const keyboardY = (this.keys.has('KeyW') ? 1 : 0) - (this.keys.has('KeyS') ? 1 : 0);
     const mobileInputActive = Math.abs(this.input.x) > 0.05 || Math.abs(this.input.y) > 0.05;
@@ -669,7 +749,6 @@ export class RangerController {
     const length = Math.hypot(inputX, inputY);
     const analogStrength = mobileInputActive ? THREE.MathUtils.clamp(length, 0, 1) : 1;
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
-    const flyingAtFrameStart = Boolean(this.flightAssist?.isFlightActive?.());
     const speed = flyingAtFrameStart
       ? SPRINT_SPEED
         * PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier
@@ -737,7 +816,18 @@ export class RangerController {
     }
 
     if (!this.grounded) {
-      if (flying) {
+      if (flying && this.flightLocked) {
+        const verticalInput = this.flightVerticalInput;
+        const targetVerticalSpeed = verticalInput >= 0
+          ? PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed * verticalInput
+          : PLAYER_TRAVERSAL_TUNING.flight.descendSpeed * verticalInput;
+        this.jumpVelocity = THREE.MathUtils.damp(
+          this.jumpVelocity,
+          targetVerticalSpeed,
+          PLAYER_TRAVERSAL_TUNING.flight.verticalResponse,
+          dt
+        );
+      } else if (flying && this.jumpHeld) {
         this.jumpVelocity = THREE.MathUtils.damp(
           this.jumpVelocity,
           PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed,
@@ -763,7 +853,11 @@ export class RangerController {
         this.jumpStage = 0;
         this.flightHoldArmed = false;
         this.flightHoldElapsed = 0;
+        this.jumpTapCount = 0;
+        this.jumpTapElapsed = 0;
         this.flightAssist?.endFlight?.('landed');
+        this.#setFlightLocked(false);
+        this.#resetFlightControl();
         if (!throwing && !toolActing) {
           this.#setAnimation(length > 0.08 ? (runningAnimation ? 'Running_A' : 'Walking_A') : 'Idle_A', true);
         }
@@ -774,7 +868,11 @@ export class RangerController {
       this.jumpStage = 0;
       this.flightHoldArmed = false;
       this.flightHoldElapsed = 0;
+      this.jumpTapCount = 0;
+      this.jumpTapElapsed = 0;
       if (flying) this.flightAssist?.endFlight?.('grounded');
+      this.#setFlightLocked(false);
+      this.#resetFlightControl();
     }
 
     this.mixer?.update(dt);
@@ -786,6 +884,33 @@ export class RangerController {
     }
     this.#updateSpearThrow(dt);
     this.#updateCamera(false, dt);
+  }
+
+  #registerJumpTap() {
+    if (
+      this.jumpTapCount <= 0
+      || this.jumpTapElapsed > PLAYER_TRAVERSAL_TUNING.flight.lockTapWindowSeconds
+    ) {
+      this.jumpTapCount = 1;
+    } else {
+      this.jumpTapCount += 1;
+    }
+    this.jumpTapElapsed = 0;
+    return this.jumpTapCount;
+  }
+
+  #setFlightLocked(active) {
+    const next = Boolean(active);
+    if (this.flightLocked === next) return this.flightLocked;
+    this.flightLocked = next;
+    if (!next) this.#resetFlightControl();
+    for (const listener of this.flightModeListeners) listener(this.flightLocked);
+    return this.flightLocked;
+  }
+
+  #resetFlightControl() {
+    this.flightVerticalInput = 0;
+    this.flightTurnInput = 0;
   }
 
   #groundHeightAt(x, z) {
