@@ -102,7 +102,6 @@ export class UndergroundTunnelingSystem {
     this.nextFloorEditId = 1;
     this.discoveredPocketIds = new Set();
     this.pocketCache = new Map();
-    this.pocketColumnBuckets = new Map();
     this.activeChunks = new Map();
     this.activeColumns = new Set();
     this.surfaceOpenings = [];
@@ -923,7 +922,7 @@ export class UndergroundTunnelingSystem {
       surfaceY,
       this.excavationBuckets.get(chunkKey),
       this.naturalFeatureBuckets.get(chunkKey),
-      this.#pocketCandidatesForChunkKey(chunkKey),
+      this.#candidatePocketsAround(x, z),
       this.floorEditBuckets.get(chunkKey)
     );
   }
@@ -976,39 +975,6 @@ export class UndergroundTunnelingSystem {
       }
     }
     return density;
-  }
-
-  #pocketCandidatesForChunkKey(chunkKey) {
-    const [ix, , iz] = chunkKey.split(':').map(Number);
-    if (!Number.isFinite(ix) || !Number.isFinite(iz)) return [];
-
-    const columnKey = this.#columnKey(ix, iz);
-    if (this.pocketColumnBuckets.has(columnKey)) {
-      return this.pocketColumnBuckets.get(columnKey);
-    }
-
-    const reach = this.config.pocketMaxRadius;
-    const cellSize = this.config.pocketCellSize;
-    const minWorldX = ix * this.chunkSize;
-    const maxWorldX = minWorldX + this.chunkSize;
-    const minWorldZ = iz * this.chunkSize;
-    const maxWorldZ = minWorldZ + this.chunkSize;
-    const minPocketX = Math.floor((minWorldX - reach) / cellSize);
-    const maxPocketX = Math.floor((maxWorldX + reach) / cellSize);
-    const minPocketZ = Math.floor((minWorldZ - reach) / cellSize);
-    const maxPocketZ = Math.floor((maxWorldZ + reach) / cellSize);
-    const pockets = [];
-
-    for (let pocketX = minPocketX; pocketX <= maxPocketX; pocketX += 1) {
-      for (let pocketZ = minPocketZ; pocketZ <= maxPocketZ; pocketZ += 1) {
-        const pocket = this.#pocketForCell(pocketX, pocketZ);
-        if (pocket) pockets.push(pocket);
-      }
-    }
-
-    const cached = Object.freeze(pockets);
-    this.pocketColumnBuckets.set(columnKey, cached);
-    return cached;
   }
 
   #registerExcavation(excavation) {
@@ -1802,7 +1768,6 @@ export class UndergroundTunnelingSystem {
           sampleBuckets[bucketIndex] = {
             excavations: this.excavationBuckets.get(bucketKey),
             naturalFeatures: this.naturalFeatureBuckets.get(bucketKey),
-            pockets: this.#pocketCandidatesForChunkKey(bucketKey),
             floorEdits: this.floorEditBuckets.get(bucketKey)
           };
         }
@@ -1819,6 +1784,9 @@ export class UndergroundTunnelingSystem {
         const surfaceY = this.terrain.heightAt(x, z);
         const horizontalBucketIndex =
           (ix === cells ? 1 : 0) | (iz === cells ? 4 : 0);
+        // Pocket candidates depend only on x/z. Resolve them once for this
+        // 13-sample vertical lattice column instead of once per density sample.
+        const columnPockets = this.#candidatePocketsAround(x, z);
         for (let iy = 0; iy <= cells; iy += 1) {
           const bucket =
             sampleBuckets[horizontalBucketIndex | (iy === cells ? 2 : 0)];
@@ -1830,7 +1798,7 @@ export class UndergroundTunnelingSystem {
               surfaceY,
               bucket.excavations,
               bucket.naturalFeatures,
-              bucket.pockets,
+              columnPockets,
               bucket.floorEdits
             );
         }
