@@ -5,6 +5,7 @@ export const SPROUT_COMPANION = Object.freeze({
   deployBackOffset: 0.18,
   deploySideOffset: 0.58,
   miniScaleFactor: 0.18,
+  firstPersonMiniOffset: Object.freeze({ x: 0.24, y: -0.22, z: -0.58 }),
   deployHandSeconds: 0.28,
   deployGrowSeconds: 0.62,
   scanRaiseSeconds: 0.7,
