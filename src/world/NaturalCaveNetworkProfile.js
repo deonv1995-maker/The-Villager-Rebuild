@@ -158,7 +158,11 @@ export const naturalCaveSegmentFieldAt = (x, y, z, segment, config) => {
     config
   );
   // Keep the established surface-mouth cut exact; add erosion deeper inside.
-  const weight = segment.kind === 'entrance' ? 0 : 1;
+  const weight = segment.kind === 'entrance'
+    ? 0
+    : segment.kind === 'fissure'
+      ? 0.08
+      : 1;
   return erodedNaturalField(
     field, center.y - radius * config.tunnelFloorDropScale,
     x, y, z, config, weight
@@ -237,6 +241,28 @@ export const naturalCaveFeatureDistance2D = (feature, x, z) => {
   return Number.POSITIVE_INFINITY;
 };
 
+export const naturalCaveFeatureVerticalDistance = (feature, y) => {
+  if (!Number.isFinite(y) || !feature) return Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  if (feature.type === 'segment' && feature.bounds) {
+    minY = feature.bounds.minY;
+    maxY = feature.bounds.maxY;
+  } else if (feature.type === 'chamber') {
+    minY = Number(feature.floorY);
+    for (const lobe of feature.lobes ?? []) {
+      if (Number.isFinite(lobe?.ceilingY)) maxY = Math.max(maxY, lobe.ceilingY);
+    }
+    if (!Number.isFinite(maxY)) maxY = feature.y + feature.radius;
+  }
+
+  if (![minY, maxY].every(Number.isFinite)) return Number.POSITIVE_INFINITY;
+  if (y < minY) return minY - y;
+  if (y > maxY) return y - maxY;
+  return 0;
+};
+
 const safeChamberCenterY = (terrain, config, x, z, radius, requestedDepth) => {
   const surfaceY = surfaceHeightAt(terrain, x, z);
   const floorOffset = radius * config.naturalChamberFloorDepthScale;
@@ -262,7 +288,9 @@ const makeChamber = ({
   z,
   radius,
   requestedDepth,
-  rotationSeed
+  rotationSeed,
+  role = 'room',
+  access = 'open'
 }) => {
   const y = safeChamberCenterY(
     terrain,
@@ -398,6 +426,8 @@ const makeChamber = ({
     floorY,
     floorRadius,
     contentRadius: radius * 0.48,
+    role,
+    access,
     naturalCave: true,
     presentationOnly: true,
     lobes: Object.freeze(lobes)
@@ -433,7 +463,7 @@ const makeSegment = ({
     const twoThirdX = lerp(start.x, end.x, 2 / 3);
     const twoThirdZ = lerp(start.z, end.z, 2 / 3);
     // Static world-space noise is sampled once while the route graph is built.
-    // Runtime density queries evaluate only the cached cubic controls.
+    // Runtime density queries evaluate only cached cubic controls.
     const noiseA = naturalCaveNoiseAt(
       oneThirdX * frequency,
       networkIndex * 0.41 + 5.3,
@@ -448,22 +478,26 @@ const makeSegment = ({
       config.naturalRouteMaxLateralWarp,
       length * config.naturalRouteLateralWarpFraction
     ) * curveWeight;
-    const maxDip = Math.min(
-      config.naturalRouteMaxVerticalDip,
-      length * config.naturalRouteVerticalDipFraction
-    ) * curveWeight;
+    const verticalScale = kind === 'fissure' ? 0.22 : 1;
+    const maxVerticalWarp = Math.min(
+      config.naturalRouteMaxVerticalWarp,
+      length * config.naturalRouteVerticalWarpFraction
+    ) * curveWeight * verticalScale;
     const offsetA = (noiseA * 2 - 1) * maxWarp;
     const offsetB = (noiseB * 2 - 1) * maxWarp;
-    const dipA = maxDip * (0.45 + noiseB * 0.55);
-    const dipB = maxDip * (0.45 + noiseA * 0.55);
+    // Signed vertical warps are intentionally allowed to rise as well as dip.
+    // Endpoint depth bands provide the large-scale slope; these cached controls
+    // prevent the route between them from reading as a planar ramp.
+    const verticalA = (noiseB * 2 - 1) * maxVerticalWarp;
+    const verticalB = (noiseA * 2 - 1) * maxVerticalWarp;
     const controlA = makePoint(
       oneThirdX + perpendicularX * offsetA,
-      lerp(start.y, end.y, 1 / 3) - dipA,
+      lerp(start.y, end.y, 1 / 3) + verticalA,
       oneThirdZ + perpendicularZ * offsetA
     );
     const controlB = makePoint(
       twoThirdX + perpendicularX * offsetB,
-      lerp(start.y, end.y, 2 / 3) - dipB,
+      lerp(start.y, end.y, 2 / 3) + verticalB,
       twoThirdZ + perpendicularZ * offsetB
     );
     const widthNoise = naturalCaveNoiseAt(
@@ -471,25 +505,30 @@ const makeSegment = ({
       networkIndex * 0.29,
       (start.z + end.z) * 0.5 * frequency - 23
     );
-    const bulgeScale = config.naturalRouteRadiusBulge * curveWeight;
-    const radiusBulges = Object.freeze([
-      Object.freeze({
-        t: lerp(0.24, 0.34, noiseA),
-        span: lerp(0.14, 0.2, noiseB),
-        radius: bulgeScale * lerp(0.76, 1.08, widthNoise)
-      }),
-      Object.freeze({
-        t: lerp(0.64, 0.78, noiseB),
-        span: lerp(0.14, 0.2, noiseA),
-        radius: bulgeScale * lerp(0.72, 1.04, 1 - widthNoise)
-      })
-    ]);
+    const bulgeScale = kind === 'fissure'
+      ? 0
+      : config.naturalRouteRadiusBulge * curveWeight;
+    const radiusBulges = bulgeScale > 0
+      ? Object.freeze([
+          Object.freeze({
+            t: lerp(0.24, 0.34, noiseA),
+            span: lerp(0.14, 0.2, noiseB),
+            radius: bulgeScale * lerp(0.76, 1.08, widthNoise)
+          }),
+          Object.freeze({
+            t: lerp(0.64, 0.78, noiseB),
+            span: lerp(0.14, 0.2, noiseA),
+            radius: bulgeScale * lerp(0.72, 1.04, 1 - widthNoise)
+          })
+        ])
+      : Object.freeze([]);
     curve = Object.freeze({
       controlA,
       controlB,
       radiusBulges,
-      // Retain the conservative maximum for older tooling and broad-phase code.
-      radiusBulge: Math.max(...radiusBulges.map(entry => entry.radius))
+      radiusBulge: radiusBulges.length
+        ? Math.max(...radiusBulges.map(entry => entry.radius))
+        : 0
     });
   }
 
@@ -532,12 +571,27 @@ const entranceAnchor = (terrain, angle, targetFraction) => {
   };
 };
 
+const safePassageCenterY = (terrain, config, x, z, requestedY, radius) => {
+  const surfaceY = surfaceHeightAt(terrain, x, z);
+  const minimumY =
+    surfaceY - config.maxDepth
+    + config.bottomPadding
+    + radius * config.tunnelFloorDropScale
+    + config.cellSize;
+  const maximumY =
+    surfaceY
+    - config.naturalTightMinimumClearance
+    - config.naturalChamberOverburden * 0.5;
+  return Math.max(minimumY, Math.min(requestedY, maximumY));
+};
+
 export const buildNaturalCaveNetwork = (terrain, config) => {
   const networkCount = Math.max(3, Math.floor(config.naturalNetworkCount));
   const segments = [];
   const chambers = [];
   const entrances = [];
   const deepChambers = [];
+  const sealedChambers = [];
 
   const centralRadius = config.naturalCentralChamberRadius;
   const centralX = 0;
@@ -552,7 +606,8 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
     z: centralZ,
     radius: centralRadius,
     requestedDepth: config.naturalCentralChamberDepth,
-    rotationSeed: 0.37
+    rotationSeed: 0.37,
+    role: 'central'
   });
   chambers.push(centralChamber);
 
@@ -572,11 +627,7 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
     const tangentX = -inwardZ;
     const tangentZ = inwardX;
     const sideSign = index % 2 === 0 ? 1 : -1;
-    const bend = lerp(
-      2.5,
-      7,
-      hash01(index, networkCount, 419)
-    ) * sideSign;
+    const bend = lerp(2.5, 7, hash01(index, networkCount, 419)) * sideSign;
 
     const mouthSurfaceY = surfaceHeightAt(terrain, anchor.x, anchor.z);
     const mouthRadius = lerp(
@@ -584,11 +635,7 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       config.naturalEntranceRadiusMax,
       hash01(index, networkCount, 421)
     );
-    const p0 = {
-      x: anchor.x,
-      y: mouthSurfaceY - 0.3,
-      z: anchor.z
-    };
+    const p0 = { x: anchor.x, y: mouthSurfaceY - 0.3, z: anchor.z };
     const p1x = anchor.x + inwardX * 10 + tangentX * bend * 0.25;
     const p1z = anchor.z + inwardZ * 10 + tangentZ * bend * 0.25;
     const p1 = {
@@ -604,11 +651,17 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       z: p2z
     };
 
-    const firstX = anchor.x + inwardX * 34 + tangentX * bend * 1.35;
-    const firstZ = anchor.z + inwardZ * 34 + tangentZ * bend * 1.35;
+    const firstX =
+      anchor.x
+      + inwardX * config.naturalFirstChamberDistance
+      + tangentX * bend * 1.35;
+    const firstZ =
+      anchor.z
+      + inwardZ * config.naturalFirstChamberDistance
+      + tangentZ * bend * 1.35;
     const firstRadius = lerp(
       config.naturalChamberRadiusMin,
-      config.naturalChamberRadiusMax - 0.7,
+      config.naturalChamberRadiusMax - 0.8,
       hash01(index, networkCount, 431)
     );
     const firstChamber = makeChamber({
@@ -620,18 +673,23 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       x: firstX,
       z: firstZ,
       radius: firstRadius,
-      requestedDepth: lerp(8.4, 10.2, hash01(index, networkCount, 433)),
-      rotationSeed: hash01(index, networkCount, 439)
+      requestedDepth: lerp(
+        config.naturalFirstChamberDepthMin,
+        config.naturalFirstChamberDepthMax,
+        hash01(index, networkCount, 433)
+      ),
+      rotationSeed: hash01(index, networkCount, 439),
+      role: 'entry-room'
     });
     chambers.push(firstChamber);
 
     const sideDistance = lerp(
-      18,
-      26,
+      config.naturalSideChamberDistanceMin,
+      config.naturalSideChamberDistanceMax,
       hash01(index, networkCount, 443)
     );
-    const sideX = firstX + tangentX * sideDistance * sideSign + inwardX * 4;
-    const sideZ = firstZ + tangentZ * sideDistance * sideSign + inwardZ * 4;
+    const sideX = firstX + tangentX * sideDistance * sideSign + inwardX * 6;
+    const sideZ = firstZ + tangentZ * sideDistance * sideSign + inwardZ * 6;
     const sideChamber = makeChamber({
       terrain,
       config,
@@ -640,37 +698,131 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       id: `natural-cave:${index}:side`,
       x: sideX,
       z: sideZ,
-      radius: lerp(4.2, 5.2, hash01(index, networkCount, 449)),
-      requestedDepth: lerp(9.2, 11.2, hash01(index, networkCount, 457)),
-      rotationSeed: hash01(index, networkCount, 461)
+      radius: lerp(
+        config.naturalChamberRadiusMin,
+        config.naturalChamberRadiusMax - 0.35,
+        hash01(index, networkCount, 449)
+      ),
+      requestedDepth: lerp(
+        config.naturalSideChamberDepthMin,
+        config.naturalSideChamberDepthMax,
+        hash01(index, networkCount, 457)
+      ),
+      rotationSeed: hash01(index, networkCount, 461),
+      role: 'side-room'
     });
     chambers.push(sideChamber);
 
-    const deepX = anchor.x + inwardX * 60 - tangentX * bend * 0.45;
-    const deepZ = anchor.z + inwardZ * 60 - tangentZ * bend * 0.45;
-    const deepChamber = makeChamber({
+    const dropDistance = lerp(
+      config.naturalDropChamberDistanceMin,
+      config.naturalDropChamberDistanceMax,
+      hash01(index, networkCount, 463)
+    );
+    const dropX =
+      firstX
+      + inwardX * dropDistance
+      - tangentX * sideSign * dropDistance * 0.3;
+    const dropZ =
+      firstZ
+      + inwardZ * dropDistance
+      - tangentZ * sideSign * dropDistance * 0.3;
+    const dropChamber = makeChamber({
       terrain,
       config,
       networkIndex: index,
       chamberIndex: 3,
+      id: `natural-cave:${index}:drop`,
+      x: dropX,
+      z: dropZ,
+      radius: lerp(
+        config.naturalDropChamberRadiusMin,
+        config.naturalDropChamberRadiusMax,
+        hash01(index, networkCount, 467)
+      ),
+      requestedDepth: lerp(
+        config.naturalDropChamberDepthMin,
+        config.naturalDropChamberDepthMax,
+        hash01(index, networkCount, 479)
+      ),
+      rotationSeed: hash01(index, networkCount, 481),
+      role: 'drop-room'
+    });
+    chambers.push(dropChamber);
+
+    const deepX =
+      anchor.x
+      + inwardX * config.naturalDeepChamberDistance
+      - tangentX * bend * 0.55;
+    const deepZ =
+      anchor.z
+      + inwardZ * config.naturalDeepChamberDistance
+      - tangentZ * bend * 0.55;
+    const deepChamber = makeChamber({
+      terrain,
+      config,
+      networkIndex: index,
+      chamberIndex: 4,
       id: `natural-cave:${index}:deep`,
       x: deepX,
       z: deepZ,
       radius: lerp(
         config.naturalChamberRadiusMin + 0.8,
         config.naturalChamberRadiusMax,
-        hash01(index, networkCount, 463)
+        hash01(index, networkCount, 487)
       ),
-      requestedDepth: lerp(11.4, 13.1, hash01(index, networkCount, 467)),
-      rotationSeed: hash01(index, networkCount, 479)
+      requestedDepth: lerp(
+        config.naturalDeepChamberDepthMin,
+        config.naturalDeepChamberDepthMax,
+        hash01(index, networkCount, 491)
+      ),
+      rotationSeed: hash01(index, networkCount, 499),
+      role: 'deep-room'
     });
     chambers.push(deepChamber);
     deepChambers.push(deepChamber);
 
+    const sealedDistance = lerp(
+      config.naturalSealedChamberDistanceMin,
+      config.naturalSealedChamberDistanceMax,
+      hash01(index, networkCount, 503)
+    );
+    const sealedX =
+      sideX
+      + inwardX * sealedDistance * 0.45
+      - tangentX * sideSign * sealedDistance * 0.9;
+    const sealedZ =
+      sideZ
+      + inwardZ * sealedDistance * 0.45
+      - tangentZ * sideSign * sealedDistance * 0.9;
+    const sealedChamber = makeChamber({
+      terrain,
+      config,
+      networkIndex: index,
+      chamberIndex: 5,
+      id: `natural-cave:${index}:sealed`,
+      x: sealedX,
+      z: sealedZ,
+      radius: lerp(
+        config.naturalSealedChamberRadiusMin,
+        config.naturalSealedChamberRadiusMax,
+        hash01(index, networkCount, 509)
+      ),
+      requestedDepth: lerp(
+        config.naturalSealedChamberDepthMin,
+        config.naturalSealedChamberDepthMax,
+        hash01(index, networkCount, 521)
+      ),
+      rotationSeed: hash01(index, networkCount, 523),
+      role: 'sealed-room',
+      access: 'mine-through-fissure'
+    });
+    chambers.push(sealedChamber);
+    sealedChambers.push(sealedChamber);
+
     const entryMidRadius = lerp(
       config.naturalPassageRadiusMin,
       config.naturalPassageRadiusMax,
-      hash01(index, networkCount, 487)
+      hash01(index, networkCount, 541)
     );
     segments.push(makeSegment({
       id: `natural-cave:${index}:mouth`,
@@ -703,23 +855,53 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       config
     }));
     segments.push(makeSegment({
-      id: `natural-cave:${index}:side-branch`,
+      id: `natural-cave:${index}:side-slope`,
       networkIndex: index,
-      kind: 'tight',
+      kind: 'slope',
       a: chamberPoint(firstChamber),
       b: chamberPoint(sideChamber),
-      radiusA: config.naturalTightPassageRadius,
-      radiusB: config.naturalTightPassageRadius * 1.08,
+      radiusA: config.naturalPassageRadiusMax,
+      radiusB: config.naturalGalleryPassageRadius * 0.82,
+      config
+    }));
+    segments.push(makeSegment({
+      id: `natural-cave:${index}:plunge`,
+      networkIndex: index,
+      kind: 'drop',
+      a: chamberPoint(firstChamber),
+      b: chamberPoint(dropChamber),
+      radiusA: config.naturalTightPassageRadius * 1.08,
+      radiusB: config.naturalGalleryPassageRadius * 0.82,
+      config
+    }));
+    segments.push(makeSegment({
+      id: `natural-cave:${index}:deep-incline`,
+      networkIndex: index,
+      kind: 'incline',
+      a: chamberPoint(dropChamber),
+      b: chamberPoint(deepChamber),
+      radiusA: config.naturalPassageRadiusMin,
+      radiusB: config.naturalGalleryPassageRadius,
       config
     }));
     segments.push(makeSegment({
       id: `natural-cave:${index}:gallery`,
       networkIndex: index,
       kind: 'gallery',
-      a: chamberPoint(firstChamber),
+      a: chamberPoint(sideChamber),
       b: chamberPoint(deepChamber),
       radiusA: config.naturalGalleryPassageRadius,
-      radiusB: config.naturalGalleryPassageRadius * 0.86,
+      radiusB: config.naturalGalleryPassageRadius * 0.9,
+      config
+    }));
+    segments.push(makeSegment({
+      id: `natural-cave:${index}:fissure`,
+      networkIndex: index,
+      kind: 'fissure',
+      a: chamberPoint(sideChamber),
+      b: chamberPoint(sealedChamber),
+      radiusA: config.naturalFissurePassageRadius,
+      radiusB: config.naturalFissurePassageRadius,
       config
     }));
 
@@ -740,22 +922,23 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
   for (let index = 0; index < deepChambers.length; index += 1) {
     const chamber = deepChambers[index];
     const start = chamberPoint(chamber);
-    const dx = centralChamber.x - start.x;
-    const dz = centralChamber.z - start.z;
+    const end = chamberPoint(centralChamber);
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
     const distance = Math.hypot(dx, dz);
     const sectionCount = Math.max(
       2,
       Math.ceil(distance / config.naturalConnectorSegmentLength)
     );
+    const length = Math.max(0.000001, distance);
+    const tangentX = -dz / length;
+    const tangentZ = dx / length;
     let previous = start;
 
     for (let section = 1; section <= sectionCount; section += 1) {
       const t = section / sectionCount;
-      const baseX = lerp(start.x, centralChamber.x, t);
-      const baseZ = lerp(start.z, centralChamber.z, t);
-      const length = Math.max(0.000001, distance);
-      const tangentX = -dz / length;
-      const tangentZ = dx / length;
+      const baseX = lerp(start.x, end.x, t);
+      const baseZ = lerp(start.z, end.z, t);
       const bend =
         Math.sin(t * Math.PI)
         * Math.sin((index + 1) * 1.71)
@@ -763,29 +946,39 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
       const x = baseX + tangentX * bend;
       const z = baseZ + tangentZ * bend;
       const isLast = section === sectionCount;
-      const point = isLast
-        ? chamberPoint(centralChamber)
-        : {
-            x,
-            y: surfaceHeightAt(terrain, x, z)
-              - lerp(
-                config.naturalConnectorDepthMin,
-                config.naturalConnectorDepthMax,
-                hash01(index, section, 491)
-              ),
-            z
-          };
+      const verticalWave =
+        Math.sin(t * Math.PI)
+        * Math.sin((index + 1) * 2.13 + t * Math.PI * 2)
+        * config.naturalConnectorVerticalWave;
       const radius =
-        section % 3 === 0
+        section % 4 === 0
           ? config.naturalTightPassageRadius
           : section % 2 === 0
             ? config.naturalGalleryPassageRadius
             : config.naturalPassageRadiusMax;
+      const point = isLast
+        ? end
+        : {
+            x,
+            y: safePassageCenterY(
+              terrain,
+              config,
+              x,
+              z,
+              lerp(start.y, end.y, t) + verticalWave,
+              radius
+            ),
+            z
+          };
 
       segments.push(makeSegment({
         id: `natural-cave:${index}:connector:${section}`,
         networkIndex: index,
-        kind: section % 3 === 0 ? 'tight' : 'connector',
+        kind: section % 4 === 0
+          ? 'tight'
+          : section % 2 === 0
+            ? 'connector'
+            : 'slope',
         a: previous,
         b: point,
         radiusA: radius,
@@ -802,7 +995,8 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
     chambers: Object.freeze(chambers),
     entrances: Object.freeze(entrances),
     features,
-    centralChamberId: centralChamber.id
+    centralChamberId: centralChamber.id,
+    sealedChamberIds: Object.freeze(sealedChambers.map(chamber => chamber.id))
   });
 };
 
