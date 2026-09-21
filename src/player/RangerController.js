@@ -109,6 +109,7 @@ export class RangerController {
     this.tempThirdPersonViewForward = new THREE.Vector3();
     this.tempThirdPersonCameraPosition = new THREE.Vector3();
     this.cinematicDriver = null;
+    this.cinematicPreserveCameraMode = false;
     this.#bindKeyboard();
   }
 
@@ -227,9 +228,10 @@ export class RangerController {
     this.input.sprint = Boolean(active);
   }
 
-  beginCinematic(driver) {
+  beginCinematic(driver, { preserveCameraMode = false } = {}) {
     if (!driver || this.cinematicDriver) return false;
-    if (this.isFirstPerson()) this.setCameraMode('third-person');
+    this.cinematicPreserveCameraMode = Boolean(preserveCameraMode);
+    if (this.isFirstPerson() && !this.cinematicPreserveCameraMode) this.setCameraMode('third-person');
     this.cinematicDriver = driver;
     this.input.x = 0;
     this.input.y = 0;
@@ -247,7 +249,9 @@ export class RangerController {
 
   endCinematic(driver) {
     if (!this.cinematicDriver || (driver && this.cinematicDriver !== driver)) return false;
+    const preserveFirstPersonView = this.cinematicPreserveCameraMode && this.isFirstPerson();
     this.cinematicDriver = null;
+    this.cinematicPreserveCameraMode = false;
     this.input.x = 0;
     this.input.y = 0;
     this.input.sprint = false;
@@ -257,8 +261,10 @@ export class RangerController {
       this.model.rotation.set(0, 0, 0);
     }
     if (this.assetMode === 'kaykit') this.#setAnimation('Idle_A', true);
-    this.yaw = this.root.rotation.y + Math.PI;
-    this.pitch = CAMERA_DEFAULT_PITCH;
+    if (!preserveFirstPersonView) {
+      this.yaw = this.root.rotation.y + Math.PI;
+      this.pitch = CAMERA_DEFAULT_PITCH;
+    }
     this.cameraRecovering = false;
     this.cameraReturnDelay = 0;
     this.#syncCameraPresentation();
@@ -974,7 +980,7 @@ export class RangerController {
   }
 
   #updateCamera(immediate = false, dt = 1 / 60) {
-    if (this.isFirstPerson() && !this.cinematicDriver) {
+    if (this.isFirstPerson() && (!this.cinematicDriver || this.cinematicPreserveCameraMode)) {
       if (immediate) this.firstPersonBobOffset.set(0, 0, 0);
       else this.#updateFirstPersonHeadBob(dt);
       const eye = this.tempFirstPersonTarget.set(
