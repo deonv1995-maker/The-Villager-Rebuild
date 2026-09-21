@@ -29,7 +29,7 @@ Gathering, loose-Log collection and tree harvesting use the same sequence:
 - Sprout travels back to the Ranger.
 - The Ranger holds out a hand while Sprout shrinks back to Mini Sprout and is stowed.
 
-The presentation reuses RangerController.beginCinematic, playCinematicAnimation and mountRightHandObject. It does not add a second animation controller.
+The presentation reuses RangerController.beginCinematic, playCinematicAnimation and mountRightHandObject. It does not add a second animation controller. When Sprout detaches from the Ranger's hand, the mission controller explicitly clears the hand bone's inherited pitch/roll before world travel so Sprout remains upright; only world yaw is retained for facing.
 
 The cinematic lock exists only for the brief hand-off/catch presentation. Ranger control is released while Sprout is out performing a normal mission.
 
@@ -53,9 +53,11 @@ The mission ends when no active trees remain inside the original harvest radius.
 
 Underground scan does not use the normal grow-and-deploy sequence. The Ranger raises Mini Sprout and holds him while the scanner runs.
 
-The underground exploration service identifies the nearest undiscovered pocket. Sprout creates a faint blue glow at that pocket position for approximately **5 seconds**. The glow fades completely and remains absent until the player initiates another scan.
+The underground exploration service identifies the nearest undiscovered pocket within the configured **56 m** scan radius. The explicit Sprout scan is allowed both on the surface and inside excavated tunnels; the geology service's default underground-only detector behavior remains unchanged for other callers.
 
-The glow is non-persistent presentation. It does not reveal or modify pocket contents, mark the pocket discovered, change mining geometry, or introduce a second geology query.
+When the Ranger scans from the surface, the faint blue cue is projected onto the terrain directly above the hidden chamber so it gives the player an actionable place to start digging without exposing the chamber geometry. Once underground, the cue remains at the pocket's underground position. In both cases it remains visible for approximately **5 seconds**, fades completely, and stays absent until another scan.
+
+The glow is non-persistent presentation. It does not reveal or modify pocket contents, mark the pocket discovered, change mining geometry, create a cave entrance, or introduce a second geology query. Hidden pockets are still reached by tunneling.
 
 ## Energy
 
@@ -76,4 +78,4 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 
 ## Device verification
 
-Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, and the underground glow remains subtle/readable for about five seconds before disappearing.
+Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, Sprout remains upright after leaving the Ranger's hand, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, a surface scan produces a usable ground cue when an undiscovered pocket is within 56 m, and the underground glow remains subtle/readable for about five seconds before disappearing.
