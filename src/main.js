@@ -64,9 +64,12 @@ async function bootGameplay(titleScene = null, { resume = false, profile = null 
 
     const worldTime = new WorldTimeSystem();
     const lightFocus = target => game.player.getPosition(target);
+    const undergroundDepth = position =>
+      game.island.explorationPois?.getUndergroundDepth?.(position) ?? 0;
     const dayNightLighting = new DayNightLightingSystem({
       sceneSystem: game.sceneSystem,
-      focusProvider: lightFocus
+      focusProvider: lightFocus,
+      undergroundDepthProvider: undergroundDepth
     });
     const celestialBodies = new CelestialBodySystem({ sceneSystem: game.sceneSystem });
     const celestialShadows = new CelestialShadowSystem({
