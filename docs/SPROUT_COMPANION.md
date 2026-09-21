@@ -108,9 +108,9 @@ Logs use a slightly longer compression beat than small loose resources. Presenta
 
 ## Following and collision
 
-Sprout uses the shared world collision service for ordinary follow/collection movement. It hovers at a small fixed height above the current terrain, follows behind and slightly beside the Ranger, and uses a smaller collision footprint than the human Ranger.
+Sprout uses the shared world collision service for ordinary follow/collection movement. It hovers at a small fixed height above the current walkable support, follows behind and slightly beside the Ranger, and uses a smaller collision footprint than the human Ranger. Grounding is layer-aware: the companion resolves support through the same reference-height-aware `walkableHeightAt` boundary used by traversal, so an excavated cave floor can remain authoritative even when the overworld surface exists at the same X/Z.
 
-The companion does not introduce a navmesh or a competing obstacle database. If it falls far enough behind, collection intent is cancelled and catch-up takes priority. A bounded hard catch-up is allowed only as recovery from large separation or obstacle trapping.
+The companion does not introduce a navmesh, cave-only locomotion mode or a competing obstacle database. If it falls far enough behind, collection intent is cancelled and catch-up takes priority. A bounded hard catch-up is allowed only as recovery from large separation or obstacle trapping, and that recovery uses the Ranger's current vertical layer when choosing Sprout's support height.
 
 ## Tree felling and timber handoff
 
