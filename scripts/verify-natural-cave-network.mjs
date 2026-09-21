@@ -35,13 +35,13 @@ assert.equal(
 );
 assert.equal(
   network.chambers.length,
-  1 + UNDERGROUND_TUNNELING.naturalNetworkCount * 3,
-  'each entrance branch must contain varied chambers plus one shared deep hub'
+  1 + UNDERGROUND_TUNNELING.naturalNetworkCount * 5,
+  'each entrance branch must contain entry, side, drop, deep and sealed rooms plus one shared hub'
 );
 assert.ok(network.segments.length > network.chambers.length, 'underworld must be passage-led rather than a set of isolated pockets');
 
 const kinds = new Set(network.segments.map(segment => segment.kind));
-for (const kind of ['entrance', 'descent', 'tight', 'gallery', 'connector']) {
+for (const kind of ['entrance', 'descent', 'tight', 'slope', 'drop', 'incline', 'gallery', 'fissure', 'connector']) {
   assert.ok(kinds.has(kind), `natural cave network must contain ${kind} passages`);
 }
 
@@ -53,12 +53,58 @@ for (const entrance of network.entrances) {
   );
 }
 
+const chamberDepths = network.chambers.map(chamber =>
+  terrain.naturalHeightAt(chamber.x, chamber.z) - chamber.y
+);
+assert.ok(
+  Math.max(...chamberDepths) - Math.min(...chamberDepths) > 14,
+  'natural chambers must occupy materially different vertical strata instead of one shallow plane'
+);
+const dropRooms = network.chambers.filter(chamber => chamber.role === 'drop-room');
+assert.equal(
+  dropRooms.length,
+  UNDERGROUND_TUNNELING.naturalNetworkCount,
+  'every entrance branch must descend into one large drop room'
+);
+assert.ok(
+  dropRooms.every(chamber => chamber.radius >= UNDERGROUND_TUNNELING.naturalDropChamberRadiusMin),
+  'drop rooms must remain substantially wider than ordinary passage tubes'
+);
+const sealedRooms = network.chambers.filter(chamber => chamber.access === 'mine-through-fissure');
+assert.equal(
+  sealedRooms.length,
+  UNDERGROUND_TUNNELING.naturalNetworkCount,
+  'every cave branch must expose one sealed room intended for mining access'
+);
+const fissureClearance =
+  UNDERGROUND_TUNNELING.naturalFissurePassageRadius
+  * (
+    UNDERGROUND_TUNNELING.tunnelFloorDropScale
+    + UNDERGROUND_TUNNELING.tunnelRoofRiseScale
+  );
+assert.ok(
+  fissureClearance < PLAYER_TRAVERSAL_TUNING.body.height * 0.55,
+  'sealed-room fissures must be visibly open but physically too low for Ranger traversal'
+);
+
 for (let index = 0; index < UNDERGROUND_TUNNELING.naturalNetworkCount; index += 1) {
   assert.ok(
     network.segments.some(segment =>
       segment.id.startsWith(`natural-cave:${index}:connector:`)
     ),
     `cave branch ${index} must connect into the shared deeper underworld`
+  );
+  assert.ok(
+    network.segments.some(segment => segment.id === `natural-cave:${index}:plunge`),
+    `cave branch ${index} must contain a steep drop into a lower chamber`
+  );
+  assert.ok(
+    network.segments.some(segment => segment.id === `natural-cave:${index}:deep-incline`),
+    `cave branch ${index} must contain a substantial return incline`
+  );
+  assert.ok(
+    network.segments.some(segment => segment.id === `natural-cave:${index}:fissure`),
+    `cave branch ${index} must expose its sealed room through a narrow fissure`
   );
 }
 assert.equal(network.centralChamberId, 'natural-cave:central-hub');
@@ -85,8 +131,8 @@ assert.ok(
   'natural cave collision columns must activate immediately without synchronously meshing every queued chunk'
 );
 assert.ok(
-  debug.activeChunkCount <= UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate,
-  'one cave-streaming update must respect the configured geometry build budget'
+  debug.activeChunkCount <= UNDERGROUND_TUNNELING.naturalCriticalChunkBuildsPerUpdate,
+  'one cave-streaming update must respect the bounded near-player geometry build budget'
 );
 assert.ok(
   debug.pendingNaturalChunkRebuildCount > 0,
@@ -102,8 +148,8 @@ world.update(playerAtEntrance);
 const secondDebug = world.getDebugState();
 assert.ok(
   secondDebug.builtNaturalChunkCount - builtAfterFirstUpdate
-    <= UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate,
-  'each later update must keep natural cave meshing inside the same per-frame budget'
+    <= UNDERGROUND_TUNNELING.naturalCriticalChunkBuildsPerUpdate,
+  'each later update must keep natural cave meshing inside the bounded near-player budget'
 );
 assert.ok(
   secondDebug.activeChunkCount < 90,
