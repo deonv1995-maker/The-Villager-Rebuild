@@ -99,7 +99,8 @@ export class SproutCompanionController {
   }
 
   getCommandState() {
-    const available = Boolean(this.arrival.isAllied?.());
+    const storyCinematicLocked = this.player?.cinematicDriver === this.arrival;
+    const available = Boolean(this.arrival.isAllied?.() && !storyCinematicLocked);
     const energy = this.getEnergyState();
     return {
       available,
