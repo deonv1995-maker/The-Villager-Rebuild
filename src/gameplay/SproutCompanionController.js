@@ -263,6 +263,14 @@ export class SproutCompanionController {
       }
     }
 
+    if (
+      this.pocketSignal
+      && this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds
+    ) {
+      this.#updatePocketSignalFocus(dt);
+      return;
+    }
+
     if (this.#tryStartIdleAnimation()) return;
 
     if (this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds) {
@@ -287,6 +295,7 @@ export class SproutCompanionController {
     this.pocketSignal = signal;
 
     if (!signal) return;
+    if (this.idleAnimation) this.#endIdleAnimation({ applyCooldown: false });
     if (signal.pocketId !== this.announcedPocketSignalId) {
       this.announcedPocketSignalId = signal.pocketId;
       this.game.setStatus?.('SPROUT · SUBSURFACE SIGNAL DETECTED');
@@ -448,6 +457,37 @@ export class SproutCompanionController {
       { referenceY: perceivedPosition.y }
     ) + SPROUT_COMPANION.hoverHeight;
     return this.followTarget;
+  }
+
+  #updatePocketSignalFocus(dt) {
+    this.idleTargetValid = false;
+    this.idleScanRemaining = 0;
+
+    const distanceToFollowTarget = Math.hypot(
+      this.followTarget.x - this.root.position.x,
+      this.followTarget.z - this.root.position.z
+    );
+    if (distanceToFollowTarget > SPROUT_COMPANION.pocketSignalFocusRadius) {
+      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
+      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
+      return;
+    }
+
+    this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 7));
+    this.#settleHover(this.root.position.x, this.root.position.z, dt);
+
+    const signal = this.pocketSignal?.position;
+    if (!signal) return;
+    const dx = signal.x - this.root.position.x;
+    const dz = signal.z - this.root.position.z;
+    if (Math.hypot(dx, dz) <= 0.001) return;
+
+    const signalYaw = Math.atan2(dx, dz);
+    this.root.rotation.y = this.#lerpAngle(
+      this.root.rotation.y,
+      signalYaw,
+      Math.min(1, dt * SPROUT_COMPANION.pocketSignalTurnSpeed)
+    );
   }
 
   #updateIdleBehavior(dt) {
@@ -953,7 +993,13 @@ export class SproutCompanionController {
   }
 
   #tryStartIdleAnimation() {
-    if (this.idleAnimation || this.target || this.compression || this.idleAnimationCooldown > 0) return false;
+    if (
+      this.idleAnimation
+      || this.target
+      || this.compression
+      || this.pocketSignal
+      || this.idleAnimationCooldown > 0
+    ) return false;
     if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds) return false;
 
     const distance = Math.hypot(
@@ -966,7 +1012,7 @@ export class SproutCompanionController {
   }
 
   #beginIdleAnimation(kind) {
-    if (this.idleAnimation || this.target || this.compression || !this.root) return false;
+    if (this.idleAnimation || this.target || this.compression || this.pocketSignal || !this.root) return false;
     if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds || this.idleAnimationCooldown > 0) return false;
 
     const dx = this.root.position.x - this.playerPosition.x;
