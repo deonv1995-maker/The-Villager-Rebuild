@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { UNDERGROUND_TUNNELING as config } from '../src/data/UndergroundTunnelingDefinitions.js';
 import {
+  naturalCaveFeatureDistance2D,
   naturalCaveNoiseAt,
   naturalCaveSegmentCenterAt,
   naturalCaveSegmentFieldAt,
-  naturalCaveSegmentBounds
+  naturalCaveSegmentBounds,
+  naturalCaveSegmentRadiusAt
 } from '../src/world/NaturalCaveNetworkProfile.js';
 import { tunnelingExcavationFieldAt } from '../src/world/TunnelingTerrainProfile.js';
 import { UndergroundTunnelingSystem } from '../src/world/UndergroundTunnelingSystem.js';
@@ -40,6 +42,7 @@ for (const x of [-8.64, -1, 0, 8.64, 17.28]) {
 }
 
 const curvedSegment = {
+  type: 'segment',
   kind: 'gallery',
   a: {x: 0, y: -8, z: 0},
   b: {x: 0, y: -8, z: 30},
@@ -64,6 +67,11 @@ assert.ok(
 const curvedBounds = naturalCaveSegmentBounds(curvedSegment, config);
 assert.ok(curvedBounds.maxX > curvedSegment.curve.controlA.x, 'bounds must include positive route meanders');
 assert.ok(curvedBounds.minX < curvedSegment.curve.controlB.x, 'bounds must include negative route meanders');
+assert.equal(
+  naturalCaveFeatureDistance2D(curvedSegment, curvedMiddle.x, curvedMiddle.z),
+  0,
+  'activation distance must follow the curved passage instead of only its straight chord'
+);
 
 const terrain = {heightAt: () => 8, naturalHeightAt: () => 8, centerZ: 0, coastRadiusAt: () => 120, isPlayable: () => true, setTunnelingOpenings() {}};
 const makeWorld = () => {
@@ -75,6 +83,27 @@ const system = makeWorld();
 const network = system.getNaturalCaveNetwork();
 const curvedNetworkSegments = network.segments.filter(segment => segment.kind !== 'entrance' && segment.curve);
 assert.ok(curvedNetworkSegments.length >= network.segments.length * 0.6, 'most underground route sections must use cached natural meanders');
+assert.ok(
+  curvedNetworkSegments.every(segment => segment.curve.radiusBulges?.length === 2),
+  'every cached natural meander must carry two separated gallery-width pulses'
+);
+const galleryPulseSegment = curvedNetworkSegments
+  .slice()
+  .sort((a, b) =>
+    Math.max(...b.curve.radiusBulges.map(entry => entry.radius))
+      - Math.max(...a.curve.radiusBulges.map(entry => entry.radius))
+  )[0];
+const galleryPulse = galleryPulseSegment.curve.radiusBulges
+  .slice()
+  .sort((a, b) => b.radius - a.radius)[0];
+const pulseBaseRadius =
+  galleryPulseSegment.radiusA
+  + (galleryPulseSegment.radiusB - galleryPulseSegment.radiusA) * galleryPulse.t;
+assert.ok(
+  naturalCaveSegmentRadiusAt(galleryPulseSegment, galleryPulse.t)
+    - pulseBaseRadius > 0.7,
+  'long natural passages must open into materially wider gallery pockets'
+);
 assert.ok(network.segments.filter(segment => segment.kind === 'entrance').every(segment => segment.curve === null), 'surface mouth cuts must keep their established exact alignment');
 assert.ok(curvedNetworkSegments.some(segment => {
   const oneThird = naturalCaveSegmentCenterAt(segment, 1 / 3);

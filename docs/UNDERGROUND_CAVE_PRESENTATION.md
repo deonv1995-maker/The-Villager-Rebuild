@@ -128,3 +128,35 @@ The route warp is bounded by both passage length and explicit mobile-safe maxima
 bounds include the cached controls and bulge, so chunk activation remains conservative.
 The existing resumable 2 ms mesh budget, one shared density/collision authority, save
 schema, excavation system and world-chunk rendering boundary remain unchanged.
+
+## Gallery pockets and faster prewarming — 2026-09-21
+
+Device screenshots after the first meander pass showed that rough walls and a curved
+centerline were not enough: long sections still read as constructed tunnels, and streamed
+geometry remained visibly late. This pass changes the rhythm of the existing routes rather
+than adding a second cave generator.
+
+Each non-entrance natural passage now caches two separated width pulses alongside its
+cubic controls. The pulses create wider gallery-like pockets with narrower necks between
+them, and the cached lateral warp is stronger. Surface mouth alignment, established route
+endpoints, chamber ownership, collision/density authority, mining, floor support and save
+data remain unchanged. Width and bend noise is still sampled only when the deterministic
+network is built; density queries use cached arithmetic.
+
+Performance work targets total useful CPU work as well as frame pacing. Feature bounds
+remain conservative for seam safety, but activation now rejects horizontal chunk cells
+that do not overlap the sampled curved passage footprint before they enter the mesh queue.
+Natural activation starts farther ahead so useful geometry can prewarm before the Ranger
+reaches it. The scheduler may complete up to two already-cheap chunks in an update, but
+the existing 2 ms soft deadline remains the primary guard.
+
+The marching-tetrahedra hot path also reuses interpolation/corner scratch and writes the
+already-known flat face normal while emitting vertices. It no longer allocates edge
+vectors repeatedly or calls a second full `computeVertexNormals()` pass after building a
+chunk. Player mining and floor edits still use the same geometry generator synchronously,
+so there is no alternate render/collision representation.
+
+Acceptance remains device-based: approach a cave from outside, enter without waiting for
+walls to appear, traverse several neck/gallery cycles, verify the spaces no longer read as
+a continuous man-made tunnel, mine/sculpt, save/Continue underground, and watch for
+sustained Android/PWA frame drops or visible chunk pop-in.

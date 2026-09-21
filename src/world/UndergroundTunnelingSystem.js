@@ -62,12 +62,6 @@ const smoothstep01 = value => {
   const t = THREE.MathUtils.clamp(value, 0, 1);
   return t * t * (3 - 2 * t);
 };
-const averagePoint = points => {
-  const result = new THREE.Vector3();
-  for (const point of points) result.add(point);
-  return result.multiplyScalar(1 / Math.max(1, points.length));
-};
-
 const hash01 = (x, z, salt = 0) => {
   let value = Math.imul((x | 0) ^ Math.imul(salt | 0, 374761393), 668265263);
   value = Math.imul(value ^ Math.imul(z | 0, 2246822519), 1274126177);
@@ -124,6 +118,11 @@ export class UndergroundTunnelingSystem {
     this.tempC = new THREE.Vector3();
     this.tempD = new THREE.Vector3();
     this.tempNormal = new THREE.Vector3();
+    // Reused marching-tetrahedra scratch avoids thousands of short-lived arrays
+    // and Vector3 allocations while streamed cave chunks are polygonized.
+    this.tetraInsideCorners = new Int8Array(4);
+    this.tetraOutsideCorners = new Int8Array(4);
+    this.tetraPoints = Array.from({ length: 4 }, () => new THREE.Vector3());
     this.tempColor = new THREE.Color();
     this.tempSurfaceColor = new THREE.Color();
     this.stoneColor = new THREE.Color(0x625f57);
@@ -1341,8 +1340,20 @@ export class UndergroundTunnelingSystem {
     if (!feature || this.activatedNaturalFeatureIds.has(feature.id)) return 0;
     const bounds = naturalCaveFeatureBounds(feature, this.config);
     const keys = this.#chunkKeysForBounds(bounds);
+    const horizontalChunkReach =
+      this.chunkSize * Math.SQRT1_2 + this.config.cellSize * 1.5;
     let queuedChunks = 0;
+
     for (const key of keys) {
+      const [ix, , iz] = key.split(':').map(Number);
+      if (!Number.isFinite(ix) || !Number.isFinite(iz)) continue;
+      const centerX = (ix + 0.5) * this.chunkSize;
+      const centerZ = (iz + 0.5) * this.chunkSize;
+      if (
+        naturalCaveFeatureDistance2D(feature, centerX, centerZ)
+          > horizontalChunkReach
+      ) continue;
+
       this.#activateChunkColumn(key);
       if (this.#queueNaturalChunkRebuild(key)) queuedChunks += 1;
     }
@@ -1490,6 +1501,7 @@ export class UndergroundTunnelingSystem {
     const minZ = chunkZ * this.chunkSize;
 
     const positions = [];
+    const normals = [];
     const colors = [];
     const cubePoints = Array.from({ length: 8 }, () => new THREE.Vector3());
     const cubeValues = new Array(8);
@@ -1535,6 +1547,7 @@ export class UndergroundTunnelingSystem {
               cubePoints,
               cubeValues,
               positions,
+              normals,
               colors
             );
           }
@@ -1546,11 +1559,9 @@ export class UndergroundTunnelingSystem {
 
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    if (positions.length > 0) {
-      geometry.computeVertexNormals();
-      geometry.computeBoundingSphere();
-    }
+    if (positions.length > 0) geometry.computeBoundingSphere();
 
     const chunk = this.#ensureChunk(key);
     const previous = chunk.mesh.geometry;
@@ -1563,73 +1574,140 @@ export class UndergroundTunnelingSystem {
     this.pendingNaturalChunkRebuildKeys.delete(key);
   }
 
-  #polygonizeTetrahedron(tetra, cubePoints, cubeValues, positions, colors) {
-    const inside = [];
-    const outside = [];
-    for (const corner of tetra) {
-      if (cubeValues[corner] >= ISO_LEVEL) inside.push(corner);
-      else outside.push(corner);
-    }
-    if (inside.length === 0 || inside.length === 4) return;
+  #polygonizeTetrahedron(
+    tetra,
+    cubePoints,
+    cubeValues,
+    positions,
+    normals,
+    colors
+  ) {
+    const inside = this.tetraInsideCorners;
+    const outside = this.tetraOutsideCorners;
+    let insideCount = 0;
+    let outsideCount = 0;
 
-    if (inside.length === 1 || inside.length === 3) {
-      const solid = inside.length === 1 ? inside : outside;
-      const empty = inside.length === 1 ? outside : inside;
-      const pivot = solid[0];
-      const points = empty.map(corner => this.#interpolateIso(
-        cubePoints[pivot],
-        cubePoints[corner],
-        cubeValues[pivot],
-        cubeValues[corner]
-      ));
-      const outward = inside.length === 1
-        ? averagePoint(outside.map(corner => cubePoints[corner])).sub(cubePoints[pivot])
-        : cubePoints[outside[0]].clone().sub(averagePoint(inside.map(corner => cubePoints[corner])));
-      this.#pushTriangle(points[0], points[1], points[2], outward, positions, colors);
+    for (const corner of tetra) {
+      if (cubeValues[corner] >= ISO_LEVEL) inside[insideCount++] = corner;
+      else outside[outsideCount++] = corner;
+    }
+    if (insideCount === 0 || insideCount === 4) return;
+
+    const points = this.tetraPoints;
+    if (insideCount === 1 || insideCount === 3) {
+      const pivot = insideCount === 1 ? inside[0] : outside[0];
+      const empty = insideCount === 1 ? outside : inside;
+      const emptyCount = insideCount === 1 ? outsideCount : insideCount;
+
+      for (let index = 0; index < emptyCount; index += 1) {
+        const corner = empty[index];
+        this.#interpolateIso(
+          cubePoints[pivot],
+          cubePoints[corner],
+          cubeValues[pivot],
+          cubeValues[corner],
+          points[index]
+        );
+      }
+
+      if (insideCount === 1) {
+        this.tempD
+          .copy(cubePoints[outside[0]])
+          .add(cubePoints[outside[1]])
+          .add(cubePoints[outside[2]])
+          .multiplyScalar(1 / 3)
+          .sub(cubePoints[pivot]);
+      } else {
+        this.tempD
+          .copy(cubePoints[pivot])
+          .sub(
+            this.tempA
+              .copy(cubePoints[inside[0]])
+              .add(cubePoints[inside[1]])
+              .add(cubePoints[inside[2]])
+              .multiplyScalar(1 / 3)
+          );
+      }
+
+      this.#pushTriangle(
+        points[0],
+        points[1],
+        points[2],
+        this.tempD,
+        positions,
+        normals,
+        colors
+      );
       return;
     }
 
-    const [insideA, insideB] = inside;
-    const [outsideA, outsideB] = outside;
-    const q0 = this.#interpolateIso(
+    const insideA = inside[0];
+    const insideB = inside[1];
+    const outsideA = outside[0];
+    const outsideB = outside[1];
+    this.#interpolateIso(
       cubePoints[insideA],
       cubePoints[outsideA],
       cubeValues[insideA],
-      cubeValues[outsideA]
+      cubeValues[outsideA],
+      points[0]
     );
-    const q1 = this.#interpolateIso(
+    this.#interpolateIso(
       cubePoints[insideB],
       cubePoints[outsideA],
       cubeValues[insideB],
-      cubeValues[outsideA]
+      cubeValues[outsideA],
+      points[1]
     );
-    const q2 = this.#interpolateIso(
+    this.#interpolateIso(
       cubePoints[insideB],
       cubePoints[outsideB],
       cubeValues[insideB],
-      cubeValues[outsideB]
+      cubeValues[outsideB],
+      points[2]
     );
-    const q3 = this.#interpolateIso(
+    this.#interpolateIso(
       cubePoints[insideA],
       cubePoints[outsideB],
       cubeValues[insideA],
-      cubeValues[outsideB]
+      cubeValues[outsideB],
+      points[3]
     );
-    const outward = averagePoint(outside.map(corner => cubePoints[corner]))
-      .sub(averagePoint(inside.map(corner => cubePoints[corner])));
-    this.#pushTriangle(q0, q1, q2, outward, positions, colors);
-    this.#pushTriangle(q0, q2, q3, outward, positions, colors);
+    this.tempD
+      .copy(cubePoints[outsideA])
+      .add(cubePoints[outsideB])
+      .sub(cubePoints[insideA])
+      .sub(cubePoints[insideB]);
+
+    this.#pushTriangle(
+      points[0],
+      points[1],
+      points[2],
+      this.tempD,
+      positions,
+      normals,
+      colors
+    );
+    this.#pushTriangle(
+      points[0],
+      points[2],
+      points[3],
+      this.tempD,
+      positions,
+      normals,
+      colors
+    );
   }
 
-  #interpolateIso(pointA, pointB, densityA, densityB) {
+  #interpolateIso(pointA, pointB, densityA, densityB, target) {
     const denominator = densityA - densityB;
     const t = Math.abs(denominator) > 0.000001
       ? THREE.MathUtils.clamp((densityA - ISO_LEVEL) / denominator, 0, 1)
       : 0.5;
-    return new THREE.Vector3().lerpVectors(pointA, pointB, t);
+    return target.lerpVectors(pointA, pointB, t);
   }
 
-  #pushTriangle(a, b, c, outward, positions, colors) {
+  #pushTriangle(a, b, c, outward, positions, normals, colors) {
     this.tempNormal
       .copy(this.tempB.subVectors(b, a))
       .cross(this.tempC.subVectors(c, a));
@@ -1638,13 +1716,26 @@ export class UndergroundTunnelingSystem {
     if (this.tempNormal.dot(outward) < 0) {
       p1 = c;
       p2 = b;
+      this.tempNormal.multiplyScalar(-1);
+    }
+    if (this.tempNormal.lengthSq() > 0.0000000001) {
+      this.tempNormal.normalize();
+    } else if (outward.lengthSq() > 0.0000000001) {
+      this.tempNormal.copy(outward).normalize();
+    } else {
+      this.tempNormal.set(0, 1, 0);
     }
 
-    for (const point of [a, p1, p2]) {
-      positions.push(point.x, point.y, point.z);
-      const color = this.#colorAt(point);
-      colors.push(color.r, color.g, color.b);
-    }
+    this.#pushTriangleVertex(a, positions, normals, colors);
+    this.#pushTriangleVertex(p1, positions, normals, colors);
+    this.#pushTriangleVertex(p2, positions, normals, colors);
+  }
+
+  #pushTriangleVertex(point, positions, normals, colors) {
+    positions.push(point.x, point.y, point.z);
+    normals.push(this.tempNormal.x, this.tempNormal.y, this.tempNormal.z);
+    const color = this.#colorAt(point);
+    colors.push(color.r, color.g, color.b);
   }
 
   #colorAt(point) {
