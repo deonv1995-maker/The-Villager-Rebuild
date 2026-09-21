@@ -95,7 +95,9 @@ A pocket has:
 
 Pockets exist in the density function from world creation but generate no scene geometry until nearby tunneling activates their chunks.
 
-There is currently no surface marker, compass marker, or detector for an undiscovered pocket. Generation uses 28 m world-space cells; each eligible cell has a 34% deterministic pocket chance. Pocket centers sit about 5.2–14.2 m below the local natural surface, with radii of about 2.7–4.4 m. In play, the practical search pattern is to descend several metres, then drive longer horizontal/branch tunnels so excavation crosses multiple world cells instead of repeatedly widening one chamber.
+There is still no surface marker, compass marker, or exact pocket coordinate. After Sprout is allied, the existing companion scanner gains a bounded **underground pocket detector**. It only queries from an active underground tunneling column, ignores already discovered pockets, and can sense the nearest hidden pocket within 20 m. Sprout projects a short cyan scan in the pocket's direction rather than drawing a target on the terrain; the scanner pulse becomes faster/brighter as distance closes. This keeps pockets hidden while replacing blind random tunneling with readable directional exploration.
+
+Generation uses 28 m world-space cells; each eligible cell has a 34% deterministic pocket chance. Pocket centers sit about 5.2–14.2 m below the local natural surface, with radii of about 2.7–4.4 m. Before Sprout is allied, or when no signal is in range, the practical search pattern remains to descend several metres and drive longer horizontal/branch tunnels so excavation crosses multiple world cells instead of repeatedly widening one chamber.
 
 A pocket becomes **discovered** when a player excavation sphere first intersects it. Its complete local geometry is then activated so the cut can open naturally into a larger chamber.
 
@@ -189,6 +191,7 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
 - deterministic pocket generation and discovery;
+- Sprout's bounded underground-only signal for the nearest still-hidden pocket, with no exact terrain marker;
 - deterministic content activation without rerolling or duplicating pocket rewards;
 - capacity-safe underground collection;
 - collected reward persistence under the existing tunneling save façade;
@@ -212,6 +215,9 @@ After CI and Pages deployment, verify on Android/PWA:
 - create stepped downward cuts, switch to Raise/Lower/Smoothen/Level, aim at the tunnel floor and reshape the steps into a walkable ramp;
 - the original terrain surface remains closed anywhere not actually excavated;
 - create a second tunnel far from the first and confirm it behaves identically;
+- with Sprout allied, descend into an active tunnel and confirm a cyan directional scanner signal appears only when an undiscovered pocket is within range;
+- move toward/away from the indicated direction and confirm the scan becomes stronger/weaker without showing an exact terrain target marker;
+- break into the indicated pocket and confirm that hidden-pocket signal stops for that discovered chamber;
 - continue tunneling until a larger underground pocket is opened and confirm rocks, cave formations and pocket dressing appear only after discovery;
 - confirm some pockets can contain hidden ruined-stone structures, Ancient Relic treasure and cyan Sprout Upgrade Shards;
 - collect a cave Stone pile/relic/shard and confirm the inventory icon/count updates;
