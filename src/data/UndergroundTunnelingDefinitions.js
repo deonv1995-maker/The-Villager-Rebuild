@@ -57,7 +57,7 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalQueueRetentionVerticalRadius: 34,
   // When an unbuilt chunk is close enough to become visible, allow a small bounded
   // emergency budget rather than exposing the empty sky/background through the cave.
-  naturalCriticalRenderRadius: 13,
+  naturalCriticalRenderRadius: 18,
   naturalCriticalChunkBuildsPerUpdate: 3,
   naturalCriticalMeshBudgetMs: 4,
   // Marching-tetrahedra cave geometry is deliberately time-sliced. Registering

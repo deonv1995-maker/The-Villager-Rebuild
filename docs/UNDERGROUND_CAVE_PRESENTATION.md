@@ -223,3 +223,29 @@ recovery budget are unchanged. The optimization reduces irrelevant work rather t
 the mobile frame-time allowance. Regression coverage verifies the initial prewarm window,
 post-travel queue retention and the cached render-key architecture. Physical Android/PWA
 acceptance still needs to confirm that walls/rooms appear sooner during fast cave traversal.
+
+## Visible-first cave meshing — 2026-09-21
+
+Android/PWA feedback after local prewarming still showed cave sections materializing too slowly,
+including large background/sky gaps while the Ranger was already beside missing geometry. The
+queue was smaller, but a partially sampled background chunk could still monopolize the active
+mesher until it completed.
+
+Natural cave streaming now classifies critical work against the chunk volume rather than only
+its center, with an 18 m near-player safety radius plus half of the chunk diagonal. A newly
+critical queued chunk may preempt a farther in-flight chunk. The interrupted generator and its
+density revision are stored back in the queue so previous sampling work resumes later instead of
+being discarded.
+
+The mesher keeps the same cell size, topology and shared density authority. For each chunk it
+pre-resolves the eight possible excavation/natural-feature/floor-edit buckets touched by the
+sample lattice, resolves hidden-pocket candidates once per x/z sample column rather than once
+per y sample, and avoids constructing corner Vector3 positions for fully solid or fully empty
+cells. These are hot-path reductions only; cave shape, collision, mining, floor edits and save
+data remain under the existing UndergroundTunnelingSystem.
+
+The normal 2 ms and critical 4 ms frame-time ceilings remain unchanged. Device acceptance should
+specifically test walking and fast vertical descent through an entrance branch while watching
+for missing cave walls/floors, then verify sustained frame pacing after nearby geometry has
+finished streaming.
+

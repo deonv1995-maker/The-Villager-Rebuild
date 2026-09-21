@@ -303,3 +303,23 @@ beyond what the player can currently see. Queueing those remote chunks wastes th
 mesh budget needed for nearby walls and rooms, which presents as slow cave loading. This change
 reduces irrelevant work without increasing the established 2 ms normal or 4 ms emergency
 mobile budgets, and without creating a second density, collision, mining or save authority.
+
+## 2026-09-21 — Visible cave geometry preempts background meshing
+
+Decision: preserve the existing deterministic cave density/collision authority and the hard
+2 ms normal / 4 ms critical mobile mesh budgets, but make the streaming scheduler prioritize
+what can become visible around the Ranger. The critical recovery radius is widened to 18 m,
+and chunk-volume padding is included when classifying a chunk as critical. If the Ranger
+moves or drops while a farther chunk is only partially sampled, a newly critical queued chunk
+may preempt it. The paused iterator is retained and resumed later instead of throwing away work.
+
+The marching-tetrahedra hot path also resolves the at-most eight density-authority buckets once
+per chunk, reuses one exact hidden-pocket candidate set for each vertical sample column, and
+skips Vector3 corner setup for cells that are entirely rock or entirely air.
+
+Reason: device feedback after local prewarming still showed large unrendered cave gaps. Queue
+scope was no longer the only bottleneck; expensive chunks could remain in flight while nearer
+geometry waited, and each density lattice point repeated avoidable lookup work. This keeps the
+same topology, mining, saves and frame-time ceiling while spending that bounded CPU time on the
+geometry the player can actually see first.
+

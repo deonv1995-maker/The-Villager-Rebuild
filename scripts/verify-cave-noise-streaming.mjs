@@ -154,6 +154,72 @@ try {
   system.update(player);
   assert.ok(system.naturalChunkBuild, 'an expensive chunk must suspend within the frame');
   assert.equal(system.activeChunks.size, 0, 'partial meshes must never be published');
+
+  const prioritySystem = makeWorld();
+  prioritySystem.update(player);
+  const initialPriorityBuild = prioritySystem.naturalChunkBuild;
+  assert.ok(initialPriorityBuild, 'priority regression requires a suspended background chunk');
+  const [priorityIx, priorityIy, priorityIz] = initialPriorityBuild.key.split(':').map(Number);
+  const caveChunkSize = config.cellSize * config.chunkCells;
+  const initialPriorityCenter = {
+    x: (priorityIx + 0.5) * caveChunkSize,
+    y: (priorityIy + 0.5) * caveChunkSize,
+    z: (priorityIz + 0.5) * caveChunkSize
+  };
+  const effectiveCriticalRadius =
+    config.naturalCriticalRenderRadius + caveChunkSize * Math.sqrt(3) * 0.5;
+  const moveTarget = prioritySystem.pendingNaturalChunkRebuilds
+    .slice()
+    .sort((a, b) => {
+      const aDistance = Math.hypot(
+        a.x - initialPriorityCenter.x,
+        a.y - initialPriorityCenter.y,
+        a.z - initialPriorityCenter.z
+      );
+      const bDistance = Math.hypot(
+        b.x - initialPriorityCenter.x,
+        b.y - initialPriorityCenter.y,
+        b.z - initialPriorityCenter.z
+      );
+      return bDistance - aDistance;
+    })
+    .find(entry =>
+      Math.hypot(
+        entry.x - initialPriorityCenter.x,
+        entry.y - initialPriorityCenter.y,
+        entry.z - initialPriorityCenter.z
+      ) > effectiveCriticalRadius + 0.5
+      && Math.hypot(
+        entry.x - initialPriorityCenter.x,
+        entry.z - initialPriorityCenter.z
+      ) < config.naturalQueueRetentionRadius
+      && Math.abs(entry.y - initialPriorityCenter.y)
+        < config.naturalQueueRetentionVerticalRadius
+    );
+  assert.ok(moveTarget, 'prewarm queue must include a farther resumable chunk for priority coverage');
+  prioritySystem.update({x: moveTarget.x, y: moveTarget.y, z: moveTarget.z});
+  assert.notEqual(
+    prioritySystem.naturalChunkBuild?.key,
+    initialPriorityBuild.key,
+    'newly critical cave geometry must preempt a farther partially sampled chunk'
+  );
+  assert.ok(
+    prioritySystem.pendingNaturalChunkRebuilds.some(entry =>
+      entry.key === initialPriorityBuild.key && entry.iterator
+    ),
+    'preempted cave work must retain its iterator so completed sampling is not discarded'
+  );
+  const [activePriorityIx, activePriorityIy, activePriorityIz] =
+    prioritySystem.naturalChunkBuild.key.split(':').map(Number);
+  assert.ok(
+    Math.hypot(
+      (activePriorityIx + 0.5) * caveChunkSize - moveTarget.x,
+      (activePriorityIy + 0.5) * caveChunkSize - moveTarget.y,
+      (activePriorityIz + 0.5) * caveChunkSize - moveTarget.z
+    ) <= effectiveCriticalRadius + 0.0001,
+    'the resumed scheduler must immediately work inside the near-player critical volume'
+  );
+
   const oldIterator = system.naturalChunkBuild.iterator;
   system.refreshTerrainSurface({x: entrance.x, z: entrance.z, radius: 1});
   system.update(player);

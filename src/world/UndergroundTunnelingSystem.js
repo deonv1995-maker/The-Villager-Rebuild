@@ -914,12 +914,33 @@ export class UndergroundTunnelingSystem {
   }
 
   #densityAt(x, y, z, surfaceY = this.terrain.heightAt(x, z)) {
+    const chunkKey = this.#chunkKeyForPoint(x, y, z);
+    return this.#densityAtFromBuckets(
+      x,
+      y,
+      z,
+      surfaceY,
+      this.excavationBuckets.get(chunkKey),
+      this.naturalFeatureBuckets.get(chunkKey),
+      this.#candidatePocketsAround(x, z),
+      this.floorEditBuckets.get(chunkKey)
+    );
+  }
+
+  #densityAtFromBuckets(
+    x,
+    y,
+    z,
+    surfaceY,
+    excavationBucket,
+    naturalFeatures,
+    pockets,
+    floorBucket
+  ) {
     let density = surfaceY - y;
 
-    const chunkKey = this.#chunkKeyForPoint(x, y, z);
-    const bucket = this.excavationBuckets.get(chunkKey);
-    if (bucket) {
-      for (const excavation of bucket) {
+    if (excavationBucket) {
+      for (const excavation of excavationBucket) {
         density = Math.min(
           density,
           tunnelingExcavationFieldAt(
@@ -933,7 +954,6 @@ export class UndergroundTunnelingSystem {
       }
     }
 
-    const naturalFeatures = this.naturalFeatureBuckets.get(chunkKey);
     if (naturalFeatures) {
       for (const feature of naturalFeatures) {
         density = Math.min(
@@ -943,11 +963,12 @@ export class UndergroundTunnelingSystem {
       }
     }
 
-    for (const pocket of this.#candidatePocketsAround(x, z)) {
-      density = Math.min(density, this.#pocketFieldAt(x, y, z, pocket));
+    if (pockets) {
+      for (const pocket of pockets) {
+        density = Math.min(density, this.#pocketFieldAt(x, y, z, pocket));
+      }
     }
 
-    const floorBucket = this.floorEditBuckets.get(chunkKey);
     if (floorBucket) {
       for (const edit of floorBucket) {
         density = this.#applyFloorEditDensity(density, x, y, z, edit);
@@ -1540,17 +1561,62 @@ export class UndergroundTunnelingSystem {
     const py = Number(playerPosition?.y);
     const pz = Number(playerPosition?.z);
     const hasPlayerPosition = [px, py, pz].every(Number.isFinite);
-    if (!this.naturalChunkBuild && hasPlayerPosition) {
-      this.pendingNaturalChunkRebuilds.sort((a, b) => {
-        const adx = a.x - px;
-        const ady = a.y - py;
-        const adz = a.z - pz;
-        const bdx = b.x - px;
-        const bdy = b.y - py;
-        const bdz = b.z - pz;
-        return adx * adx + ady * ady + adz * adz
-          - (bdx * bdx + bdy * bdy + bdz * bdz);
-      });
+    const distanceSqToPlayer = entry => {
+      const dx = entry.x - px;
+      const dy = entry.y - py;
+      const dz = entry.z - pz;
+      return dx * dx + dy * dy + dz * dz;
+    };
+    const compareDistanceToPlayer = (a, b) =>
+      distanceSqToPlayer(a) - distanceSqToPlayer(b);
+
+    if (hasPlayerPosition && this.pendingNaturalChunkRebuilds.length > 1) {
+      this.pendingNaturalChunkRebuilds.sort(compareDistanceToPlayer);
+    }
+
+    // Treat a chunk as critical when any part of its volume can enter the
+    // near-player safety radius, not only when its center does.
+    const halfChunkDiagonal = this.chunkSize * Math.sqrt(3) * 0.5;
+    const criticalRadius =
+      Math.max(
+        this.chunkSize,
+        Number(this.config.naturalCriticalRenderRadius) || 0
+      ) + halfChunkDiagonal;
+    const criticalRadiusSq = criticalRadius * criticalRadius;
+
+    // A partially sampled background chunk must never block geometry that has
+    // become critical after the Ranger moves or drops. Preserve the iterator
+    // and requeue it so the CPU work is resumed rather than discarded.
+    if (
+      hasPlayerPosition
+      && this.naturalChunkBuild
+      && this.pendingNaturalChunkRebuilds.length
+    ) {
+      const [activeIx, activeIy, activeIz] =
+        this.naturalChunkBuild.key.split(':').map(Number);
+      const activeEntry = {
+        x: (activeIx + 0.5) * this.chunkSize,
+        y: (activeIy + 0.5) * this.chunkSize,
+        z: (activeIz + 0.5) * this.chunkSize
+      };
+      const nearestPending = this.pendingNaturalChunkRebuilds[0];
+      if (
+        [activeIx, activeIy, activeIz].every(Number.isFinite)
+        && distanceSqToPlayer(activeEntry) > criticalRadiusSq
+        && distanceSqToPlayer(nearestPending) <= criticalRadiusSq
+      ) {
+        const paused = this.naturalChunkBuild;
+        this.pendingNaturalChunkRebuilds.push({
+          key: paused.key,
+          x: activeEntry.x,
+          y: activeEntry.y,
+          z: activeEntry.z,
+          iterator: paused.iterator,
+          revision: paused.revision
+        });
+        this.naturalChunkBuild = null;
+        this.pendingNaturalChunkRebuilds.sort(compareDistanceToPlayer);
+      }
     }
 
     const nearestKey = this.naturalChunkBuild?.key
@@ -1560,14 +1626,11 @@ export class UndergroundTunnelingSystem {
     if (nearestKey && hasPlayerPosition) {
       const [ix, iy, iz] = nearestKey.split(':').map(Number);
       if ([ix, iy, iz].every(Number.isFinite)) {
-        const dx = (ix + 0.5) * this.chunkSize - px;
-        const dy = (iy + 0.5) * this.chunkSize - py;
-        const dz = (iz + 0.5) * this.chunkSize - pz;
-        const criticalRadius = Math.max(
-          this.chunkSize,
-          Number(this.config.naturalCriticalRenderRadius) || 0
-        );
-        critical = dx * dx + dy * dy + dz * dz <= criticalRadius * criticalRadius;
+        critical = distanceSqToPlayer({
+          x: (ix + 0.5) * this.chunkSize,
+          y: (iy + 0.5) * this.chunkSize,
+          z: (iz + 0.5) * this.chunkSize
+        }) <= criticalRadiusSq;
       }
     }
 
@@ -1596,8 +1659,10 @@ export class UndergroundTunnelingSystem {
         if (this.builtNaturalChunkKeys.has(entry.key)) continue;
         this.naturalChunkBuild = {
           key: entry.key,
-          revision: this.densityRevision,
-          iterator: this.#buildChunkGeometry(entry.key)
+          revision: Number.isFinite(entry.revision)
+            ? entry.revision
+            : this.densityRevision,
+          iterator: entry.iterator ?? this.#buildChunkGeometry(entry.key)
         };
       }
       const job = this.naturalChunkBuild;
@@ -1609,8 +1674,8 @@ export class UndergroundTunnelingSystem {
         this.naturalChunkBuild = null;
         rebuilt += 1;
       }
-      // Yield between sample columns / mesh cells. Nearby missing geometry gets a
-      // small bounded visual-safety budget; distant prewarming keeps the 2 ms path.
+      // Yield between bounded mesher checkpoints. Critical nearby gaps can use
+      // the 4 ms recovery path; background prewarming stays on the 2 ms path.
       if (performance.now() >= deadline) break;
     }
     return rebuilt;
@@ -1687,6 +1752,28 @@ export class UndergroundTunnelingSystem {
     const cells = this.config.chunkCells;
     const step = this.config.cellSize;
 
+    // A streamed chunk samples only its own lattice plus the positive boundary
+    // planes. Resolve the at-most eight authority buckets once, so thousands of
+    // density queries do not rebuild chunk keys or rediscover nearby pockets.
+    const sampleBuckets = new Array(8);
+    for (let offsetZ = 0; offsetZ <= 1; offsetZ += 1) {
+      for (let offsetY = 0; offsetY <= 1; offsetY += 1) {
+        for (let offsetX = 0; offsetX <= 1; offsetX += 1) {
+          const bucketIndex = offsetX | (offsetY << 1) | (offsetZ << 2);
+          const bucketKey = this.#chunkKey(
+            chunkX + offsetX,
+            chunkY + offsetY,
+            chunkZ + offsetZ
+          );
+          sampleBuckets[bucketIndex] = {
+            excavations: this.excavationBuckets.get(bucketKey),
+            naturalFeatures: this.naturalFeatureBuckets.get(bucketKey),
+            floorEdits: this.floorEditBuckets.get(bucketKey)
+          };
+        }
+      }
+    }
+
     // Shared corners are sampled once: 13^3 rather than 8 * 12^3 queries.
     const stride = cells + 1;
     const samples = new Float64Array(stride * stride * stride);
@@ -1695,9 +1782,25 @@ export class UndergroundTunnelingSystem {
       for (let ix = 0; ix <= cells; ix += 1) {
         const x = minX + ix * step;
         const surfaceY = this.terrain.heightAt(x, z);
+        const horizontalBucketIndex =
+          (ix === cells ? 1 : 0) | (iz === cells ? 4 : 0);
+        // Pocket candidates depend only on x/z. Resolve them once for this
+        // 13-sample vertical lattice column instead of once per density sample.
+        const columnPockets = this.#candidatePocketsAround(x, z);
         for (let iy = 0; iy <= cells; iy += 1) {
+          const bucket =
+            sampleBuckets[horizontalBucketIndex | (iy === cells ? 2 : 0)];
           samples[ix + stride * (iy + stride * iz)] =
-            this.#densityAt(x, minY + iy * step, z, surfaceY);
+            this.#densityAtFromBuckets(
+              x,
+              minY + iy * step,
+              z,
+              surfaceY,
+              bucket.excavations,
+              bucket.naturalFeatures,
+              columnPockets,
+              bucket.floorEdits
+            );
         }
         yield;
       }
@@ -1706,20 +1809,26 @@ export class UndergroundTunnelingSystem {
     for (let iz = 0; iz < cells; iz += 1) {
       for (let iy = 0; iy < cells; iy += 1) {
         for (let ix = 0; ix < cells; ix += 1) {
+          let insideCornerCount = 0;
           for (let corner = 0; corner < 8; corner += 1) {
             const [ox, oy, oz] = CUBE_CORNERS[corner];
-            const point = cubePoints[corner];
-            point.set(
+            const value =
+              samples[ix + ox + stride * (iy + oy + stride * (iz + oz))];
+            cubeValues[corner] = value;
+            if (value >= ISO_LEVEL) insideCornerCount += 1;
+          }
+
+          // Most cubes are entirely rock or entirely air. Do not populate the
+          // eight Vector3 corner positions until a cell actually crosses rock/air.
+          if (insideCornerCount === 0 || insideCornerCount === 8) continue;
+          for (let corner = 0; corner < 8; corner += 1) {
+            const [ox, oy, oz] = CUBE_CORNERS[corner];
+            cubePoints[corner].set(
               minX + (ix + ox) * step,
               minY + (iy + oy) * step,
               minZ + (iz + oz) * step
             );
-            cubeValues[corner] = samples[ix + ox + stride * (iy + oy + stride * (iz + oz))];
           }
-
-          // Most cubes are entirely rock or entirely air.
-          if (cubeValues.every(value => value >= ISO_LEVEL)
-            || cubeValues.every(value => value < ISO_LEVEL)) continue;
           for (const tetra of CUBE_TETRAHEDRA) {
             this.#polygonizeTetrahedron(
               tetra,

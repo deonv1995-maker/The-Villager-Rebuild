@@ -205,6 +205,13 @@ assert.ok(
     && UNDERGROUND_TUNNELING.naturalCriticalMeshBudgetMs <= 4,
   'near-player cave recovery must retain a hard mobile-sized millisecond budget'
 );
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalCriticalRenderRadius
+    >= UNDERGROUND_TUNNELING.cellSize * UNDERGROUND_TUNNELING.chunkCells * 2
+    && UNDERGROUND_TUNNELING.naturalCriticalRenderRadius
+      < UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
+  'critical recovery must cover at least two cave chunks while staying inside local prewarming'
+);
 const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition) {');
 const naturalUpdateEnd = tunnelingSource.indexOf('  getNaturalCaveNetwork()', naturalUpdateStart);
 const naturalUpdateSource = tunnelingSource.slice(naturalUpdateStart, naturalUpdateEnd);
@@ -252,6 +259,12 @@ assert.ok(
   'visible nearby cave gaps must use only the explicit bounded critical streaming budget'
 );
 assert.ok(
+  naturalActivationSource.includes('halfChunkDiagonal')
+    && naturalActivationSource.includes('iterator: paused.iterator')
+    && naturalActivationSource.includes('this.pendingNaturalChunkRebuilds.sort(compareDistanceToPlayer)'),
+  'critical cave chunks must use volume-aware distance and may preempt farther resumable work'
+);
+assert.ok(
   tunnelingSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
     && tunnelingSource.includes('this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys))')
     && tunnelingSource.includes('Math.SQRT1_2'),
@@ -275,6 +288,20 @@ assert.ok(
   'natural cave mesher implementation must remain inspectable'
 );
 const naturalMesherSource = tunnelingSource.slice(naturalMesherStart, naturalMesherEnd);
+assert.ok(
+  naturalMesherSource.includes('const sampleBuckets = new Array(8)')
+    && naturalMesherSource.includes('const columnPockets = this.#candidatePocketsAround(x, z)')
+    && naturalMesherSource.includes('this.#densityAtFromBuckets('),
+  'streamed cave density sampling must reuse authority buckets and one exact pocket candidate set per vertical lattice column'
+);
+const uniformCellSkipIndex =
+  naturalMesherSource.indexOf('if (insideCornerCount === 0 || insideCornerCount === 8) continue;');
+const cornerVectorSetupIndex =
+  naturalMesherSource.indexOf('cubePoints[corner].set(', uniformCellSkipIndex);
+assert.ok(
+  uniformCellSkipIndex >= 0 && cornerVectorSetupIndex > uniformCellSkipIndex,
+  'uniform cave cells must skip Vector3 corner setup before polygonization'
+);
 assert.ok(
   naturalMesherSource.includes("geometry.setAttribute('normal'")
     && naturalMesherSource.includes('this.tetraPoints'),
