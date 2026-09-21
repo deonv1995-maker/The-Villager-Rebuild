@@ -15,7 +15,7 @@ Normal gathering, loose-Log collection and tree harvesting share one presentatio
 5. when the mission ends, Sprout travels back to the Ranger;
 6. the Ranger holds out a hand, Sprout shrinks back to Mini Sprout, and he is stowed.
 
-The temporary deployment pose uses the Ranger's existing cinematic/hand-mount boundaries. It does not create a new Ranger animation rig.
+The temporary deployment pose uses the Ranger's existing cinematic/hand-mount boundaries. It does not create a new Ranger animation rig. The hand mount is allowed to tilt Mini Sprout naturally while held, but once detached the mission controller levels Sprout by clearing inherited hand pitch/roll and then owns only his world-facing yaw.
 
 Sprout mission travel is intentionally lightweight direct travel between known task targets. It is not a replacement for Ranger, villager or future NPC traversal/pathfinding.
 
@@ -43,7 +43,9 @@ No tree, stump, regrowth or Log-drop rules are duplicated in Sprout code.
 
 Underground scanning intentionally uses a different presentation. The Ranger raises **Mini Sprout** and keeps him in hand while Sprout performs the full scan. Sprout does not grow or leave the Ranger for this command.
 
-The existing underground geology service remains authoritative for the nearest undiscovered pocket. When a signal exists, the controller creates one faint blue world-space glow at that pocket position. The signal lasts about **5 seconds**, fades away completely, and does not reappear until another explicit scan.
+The existing underground geology service remains authoritative for the nearest undiscovered pocket. Sprout's explicit scan uses a **56 m** search radius and is allowed from the surface as well as from an existing tunnel. This surface allowance is opt-in at the geology query boundary; other detector callers keep the established underground-only default.
+
+When a surface signal exists, the controller projects one faint blue world-space glow onto the terrain directly above the hidden chamber. This is a digging cue, not a prebuilt cave entrance. When the Ranger is already underground, the cue remains at the hidden pocket's underground position. The signal lasts about **5 seconds**, fades away completely, and does not reappear until another explicit scan.
 
 The glow is a temporary presentation only. It does not alter pocket discovery, terrain density, mining, rewards or save state.
 
@@ -61,4 +63,4 @@ The active responsibility is narrower: execute an explicit temporary mission, us
 
 ## Verification target
 
-Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, underground hand-held scan, five-second faint blue pocket glow, and clean stow afterward.
+Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, upright world orientation after detaching from the tilted hand bone, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, hand-held scan from both surface and tunnel, usable surface cue above the nearest hidden pocket, five-second faint blue pocket glow, and clean stow afterward.
