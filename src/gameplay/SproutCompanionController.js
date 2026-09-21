@@ -127,6 +127,13 @@ export class SproutCompanionController {
   }
 
   getPresentationState() {
+    const cutting = Boolean(
+      this.command?.definition?.kind === 'harvest-tree'
+      && this.command?.taskPhase === 'laser'
+      && !this.compression
+      && this.command?.treePosition
+    );
+
     return {
       scanning: Boolean(this.command?.scanning && !this.compression),
       scanTarget: this.scanTarget
@@ -134,6 +141,14 @@ export class SproutCompanionController {
         : null,
       scanTerrainProjection: this.scanTerrainProjection,
       scanIntensity: this.scanIntensity,
+      cutting,
+      cutTarget: cutting
+        ? {
+            x: this.command.treePosition.x,
+            y: this.command.treePosition.y,
+            z: this.command.treePosition.z
+          }
+        : null,
       affectionate: false
     };
   }
@@ -646,10 +661,9 @@ export class SproutCompanionController {
 
       command.taskPhase = 'laser';
       command.pulseElapsed = SPROUT_COMPANION.laserPulseIntervalSeconds;
-      command.scanning = true;
-      this.scanTarget = command.treePosition.clone();
-      this.scanTerrainProjection = false;
-      this.scanIntensity = 1;
+      command.scanning = false;
+      this.scanTarget = null;
+      this.scanIntensity = 0;
       this.game.setStatus?.('SPROUT · CUTTING TREE ' + command.treeId);
       return;
     }
@@ -673,7 +687,6 @@ export class SproutCompanionController {
       }
       if (result.position) {
         command.treePosition.copy(result.position);
-        this.scanTarget = result.position.clone();
       }
 
       if (!result.chopped) {
