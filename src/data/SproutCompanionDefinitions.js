@@ -22,6 +22,8 @@ export const SPROUT_COMPANION = Object.freeze({
   undergroundSignalSurfaceLift: 0.18,
   energyMax: 100,
   energyRechargePerSecond: 0.35,
+  flightEnergyPerSecond: 8,
+  flightMinimumEnergy: 1,
   resourceScanRange: 34,
   resourceScanHoldSeconds: 3.2,
   undergroundScanRange: 56,
