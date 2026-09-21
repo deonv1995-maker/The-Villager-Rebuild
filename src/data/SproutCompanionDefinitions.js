@@ -34,6 +34,13 @@ export const SPROUT_COMPANION = Object.freeze({
   flightMinimumEnergy: 1,
   flightTransformSeconds: 0.18,
   flightThrusterIgnitionRatio: 0.72,
+  navigationLight: Object.freeze({
+    color: 0x62cfff,
+    intensity: 48,
+    distance: 11.5,
+    decay: 2,
+    height: 1.15
+  }),
   resourceScanRange: 34,
   resourceScanHoldSeconds: 3.2,
   undergroundScanRange: 56,
