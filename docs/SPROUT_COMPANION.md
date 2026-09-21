@@ -103,3 +103,16 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, the same deployment/scan/retrieval sequence stays entirely in first person when 1P is active, Mini Sprout remains visible as a first-person view prop without unhiding the third-person Ranger body, the view does not snap behind the Ranger after retrieval, Sprout remains upright after leaving the Ranger's hand/view mount, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, the cave scan visibly raises the Ranger's right hand, all three expanding ground-grid pulses are readable and dissipate outward before the hand lowers, a surface scan produces a usable ground cue when a pocket is within 56 m, every manual scan reacquires the closest pocket even when it was previously discovered, and the glow holds for 10 seconds before completing an 8-second slow fade.
 
 For rocket-shoe flight, verify both keyboard and touch input: a quick second-jump tap must remain only a double jump; holding the second press should visibly replace stored Sprout with two foot-mounted rocket shoes and boost upward; releasing that hold should stop thrust **without removing the boots**, and holding jump again while still airborne should resume the boost without replaying the transformation. A rapid third jump press should latch flight so releasing the button leaves the Ranger airborne. While latched on mobile, the visible right-side flight guide should replace camera-look control: upward/downward drag climbs/descends, horizontal drag turns, and returning to center settles toward a hover. The normal left movement control must continue to steer horizontally at up to **2.5× normal running speed**, with partial stick input remaining proportional. Flight must still drain the existing Sprout gauge continuously and force shutdown cleanly at zero energy or on landing. Confirm the shoes track both feet in third person and flight remains mechanically usable in first person without unhiding the body. The 0.18-second transformation should read as Sprout physically reconfiguring rather than generic boots appearing: compact pod first, ivory/green/orange shell unfolding around each foot, cyan expression/core resolving, leaf fins opening and the antigrav thrusters igniting only near the end.
+
+## Underground navigation light — 2026-09-21
+
+Once allied, Sprout provides a small cyan navigation light automatically when Ranger enters
+dark cave air. It follows Ranger rather than creating pathfinding or a second companion
+movement mode, scales its intensity from the same shared underground-darkness curve used by
+the world lighting system, and switches off again toward the cave mouth/surface. It is one
+non-shadow-casting `PointLight`, so it does not add another six-face mobile shadow pass.
+
+The light is navigation/readability support, not an inventory torch replacement. Permanent
+player-chosen illumination still comes from crafted placed torches, while Sprout energy,
+missions, scanning and rocket-shoe authority remain unchanged.
+
