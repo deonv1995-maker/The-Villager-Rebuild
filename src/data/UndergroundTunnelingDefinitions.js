@@ -42,6 +42,10 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // while 3D passage/chamber meshes are activated only near the Ranger.
   naturalNetworkCount: 6,
   naturalActivationRadius: 52,
+  // Marching-tetrahedra cave geometry is deliberately time-sliced. Registering
+  // nearby density/collision columns stays immediate, but only this many new
+  // natural-cave render chunks may be meshed in one frame.
+  naturalChunkBuildsPerUpdate: 1,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
   naturalEntranceRadiusFractionMin: 0.5,

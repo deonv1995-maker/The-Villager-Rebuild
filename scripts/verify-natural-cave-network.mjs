@@ -75,18 +75,44 @@ assert.equal(
 
 const entrance = network.entrances[0];
 const surfaceY = terrain.naturalHeightAt(entrance.x, entrance.z);
-const activated = world.update(new THREE.Vector3(entrance.x, surfaceY + 1, entrance.z));
-assert.ok(activated > 0, 'approaching a natural cave must lazily materialize nearby 3D density chunks');
+const playerAtEntrance = new THREE.Vector3(entrance.x, surfaceY + 1, entrance.z);
+const activated = world.update(playerAtEntrance);
+assert.ok(activated > 0, 'approaching a natural cave must queue nearby 3D density chunks');
 const debug = world.getDebugState();
 assert.ok(debug.activatedNaturalFeatureCount > 0, 'natural feature activation must be tracked explicitly');
 assert.ok(
-  debug.activeChunkCount < 90,
+  debug.activeColumnCount > debug.activeChunkCount,
+  'natural cave collision columns must activate immediately without synchronously meshing every queued chunk'
+);
+assert.ok(
+  debug.activeChunkCount <= UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate,
+  'one cave-streaming update must respect the configured geometry build budget'
+);
+assert.ok(
+  debug.pendingNaturalChunkRebuildCount > 0,
+  'approaching a cave must leave additional geometry queued for later frames instead of causing one large hitch'
+);
+assert.equal(
+  debug.builtNaturalChunkCount,
+  debug.activeChunkCount,
+  'new natural cave render chunks must be counted only after their geometry is materialized'
+);
+const builtAfterFirstUpdate = debug.builtNaturalChunkCount;
+world.update(playerAtEntrance);
+const secondDebug = world.getDebugState();
+assert.ok(
+  secondDebug.builtNaturalChunkCount - builtAfterFirstUpdate
+    <= UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate,
+  'each later update must keep natural cave meshing inside the same per-frame budget'
+);
+assert.ok(
+  secondDebug.activeChunkCount < 90,
   'approaching one cave mouth must not materialize the entire connected underworld'
 );
 assert.equal(
   world.isSolidAt(entrance.x, surfaceY - 0.45, entrance.z),
   false,
-  'walk-in cave mouth must already be empty below the terrain surface without Pickaxe excavation'
+  'walk-in cave mouth collision must be available immediately even while later visual chunks remain queued'
 );
 
 console.log('enlarged island and connected lazy natural cave underworld verified');
