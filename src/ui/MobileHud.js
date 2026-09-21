@@ -681,10 +681,20 @@ export class MobileHud {
   #bindButtons() {
     const jump = this.root.querySelector('.jump');
 
+    const releaseJump = event => {
+      event?.preventDefault?.();
+      this.player.setJumpHeld?.(false);
+    };
+
     jump.addEventListener('pointerdown', event => {
       event.preventDefault();
+      jump.setPointerCapture?.(event.pointerId);
+      this.player.setJumpHeld?.(true);
       this.player.jump();
     });
+    jump.addEventListener('pointerup', releaseJump);
+    jump.addEventListener('pointercancel', releaseJump);
+    jump.addEventListener('lostpointercapture', releaseJump);
 
     this.actionButton.addEventListener('pointerdown', event => {
       event.preventDefault();
