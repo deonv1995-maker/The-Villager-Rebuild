@@ -32,6 +32,7 @@ import { BeachArrivalIntroController } from './startup/BeachArrivalIntroControll
 import { TitleSaveMenuController } from './startup/TitleSaveMenuController.js';
 import { TitleSceneApp } from './startup/TitleSceneApp.js';
 import { RestTransitionOverlay } from './ui/RestTransitionOverlay.js';
+import { SproutCommandMenuController } from './ui/SproutCommandMenuController.js';
 import { RoofWallPolishSystem } from './world/RoofWallPolishSystem.js';
 import { StackedRoofReflowSystem } from './world/StackedRoofReflowSystem.js';
 import { StructureRoofQuery } from './world/StructureRoofQuery.js';
@@ -184,6 +185,13 @@ async function bootGameplay(titleScene = null, { resume = false, profile = null 
     const sproutCompanion = new SproutCompanionController({ game });
     sproutCompanion.start();
     game.sproutCompanion = sproutCompanion;
+
+    const sproutCommandMenu = new SproutCommandMenuController({
+      game,
+      controller: sproutCompanion
+    });
+    sproutCommandMenu.start();
+    game.sproutCommandMenu = sproutCommandMenu;
 
     const inventoryGainFeedback = new InventoryGainFeedbackController({ game });
     game.inventoryGainFeedback = inventoryGainFeedback;
