@@ -14,6 +14,8 @@ The collection sequence is intentionally staged so scanning and matter compressi
 
 The scan-lock duration is gameplay/presentation timing in `SproutCompanionDefinitions.js`; it is not duplicated in rendering code. Idle roaming scans and the automatic scan flourish still use the same scanner effect without a collection target.
 
+The same scanner now also presents Sprout's underground hidden-pocket sense after allegiance. Pocket sensing never replaces the collection sequence: a live pickup target has priority, and the hidden-pocket scanner is suppressed throughout matter compression. For a hidden pocket, the controller supplies only a short directional endpoint plus a normalized proximity strength. It deliberately disables the terrain-grid/item-marker projection so the scanner suggests a direction without revealing the chamber's exact world coordinate.
+
 ## Lens-origin presentation contract
 
 `SproutVisualRuntimeController` reads `scanning` and `scanTarget` and forwards them to `src/rendering/SproutScannerVisual.js`. It also exposes the island's existing `heightAt(x, z)` sampler to the scanner as a presentation-only terrain surface query. That query is not a second terrain authority and does not affect collision or movement.
@@ -50,6 +52,6 @@ The effect is attached below the outer gameplay root, while its beam pivot is re
 
 ## Architecture boundary
 
-The scanner effect must remain presentation-only. Future refinement may change cone width, terrain-grid density, pulse timing, contour count, glow strength or sweep motion, but gameplay collection radius, beam range, resource eligibility and scan-lock timing stay in `SproutCompanionDefinitions.js` and `SproutCompanionController.js`. Rendering code must not introduce a second scan radius, target-selection rule, terrain authority or collection path.
+The scanner effect must remain presentation-only. Future refinement may change cone width, terrain-grid density, pulse timing, contour count, glow strength or sweep motion, but gameplay collection radius, beam range, resource eligibility, scan-lock timing and underground pocket-detection range stay in `SproutCompanionDefinitions.js` and `SproutCompanionController.js`. Pocket existence/discovery remains owned by `UndergroundTunnelingSystem`. Rendering code must not introduce a second scan radius, target-selection rule, terrain authority, pocket-discovery path or collection path.
 
 The current effect deliberately does not add a real light source. Cyan visibility comes from additive unlit materials, preserving the existing mobile-first lighting budget and avoiding additional shadow or lighting work.
