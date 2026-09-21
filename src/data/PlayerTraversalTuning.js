@@ -4,6 +4,9 @@ export const PLAYER_TRAVERSAL_TUNING = Object.freeze({
     height: 2.2,
     eyeHeight: 1.72
   }),
+  movement: Object.freeze({
+    runSpeed: 6
+  }),
   jump: Object.freeze({
     launchSpeed: 6.8,
     doubleJumpSpeed: 6.4,
@@ -14,7 +17,8 @@ export const PLAYER_TRAVERSAL_TUNING = Object.freeze({
   flight: Object.freeze({
     holdDelaySeconds: 0.18,
     ascentSpeed: 4.8,
-    verticalResponse: 10
+    verticalResponse: 10,
+    horizontalSpeedMultiplier: 2.5
   })
 });
 
