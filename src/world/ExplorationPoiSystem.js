@@ -57,6 +57,14 @@ export class ExplorationPoiSystem {
     return this.tunneling.getFloorSculptTarget(options);
   }
 
+  getTorchPlacementTarget(options) {
+    return this.tunneling.getTorchPlacementTarget(options);
+  }
+
+  getUndergroundDepth(position) {
+    return this.tunneling.getUndergroundDepth(position);
+  }
+
   applyFloorSculpt(mode, target) {
     return this.tunneling.applyFloorSculpt(mode, target);
   }
