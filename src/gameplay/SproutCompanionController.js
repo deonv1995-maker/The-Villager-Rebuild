@@ -364,6 +364,7 @@ export class SproutCompanionController {
       this.#detachToScene();
       this.launchStart.copy(this.root.position);
       this.root.scale.copy(this.miniScale);
+      this.root.rotation.set(0, Math.atan2(this.playerFacing.x, this.playerFacing.z), 0);
     }
 
     const raw = THREE.MathUtils.clamp(
@@ -376,7 +377,7 @@ export class SproutCompanionController {
     this.root.position.lerpVectors(this.launchStart, destination, progress);
     this.root.position.y += Math.sin(raw * Math.PI) * 0.48;
     this.root.scale.lerpVectors(this.miniScale, this.fullScale, progress);
-    this.root.rotation.y = Math.atan2(this.playerFacing.x, this.playerFacing.z);
+    this.root.rotation.set(0, Math.atan2(this.playerFacing.x, this.playerFacing.z), 0);
     this.root.visible = true;
 
     if (raw < 1) return;
@@ -434,6 +435,10 @@ export class SproutCompanionController {
   #moveRootToward(target, dt, speed, heightOffset = 0.5, threshold = SPROUT_COMPANION.missionArrivalDistance) {
     if (!this.root || !target) return false;
     this.#detachToScene();
+    // scene.attach() preserves the Ranger hand bone's world quaternion. Clear the
+    // inherited hand pitch/roll as soon as Sprout becomes a free-flying actor.
+    this.root.rotation.x = 0;
+    this.root.rotation.z = 0;
     this.travelDestination.set(target.x, target.y + heightOffset, target.z);
     this.travelDelta.subVectors(this.travelDestination, this.root.position);
     const distance = this.travelDelta.length();
@@ -508,11 +513,23 @@ export class SproutCompanionController {
     }
   }
 
+  #isRangerUnderground() {
+    const surfaceHeightAt = typeof this.island.naturalHeightAt === 'function'
+      ? this.island.naturalHeightAt.bind(this.island)
+      : typeof this.island.heightAt === 'function'
+        ? this.island.heightAt.bind(this.island)
+        : null;
+    if (!surfaceHeightAt) return false;
+    const surfaceY = surfaceHeightAt(this.playerPosition.x, this.playerPosition.z);
+    return Number.isFinite(surfaceY) && surfaceY - this.playerPosition.y >= 1.2;
+  }
+
   #updateUndergroundScan(command) {
     if (command.taskPhase === 'acquire') {
       const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
         this.playerPosition,
-        SPROUT_COMPANION.undergroundScanRange
+        SPROUT_COMPANION.undergroundScanRange,
+        { allowSurface: true }
       ) ?? null;
 
       command.taskPhase = 'scan';
@@ -526,10 +543,23 @@ export class SproutCompanionController {
         const position = signal.position.clone
           ? signal.position.clone()
           : new THREE.Vector3(signal.position.x, signal.position.y, signal.position.z);
+        const rangerUnderground = this.#isRangerUnderground();
+        if (!rangerUnderground) {
+          const surfaceY = this.island.heightAt?.(position.x, position.z);
+          if (Number.isFinite(surfaceY)) {
+            position.y = surfaceY + SPROUT_COMPANION.undergroundSignalSurfaceLift;
+          }
+        }
         this.#showPocketSignal(position);
-        this.game.setStatus?.('SPROUT · FAINT SUBSURFACE SIGNAL · ' + Math.round(signal.distance) + 'm');
+        this.game.setStatus?.(
+          rangerUnderground
+            ? 'SPROUT · FAINT SUBSURFACE SIGNAL · ' + Math.round(signal.distance) + 'm'
+            : 'SPROUT · POCKET BELOW · ' + Math.round(signal.distance) + 'm'
+        );
       } else {
-        this.game.setStatus?.('SPROUT · FULL SCAN · NO SUBSURFACE SIGNAL');
+        this.game.setStatus?.(
+          'SPROUT · FULL SCAN · NO POCKET WITHIN ' + SPROUT_COMPANION.undergroundScanRange + 'm'
+        );
       }
       return;
     }

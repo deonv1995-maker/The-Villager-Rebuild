@@ -587,7 +587,7 @@ export class UndergroundTunnelingSystem {
       .filter(Boolean);
   }
 
-  getUndiscoveredPocketSignal(position, maxDistance = 20) {
+  getUndiscoveredPocketSignal(position, maxDistance = 20, { allowSurface = false } = {}) {
     const x = Number(position?.x);
     const y = Number(position?.y);
     const z = Number(position?.z);
@@ -596,7 +596,7 @@ export class UndergroundTunnelingSystem {
 
     const naturalSurfaceY = this.#naturalSurfaceHeightAt(x, z);
     const minimumUndergroundDepth = Math.max(1.2, this.config.cellSize * 1.5);
-    if (naturalSurfaceY - y < minimumUndergroundDepth || !this.#columnHasActivity(x, z)) {
+    if (!allowSurface && (naturalSurfaceY - y < minimumUndergroundDepth || !this.#columnHasActivity(x, z))) {
       return null;
     }
 

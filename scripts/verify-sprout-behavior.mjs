@@ -8,16 +8,25 @@ import { createSproutVisual, disposeSproutVisual } from '../src/rendering/Sprout
 
 function fixture() {
   const scene = new THREE.Scene();
+  let lastPocketSignalRequest = null;
   const terrain = {
     heightAt: () => 0,
+    naturalHeightAt: () => 0,
     isPlayable: () => true,
     explorationPois: {
-      getUndiscoveredPocketSignal: () => ({
-        pocketId: 'test-pocket',
-        distance: 12,
-        strength: 0.8,
-        position: new THREE.Vector3(5, -6, -4)
-      })
+      getUndiscoveredPocketSignal: (scanPosition, range, options = {}) => {
+        lastPocketSignalRequest = {
+          position: scanPosition.clone?.() ?? new THREE.Vector3(scanPosition.x, scanPosition.y, scanPosition.z),
+          range,
+          options: { ...options }
+        };
+        return {
+          pocketId: 'test-pocket',
+          distance: 12,
+          strength: 0.8,
+          position: new THREE.Vector3(5, -6, -4)
+        };
+      }
     }
   };
   const gatherables = new GatherableSystem({ scene, terrain });
@@ -33,6 +42,7 @@ function fixture() {
   const playerRoot = new THREE.Group();
   const hand = new THREE.Group();
   hand.position.set(0.35, 1.25, 0.18);
+  hand.rotation.set(0.82, 0.26, -0.47);
   playerRoot.add(hand);
   scene.add(playerRoot);
 
@@ -146,6 +156,7 @@ function fixture() {
     gatherables,
     statuses,
     trees,
+    get lastPocketSignalRequest() { return lastPocketSignalRequest; },
     get harvestCalls() { return harvestCalls; }
   };
 }
@@ -169,6 +180,10 @@ function fixture() {
   f.tick(2);
   assert.equal(f.root.visible, true, 'Gather command begins with visible Mini Sprout deployment');
   assert.equal(f.root.parent, f.hand, 'Mini Sprout is mounted in the Ranger hand before launch');
+
+  f.tick(Math.ceil((tuning.deployHandSeconds + tuning.deployGrowSeconds + 0.15) / 0.05));
+  assert.ok(Math.abs(f.root.rotation.x) < 0.001, 'World-deployed Sprout clears inherited hand pitch');
+  assert.ok(Math.abs(f.root.rotation.z) < 0.001, 'World-deployed Sprout clears inherited hand roll');
 
   for (let frame = 0; frame < 600 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
   const gathered = f.inventory.get('stick');
@@ -224,7 +239,14 @@ function fixture() {
   assert.equal(presentation.scanning, true, 'Mini Sprout performs the scan while held');
   assert.equal(presentation.scanTerrainProjection, false);
   assert.equal(f.root.parent, f.hand, 'Underground scan keeps Mini Sprout in the Ranger hand');
-  assert.ok(f.scene.getObjectByName('sprout-underground-pocket-glow'), 'Closest underground pocket receives a faint world-space glow');
+  assert.equal(f.lastPocketSignalRequest?.options?.allowSurface, true, 'Sprout explicitly allows pocket sensing from the surface');
+  assert.equal(f.lastPocketSignalRequest?.range, tuning.undergroundScanRange, 'Sprout uses the configured surface scan range');
+  const pocketGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
+  assert.ok(pocketGlow, 'Closest underground pocket receives a faint world-space glow');
+  assert.ok(
+    Math.abs(pocketGlow.position.y - tuning.undergroundSignalSurfaceLift) < 0.001,
+    'Surface scan projects the pocket cue onto the ground above the hidden chamber'
+  );
   assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['scan-underground'].energyCost);
 
   f.tick(Math.ceil((tuning.undergroundSignalSeconds + 0.2) / 0.05));
