@@ -125,6 +125,45 @@ assert.ok(
   'First-person camera must sit at Ranger eye height'
 );
 
+const preservedCinematicDriver = { update() {} };
+const preservedYaw = player.yaw;
+const preservedPitch = player.pitch;
+assert.equal(
+  player.beginCinematic(preservedCinematicDriver, { preserveCameraMode: true }),
+  true,
+  'A scoped presentation lock must be able to preserve the active camera mode'
+);
+player.update(1 / 60);
+assert.equal(
+  player.getCameraMode(),
+  'first-person',
+  'Camera-preserving presentation locks must not force first person into third person'
+);
+assert.ok(
+  Math.abs(camera.position.x - player.root.position.x) < 0.000001
+  && Math.abs(camera.position.z - player.root.position.z) < 0.000001,
+  'First-person camera must remain anchored to the Ranger while a preserving presentation lock is active'
+);
+assert.equal(player.endCinematic(preservedCinematicDriver), true);
+assert.equal(player.getCameraMode(), 'first-person');
+assert.equal(player.yaw, preservedYaw, 'Ending a preserving first-person pose must keep the player view yaw');
+assert.equal(player.pitch, preservedPitch, 'Ending a preserving first-person pose must keep the player view pitch');
+
+const forcedCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const forcedPlayer = new RangerController({ scene, camera: forcedCamera, terrain });
+forcedPlayer.model = new THREE.Group();
+forcedPlayer.root.add(forcedPlayer.model);
+forcedPlayer.assetMode = 'kaykit';
+forcedPlayer.setCameraMode('first-person');
+const storyCinematicDriver = { update() {} };
+assert.equal(forcedPlayer.beginCinematic(storyCinematicDriver), true);
+assert.equal(
+  forcedPlayer.getCameraMode(),
+  'third-person',
+  'Existing story cinematics must retain their default third-person framing contract'
+);
+forcedPlayer.endCinematic(storyCinematicDriver);
+
 const pitchCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
 const pitchPlayer = new RangerController({ scene, camera: pitchCamera, terrain });
 pitchPlayer.model = new THREE.Group();
@@ -350,4 +389,4 @@ assert.equal(positionReads, 2, 'Third person must continue using the same curren
 assert.equal(firstPersonUpdates, 1);
 assert.equal(thirdPersonUpdates, 1, 'Third person must continue using the existing structure occlusion system');
 
-console.log('Forward-biased third-person framing, full first-person vertical look, natural relaxed walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');
+console.log('Forward-biased third-person framing, camera-preserving pose locks, full first-person vertical look, natural relaxed walk/run head bob, view-relative controls, presentation visibility and roof-aware occlusion handoff verified');

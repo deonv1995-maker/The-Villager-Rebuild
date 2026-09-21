@@ -306,7 +306,7 @@ export class SproutCompanionController {
 
   #beginPlayerPose(preferences, options = {}) {
     if (!this.playerPoseOwned) {
-      this.playerPoseOwned = Boolean(this.player.beginCinematic?.(this));
+      this.playerPoseOwned = Boolean(this.player.beginCinematic?.(this, { preserveCameraMode: true }));
     }
     if (this.playerPoseOwned) {
       this.player.playCinematicAnimation?.(preferences, options);
@@ -322,9 +322,18 @@ export class SproutCompanionController {
 
   #mountMiniToHand() {
     if (!this.root) return false;
-    this.player.mountRightHandObject?.(this.root);
-    this.root.position.set(0, 0.06, 0.08);
-    this.root.rotation.set(0, 0, 0);
+
+    if (this.player.isFirstPerson?.() && this.player.camera) {
+      const offset = SPROUT_COMPANION.firstPersonMiniOffset;
+      this.player.camera.add(this.root);
+      this.root.position.set(offset.x, offset.y, offset.z);
+      this.root.rotation.set(0, 0, 0);
+    } else {
+      this.player.mountRightHandObject?.(this.root);
+      this.root.position.set(0, 0.06, 0.08);
+      this.root.rotation.set(0, 0, 0);
+    }
+
     this.root.scale.copy(this.miniScale);
     this.root.visible = true;
     return true;
