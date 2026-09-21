@@ -32,6 +32,10 @@ export class SproutCompanionController {
     this.frameId = null;
     this.lastTimestamp = null;
     this.scanElapsed = 0;
+    this.pocketDetectionElapsed = SPROUT_COMPANION.pocketDetectionIntervalSeconds;
+    this.pocketSignal = null;
+    this.announcedPocketSignalId = null;
+    this.announcedStrongPocketSignalId = null;
     this.cooldown = 0;
     this.elapsed = 0;
     this.approachElapsed = 0;
@@ -68,6 +72,7 @@ export class SproutCompanionController {
     this.perceivedPlayerGoalFacing = new THREE.Vector3(0, 0, 1);
     this.followTarget = new THREE.Vector3();
     this.idleTarget = new THREE.Vector3();
+    this.pocketScanTarget = new THREE.Vector3();
     this.resourcePosition = new THREE.Vector3();
     this.tempQuaternion = new THREE.Quaternion();
     this.tempScale = new THREE.Vector3();
@@ -92,10 +97,33 @@ export class SproutCompanionController {
   }
 
   getPresentationState() {
-    const scanTarget = this.target?.position;
+    let scanTarget = this.target?.position ?? null;
+    let scanTerrainProjection = true;
+    let scanIntensity = 0;
+
+    if (!scanTarget && !this.compression && this.pocketSignal && this.root) {
+      const signal = this.pocketSignal.position;
+      const dx = signal.x - this.root.position.x;
+      const dy = signal.y - this.root.position.y;
+      const dz = signal.z - this.root.position.z;
+      const distance = Math.hypot(dx, dy, dz);
+      if (distance > 0.001) {
+        const scale = Math.min(1, SPROUT_COMPANION.pocketDetectionBeamLength / distance);
+        this.pocketScanTarget.set(
+          this.root.position.x + dx * scale,
+          this.root.position.y + dy * scale,
+          this.root.position.z + dz * scale
+        );
+        scanTarget = this.pocketScanTarget;
+        scanTerrainProjection = false;
+        scanIntensity = this.pocketSignal.strength;
+      }
+    }
+
     return {
       scanning: Boolean(
         this.target
+        || (!this.compression && this.pocketSignal)
         || this.idleScanRemaining > 0
         || this.idleAnimation?.kind === 'scan'
       ),
@@ -104,6 +132,8 @@ export class SproutCompanionController {
         y: scanTarget.y,
         z: scanTarget.z
       } : null,
+      scanTerrainProjection,
+      scanIntensity,
       affectionate: this.idleAnimation?.kind === 'affection'
     };
   }
@@ -130,6 +160,7 @@ export class SproutCompanionController {
     this.scanElapsed += dt;
 
     this.player.getPosition(this.playerPosition);
+    this.#updatePocketSignal(dt);
     this.player.getFacingDirection(this.playerFacing);
     this.playerFacing.y = 0;
     if (this.playerFacing.lengthSq() < 0.0001) this.playerFacing.set(0, 0, 1);
@@ -241,6 +272,31 @@ export class SproutCompanionController {
       this.idleScanRemaining = 0;
       const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
       if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
+    }
+  }
+
+  #updatePocketSignal(dt) {
+    this.pocketDetectionElapsed += dt;
+    if (this.pocketDetectionElapsed < SPROUT_COMPANION.pocketDetectionIntervalSeconds) return;
+    this.pocketDetectionElapsed = 0;
+
+    const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
+      this.playerPosition,
+      SPROUT_COMPANION.pocketDetectionRange
+    ) ?? null;
+    this.pocketSignal = signal;
+
+    if (!signal) return;
+    if (signal.pocketId !== this.announcedPocketSignalId) {
+      this.announcedPocketSignalId = signal.pocketId;
+      this.game.setStatus?.('SPROUT · SUBSURFACE SIGNAL DETECTED');
+    }
+    if (
+      signal.distance <= SPROUT_COMPANION.pocketDetectionStrongDistance
+      && signal.pocketId !== this.announcedStrongPocketSignalId
+    ) {
+      this.announcedStrongPocketSignalId = signal.pocketId;
+      this.game.setStatus?.('SPROUT · STRONG SUBSURFACE SIGNAL');
     }
   }
 

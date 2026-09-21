@@ -73,6 +73,21 @@ The collection scan and compression are deliberately separate phases. The select
 
 A hard catch-up fallback may relocate the companion back beside the Ranger if ordinary collision-aware movement cannot close a very large separation. This is a companion recovery rule, not a second navigation system.
 
+## Underground pocket detection
+
+After allegiance, Sprout's existing cyan scanner also helps the Ranger search for deterministic hidden cave pockets. This is a **directional proximity sense**, not a map reveal:
+
+- detection is queried only while the Ranger is genuinely underground in an active tunneling column;
+- the search radius is currently 20 m and updates on a modest interval rather than every render query;
+- only the nearest **undiscovered** pocket can produce a signal;
+- already opened pockets are ignored immediately;
+- the scanner projects only a short beam in the hidden pocket's direction, never the full distance to the chamber;
+- terrain-grid and exact target-marker projection are disabled for this signal so the pocket coordinate remains hidden;
+- scanner pulse speed/brightness increases with proximity, with a one-time strong-signal status when the Ranger closes to the current strong range;
+- normal loose-resource pickup scanning keeps presentation priority whenever Sprout is actively collecting something.
+
+`UndergroundTunnelingSystem` remains the geology authority that decides whether a hidden pocket exists and whether the Ranger is underground. `ExplorationPoiSystem` exposes that read-only signal to Sprout. `SproutCompanionController` owns only the companion reaction/presentation, so the detector cannot create, move, discover or award pocket contents.
+
 ## Transactional collection boundary
 
 `GatherableSystem` remains the authority for companion-retrievable world resources and removal. Its shared loose-resource transaction now covers both normal item records and passive harvestable grass patches. Sprout does not directly award an item merely because a scan or beam animation started.
