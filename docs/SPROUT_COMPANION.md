@@ -35,7 +35,7 @@ The cinematic lock exists only for the brief hand-off/catch presentation. Ranger
 
 ## Shared inventory capacity
 
-Before Sprout alliance/compression, the Ranger pack remains limited to **24 bulk units**. After Sprout alliance, the same authoritative inventory is re-evaluated under Sprout compression with **96 compressed units** of capacity; quantities are not copied into a second store.
+Before Sprout alliance/compression, the Ranger pack remains limited to **24 bulk units**. After Sprout alliance, the same authoritative inventory is re-evaluated under Sprout compression with **96 compressed units** of capacity; quantities are not copied into a second store. Manual Log pickup and Sprout Log collection both commit into that same inventory-backed capacity model.
 
 Every Sprout pickup is reserved/committed through GatherableSystem and then added to the shared InventorySystem. There is no second Sprout inventory. A failed reservation, full inventory or interrupted mission leaves the legitimate object in the world.
 
