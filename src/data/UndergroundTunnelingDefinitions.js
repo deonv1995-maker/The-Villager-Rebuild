@@ -45,6 +45,16 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // Horizontal prewarming can start early, but unrelated deep strata must not
   // flood the mesh queue while the Ranger is still near the surface.
   naturalActivationVerticalRadius: 18,
+  // Feature bounds can be much longer/larger than the part the Ranger can actually
+  // see. Only chunk cells inside this local 3D prewarm window enter the render queue.
+  // This keeps a nearby long gallery/drop from scheduling its entire feature at once.
+  naturalRenderPrewarmRadius: 34,
+  naturalRenderPrewarmVerticalRadius: 24,
+  // Queued chunks that become irrelevant after fast movement/drop traversal are
+  // discarded and can be requested again later. Retention is deliberately larger
+  // than prewarm so ordinary movement does not churn the queue.
+  naturalQueueRetentionRadius: 50,
+  naturalQueueRetentionVerticalRadius: 34,
   // When an unbuilt chunk is close enough to become visible, allow a small bounded
   // emergency budget rather than exposing the empty sky/background through the cave.
   naturalCriticalRenderRadius: 13,
