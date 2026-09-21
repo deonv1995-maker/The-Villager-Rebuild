@@ -1,3 +1,9 @@
+const UNDERGROUND_SCAN_PULSE_COUNT = 3;
+const UNDERGROUND_SCAN_PULSE_SECONDS = 1;
+const UNDERGROUND_SCAN_PULSE_GAP_SECONDS = 0.4;
+const UNDERGROUND_SCAN_HOLD_SECONDS = (UNDERGROUND_SCAN_PULSE_COUNT * UNDERGROUND_SCAN_PULSE_SECONDS)
+  + ((UNDERGROUND_SCAN_PULSE_COUNT - 1) * UNDERGROUND_SCAN_PULSE_GAP_SECONDS);
+
 export const SPROUT_COMPANION = Object.freeze({
   hoverHeight: 1.08,
   hoverAmplitude: 0.045,
@@ -6,6 +12,8 @@ export const SPROUT_COMPANION = Object.freeze({
   deploySideOffset: 0.58,
   miniScaleFactor: 0.18,
   firstPersonMiniOffset: Object.freeze({ x: 0.24, y: -0.22, z: -0.58 }),
+  firstPersonScanMiniOffset: Object.freeze({ x: 0.2, y: 0.12, z: -0.5 }),
+  scanHandRaiseOffset: Object.freeze({ x: 0, y: 0.58, z: -0.08 }),
   deployHandSeconds: 0.28,
   deployGrowSeconds: 0.62,
   scanRaiseSeconds: 0.7,
@@ -25,7 +33,11 @@ export const SPROUT_COMPANION = Object.freeze({
   resourceScanRange: 34,
   resourceScanHoldSeconds: 3.2,
   undergroundScanRange: 56,
-  undergroundScanHoldSeconds: 3.8,
+  undergroundScanPulseCount: UNDERGROUND_SCAN_PULSE_COUNT,
+  undergroundScanPulseSeconds: UNDERGROUND_SCAN_PULSE_SECONDS,
+  undergroundScanPulseGapSeconds: UNDERGROUND_SCAN_PULSE_GAP_SECONDS,
+  undergroundScanPulseRadius: 18,
+  undergroundScanHoldSeconds: UNDERGROUND_SCAN_HOLD_SECONDS,
   collectionRadius: 22,
   treeHarvestRange: 18,
   harvestLogCollectRadius: 4.2,
