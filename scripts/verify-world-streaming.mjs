@@ -7,10 +7,10 @@ import { WorldChunkSystem } from '../src/world/WorldChunkSystem.js';
 import { WaterVisualSystem } from '../src/world/WaterVisualSystem.js';
 
 const terrain = new ExpandedIslandTerrainSystem(new THREE.Group());
-assert.equal(terrain.mainlandScale, 2.25, 'expanded mainland must retain the agreed 2.25x linear scale');
+assert.equal(terrain.mainlandScale, 2.7, 'expanded mainland must retain the agreed 2.70x linear scale');
 assert.equal(terrain.chunkTerrainSegments, 18, 'terrain must expose one shared chunk tessellation for terrain and shallow water');
-assert.equal(terrain.coastRadiusAt(0) > 340, true, 'expanded east/west mainland radius must materially exceed the previous 2x island');
-assert.equal(terrain.coastRadiusAt(Math.PI) > 340, true, 'expanded west mainland radius must materially exceed the previous 2x island');
+assert.equal(terrain.coastRadiusAt(0) > 500, true, 'expanded east mainland radius must materially exceed the previous 2.25x island');
+assert.equal(terrain.coastRadiusAt(Math.PI) > 420, true, 'expanded west mainland radius must materially exceed the previous 2.25x island');
 assert.equal(terrain.coastRadiusAt(Math.PI / 2) < 160, true, 'Day-1 southern coast must remain a deep inlet rather than moving the tutorial inland');
 const spawn = terrain.getSpawnPoint();
 assert.equal(terrain.isPlayable(spawn.x, spawn.z), true, 'existing Day-1 spawn must stay playable after mainland expansion');
