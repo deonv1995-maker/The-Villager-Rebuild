@@ -12,6 +12,7 @@ import {
   tunnelingExcavationFloorY,
   tunnelingExcavationHorizontalRadius
 } from './TunnelingTerrainProfile.js';
+import { undergroundPocketFieldAt } from './UndergroundPocketProfile.js';
 
 const ISO_LEVEL = 0;
 const STATE_KIND = 'global-tunneling-v1';
@@ -1061,60 +1062,112 @@ export class UndergroundTunnelingSystem {
       protectedCenterFloor,
       hiddenCenterCeiling
     );
-    const floorRadius = radius * this.config.pocketFloorLobeScale;
+    const floorY = y - radius * this.config.pocketFloorDepthScale;
+    const floorRadius = radius * this.config.pocketFloorRadiusScale;
     const lobes = [];
-    const addLobe = (offsetX, offsetY, offsetZ, desiredRadius) => {
-      const offsetDistance = Math.hypot(offsetX, offsetY, offsetZ);
-      const boundedRadius = Math.min(
-        desiredRadius,
-        Math.max(radius * 0.34, radius * 0.98 - offsetDistance)
+    const addLobe = ({
+      offsetX,
+      offsetZ,
+      desiredRadiusX,
+      desiredRadiusZ,
+      rotation,
+      ceilingY,
+      ceilingDrop
+    }) => {
+      const offsetDistance = Math.hypot(offsetX, offsetZ);
+      const maximumAxis = Math.max(
+        radius * 0.24,
+        radius * 0.96 - offsetDistance
       );
+      const radiusX = Math.min(desiredRadiusX, maximumAxis);
+      const radiusZ = Math.min(desiredRadiusZ, maximumAxis);
+      const resolvedCeilingY = Math.max(
+        floorY + 2.3,
+        Math.min(ceilingY, y + radius * 0.96)
+      );
+      const resolvedDrop = Math.min(
+        Math.max(0, ceilingDrop),
+        Math.max(0, (resolvedCeilingY - floorY) * 0.28)
+      );
+
       lobes.push(Object.freeze({
         x: x + offsetX,
-        y: y + offsetY,
+        y: (floorY + resolvedCeilingY) * 0.5,
         z: z + offsetZ,
-        radius: boundedRadius
+        radius: Math.max(radiusX, radiusZ),
+        radiusX,
+        radiusZ,
+        rotation,
+        ceilingY: resolvedCeilingY,
+        ceilingDrop: resolvedDrop
       }));
     };
 
-    // The first lobe anchors a dependable floor at the pocket's legacy outer
-    // bottom while leaving the walls free to become asymmetric.
-    addLobe(0, -(radius - floorRadius), 0, floorRadius);
+    // The chamber is deliberately not a 3D sphere. A shared floor plane gives
+    // the Ranger a readable cave floor, while rotated elliptical lobes make the
+    // walls widen into alcoves instead of wrapping into a round bowl.
+    const mainRotation = hash01(ix, iz, 157) * Math.PI;
+    addLobe({
+      offsetX: 0,
+      offsetZ: 0,
+      desiredRadiusX: radius * this.config.pocketMainLobeLongScale,
+      desiredRadiusZ: radius * this.config.pocketMainLobeShortScale,
+      rotation: mainRotation,
+      ceilingY: y + radius * this.config.pocketCeilingBaseScale,
+      ceilingDrop: radius * this.config.pocketCeilingShoulderDropScale
+    });
 
-    const topAngle = hash01(ix, iz, 157) * Math.PI * 2;
-    const topHorizontalOffset = radius * lerp(0.04, 0.11, hash01(ix, iz, 163));
-    addLobe(
-      Math.cos(topAngle) * topHorizontalOffset,
-      radius * lerp(0.12, 0.2, hash01(ix, iz, 167)),
-      Math.sin(topAngle) * topHorizontalOffset,
-      radius * lerp(
-        this.config.pocketTopLobeScale - 0.04,
-        this.config.pocketTopLobeScale + 0.04,
-        hash01(ix, iz, 173)
-      )
-    );
+    const crownAngle = hash01(ix, iz, 163) * Math.PI * 2;
+    const crownOffset = radius * lerp(0.05, 0.13, hash01(ix, iz, 167));
+    addLobe({
+      offsetX: Math.cos(crownAngle) * crownOffset,
+      offsetZ: Math.sin(crownAngle) * crownOffset,
+      desiredRadiusX: radius * this.config.pocketTopLobeLongScale,
+      desiredRadiusZ: radius * this.config.pocketTopLobeShortScale,
+      rotation: mainRotation + lerp(-0.55, 0.55, hash01(ix, iz, 173)),
+      ceilingY: y + radius * this.config.pocketCeilingCrownScale,
+      ceilingDrop: radius * this.config.pocketCeilingShoulderDropScale * 1.35
+    });
 
     const sideAngleOffset = hash01(ix, iz, 179) * Math.PI * 2;
     for (let index = 0; index < this.config.pocketSideLobeCount; index += 1) {
       const angle =
         sideAngleOffset
         + index * Math.PI * 2 / this.config.pocketSideLobeCount
-        + (hash01(ix + index * 11, iz - index * 7, 181) - 0.5) * 0.72;
+        + (hash01(ix + index * 11, iz - index * 7, 181) - 0.5) * 0.58;
       const horizontalOffset = radius * lerp(
-        0.23,
-        0.37,
+        0.32,
+        0.46,
         hash01(ix - index * 5, iz + index * 13, 191)
       );
-      addLobe(
-        Math.cos(angle) * horizontalOffset,
-        radius * lerp(-0.06, 0.16, hash01(ix + index * 17, iz, 193)),
-        Math.sin(angle) * horizontalOffset,
-        radius * lerp(
-          this.config.pocketSideLobeMinScale,
-          this.config.pocketSideLobeMaxScale,
-          hash01(ix, iz - index * 19, 197)
-        )
+      const longScale = lerp(
+        this.config.pocketSideLobeMinScale,
+        this.config.pocketSideLobeMaxScale,
+        hash01(ix + index * 17, iz, 193)
       );
+      const shortScale = longScale * lerp(
+        0.68,
+        0.86,
+        hash01(ix, iz - index * 19, 197)
+      );
+
+      addLobe({
+        offsetX: Math.cos(angle) * horizontalOffset,
+        offsetZ: Math.sin(angle) * horizontalOffset,
+        desiredRadiusX: radius * longScale,
+        desiredRadiusZ: radius * shortScale,
+        rotation: angle + lerp(-0.5, 0.5, hash01(ix + index, iz, 199)),
+        ceilingY: y + radius * lerp(
+          0.28,
+          0.56,
+          hash01(ix, iz + index * 23, 201)
+        ),
+        ceilingDrop: radius * lerp(
+          0.08,
+          0.16,
+          hash01(ix + index * 29, iz, 205)
+        )
+      });
     }
 
     const pocket = Object.freeze({
@@ -1125,6 +1178,7 @@ export class UndergroundTunnelingSystem {
       y,
       z,
       radius,
+      floorY,
       floorRadius,
       contentRadius: radius * this.config.pocketContentRadiusScale,
       lobes: Object.freeze(lobes)
@@ -1134,30 +1188,16 @@ export class UndergroundTunnelingSystem {
   }
 
   #pocketFieldAt(x, y, z, pocket) {
-    let field = Infinity;
-    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
-      ? pocket.lobes
-      : [pocket];
-    for (const lobe of lobes) {
-      field = Math.min(
-        field,
-        Math.hypot(x - lobe.x, y - lobe.y, z - lobe.z) - lobe.radius
-      );
-    }
-    return field;
+    return undergroundPocketFieldAt(pocket, x, y, z);
   }
 
   #sphereIntersectsPocket(center, radius, pocket) {
-    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
-      ? pocket.lobes
-      : [pocket];
-    return lobes.some(lobe =>
-      Math.hypot(
-        center.x - lobe.x,
-        center.y - lobe.y,
-        center.z - lobe.z
-      ) <= radius + lobe.radius
-    );
+    return undergroundPocketFieldAt(
+      pocket,
+      center.x,
+      center.y,
+      center.z
+    ) <= radius;
   }
 
   #pocketFromId(id) {
