@@ -4,14 +4,30 @@ export const SPROUT_COMPANION = Object.freeze({
   hoverFrequency: 2.8,
   deployBackOffset: 0.18,
   deploySideOffset: 0.58,
+  deploymentSeconds: 1.05,
+  retrievalSeconds: 0.82,
+  handScanStowSeconds: 0.48,
+  miniScale: 0.22,
+  deployArcHeight: 0.72,
+  handForwardOffset: 0.2,
+  handSideOffset: 0.34,
+  handHeightOffset: 1.28,
   energyMax: 100,
   energyRechargePerSecond: 0.35,
-  resourceScanRange: 34,
-  resourceScanHoldSeconds: 3.2,
+  resourceCollectionRange: 18,
+  resourceBatchMin: 2,
+  resourceBatchMax: 5,
   undergroundScanRange: 24,
   undergroundScanHoldSeconds: 3.8,
-  collectionRadius: 22,
+  undergroundSignalLingerSeconds: 5,
+  collectionRadius: 18,
+  collectionMoveSpeed: 4.8,
+  approachTimeoutSeconds: 8,
+  collisionRadius: 0.28,
+  collisionHeight: 0.82,
+  beamRange: 2.15,
   treeHarvestRange: 18,
+  treeApproachRange: 2.2,
   harvestLogCollectRadius: 4.2,
   harvestDropDelaySeconds: 0.85,
   harvestLogWaitSeconds: 4.2,
@@ -34,30 +50,30 @@ export const SPROUT_COMPANION = Object.freeze({
   commands: Object.freeze({
     'find-stick': Object.freeze({
       id: 'find-stick',
-      kind: 'find-resource',
+      kind: 'collect-batch',
       resourceId: 'stick',
-      label: 'Find sticks',
+      label: 'Collect sticks',
       energyCost: 4
     }),
     'find-grass': Object.freeze({
       id: 'find-grass',
-      kind: 'find-resource',
+      kind: 'collect-batch',
       resourceId: 'grass',
-      label: 'Find grass',
+      label: 'Collect grass',
       energyCost: 4
     }),
     'find-stone': Object.freeze({
       id: 'find-stone',
-      kind: 'find-resource',
+      kind: 'collect-batch',
       resourceId: 'stone',
-      label: 'Find stone',
+      label: 'Collect stone',
       energyCost: 4
     }),
     'find-mushroom': Object.freeze({
       id: 'find-mushroom',
-      kind: 'find-resource',
+      kind: 'collect-batch',
       resourceId: 'mushroom',
-      label: 'Find mushrooms',
+      label: 'Collect mushrooms',
       energyCost: 4
     }),
     'collect-logs': Object.freeze({
@@ -70,7 +86,7 @@ export const SPROUT_COMPANION = Object.freeze({
     'harvest-tree': Object.freeze({
       id: 'harvest-tree',
       kind: 'harvest-tree',
-      label: 'Laser tree + collect',
+      label: 'Harvest nearby trees',
       energyCost: 4
     }),
     'scan-underground': Object.freeze({
