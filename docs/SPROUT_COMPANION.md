@@ -69,7 +69,8 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 
 ## Architecture boundaries
 
-- SproutCompanionController owns command state, energy, deployment/retrieval presentation, temporary mission travel, scanner intent, pocket glow and compression presentation.
+- SproutCompanionController owns command state, energy, deployment/retrieval presentation, temporary mission travel, scanner intent, tree-cutting presentation intent, pocket glow and compression presentation.
+- SproutVisualRuntimeController forwards scanner and tree-cutting presentation state into separate lightweight rendering effects; neither effect owns gameplay targeting or harvesting.
 - SproutCommandMenuController owns only the mobile Sprout menu and reads controller state.
 - RangerController owns the Ranger rig, authored cinematic animations and right-hand mount.
 - TreeHarvestSystem remains authoritative for tree hits, felling, Log spawning, stumps and regrowth.
