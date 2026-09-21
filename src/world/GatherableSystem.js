@@ -186,7 +186,7 @@ export class GatherableSystem {
     return root;
   }
 
-  findNearestLooseResource(position, maxDistance, filter = null) {
+  findNearestLooseResource(position, maxDistance, filter = null, { requireCapacity = true } = {}) {
     if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
     let nearestKind = null;
     let nearestResource = null;
@@ -197,7 +197,7 @@ export class GatherableSystem {
       const definition = RESOURCE_DEFINITIONS[item.resourceId];
       if (definition?.storage !== 'inventory') continue;
       const quantity = item.quantity ?? definition.pickupQuantity;
-      if (!this.#canStore(item.resourceId, quantity)) continue;
+      if (requireCapacity && !this.#canStore(item.resourceId, quantity)) continue;
       if (filter && !filter(item.resourceId, quantity)) continue;
       const dx = item.root.position.x - position.x;
       const dz = item.root.position.z - position.z;
@@ -210,7 +210,7 @@ export class GatherableSystem {
 
     for (const patch of this.grassPatches) {
       if (!patch.active || patch.reservedBy) continue;
-      if (!this.#canStore('grass', patch.quantity)) continue;
+      if (requireCapacity && !this.#canStore('grass', patch.quantity)) continue;
       if (filter && !filter('grass', patch.quantity)) continue;
       const dx = patch.x - position.x;
       const dz = patch.z - position.z;

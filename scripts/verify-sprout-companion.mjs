@@ -1,91 +1,39 @@
-import { readFileSync } from 'node:fs';
+import fs from 'node:fs';
 
-const read = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-
-const main = read('src/main.js');
+const read = path => fs.readFileSync(new URL('../' + path, import.meta.url), 'utf8');
+const controller = read('src/gameplay/SproutCompanionController.js');
 const definitions = read('src/data/SproutCompanionDefinitions.js');
-const companion = read('src/gameplay/SproutCompanionController.js');
-const visualRuntime = read('src/gameplay/SproutVisualRuntimeController.js');
-const scannerVisual = read('src/rendering/SproutScannerVisual.js');
-const exploration = read('src/world/ExplorationPoiSystem.js');
-const tunneling = read('src/world/UndergroundTunnelingSystem.js');
-const capacityController = read('src/gameplay/InventoryCapacityController.js');
-const gainFeedback = read('src/gameplay/InventoryGainFeedbackController.js');
-const arrival = read('src/gameplay/SproutArrivalController.js');
+const treeHarvest = read('src/world/TreeHarvestSystem.js');
 const gatherables = read('src/world/GatherableSystem.js');
-const grassField = read('src/world/GrassFieldSystem.js');
-const persistence = read('src/persistence/GameStatePersistence.js');
-const inventoryCss = read('src/resource-inventory.css');
+const menu = read('src/ui/SproutCommandMenuController.js');
+const main = read('src/main.js');
+const save = read('src/persistence/SaveGameController.js');
 const docs = read('docs/SPROUT_COMPANION.md');
 const autonomyDocs = read('docs/SPROUT_AUTONOMY.md');
-const feedbackDocs = read('docs/SPROUT_COLLECTION_FEEDBACK.md');
 const packageJson = JSON.parse(read('package.json'));
 
-const arrivalIndex = main.indexOf('new SproutArrivalController({');
-const companionIndex = main.indexOf('new SproutCompanionController({ game })');
-const feedbackIndex = main.indexOf('new InventoryGainFeedbackController({ game })');
-const restoreIndex = main.indexOf('const restored = saveController.restore();');
-const resumeFeedbackStartIndex = main.indexOf('inventoryGainFeedback.start();', restoreIndex);
-const freshBranchIndex = main.indexOf('} else {', restoreIndex);
-const freshFeedbackStartIndex = main.indexOf('inventoryGainFeedback.start();', freshBranchIndex);
-const takeIndex = companion.indexOf('takeReservedLooseResource?.(state.id, this.ownerToken)');
-const awardIndex = companion.indexOf('this.inventory.add(pickup.resourceId, pickup.quantity)');
-const scanHoldIndex = companion.indexOf('if (this.targetScanHoldRemaining > 0) return;');
-const beginCompressionIndex = companion.indexOf('if (this.#beginCompression(live)) return;');
-
 const checks = [
-  ['main creates one Sprout companion runtime after the arrival/story authority', main.includes("import { SproutCompanionController }") && arrivalIndex >= 0 && companionIndex > arrivalIndex],
-  ['companion activation is gated by the ALLIED story checkpoint', companion.includes('this.arrival.isAllied?.()') && arrival.includes('isAllied()') && arrival.includes('return this.phase === PHASE.ALLIED')],
-  ['the crash-site Sprout presentation transfers instead of spawning a duplicate companion actor', arrival.includes('this.crashSite.scene.attach(sprout)') && arrival.includes('this.crashSite.sprout = null') && arrival.includes("sprout.name = 'sprout-companion-placeholder'")],
-  ['companion tuning keeps collection bounded and catch-up explicit', definitions.includes('collectionRadius:') && definitions.includes('catchUpDistance:') && definitions.includes('hardCatchUpDistance:') && definitions.includes("collectibleResourceIds: Object.freeze(['stick', 'stone', 'grass', 'log'])")],
-  ['Sprout follow intent keeps Ranger separation with the doubled collection range', definitions.includes('followDistance: 2.05') && definitions.includes('followSideOffset: 0.95') && definitions.includes('collectionRadius: 18')],
-  ['Sprout follow intent samples Ranger goals on an irregular cadence and eases toward them instead of stepping transforms', definitions.includes('followSenseMinSeconds:') && definitions.includes('followReactionMinSeconds:') && definitions.includes('followPerceptionResponse:') && definitions.includes('followDriftResponse:') && companion.includes('this.perceivedPlayerGoalPosition.copy(this.playerPosition)') && companion.includes('this.perceivedPlayerPosition.lerp(this.perceivedPlayerGoalPosition') && companion.includes('this.followReactionRemaining') && companion.includes('#sampleFollowDrift()')],
-  ['target collection scans while approaching, holds on the item, then switches off before compression', definitions.includes('targetScanHoldSeconds:') && companion.includes('this.targetScanHoldRemaining = SPROUT_COMPANION.targetScanHoldSeconds') && scanHoldIndex >= 0 && beginCompressionIndex > scanHoldIndex && companion.includes('scanTarget: scanTarget ? {') && companion.includes('this.#clearCollectionTarget();')],
-  ['Sprout underground sensing is bounded, periodic and separate from loose-resource collection', definitions.includes('pocketDetectionIntervalSeconds: 0.3') && definitions.includes('pocketDetectionRange: 20') && definitions.includes('pocketDetectionBeamLength: 2.6') && companion.includes('#updatePocketSignal(dt)') && companion.includes('getUndiscoveredPocketSignal?.(') && companion.includes('SPROUT_COMPANION.pocketDetectionRange')],
-  ['hidden-pocket sensing stays owned by tunneling geology and ignores already discovered pockets', tunneling.includes('getUndiscoveredPocketSignal(position, maxDistance = 20)') && tunneling.includes('naturalSurfaceY - y < minimumUndergroundDepth') && tunneling.includes('!this.#columnHasActivity(x, z)') && tunneling.includes('this.discoveredPocketIds.has(pocket.id)') && exploration.includes('return this.tunneling.getUndiscoveredPocketSignal(playerPosition, maxDistance)')],
-  ['pocket scan points only a short distance toward the hidden chamber and does not draw an exact terrain marker', companion.includes('SPROUT_COMPANION.pocketDetectionBeamLength / distance') && companion.includes('scanTerrainProjection = false') && visualRuntime.includes('scanTerrainProjection ? this.terrainHeightAt : null')],
-  ['pocket sensing yields to the established scan-then-compress presentation boundary', companion.includes('!this.compression && this.pocketSignal') && companion.includes('if (!scanTarget && !this.compression && this.pocketSignal && this.root)')],
-  ['active pocket sensing suppresses generic idle flourishes and focuses Sprout toward the hidden signal while the Ranger pauses', definitions.includes('pocketSignalFocusRadius: 0.75') && definitions.includes('pocketSignalTurnSpeed: 5.2') && companion.includes('#updatePocketSignalFocus(dt)') && companion.includes('if (this.idleAnimation) this.#endIdleAnimation({ applyCooldown: false })') && companion.includes('|| this.pocketSignal') && companion.includes('signalYaw = Math.atan2(dx, dz)')],
-  ['pocket proximity intensifies the existing cyan scanner without adding a second detector UI', companion.includes('scanIntensity = this.pocketSignal.strength') && visualRuntime.includes('signalStrength: scanIntensity') && scannerVisual.includes('signalStrength = 0') && scannerVisual.includes('intensityGain = 1 + strength * 0.55')],
-  ['idle autonomy roams collision-safe local points and drives scanner pauses', definitions.includes('idleRoamMinRadius:') && definitions.includes('idleScanMinSeconds:') && companion.includes('#chooseIdleTarget()') && companion.includes('this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)') && companion.includes('this.idleScanRemaining')],
-  ['idle pickup inspection preserves the existing reservation and commit boundary', definitions.includes('idleInspectMinSeconds:') && companion.includes('inspectDuration') && companion.includes('#updateInspectionPoint(state)') && takeIndex >= 0 && awardIndex > takeIndex],
-  ['extended-idle flourish is automatic and never exposed as a context action', definitions.includes('idleAnimationAfterSeconds:') && definitions.includes('idleAnimationCooldownMinSeconds:') && companion.includes('#tryStartIdleAnimation()') && companion.includes('this.rangerMoving) this.#endIdleAnimation()') && !companion.includes("BOND_ACTION_ID") && !companion.includes('setExternalAction(') && !companion.includes('beginCinematic(')],
-  ['automatic idle flourish leaves Ranger authority untouched', companion.includes("this.nextIdleAnimationKind = 'affection'") && companion.includes("state.kind === 'affection' ? 'scan' : 'affection'") && !companion.includes('playCinematicAnimation(') && !companion.includes('faceWorldPoint(')],
-  ['visual runtime consumes companion presentation hints without owning gameplay state', companion.includes('getPresentationState()') && visualRuntime.includes('companion?.getPresentationState?.()') && visualRuntime.includes('presentation.affectionate') && visualRuntime.includes('presentation.scanTarget') && !visualRuntime.includes('inventory.add') && !visualRuntime.includes('reserveLooseResource')],
-  ['Sprout ordinary movement reuses shared collision and resolves Ranger overlap with bounded separation', companion.includes('this.collision.resolveMove(from, desired') && companion.includes('SPROUT_COMPANION.collisionRadius') && definitions.includes('rangerSeparationSpeed:') && companion.includes('#separateFromRanger(dt)') && companion.includes('SPROUT_COMPANION.rangerSeparationSpeed * dt')],
-  ['catch-up safeguards remain available after collection', companion.includes('this.#cancelCollectionIntent();') && companion.includes('SPROUT_COMPANION.catchUpDistance') && companion.includes('SPROUT_COMPANION.hardCatchUpDistance')],
-  ['GatherableSystem exposes one transactional loose-pickup reservation boundary', gatherables.includes('findNearestLooseResource(position, maxDistance, filter = null)') && gatherables.includes('reserveLooseResource(id, owner)') && gatherables.includes('releaseLooseResource(id, owner)') && gatherables.includes('takeReservedLooseResource(id, owner)')],
-  ['player targeting ignores item and grass-patch resources temporarily reserved by Sprout', gatherables.includes('if (!item.active || item.reservedBy) continue;') && gatherables.includes('if (!patch.active || patch.reservedBy || visited.has(patch)) continue;')],
-  ['Sprout delegates normal island grass through the shared loose-resource transaction without directly harvesting intact nodes', companion.includes('findNearestLooseResource?.(') && gatherables.includes("resourceId: 'grass'") && gatherables.includes('patch.reservedBy = owner') && gatherables.includes('setCollectionHidden?.(patch.entries, true)') && gatherables.includes('const quantity = this.#harvestGrassPatch(patch);') && !companion.includes('.gather(') && !companion.includes('harvestGrassPatch') && !companion.includes('treeHarvest') && !companion.includes('rockHarvest')],
-  ['reactive grass keeps transient Sprout collection visibility separate from construction and presentation occlusion', grassField.includes('collectionHidden: false') && grassField.includes('setCollectionHidden(entries = [], hidden = false)') && grassField.includes('entry.constructionHidden || entry.presentationHidden || entry.collectionHidden')],
-  ['save restore clears in-flight grass reservations while harvested patch IDs remain authoritative', persistence.includes('patch.reservedBy = null') && persistence.includes('setCollectionHidden?.(patch.entries, false)') && persistence.includes('harvestedGrassPatchIds')],
-  ['visible compression uses a blue beam/halo presentation', companion.includes("beam.name = 'sprout-compression-beam'") && companion.includes("halo.name = 'sprout-compression-halo'") && companion.includes('state.visual.scale.copy(state.startScale).multiplyScalar(scale)')],
-  ['inventory award happens only after authoritative reserved pickup commit', takeIndex >= 0 && awardIndex > takeIndex],
-  ['companion refreshes HUD from the existing authoritative inventory snapshot', companion.includes('this.game.hud?.setInventory(this.inventory.snapshot())')],
-  ['companion creates no second inventory authority', !companion.includes('new InventorySystem') && !companion.includes('this.inventory = new')],
-  ['capacity mode derives from Sprout allegiance without becoming a second inventory', capacityController.includes('this.game.sproutArrival?.isAllied?.()') && capacityController.includes('this.inventory.setStorageMode(mode)') && capacityController.includes('hud.root.dataset.storageMode = state.mode') && !capacityController.includes('new InventorySystem')],
-  ['shared inventory gain feedback is a presentation wrapper around authoritative resource additions', gainFeedback.includes("RESOURCE_DEFINITIONS[itemId]?.storage === 'inventory'") && gainFeedback.includes('this.originalAdd(itemId, amount)') && gainFeedback.includes('this.#queue(itemId, amount)') && !gainFeedback.includes('new InventorySystem')],
-  ['gain feedback waits for the rendered suitcase card and displays an explicit +N pulse', gainFeedback.includes('globalThis.requestAnimationFrame(flush)') && gainFeedback.includes('card.dataset.gain = `+${amount}`') && gainFeedback.includes("card.classList.add('inventory-gain-pulse')") && inventoryCss.includes('.inventory-card.inventory-gain-pulse::after') && inventoryCss.includes('content: attr(data-gain)')],
-  ['Sprout storage feedback reuses the blue/cyan companion visual language', inventoryCss.includes('.mobile-hud[data-storage-mode="sprout"] .inventory-card.inventory-gain-pulse::after') && inventoryCss.includes('.mobile-hud[data-storage-mode="sprout"] .inventory-menu-toggle.inventory-capacity-pulse') && inventoryCss.includes('#9ce8f4')],
-  ['Continue starts gain feedback only after restore so saved inventory does not look newly collected', feedbackIndex > companionIndex && resumeFeedbackStartIndex > restoreIndex && freshFeedbackStartIndex > freshBranchIndex],
-  ['collection feedback documentation preserves shared inventory, Sprout compression and future upgrade boundaries', feedbackDocs.includes('presentation only') && feedbackDocs.includes('One shared `InventorySystem` remains authoritative') && feedbackDocs.includes('No storage-upgrade progression')],
-  ['documentation records reservation/commit, shared inventory, Ranger node harvesting, direct passive-grass retrieval and live compressed storage boundaries', docs.includes('reservation/commit') && docs.includes('one authoritative shared inventory') && docs.includes('Ranger performs the harvesting') && docs.includes('passive forage exception') && docs.includes('96 compressed units')],
-  ['documentation records lens-origin scan lock before reservation/compression', docs.includes("scanning lens") && docs.includes('scan-lock pause') && docs.includes('scanner then turns off before the resource is reserved')],
-  ['autonomy documentation preserves independent follow, idle inspection and automatic visual-only idle boundaries', autonomyDocs.includes('short irregular cadence') && autonomyDocs.includes('inspection beat before compression') && autonomyDocs.includes('automatically') && autonomyDocs.includes('no context-action button') && autonomyDocs.includes('Ranger control') && autonomyDocs.includes('shared collision service')],
-  ['documentation keeps falling-tree damage as a later milestone while physical felling and capacity are active', docs.includes('falling-tree damage/collision') && docs.includes('visible authored-tree fall') && docs.includes('24 bulk units')],
-  ['full repository check includes the Sprout companion regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
+  ['Sprout has one command controller and no follow/pathfinding dependency', !controller.includes('PanelTraversalQuery') && !controller.includes('SproutDoorRoutePlanner') && !controller.includes('resolveMove(')],
+  ['Sprout is stowed while idle and recharges only when unused', controller.includes('!this.command && !this.compression') && controller.includes('energyRechargePerSecond') && controller.includes('this.#stow()')],
+  ['energy tuning is centralized and monetization-agnostic', definitions.includes('energyMax: 100') && definitions.includes('energyRechargePerSecond') && controller.includes('grantEnergy(amount, source =')],
+  ['mobile Sprout menu exposes command selections and an energy gauge', menu.includes('SPROUT COMMANDS') && menu.includes('sprout-energy-fill') && menu.includes('data.sproutCommand') === false && menu.includes('dataset.sproutCommand')],
+  ['main boots the Sprout command menu beside the companion controller', main.includes('SproutCommandMenuController') && main.includes('game.sproutCommandMenu')],
+  ['tree laser uses shared tree authority rather than direct log grants', treeHarvest.includes('findNearestActiveTree') && treeHarvest.includes('harvestTree(treeId') && treeHarvest.includes('#applyChop') && !controller.includes("inventory.add('log'")],
+  ['resource scans may ignore capacity while collection still honors it', gatherables.includes('{ requireCapacity = true }') && gatherables.includes('requireCapacity && !this.#canStore')],
+  ['Sprout energy persists independently of active commands', save.includes('record.state.sproutCompanion') && save.includes('captureState?.() ?? null')],
+  ['documentation records stowed command-driven Sprout architecture', docs.includes('stowed') && docs.includes('slowly recharges') && docs.includes('laser') && autonomyDocs.includes('command-driven')],
+  ['full repository check still includes Sprout regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
 
 let failed = 0;
 for (const [label, ok] of checks) {
-  if (ok) console.log(`PASS ${label}`);
+  if (ok) console.log('PASS ' + label);
   else {
     failed += 1;
-    console.error(`FAIL ${label}`);
+    console.error('FAIL ' + label);
   }
 }
-
 if (failed > 0) process.exitCode = 1;
-else console.log(`Sprout companion regression checks passed (${checks.length} contracts).`);
+else console.log('Sprout companion regression checks passed (' + checks.length + ' contracts).');
 
 await import('./verify-sprout-behavior.mjs');

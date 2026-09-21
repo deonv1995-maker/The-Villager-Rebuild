@@ -205,11 +205,49 @@ export class TreeHarvestSystem {
     };
   }
 
+  findNearestActiveTree(position, maxDistance) {
+    if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
+    let nearest = null;
+    let nearestDistanceSq = maxDistance * maxDistance;
+    for (const tree of this.trees) {
+      if (!tree.active) continue;
+      const dx = tree.obstacle.x - position.x;
+      const dz = tree.obstacle.z - position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearest = tree;
+      nearestDistanceSq = distanceSq;
+    }
+    if (!nearest) return null;
+    return {
+      treeId: nearest.treeId,
+      label: this.definition.label,
+      position: new THREE.Vector3(
+        nearest.obstacle.x,
+        this.terrain.heightAt(nearest.obstacle.x, nearest.obstacle.z),
+        nearest.obstacle.z
+      )
+    };
+  }
+
+  harvestTree(treeId, sourcePosition) {
+    const tree = this.trees.find(candidate => candidate.treeId === treeId && candidate.active);
+    if (!tree) return null;
+    const playerPosition = sourcePosition ?? new THREE.Vector3(
+      tree.obstacle.x,
+      this.terrain.heightAt(tree.obstacle.x, tree.obstacle.z),
+      tree.obstacle.z
+    );
+    return this.#applyChop(tree, playerPosition);
+  }
+
   chop(playerPosition) {
     this.update(playerPosition, true);
     if (!this.target) return null;
+    return this.#applyChop(this.target, playerPosition);
+  }
 
-    const tree = this.target;
+  #applyChop(tree, playerPosition) {
     tree.hits += 1;
     const remainingHits = Math.max(0, this.definition.hitsRequired - tree.hits);
     const position = new THREE.Vector3(

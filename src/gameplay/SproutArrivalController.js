@@ -314,6 +314,8 @@ export class SproutArrivalController {
       this.#clearRescueAction();
       if (this.introCinematicBeat === 'first-log') {
         this.#setObjective('Watch Sprout store the first log');
+        const activeCommand = this.game.sproutCompanion?.getCommandState?.().activeCommandId ?? null;
+        if (!activeCommand) this.game.sproutCompanion?.issueCommand?.('collect-logs');
         const logCount = this.game.inventory?.get?.('log') ?? this.firstLogInventoryCount;
         if (logCount > this.firstLogInventoryCount) this.#completeFirstLogCinematic();
         return;

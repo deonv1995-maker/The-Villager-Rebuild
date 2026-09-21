@@ -53,6 +53,7 @@ export class SaveGameController {
     // Story state restores after Ranger placement. Dialogue/rescue checkpoints may take
     // cinematic ownership, so restoring them earlier would conflict with player restore.
     this.game.sproutArrival?.restoreState?.(record.state.sproutArrival);
+    this.game.sproutCompanion?.restoreState?.(record.state.sproutCompanion);
     this.lastFingerprint = JSON.stringify(record.state);
     this.lastSavedAt = record.savedAt;
     return { restored: true, savedAt: record.savedAt };
@@ -148,6 +149,7 @@ export class SaveGameController {
       state.treeRegrowth = this.game.treeHarvest?.captureRegrowthState?.() ?? [];
       state.resourceRenewal = this.game.resourceRenewal?.captureState?.() ?? null;
       state.sproutArrival = this.game.sproutArrival?.captureState?.() ?? null;
+      state.sproutCompanion = this.game.sproutCompanion?.captureState?.() ?? null;
       const fingerprint = JSON.stringify(state);
       if (fingerprint === this.lastFingerprint) {
         return {

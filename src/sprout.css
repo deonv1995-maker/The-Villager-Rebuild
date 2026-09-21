@@ -85,3 +85,178 @@ body.sprout-dialogue-active .mobile-hud .toolbelt {
     min-height: 36px;
   }
 }
+
+
+.sprout-command-access {
+  position: fixed;
+  z-index: 22;
+  right: max(12px, calc(env(safe-area-inset-right) + 8px));
+  top: max(82px, calc(env(safe-area-inset-top) + 76px));
+  width: min(220px, calc(100vw - 24px));
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: auto;
+}
+
+.sprout-command-access[hidden],
+.sprout-command-menu[hidden] {
+  display: none;
+}
+
+.sprout-command-toggle {
+  margin-left: auto;
+  width: 92px;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 7px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid rgba(104, 210, 255, 0.62);
+  border-radius: 12px;
+  background: rgba(7, 24, 34, 0.9);
+  color: #eafaff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  touch-action: manipulation;
+}
+
+.sprout-command-toggle > span:first-child {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.sprout-command-toggle > strong {
+  color: #8ee8ff;
+  font-size: 11px;
+}
+
+.sprout-energy-track {
+  grid-column: 1 / -1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sprout-energy-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: #73dbff;
+  transition: width 180ms linear;
+}
+
+.sprout-command-toggle[data-recharging="true"] .sprout-energy-fill {
+  box-shadow: 0 0 8px rgba(115, 219, 255, 0.8);
+}
+
+.sprout-command-toggle[data-active="true"] {
+  border-color: rgba(144, 235, 255, 0.92);
+  background: rgba(11, 47, 63, 0.94);
+}
+
+.sprout-command-menu {
+  margin-top: 7px;
+  padding: 9px;
+  border: 1px solid rgba(104, 210, 255, 0.5);
+  border-radius: 12px;
+  background: rgba(5, 18, 27, 0.96);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(7px);
+}
+
+.sprout-command-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #eafaff;
+}
+
+.sprout-command-header strong {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.sprout-command-header span {
+  color: #86dff9;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.sprout-command-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.sprout-command-list button,
+.sprout-command-cancel {
+  min-height: 48px;
+  border: 1px solid rgba(116, 204, 235, 0.35);
+  border-radius: 9px;
+  background: rgba(29, 64, 77, 0.78);
+  color: #eefbff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  touch-action: manipulation;
+}
+
+.sprout-command-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 7px 8px;
+  text-align: left;
+}
+
+.sprout-command-list button small {
+  color: #86dff9;
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.sprout-command-list button.active {
+  border-color: #8fe9ff;
+  background: rgba(43, 116, 141, 0.78);
+}
+
+.sprout-command-list button:disabled {
+  opacity: 0.36;
+}
+
+.sprout-command-cancel {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 7px;
+  color: #bfefff;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .sprout-command-access {
+    top: max(72px, calc(env(safe-area-inset-top) + 66px));
+    width: min(206px, calc(100vw - 20px));
+  }
+
+  .sprout-command-menu {
+    max-height: min(56vh, 430px);
+    overflow-y: auto;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .sprout-command-access {
+    top: max(54px, calc(env(safe-area-inset-top) + 48px));
+    width: 240px;
+  }
+
+  .sprout-command-list button {
+    min-height: 42px;
+  }
+}
