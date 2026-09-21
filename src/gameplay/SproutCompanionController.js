@@ -101,7 +101,7 @@ export class SproutCompanionController {
     let scanTerrainProjection = true;
     let scanIntensity = 0;
 
-    if (!scanTarget && this.pocketSignal && this.root) {
+    if (!scanTarget && !this.compression && this.pocketSignal && this.root) {
       const signal = this.pocketSignal.position;
       const dx = signal.x - this.root.position.x;
       const dy = signal.y - this.root.position.y;
@@ -123,7 +123,7 @@ export class SproutCompanionController {
     return {
       scanning: Boolean(
         this.target
-        || this.pocketSignal
+        || (!this.compression && this.pocketSignal)
         || this.idleScanRemaining > 0
         || this.idleAnimation?.kind === 'scan'
       ),
