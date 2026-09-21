@@ -271,6 +271,8 @@ function fixture() {
   assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['scan-underground'].energyCost);
 
   for (let frame = 0; frame < 180 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+  assert.equal(f.scene.getObjectByName('sprout-ground-grid-scan'), undefined, 'Ground scan visual is removed after the third pulse');
+  assert.ok(f.cinematicRightHandOffset.lengthSq() < 0.000001, 'Ranger scan hand lowers before Mini Sprout is stowed');
   const firstGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
   assert.ok(firstGlow, 'Pocket cue remains visible after the held scan finishes');
 
