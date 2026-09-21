@@ -84,3 +84,4 @@ On Android Chrome or a Chromium desktop browser, use the browser-owned **Install
 - `docs/STAIR_SYSTEM.md` — split-log stair placement, stairwell reservation, traversal and persistence rules.
 - `docs/STACKED_WALL_ROOF_ORIENTATION.md` — stacked wall ownership and connected/upper-wall roof orientation rules.
 - `docs/CAMERA_MODES.md` — shared third-person/first-person Ranger camera contract.
+- `docs/UNDERGROUND_CAVE_PRESENTATION.md` — discovered cave silhouette, dressing, readability and mobile-performance boundaries.

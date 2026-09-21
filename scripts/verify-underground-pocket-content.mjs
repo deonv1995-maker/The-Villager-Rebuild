@@ -29,6 +29,18 @@ assert.ok(
 );
 assert.ok(firstSummary.stalagmiteCount >= UNDERGROUND_POCKET_CONTENT.stalagmiteMin);
 assert.ok(firstSummary.crystalClusterCount >= UNDERGROUND_POCKET_CONTENT.crystalClusterMin);
+assert.ok(
+  firstSummary.stalactiteCount >= UNDERGROUND_POCKET_CONTENT.stalactiteMin,
+  'pockets must carry ceiling formations so chambers do not read as empty domes'
+);
+assert.ok(
+  firstSummary.wallFormationCount >= UNDERGROUND_POCKET_CONTENT.wallFormationMin,
+  'pockets must carry perimeter wall masses/shelves to strengthen the chamber silhouette'
+);
+assert.ok(
+  firstSummary.columnFormationCount === 0 || firstSummary.columnFormationCount === 1,
+  'the optional joined floor/ceiling formation must stay bounded per discovered pocket'
+);
 assert.ok(firstSummary.stoneCount >= UNDERGROUND_POCKET_CONTENT.collectibleStoneMin);
 
 const firstDebug = content.getDebugState();

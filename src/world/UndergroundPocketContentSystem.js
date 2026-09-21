@@ -48,8 +48,10 @@ export class UndergroundPocketContentSystem {
 
     this.geometry = Object.freeze({
       rock: new THREE.DodecahedronGeometry(0.34, 0),
+      wallShelf: new THREE.DodecahedronGeometry(0.48, 0),
       pebble: new THREE.DodecahedronGeometry(0.19, 0),
       stalagmite: new THREE.ConeGeometry(0.24, 0.9, 5),
+      stalactite: new THREE.ConeGeometry(0.25, 1.1, 5),
       crystal: new THREE.ConeGeometry(0.12, 0.62, 5),
       shard: new THREE.OctahedronGeometry(0.22, 0),
       pillar: new THREE.BoxGeometry(0.34, 1.8, 0.34),
@@ -71,15 +73,20 @@ export class UndergroundPocketContentSystem {
         roughness: 1,
         flatShading: true
       }),
+      deepStone: new THREE.MeshStandardMaterial({
+        color: 0x45494a,
+        roughness: 1,
+        flatShading: true
+      }),
       ancientStone: new THREE.MeshStandardMaterial({
         color: 0x736c5b,
         roughness: 0.96,
         flatShading: true
       }),
       crystal: new THREE.MeshStandardMaterial({
-        color: 0x6f94a4,
-        emissive: 0x1d3540,
-        emissiveIntensity: 0.5,
+        color: 0x73c7d8,
+        emissive: 0x1d6072,
+        emissiveIntensity: 0.82,
         roughness: 0.52,
         flatShading: true
       }),
@@ -275,6 +282,9 @@ export class UndergroundPocketContentSystem {
         floorRadius * floorRadius - safeDistance * safeDistance
       ));
     };
+    const rootWorldY = pocketRoot.position.y;
+    const verticalSpanAt = (localX, localZ) =>
+      this.#verticalSpanAt(pocket, localX, localZ, rootWorldY);
 
     const decorativeRockCount = deterministicCount(
       this.config.decorativeRockMin,
@@ -323,6 +333,161 @@ export class UndergroundPocketContentSystem {
       spike.castShadow = false;
       spike.receiveShadow = true;
       pocketRoot.add(spike);
+    }
+
+    // Strong cave silhouettes need ceiling and wall detail as well as floor
+    // clutter. These formations are deterministic, presentation-only and
+    // restricted to discovered pockets so traversal/collision stay authoritative
+    // in the tunneling density system.
+    const stalactiteTargetCount = deterministicCount(
+      this.config.stalactiteMin,
+      this.config.stalactiteMax,
+      hash01(ix, iz, 353)
+    );
+    let stalactiteCount = 0;
+    for (let index = 0; index < stalactiteTargetCount; index += 1) {
+      const angle = angleOffset + 0.18
+        + index * Math.PI * 2 / Math.max(1, stalactiteTargetCount)
+        + (hash01(ix + index * 3, iz, 359) - 0.5) * 0.38;
+      const radius = contentRadius * lerp(0.42, 0.74, hash01(ix, iz + index, 367));
+      const localX = Math.cos(angle) * radius;
+      const localZ = Math.sin(angle) * radius;
+      const span = verticalSpanAt(localX, localZ);
+      if (!span || span.clearance < 2.05) continue;
+
+      const height = Math.min(
+        lerp(0.68, 1.52, hash01(ix + index, iz, 373)),
+        span.clearance * 0.31
+      );
+      const spike = new THREE.Mesh(this.geometry.stalactite, this.material.deepStone);
+      spike.position.set(
+        localX,
+        span.ceilingY - height * 0.5 + 0.04,
+        localZ
+      );
+      spike.scale.set(
+        lerp(0.72, 1.22, hash01(ix, iz + index, 379)),
+        height / 1.1,
+        lerp(0.72, 1.22, hash01(ix + index, iz, 383))
+      );
+      spike.rotation.set(
+        Math.PI + (hash01(ix, iz + index, 389) - 0.5) * 0.13,
+        hash01(ix + index, iz, 397) * Math.PI * 2,
+        (hash01(ix, iz + index, 401) - 0.5) * 0.16
+      );
+      spike.castShadow = false;
+      spike.receiveShadow = true;
+      pocketRoot.add(spike);
+      stalactiteCount += 1;
+    }
+
+    const wallFormationTargetCount = deterministicCount(
+      this.config.wallFormationMin,
+      this.config.wallFormationMax,
+      hash01(ix, iz, 409)
+    );
+    let wallFormationCount = 0;
+    for (let formation = 0; formation < wallFormationTargetCount; formation += 1) {
+      const angle = angleOffset + 0.73
+        + formation * Math.PI * 2 / Math.max(1, wallFormationTargetCount)
+        + (hash01(ix + formation * 5, iz, 419) - 0.5) * 0.42;
+      const radius = contentRadius * lerp(0.72, 0.88, hash01(ix, iz + formation, 421));
+      const localX = Math.cos(angle) * radius;
+      const localZ = Math.sin(angle) * radius;
+      const span = verticalSpanAt(localX, localZ);
+      if (!span || span.clearance < 1.8) continue;
+
+      const formationRoot = new THREE.Group();
+      formationRoot.position.set(
+        localX,
+        span.floorY + span.clearance * lerp(0.2, 0.42, hash01(ix + formation, iz, 431)),
+        localZ
+      );
+      formationRoot.rotation.y = -angle + Math.PI * 0.5;
+
+      const rockCount = deterministicCount(
+        this.config.wallFormationRockMin,
+        this.config.wallFormationRockMax,
+        hash01(ix, iz + formation, 433)
+      );
+      for (let rockIndex = 0; rockIndex < rockCount; rockIndex += 1) {
+        const shelf = new THREE.Mesh(
+          this.geometry.wallShelf,
+          rockIndex === 0 ? this.material.deepStone : this.material.rock
+        );
+        const offset = rockIndex - (rockCount - 1) * 0.5;
+        const scale = lerp(0.86, 1.34, hash01(ix + formation, iz + rockIndex, 439));
+        shelf.position.set(
+          offset * 0.36,
+          (hash01(ix + rockIndex, iz + formation, 443) - 0.5) * 0.24,
+          (hash01(ix + formation, iz + rockIndex, 449) - 0.5) * 0.26
+        );
+        shelf.scale.set(
+          scale * lerp(1.25, 1.75, hash01(ix, iz + rockIndex, 457)),
+          scale * lerp(0.48, 0.8, hash01(ix + rockIndex, iz, 461)),
+          scale * lerp(0.72, 1.08, hash01(ix + formation, iz, 463))
+        );
+        shelf.rotation.set(
+          (hash01(ix, iz + rockIndex, 467) - 0.5) * 0.35,
+          hash01(ix + rockIndex, iz + formation, 479) * Math.PI,
+          (hash01(ix + formation, iz + rockIndex, 487) - 0.5) * 0.28
+        );
+        shelf.castShadow = false;
+        shelf.receiveShadow = true;
+        formationRoot.add(shelf);
+      }
+
+      if (hash01(ix + formation, iz, 491) <= this.config.wallCrystalChance) {
+        for (let crystalIndex = 0; crystalIndex < 2; crystalIndex += 1) {
+          const crystal = new THREE.Mesh(this.geometry.crystal, this.material.crystal);
+          crystal.position.set(
+            (crystalIndex - 0.5) * 0.26,
+            0.38 + crystalIndex * 0.08,
+            -0.08
+          );
+          crystal.rotation.z = (crystalIndex - 0.5) * 0.24;
+          crystal.rotation.y = crystalIndex * 0.7;
+          crystal.scale.set(
+            0.92,
+            lerp(0.92, 1.45, hash01(ix + formation, iz + crystalIndex, 499)),
+            0.92
+          );
+          formationRoot.add(crystal);
+        }
+      }
+
+      pocketRoot.add(formationRoot);
+      wallFormationCount += 1;
+    }
+
+    let columnFormationCount = 0;
+    if (hash01(ix, iz, 503) <= this.config.columnFormationChance) {
+      const angle = angleOffset + Math.PI * lerp(0.2, 1.65, hash01(ix, iz, 509));
+      const radius = contentRadius * lerp(0.62, 0.76, hash01(ix, iz, 521));
+      const localX = Math.cos(angle) * radius;
+      const localZ = Math.sin(angle) * radius;
+      const span = verticalSpanAt(localX, localZ);
+      if (span && span.clearance >= 2.55) {
+        const gap = THREE.MathUtils.clamp(span.clearance * 0.16, 0.42, 0.72);
+        const formationHeight = span.clearance - gap;
+        const lowerHeight = formationHeight * 0.52;
+        const upperHeight = formationHeight - lowerHeight;
+
+        const lower = new THREE.Mesh(this.geometry.stalagmite, this.material.deepStone);
+        lower.position.set(localX, span.floorY + lowerHeight * 0.5, localZ);
+        lower.scale.set(1.34, lowerHeight / 0.9, 1.2);
+        lower.rotation.y = angle + 0.35;
+        lower.receiveShadow = true;
+        pocketRoot.add(lower);
+
+        const upper = new THREE.Mesh(this.geometry.stalactite, this.material.deepStone);
+        upper.position.set(localX, span.ceilingY - upperHeight * 0.5, localZ);
+        upper.scale.set(1.2, upperHeight / 1.1, 1.34);
+        upper.rotation.set(Math.PI, angle - 0.28, 0.04);
+        upper.receiveShadow = true;
+        pocketRoot.add(upper);
+        columnFormationCount = 1;
+      }
     }
 
     const crystalClusterCount = deterministicCount(
@@ -445,11 +610,44 @@ export class UndergroundPocketContentSystem {
       decorativeRockCount,
       stalagmiteCount,
       crystalClusterCount,
+      stalactiteCount,
+      wallFormationCount,
+      columnFormationCount,
       stoneCount,
       hasHiddenStructure,
       hasTreasure,
       sproutShardCount
     }));
+  }
+
+  #verticalSpanAt(pocket, localX, localZ, rootWorldY) {
+    const worldX = pocket.x + localX;
+    const worldZ = pocket.z + localZ;
+    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
+      ? pocket.lobes
+      : [pocket];
+
+    let floorWorldY = Number.POSITIVE_INFINITY;
+    let ceilingWorldY = Number.NEGATIVE_INFINITY;
+    for (const lobe of lobes) {
+      if (!Number.isFinite(lobe?.radius) || lobe.radius <= 0) continue;
+      const dx = worldX - lobe.x;
+      const dz = worldZ - lobe.z;
+      const verticalRadiusSq = lobe.radius * lobe.radius - dx * dx - dz * dz;
+      if (verticalRadiusSq < 0) continue;
+      const verticalRadius = Math.sqrt(verticalRadiusSq);
+      floorWorldY = Math.min(floorWorldY, lobe.y - verticalRadius);
+      ceilingWorldY = Math.max(ceilingWorldY, lobe.y + verticalRadius);
+    }
+
+    if (!Number.isFinite(floorWorldY) || !Number.isFinite(ceilingWorldY)) return null;
+    const floorY = floorWorldY - rootWorldY;
+    const ceilingY = ceilingWorldY - rootWorldY;
+    return {
+      floorY,
+      ceilingY,
+      clearance: Math.max(0, ceilingY - floorY)
+    };
   }
 
   #addHiddenStructure(parent, pocket, angle, floorRiseAtRadius) {

@@ -11,6 +11,19 @@ export const UNDERGROUND_POCKET_CONTENT = Object.freeze({
   stalagmiteMax: 5,
   crystalClusterMin: 1,
   crystalClusterMax: 3,
+
+  // Cave silhouette dressing is intentionally bounded and generated only for
+  // discovered pockets. Ceiling spikes, wall shelves and occasional joined
+  // columns give chambers readable shape without adding lights or new collision.
+  stalactiteMin: 4,
+  stalactiteMax: 7,
+  wallFormationMin: 4,
+  wallFormationMax: 7,
+  wallFormationRockMin: 2,
+  wallFormationRockMax: 3,
+  wallCrystalChance: 0.48,
+  columnFormationChance: 0.42,
+
   collectibleStoneMin: 2,
   collectibleStoneMax: 4,
   collectibleStoneQuantityMin: 1,
