@@ -29,9 +29,9 @@ Gathering, loose-Log collection and tree harvesting use the same sequence:
 - Sprout travels back to the Ranger.
 - The Ranger holds out a hand while Sprout shrinks back to Mini Sprout and is stowed.
 
-The presentation reuses RangerController.beginCinematic, playCinematicAnimation and mountRightHandObject. It does not add a second animation controller.
+The presentation reuses RangerController.beginCinematic, playCinematicAnimation and mountRightHandObject. It does not add a second animation controller. Sprout requests the camera-preserving form of the Ranger pose lock, so deployment, scanning and retrieval never switch the player between first person and third person. In first person the normal third-person Ranger body remains hidden; Mini Sprout is temporarily mounted to the active camera as a small view-space mission prop for the hand-off/scan, then detaches back into the shared world scene. Third person continues using the authored right-hand bone mount.
 
-The cinematic lock exists only for the brief hand-off/catch presentation. Ranger control is released while Sprout is out performing a normal mission.
+The cinematic lock exists only for the brief hand-off/catch presentation. Ranger control is released while Sprout is out performing a normal mission. Ending a camera-preserving first-person pose also keeps the player's existing yaw and pitch instead of snapping the view behind the Ranger.
 
 ## Shared inventory capacity
 
@@ -76,4 +76,4 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 
 ## Device verification
 
-Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, and the underground glow remains subtle/readable for about five seconds before disappearing.
+Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, the same deployment/scan/retrieval sequence stays entirely in first person when 1P is active, Mini Sprout remains visible as a first-person view prop without unhiding the third-person Ranger body, the view does not snap behind the Ranger after retrieval, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, and the underground glow remains subtle/readable for about five seconds before disappearing.
