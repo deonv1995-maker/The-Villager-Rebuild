@@ -233,7 +233,12 @@ export class TreeHarvestSystem {
   harvestTree(treeId, sourcePosition) {
     const tree = this.trees.find(candidate => candidate.treeId === treeId && candidate.active);
     if (!tree) return null;
-    return this.#applyChop(tree, sourcePosition);
+    const playerPosition = sourcePosition ?? new THREE.Vector3(
+      tree.obstacle.x,
+      this.terrain.heightAt(tree.obstacle.x, tree.obstacle.z),
+      tree.obstacle.z
+    );
+    return this.#applyChop(tree, playerPosition);
   }
 
   chop(playerPosition) {
@@ -242,7 +247,7 @@ export class TreeHarvestSystem {
     return this.#applyChop(this.target, playerPosition);
   }
 
-  #applyChop(tree, sourcePosition) {
+  #applyChop(tree, playerPosition) {
     tree.hits += 1;
     const remainingHits = Math.max(0, this.definition.hitsRequired - tree.hits);
     const position = new THREE.Vector3(
@@ -253,7 +258,7 @@ export class TreeHarvestSystem {
     this.hitFeedback.emit(position, 'wood');
 
     if (remainingHits > 0) {
-      this.treeShake.hit(tree.treeId, sourcePosition ?? position, tree.obstacle);
+      this.treeShake.hit(tree.treeId, playerPosition, tree.obstacle);
       return {
         chopped: false,
         remainingHits,
@@ -270,7 +275,7 @@ export class TreeHarvestSystem {
     tree.cleared = false;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
-    this.fellingPresentation.begin(tree, sourcePosition ?? position);
+    this.fellingPresentation.begin(tree, playerPosition);
     this.choppedCount += 1;
     this.target = null;
     this.indicator.visible = false;
