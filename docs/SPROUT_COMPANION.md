@@ -59,17 +59,28 @@ When the Ranger scans from the surface, the faint blue cue is projected onto the
 
 The glow is non-persistent presentation. It does not reveal or modify pocket contents, mark the pocket discovered, change mining geometry, create a cave entrance, or introduce a second geology query. Hidden pockets are still reached by tunneling.
 
+## Rocket-shoe flight
+
+After Sprout is allied, the Ranger can convert the existing double jump into powered flight without adding another movement button. The first jump remains unchanged. The second airborne jump also remains a normal double jump when tapped. If the player keeps holding that second jump for the configured hold threshold, Sprout leaves storage/any temporary command state and transforms into a pair of rocket shoes mounted to the Ranger's left and right foot anchors.
+
+RangerController remains authoritative for movement, collision and vertical position. It only asks the registered Sprout flight-assist provider to start or stop. While the provider reports active flight, Ranger vertical velocity is driven toward the centrally tuned ascent speed and existing horizontal movement/collision continues to run through the normal player traversal path. Releasing jump, landing, entering a cinematic, losing alliance or exhausting Sprout energy ends flight and normal gravity resumes.
+
+SproutCompanionController remains authoritative for whether flight is available, the shared energy meter and the transformation presentation. Flight drains **8 energy per second** from the same saved 100-point battery used by scanning, harvesting and collection. Sprout does not recharge while powering the shoes. At the current rate a completely full battery provides up to **12.5 seconds** of continuous flight before forced shutdown.
+
+The rocket-shoe visual is presentation-only. It mounts through RangerController foot-anchor APIs so it follows the animated rig without giving the presentation authority over player movement. The ordinary Sprout body is stowed while the shoes are active, and normal Sprout commands are disabled until flight ends.
+
 ## Energy
 
-Sprout has a saved energy meter with a maximum of 100. Energy slowly recharges while Sprout is stowed and no resource transfer is active. Scans, laser pulses and compressed pickups consume centrally configured energy.
+Sprout has a saved energy meter with a maximum of 100. Energy slowly recharges while Sprout is stowed and no resource transfer or rocket-shoe flight is active. Scans, laser pulses, compressed pickups and flight consume centrally configured energy.
 
 SproutCompanionController.grantEnergy(amount, source) remains the monetization-agnostic future reward boundary.
 
 ## Architecture boundaries
 
-- SproutCompanionController owns command state, energy, deployment/retrieval presentation, temporary mission travel, scanner intent, pocket glow and compression presentation.
+- SproutCompanionController owns command state, shared energy, deployment/retrieval presentation, temporary mission travel, scanner intent, pocket glow, compression presentation and rocket-shoe flight availability.
+- SproutRocketShoesPresentation owns only the temporary foot-mounted shoe/thruster visuals.
 - SproutCommandMenuController owns only the mobile Sprout menu and reads controller state.
-- RangerController owns the Ranger rig, authored cinematic animations and right-hand mount.
+- RangerController owns the Ranger rig, authored cinematic animations, hand/foot mounting, movement, collision and vertical flight motion.
 - TreeHarvestSystem remains authoritative for tree hits, felling, Log spawning, stumps and regrowth.
 - GatherableSystem remains authoritative for loose-resource identity and reservation/commit.
 - InventorySystem remains authoritative for counts and capacity.
@@ -79,3 +90,5 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 ## Device verification
 
 Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, the same deployment/scan/retrieval sequence stays entirely in first person when 1P is active, Mini Sprout remains visible as a first-person view prop without unhiding the third-person Ranger body, the view does not snap behind the Ranger after retrieval, Sprout remains upright after leaving the Ranger's hand/view mount, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, a surface scan produces a usable ground cue when a pocket is within 56 m, every manual scan reacquires the closest pocket even when it was previously discovered, and the glow holds for 10 seconds before completing an 8-second slow fade.
+
+For rocket-shoe flight, verify both keyboard and touch input: a quick second-jump tap must remain only a double jump; holding the second press should visibly replace stored Sprout with two foot-mounted rocket shoes, continue lifting the Ranger while directional movement remains controllable, drain the existing Sprout gauge continuously, stop immediately on release, and force shutdown cleanly at zero energy. Confirm the shoes track both feet in third person and flight remains mechanically usable in first person without unhiding the body.
