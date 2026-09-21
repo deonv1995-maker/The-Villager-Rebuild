@@ -8,6 +8,13 @@ import { SproutRocketShoesPresentation } from '../src/gameplay/SproutRocketShoes
 
 const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8');
 
+const rocketPresentationSource = read('src/gameplay/SproutRocketShoesPresentation.js');
+assert.ok(
+  rocketPresentationSource.includes("SPROUT_VISUAL_COLORS as COLORS")
+    && !rocketPresentationSource.includes('shell: 0xe7e1cf'),
+  'transformed rocket shoes should reuse Sprout production colours instead of duplicating a second palette'
+);
+
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds > 0, 'flight should require a deliberate held second jump');
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed > 0, 'flight should provide positive ascent');
 assert.equal(
