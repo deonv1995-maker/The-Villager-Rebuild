@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
+import { SproutRocketShoesPresentation } from './SproutRocketShoesPresentation.js';
 
 const BLUE = 0x62cfff;
 const clampDt = dt => Math.min(Math.max(0, Number(dt) || 0), 0.05);
@@ -50,6 +51,8 @@ export class SproutCompanionController {
     this.lastTimestamp = null;
     this.elapsed = 0;
     this.energy = SPROUT_COMPANION.energyMax;
+    this.flightActive = false;
+    this.flightPresentation = null;
     this.command = null;
     this.compression = null;
     this.scanTarget = null;
@@ -87,6 +90,7 @@ export class SproutCompanionController {
     if (this.frameId !== null) globalThis.cancelAnimationFrame?.(this.frameId);
     this.frameId = null;
     this.running = false;
+    this.endFlight('dispose');
     this.#cancelCompression();
     this.#destroySignalGlow();
     this.#destroyGroundScanPulse();
@@ -105,6 +109,7 @@ export class SproutCompanionController {
     this.energy = Number.isFinite(restored)
       ? THREE.MathUtils.clamp(restored, 0, SPROUT_COMPANION.energyMax)
       : SPROUT_COMPANION.energyMax;
+    this.endFlight('restore');
     this.#cancelCompression();
     this.#destroySignalGlow();
     this.#destroyGroundScanPulse();
@@ -127,7 +132,13 @@ export class SproutCompanionController {
       energy: this.energy,
       maxEnergy: SPROUT_COMPANION.energyMax,
       percent: Math.round((this.energy / SPROUT_COMPANION.energyMax) * 100),
-      recharging: Boolean(this.arrival.isAllied?.() && !this.command && !this.compression && this.energy < SPROUT_COMPANION.energyMax)
+      recharging: Boolean(
+        this.arrival.isAllied?.()
+        && !this.command
+        && !this.compression
+        && !this.flightActive
+        && this.energy < SPROUT_COMPANION.energyMax
+      )
     };
   }
 
@@ -138,15 +149,15 @@ export class SproutCompanionController {
     return {
       available,
       ...energy,
-      activeCommandId: this.command?.id ?? null,
-      activeCommandLabel: this.command?.definition?.label ?? null,
+      activeCommandId: this.flightActive ? 'flight' : (this.command?.id ?? null),
+      activeCommandLabel: this.flightActive ? 'ROCKET SHOES' : (this.command?.definition?.label ?? null),
       commands: SPROUT_COMPANION.commandOrder.map(id => {
         const definition = SPROUT_COMPANION.commands[id];
         return {
           id,
           label: definition.label,
           energyCost: definition.energyCost,
-          enabled: available && this.energy >= definition.energyCost,
+          enabled: available && !this.flightActive && this.energy >= definition.energyCost,
           active: this.command?.id === id
         };
       })
@@ -180,10 +191,45 @@ export class SproutCompanionController {
     };
   }
 
+  isFlightActive() {
+    return this.flightActive;
+  }
+
+  beginFlight() {
+    const storyCinematicLocked = this.player?.cinematicDriver === this.arrival;
+    if (!this.arrival.isAllied?.() || storyCinematicLocked) return false;
+    if (this.flightActive) return true;
+    if (this.energy + 1e-6 < SPROUT_COMPANION.flightMinimumEnergy) {
+      this.game.setStatus?.('SPROUT · LOW ENERGY · ' + Math.round(this.energy) + '%');
+      return false;
+    }
+
+    if (this.command || this.compression) this.#hardResetCommand();
+    if (!this.root && !this.#activate()) return false;
+
+    this.#stow();
+    this.flightPresentation?.dispose?.();
+    this.flightPresentation = new SproutRocketShoesPresentation({ player: this.player });
+    this.flightActive = true;
+    this.game.setStatus?.('SPROUT · ROCKET SHOES ONLINE');
+    return true;
+  }
+
+  endFlight(reason = 'released') {
+    if (!this.flightActive && !this.flightPresentation) return false;
+    this.flightActive = false;
+    this.flightPresentation?.dispose?.();
+    this.flightPresentation = null;
+    this.#stow();
+    if (reason === 'energy-depleted') this.game.setStatus?.('SPROUT · ENERGY DEPLETED · FLIGHT OFFLINE');
+    return true;
+  }
+
   issueCommand(commandId) {
     if (commandId === 'cancel') {
-      this.#cancelCommand('SPROUT · RECALLED');
-      return true;
+      const endedFlight = this.endFlight('recalled');
+      const cancelledCommand = this.#cancelCommand('SPROUT · RECALLED');
+      return endedFlight || cancelledCommand;
     }
     if (!this.arrival.isAllied?.()) return false;
 
@@ -247,7 +293,12 @@ export class SproutCompanionController {
     this.#updateSignalGlow(dt);
 
     if (!this.arrival.isAllied?.()) {
+      this.endFlight('alliance-lost');
       this.#hardResetCommand();
+      return;
+    }
+    if (this.flightActive) {
+      this.#updateFlight(dt);
       return;
     }
     if (!this.root && !this.#activate()) return;
@@ -314,6 +365,16 @@ export class SproutCompanionController {
     if (!this.game.isPaused?.()) this.update(dt);
     this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
   };
+
+  #updateFlight(dt) {
+    const drain = SPROUT_COMPANION.flightEnergyPerSecond * dt;
+    this.energy = Math.max(0, this.energy - drain);
+    this.flightPresentation?.update?.(
+      dt,
+      this.energy / Math.max(1, SPROUT_COMPANION.energyMax)
+    );
+    if (this.energy <= 1e-6) this.endFlight('energy-depleted');
+  }
 
   #activate() {
     const presentation = this.arrival.claimCompanionPresentation?.();
