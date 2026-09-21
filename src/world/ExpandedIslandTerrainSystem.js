@@ -432,6 +432,108 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     }
   }
 
+  #terrainBoundaryDescriptor(record, localX, localZ) {
+    const halfChunk = record.chunkSize * 0.5;
+    const edgeTolerance = 0.00001;
+    const onXEdge = Math.abs(Math.abs(localX) - halfChunk) <= edgeTolerance;
+    const onZEdge = Math.abs(Math.abs(localZ) - halfChunk) <= edgeTolerance;
+    if (!onXEdge && !onZEdge) return null;
+
+    const baseStep = record.chunkSize / this.chunkTerrainSegments;
+    const along = onXEdge ? localZ : localX;
+    const sample = THREE.MathUtils.clamp(
+      (along + halfChunk) / baseStep,
+      0,
+      this.chunkTerrainSegments
+    );
+    const lowerIndex = Math.floor(sample);
+    const upperIndex = Math.min(this.chunkTerrainSegments, lowerIndex + 1);
+    const t = sample - lowerIndex;
+    const pointAt = index => (
+      onXEdge
+        ? {
+            x: record.centerX + localX,
+            z: record.centerZ - halfChunk + index * baseStep
+          }
+        : {
+            x: record.centerX - halfChunk + index * baseStep,
+            z: record.centerZ + localZ
+          }
+    );
+
+    return {
+      lower: pointAt(lowerIndex),
+      upper: pointAt(upperIndex),
+      t
+    };
+  }
+
+  #terrainSurfaceColorAtWorld(x, z, y, target) {
+    const slope = this.slopeAt(x, z, 1.35);
+    const sand = this.isSandAt(x, z);
+    const explorationRegion = sand ? null : this.explorationRegions.regionAt(x, z);
+    const jungleSoilStrength = explorationRegion?.biome === 'jungle'
+      ? explorationRegion.strength * (explorationRegion.ground?.soilStrength ?? 0)
+      : 0;
+
+    return terrainSurfaceColorAt({
+      x,
+      z,
+      y,
+      slope,
+      sand,
+      forestCover: sand ? 0 : this.forestCoverAt(x, z),
+      grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(x, z),
+      jungleSoilStrength
+    }, target);
+  }
+
+  #terrainBoundaryNormalAt(x, z, cache) {
+    const key = `${x.toFixed(6)}:${z.toFixed(6)}`;
+    const cached = cache.get(key);
+    if (cached) return cached;
+
+    const distance = 1.35;
+    const normal = new THREE.Vector3(
+      this.heightAt(x - distance, z) - this.heightAt(x + distance, z),
+      distance * 2,
+      this.heightAt(x, z - distance) - this.heightAt(x, z + distance)
+    ).normalize();
+    cache.set(key, normal);
+    return normal;
+  }
+
+  #stitchTerrainBoundaryNormals(geometry, record) {
+    const position = geometry.getAttribute('position');
+    const normal = geometry.getAttribute('normal');
+    if (!position || !normal) return;
+
+    const cache = new Map();
+    const blended = new THREE.Vector3();
+    for (let index = 0; index < position.count; index += 1) {
+      const descriptor = this.#terrainBoundaryDescriptor(
+        record,
+        position.getX(index),
+        position.getZ(index)
+      );
+      if (!descriptor) continue;
+
+      const lower = this.#terrainBoundaryNormalAt(
+        descriptor.lower.x,
+        descriptor.lower.z,
+        cache
+      );
+      const upper = this.#terrainBoundaryNormalAt(
+        descriptor.upper.x,
+        descriptor.upper.z,
+        cache
+      );
+      blended.copy(lower).lerp(upper, descriptor.t).normalize();
+      normal.setXYZ(index, blended.x, blended.y, blended.z);
+    }
+    normal.needsUpdate = true;
+  }
+
   #buildTerrainGeometry(record) {
     const openings = this.tunnelingOpenings.filter(opening =>
       tunnelingOpeningIntersectsChunk(
@@ -466,29 +568,55 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     const position = geometry.attributes.position;
     const colors = [];
     const color = new THREE.Color();
+    const boundaryHeightCache = new Map();
+    const boundaryColorCache = new Map();
+
+    const boundaryKey = point => `${point.x.toFixed(6)}:${point.z.toFixed(6)}`;
+    const boundaryHeightAt = point => {
+      const key = boundaryKey(point);
+      if (!boundaryHeightCache.has(key)) {
+        boundaryHeightCache.set(key, this.heightAt(point.x, point.z));
+      }
+      return boundaryHeightCache.get(key);
+    };
+    const boundaryColorAt = point => {
+      const key = boundaryKey(point);
+      let cached = boundaryColorCache.get(key);
+      if (!cached) {
+        cached = this.#terrainSurfaceColorAtWorld(
+          point.x,
+          point.z,
+          boundaryHeightAt(point),
+          new THREE.Color()
+        ).clone();
+        boundaryColorCache.set(key, cached);
+      }
+      return cached;
+    };
 
     for (let index = 0; index < position.count; index += 1) {
-      const worldX = record.centerX + position.getX(index);
-      const worldZ = record.centerZ + position.getZ(index);
-      const y = this.heightAt(worldX, worldZ);
-      const slope = this.slopeAt(worldX, worldZ, 1.35);
-      const sand = this.isSandAt(worldX, worldZ);
-      const explorationRegion = sand ? null : this.explorationRegions.regionAt(worldX, worldZ);
-      const jungleSoilStrength = explorationRegion?.biome === 'jungle'
-        ? explorationRegion.strength * (explorationRegion.ground?.soilStrength ?? 0)
-        : 0;
-      position.setY(index, y);
+      const localX = position.getX(index);
+      const localZ = position.getZ(index);
+      const worldX = record.centerX + localX;
+      const worldZ = record.centerZ + localZ;
+      const boundary = this.#terrainBoundaryDescriptor(record, localX, localZ);
+      let y;
 
-      terrainSurfaceColorAt({
-        x: worldX,
-        z: worldZ,
-        y,
-        slope,
-        sand,
-        forestCover: sand ? 0 : this.forestCoverAt(worldX, worldZ),
-        grassPatchStrength: sand ? 0 : this.grassPatchStrengthAt(worldX, worldZ),
-        jungleSoilStrength
-      }, color);
+      if (boundary) {
+        y = THREE.MathUtils.lerp(
+          boundaryHeightAt(boundary.lower),
+          boundaryHeightAt(boundary.upper),
+          boundary.t
+        );
+        color
+          .copy(boundaryColorAt(boundary.lower))
+          .lerp(boundaryColorAt(boundary.upper), boundary.t);
+      } else {
+        y = this.heightAt(worldX, worldZ);
+        this.#terrainSurfaceColorAtWorld(worldX, worldZ, y, color);
+      }
+
+      position.setY(index, y);
       colors.push(color.r, color.g, color.b);
     }
 
@@ -514,6 +642,7 @@ export class ExpandedIslandTerrainSystem extends IslandTerrainSystem {
     }
 
     geometry.computeVertexNormals();
+    this.#stitchTerrainBoundaryNormals(geometry, record);
     geometry.computeBoundingSphere();
     return { geometry, segments, detailed, sculpted };
   }
