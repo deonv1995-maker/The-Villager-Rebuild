@@ -587,7 +587,7 @@ export class UndergroundTunnelingSystem {
       .filter(Boolean);
   }
 
-  getUndiscoveredPocketSignal(position, maxDistance = 20, { allowSurface = false } = {}) {
+  getUndiscoveredPocketSignal(position, maxDistance = 20, { allowSurface = false, includeDiscovered = false } = {}) {
     const x = Number(position?.x);
     const y = Number(position?.y);
     const z = Number(position?.z);
@@ -603,7 +603,7 @@ export class UndergroundTunnelingSystem {
     let nearest = null;
     let nearestDistance = range;
     for (const pocket of this.#candidatePocketsAround(x, z, range)) {
-      if (this.discoveredPocketIds.has(pocket.id)) continue;
+      if (!includeDiscovered && this.discoveredPocketIds.has(pocket.id)) continue;
       const distance = Math.hypot(x - pocket.x, y - pocket.y, z - pocket.z);
       if (distance > nearestDistance) continue;
       nearest = pocket;
