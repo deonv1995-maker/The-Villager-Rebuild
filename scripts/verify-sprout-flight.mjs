@@ -87,9 +87,11 @@ assert.ok(
   'normal Sprout commands should stay disabled while Sprout is the rocket shoes'
 );
 for (let frame = 0; frame < 10; frame += 1) controller.update(0.05);
-assert.equal(
-  controller.getEnergyState().energy,
-  startingEnergy - SPROUT_COMPANION.flightEnergyPerSecond * 0.5,
+assert.ok(
+  Math.abs(
+    controller.getEnergyState().energy
+      - (startingEnergy - SPROUT_COMPANION.flightEnergyPerSecond * 0.5)
+  ) < 1e-9,
   'flight should continuously drain the existing Sprout energy meter'
 );
 assert.equal(controller.getEnergyState().recharging, false, 'Sprout must not recharge while powering flight');
