@@ -347,7 +347,8 @@ export function updateSproutScannerVisual(root, elapsed, {
   powered = true,
   scanning = false,
   target = null,
-  terrainHeightAt = null
+  terrainHeightAt = null,
+  signalStrength = 0
 } = {}) {
   const scannerVisual = ensureSproutScannerVisual(root);
   if (!scannerVisual) return;
@@ -356,8 +357,10 @@ export function updateSproutScannerVisual(root, elapsed, {
   scannerVisual.visible = active;
   if (!active) return;
 
-  const pulse = 0.5 + 0.5 * Math.sin(elapsed * 9.2);
-  const slowerPulse = 0.5 + 0.5 * Math.sin(elapsed * 3.4 + 0.7);
+  const strength = THREE.MathUtils.clamp(Number(signalStrength) || 0, 0, 1);
+  const pulse = 0.5 + 0.5 * Math.sin(elapsed * (9.2 + strength * 5.8));
+  const slowerPulse = 0.5 + 0.5 * Math.sin(elapsed * (3.4 + strength * 2.4) + 0.7);
+  const intensityGain = 1 + strength * 0.55;
   const beamMaterial = root.userData.sproutScannerBeamMaterial;
   const gridMaterial = root.userData.sproutScannerGridMaterial;
   const footprintMaterial = root.userData.sproutScannerFootprintMaterial;
@@ -365,14 +368,14 @@ export function updateSproutScannerVisual(root, elapsed, {
   const terrainGridMaterial = root.userData.sproutScannerTerrainGridMaterial;
   const targetMarkerMaterial = root.userData.sproutScannerTargetMarkerMaterial;
 
-  if (beamMaterial) beamMaterial.opacity = 0.065 + pulse * 0.045;
-  if (gridMaterial) gridMaterial.opacity = 0.24 + pulse * 0.22;
-  if (footprintMaterial) footprintMaterial.opacity = 0.48 + pulse * 0.26;
-  if (sweepMaterial) sweepMaterial.opacity = 0.48 + slowerPulse * 0.34;
+  if (beamMaterial) beamMaterial.opacity = Math.min(0.2, (0.065 + pulse * 0.045) * intensityGain);
+  if (gridMaterial) gridMaterial.opacity = Math.min(0.72, (0.24 + pulse * 0.22) * intensityGain);
+  if (footprintMaterial) footprintMaterial.opacity = Math.min(0.95, (0.48 + pulse * 0.26) * intensityGain);
+  if (sweepMaterial) sweepMaterial.opacity = Math.min(1, (0.48 + slowerPulse * 0.34) * intensityGain);
   if (terrainGridMaterial) terrainGridMaterial.opacity = 0.34 + pulse * 0.34;
   if (targetMarkerMaterial) targetMarkerMaterial.opacity = 0.68 + slowerPulse * 0.3;
 
-  const widthPulse = 0.985 + slowerPulse * 0.03;
+  const widthPulse = 0.985 + slowerPulse * 0.03 + strength * 0.06;
   resolveBeamTransform(root, target, widthPulse);
   const terrainProjectionActive = updateTerrainProjection(root, target, terrainHeightAt);
 
@@ -398,5 +401,5 @@ export function updateSproutScannerVisual(root, elapsed, {
   }
 
   const sweep = root.userData.sproutScannerSweep;
-  if (sweep) sweep.rotation.y = elapsed * 3.15;
+  if (sweep) sweep.rotation.y = elapsed * (3.15 + strength * 3.4);
 }
