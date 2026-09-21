@@ -44,7 +44,16 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   pocketMinDepth: 5.2,
   pocketMaxDepth: 14.2,
   pocketMinRadius: 2.7,
-  pocketMaxRadius: 4.4
+  pocketMaxRadius: 4.4,
+
+  // Hidden chambers use a deterministic cluster of overlapping lobes rather than
+  // a single sphere. The outer radius remains the stable broad-phase boundary.
+  pocketFloorLobeScale: 0.82,
+  pocketTopLobeScale: 0.66,
+  pocketSideLobeCount: 3,
+  pocketSideLobeMinScale: 0.42,
+  pocketSideLobeMaxScale: 0.56,
+  pocketContentRadiusScale: 0.72
 });
 
 export const undergroundTunnelChunkSize = () =>
