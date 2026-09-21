@@ -108,3 +108,23 @@ Device acceptance remains required: walk into/out of mouths, inspect walls and
 ceilings, mine and sculpt during streaming, save/reload underground, and watch for
 visible late chunks and sustained lag. This environment's browser cannot create a
 WebGL context even on the prior live build, so it cannot certify visual acceptance.
+
+
+## Noise-steered passage meanders — 2026-09-21
+
+Wall erosion alone was not enough to remove the constructed-tunnel silhouette because
+the route centerlines were still straight chords between chambers. Non-entrance
+natural passages now cache two low-frequency, world-space noise samples when the
+deterministic cave graph is created. Those samples become cubic route controls that
+bend passages sideways, introduce gentle downward dips, and add a bounded mid-route
+width bulge while preserving the established endpoints and chamber connections.
+
+This is intentionally not per-frame path noise. Runtime collision and meshing evaluate
+the cached cubic controls with ordinary arithmetic; the expensive coherent-noise
+sampling happens only during cave-network construction. Surface mouth segments remain
+unwarped so their 3D density continues to match the existing elliptical terrain cuts.
+
+The route warp is bounded by both passage length and explicit mobile-safe maxima. Feature
+bounds include the cached controls and bulge, so chunk activation remains conservative.
+The existing resumable 2 ms mesh budget, one shared density/collision authority, save
+schema, excavation system and world-chunk rendering boundary remain unchanged.
