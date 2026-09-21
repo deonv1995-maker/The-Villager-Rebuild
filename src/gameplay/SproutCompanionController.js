@@ -5,6 +5,30 @@ const BLUE = 0x62cfff;
 const clampDt = dt => Math.min(Math.max(0, Number(dt) || 0), 0.05);
 const easeOutCubic = value => 1 - ((1 - THREE.MathUtils.clamp(value, 0, 1)) ** 3);
 
+const createGroundScanGridGeometry = () => {
+  const positions = [];
+  const radius = 1;
+  const spacing = 0.125;
+  for (let offset = -0.875; offset <= 0.875 + 1e-6; offset += spacing) {
+    const span = Math.sqrt(Math.max(0, (radius * radius) - (offset * offset)));
+    positions.push(-span, 0, offset, span, 0, offset);
+    positions.push(offset, 0, -span, offset, 0, span);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeBoundingSphere();
+  return geometry;
+};
+
+const createGroundScanRingGeometry = () => {
+  const points = [];
+  for (let index = 0; index < 72; index += 1) {
+    const angle = (index / 72) * Math.PI * 2;
+    points.push(new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)));
+  }
+  return new THREE.BufferGeometry().setFromPoints(points);
+};
+
 export class SproutCompanionController {
   constructor({ game } = {}) {
     if (!game?.player || !game?.island || !game?.gatherables || !game?.inventory || !game?.sproutArrival || !game?.treeHarvest) {
@@ -32,6 +56,7 @@ export class SproutCompanionController {
     this.scanTerrainProjection = true;
     this.scanIntensity = 0;
     this.signalGlow = null;
+    this.groundScanPulse = null;
     this.playerPoseOwned = false;
     this.pollElapsed = SPROUT_COMPANION.commandPollIntervalSeconds;
 
@@ -64,6 +89,7 @@ export class SproutCompanionController {
     this.running = false;
     this.#cancelCompression();
     this.#destroySignalGlow();
+    this.#destroyGroundScanPulse();
     this.#hardResetCommand();
   }
 
@@ -81,6 +107,7 @@ export class SproutCompanionController {
       : SPROUT_COMPANION.energyMax;
     this.#cancelCompression();
     this.#destroySignalGlow();
+    this.#destroyGroundScanPulse();
     this.#hardResetCommand();
     return true;
   }
@@ -188,6 +215,8 @@ export class SproutCompanionController {
     };
     this.scanTarget = null;
     this.scanIntensity = 0;
+
+    if (definition.kind === 'scan-underground') this.#destroyGroundScanPulse();
 
     if (definition.kind === 'gather-resource' || definition.kind === 'scan-underground') {
       this.#spendEnergy(definition.energyCost);
@@ -315,9 +344,38 @@ export class SproutCompanionController {
   }
 
   #endPlayerPose() {
+    this.player.setCinematicRightHandOffset?.({ x: 0, y: 0, z: 0 });
     if (!this.playerPoseOwned) return;
     this.player.endCinematic?.(this);
     this.playerPoseOwned = false;
+  }
+
+  #applyScanHandRaise(amount) {
+    const t = THREE.MathUtils.clamp(Number(amount) || 0, 0, 1);
+    const offset = SPROUT_COMPANION.scanHandRaiseOffset;
+    this.player.setCinematicRightHandOffset?.({
+      x: offset.x * t,
+      y: offset.y * t,
+      z: offset.z * t
+    });
+
+    if (this.player.isFirstPerson?.() && this.player.camera && this.root?.parent === this.player.camera) {
+      const base = SPROUT_COMPANION.firstPersonMiniOffset;
+      const raised = SPROUT_COMPANION.firstPersonScanMiniOffset;
+      this.root.position.set(
+        THREE.MathUtils.lerp(base.x, raised.x, t),
+        THREE.MathUtils.lerp(base.y, raised.y, t),
+        THREE.MathUtils.lerp(base.z, raised.z, t)
+      );
+    }
+  }
+
+  #resetScanHandRaise() {
+    this.player.setCinematicRightHandOffset?.({ x: 0, y: 0, z: 0 });
+    if (this.player.isFirstPerson?.() && this.player.camera && this.root?.parent === this.player.camera) {
+      const base = SPROUT_COMPANION.firstPersonMiniOffset;
+      this.root.position.set(base.x, base.y, base.z);
+    }
   }
 
   #mountMiniToHand() {
@@ -355,6 +413,7 @@ export class SproutCompanionController {
     }
 
     if (command.definition.kind === 'scan-underground') {
+      this.#applyScanHandRaise(easeOutCubic(command.stageElapsed / SPROUT_COMPANION.scanRaiseSeconds));
       if (command.stageElapsed < SPROUT_COMPANION.scanRaiseSeconds) return;
       if (!command.holdPoseStarted) {
         command.holdPoseStarted = true;
@@ -405,6 +464,8 @@ export class SproutCompanionController {
         command.stageElapsed = 0;
         this.#beginPlayerPose(['Interact', 'Idle_B', 'Idle_A'], { loop: false, timeScale: 0.9 });
       }
+      const lowerProgress = 1 - easeOutCubic(command.stageElapsed / SPROUT_COMPANION.returnStowSeconds);
+      this.#applyScanHandRaise(lowerProgress);
       if (command.stageElapsed >= SPROUT_COMPANION.returnStowSeconds) this.#completeReturn();
       return;
     }
@@ -544,6 +605,8 @@ export class SproutCompanionController {
       command.taskPhase = 'scan';
       command.elapsed = 0;
       command.scanning = true;
+      this.#applyScanHandRaise(1);
+      this.#showGroundScanPulse(command.origin);
       this.scanTarget = null;
       this.scanTerrainProjection = false;
       this.scanIntensity = signal ? Math.max(0.28, Number(signal.strength) || 0.55) : 0.35;
@@ -573,7 +636,11 @@ export class SproutCompanionController {
       return;
     }
 
+    this.#applyScanHandRaise(1);
+    this.#updateGroundScanPulse(command.elapsed);
+
     if (command.elapsed >= SPROUT_COMPANION.undergroundScanHoldSeconds) {
+      this.#destroyGroundScanPulse();
       command.scanning = false;
       this.#beginReturn('SPROUT · SUBSURFACE SCAN COMPLETE');
     }
@@ -878,6 +945,8 @@ export class SproutCompanionController {
 
   #completeReturn() {
     const message = this.command?.completionMessage ?? null;
+    this.#destroyGroundScanPulse();
+    this.#resetScanHandRaise();
     if (this.root) {
       this.root.visible = false;
       this.#detachToScene();
@@ -905,6 +974,8 @@ export class SproutCompanionController {
 
   #hardResetCommand() {
     this.#cancelCompression();
+    this.#destroyGroundScanPulse();
+    this.#resetScanHandRaise();
     this.command = null;
     this.scanTarget = null;
     this.scanIntensity = 0;
@@ -929,6 +1000,88 @@ export class SproutCompanionController {
     state.beam?.material?.dispose?.();
     state.halo?.geometry?.dispose?.();
     state.halo?.material?.dispose?.();
+  }
+
+  #showGroundScanPulse(origin) {
+    this.#destroyGroundScanPulse();
+    const scene = this.game.sceneSystem?.scene;
+    if (!scene || !origin) return;
+
+    const group = new THREE.Group();
+    group.name = 'sprout-ground-grid-scan';
+    group.position.set(origin.x, this.playerPosition.y + 0.055, origin.z);
+    group.scale.setScalar(0.01);
+    group.renderOrder = 38;
+
+    const material = new THREE.LineBasicMaterial({
+      color: BLUE,
+      transparent: true,
+      opacity: 0.64,
+      depthWrite: false,
+      depthTest: true,
+      blending: THREE.AdditiveBlending
+    });
+    const ringMaterial = material.clone();
+    ringMaterial.opacity = 0.82;
+
+    const grid = new THREE.LineSegments(createGroundScanGridGeometry(), material);
+    grid.name = 'sprout-ground-grid-lines';
+    grid.frustumCulled = false;
+    grid.renderOrder = 38;
+    group.add(grid);
+
+    const ring = new THREE.LineLoop(createGroundScanRingGeometry(), ringMaterial);
+    ring.name = 'sprout-ground-grid-ring';
+    ring.frustumCulled = false;
+    ring.renderOrder = 39;
+    group.add(ring);
+
+    scene.add(group);
+    this.groundScanPulse = { group, grid, ring, material, ringMaterial };
+  }
+
+  #updateGroundScanPulse(elapsed) {
+    const state = this.groundScanPulse;
+    if (!state) return;
+    const pulseSeconds = SPROUT_COMPANION.undergroundScanPulseSeconds;
+    const gapSeconds = SPROUT_COMPANION.undergroundScanPulseGapSeconds;
+    const pulseCount = SPROUT_COMPANION.undergroundScanPulseCount;
+    const cycleSeconds = pulseSeconds + gapSeconds;
+    const totalSeconds = (pulseCount * pulseSeconds) + ((pulseCount - 1) * gapSeconds);
+    const safeElapsed = Math.max(0, Number(elapsed) || 0);
+
+    if (safeElapsed >= totalSeconds) {
+      this.#destroyGroundScanPulse();
+      return;
+    }
+
+    const pulseIndex = Math.min(pulseCount - 1, Math.floor(safeElapsed / cycleSeconds));
+    const localElapsed = safeElapsed - (pulseIndex * cycleSeconds);
+    if (localElapsed > pulseSeconds) {
+      state.group.visible = false;
+      return;
+    }
+
+    state.group.visible = true;
+    const raw = THREE.MathUtils.clamp(localElapsed / pulseSeconds, 0, 1);
+    const expansion = easeOutCubic(raw);
+    const radius = THREE.MathUtils.lerp(0.8, SPROUT_COMPANION.undergroundScanPulseRadius, expansion);
+    state.group.scale.setScalar(radius);
+
+    const fade = (1 - raw) ** 1.35;
+    state.material.opacity = 0.62 * fade;
+    state.ringMaterial.opacity = 0.84 * fade;
+  }
+
+  #destroyGroundScanPulse() {
+    const state = this.groundScanPulse;
+    if (!state) return;
+    state.group?.parent?.remove(state.group);
+    state.grid?.geometry?.dispose?.();
+    state.ring?.geometry?.dispose?.();
+    state.material?.dispose?.();
+    state.ringMaterial?.dispose?.();
+    this.groundScanPulse = null;
   }
 
   #showPocketSignal(position) {
