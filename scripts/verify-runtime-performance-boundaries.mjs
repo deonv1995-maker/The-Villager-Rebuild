@@ -213,7 +213,25 @@ assert.ok(
     && naturalUpdateSource.includes('naturalActivationVerticalRadius'),
   'multi-level cave prewarming must filter unrelated vertical strata before queueing geometry'
 );
-const naturalActivationStart = tunnelingSource.indexOf('  #activateNaturalFeature(feature) {');
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius
+    < UNDERGROUND_TUNNELING.naturalActivationRadius
+    && UNDERGROUND_TUNNELING.naturalRenderPrewarmVerticalRadius
+      > UNDERGROUND_TUNNELING.naturalActivationVerticalRadius,
+  'render prewarming must stay locally bounded while leaving enough vertical room around active strata'
+);
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalQueueRetentionRadius
+    > UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius
+    && UNDERGROUND_TUNNELING.naturalQueueRetentionVerticalRadius
+      > UNDERGROUND_TUNNELING.naturalRenderPrewarmVerticalRadius,
+  'natural cave queue retention must be larger than prewarm to avoid ordinary movement churn'
+);
+assert.ok(
+  naturalUpdateSource.includes('#pruneNaturalChunkRebuildQueue(playerPosition)'),
+  'natural cave streaming must discard stale queued geometry after movement'
+);
+const naturalActivationStart = tunnelingSource.indexOf('  #activateNaturalFeature(');
 const ensureSphereStart = tunnelingSource.indexOf('  #ensureChunksForSphere(center, radius) {', naturalActivationStart);
 assert.ok(naturalActivationStart >= 0 && ensureSphereStart > naturalActivationStart, 'natural cave activation implementation must remain inspectable');
 const naturalActivationSource = tunnelingSource.slice(naturalActivationStart, ensureSphereStart);
@@ -234,9 +252,20 @@ assert.ok(
   'visible nearby cave gaps must use only the explicit bounded critical streaming budget'
 );
 assert.ok(
-  naturalActivationSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
-    && naturalActivationSource.includes('Math.SQRT1_2'),
-  'natural cave activation must prune empty horizontal corners from conservative feature AABBs'
+  tunnelingSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
+    && tunnelingSource.includes('this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys))')
+    && tunnelingSource.includes('Math.SQRT1_2'),
+  'natural cave initialization must prune empty AABB corners once and cache each feature render footprint'
+);
+assert.ok(
+  tunnelingSource.includes('this.naturalFeatureChunkKeys = new Map()')
+    && tunnelingSource.includes('this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys))'),
+  'natural cave feature render keys must be filtered once and cached instead of rebuilding full feature bounds each frame'
+);
+assert.ok(
+  naturalActivationSource.includes('naturalRenderPrewarmRadius')
+    && naturalActivationSource.includes('naturalRenderPrewarmVerticalRadius'),
+  'natural cave activation must queue only the local 3D prewarm window around the Ranger'
 );
 
 const naturalMesherStart = tunnelingSource.indexOf('  *#buildChunkGeometry(key) {');

@@ -124,6 +124,35 @@ const surfaceY = terrain.naturalHeightAt(entrance.x, entrance.z);
 const playerAtEntrance = new THREE.Vector3(entrance.x, surfaceY + 1, entrance.z);
 const activated = world.update(playerAtEntrance);
 assert.ok(activated > 0, 'approaching a natural cave must queue nearby 3D density chunks');
+const caveChunkSize = UNDERGROUND_TUNNELING.cellSize * UNDERGROUND_TUNNELING.chunkCells;
+const assertNaturalQueueWithin = (position, horizontalRadius, verticalRadius, label) => {
+  const keys = [
+    ...world.tunneling.pendingNaturalChunkRebuilds.map(entry => entry.key),
+    world.tunneling.naturalChunkBuild?.key
+  ].filter(Boolean);
+  const horizontalLimit = horizontalRadius + caveChunkSize * Math.SQRT1_2 + 0.0001;
+  const verticalLimit = verticalRadius + caveChunkSize * 0.5 + 0.0001;
+  for (const key of keys) {
+    const [ix, iy, iz] = key.split(':').map(Number);
+    const centerX = (ix + 0.5) * caveChunkSize;
+    const centerY = (iy + 0.5) * caveChunkSize;
+    const centerZ = (iz + 0.5) * caveChunkSize;
+    assert.ok(
+      Math.hypot(centerX - position.x, centerZ - position.z) <= horizontalLimit,
+      `${label}: queued cave chunk ${key} must stay inside the local horizontal streaming window`
+    );
+    assert.ok(
+      Math.abs(centerY - position.y) <= verticalLimit,
+      `${label}: queued cave chunk ${key} must stay inside the local vertical streaming window`
+    );
+  }
+};
+assertNaturalQueueWithin(
+  playerAtEntrance,
+  UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
+  UNDERGROUND_TUNNELING.naturalRenderPrewarmVerticalRadius,
+  'initial cave prewarm'
+);
 const debug = world.getDebugState();
 assert.ok(debug.activatedNaturalFeatureCount > 0, 'natural feature activation must be tracked explicitly');
 assert.ok(
@@ -159,6 +188,28 @@ assert.equal(
   world.isSolidAt(entrance.x, surfaceY - 0.45, entrance.z),
   false,
   'walk-in cave mouth collision must be available immediately even while later visual chunks remain queued'
+);
+
+const farEntrance = network.entrances
+  .slice(1)
+  .sort((a, b) =>
+    Math.hypot(b.x - entrance.x, b.z - entrance.z)
+      - Math.hypot(a.x - entrance.x, a.z - entrance.z)
+  )[0];
+assert.ok(farEntrance, 'network must provide another entrance for queue-pruning coverage');
+const farSurfaceY = terrain.naturalHeightAt(farEntrance.x, farEntrance.z);
+const farPlayer = new THREE.Vector3(farEntrance.x, farSurfaceY + 1, farEntrance.z);
+assert.ok(
+  farPlayer.distanceTo(playerAtEntrance)
+    > UNDERGROUND_TUNNELING.naturalQueueRetentionRadius + caveChunkSize,
+  'queue-pruning test positions must be farther apart than the retention window'
+);
+world.update(farPlayer);
+assertNaturalQueueWithin(
+  farPlayer,
+  UNDERGROUND_TUNNELING.naturalQueueRetentionRadius,
+  UNDERGROUND_TUNNELING.naturalQueueRetentionVerticalRadius,
+  'post-travel queue retention'
 );
 
 console.log('enlarged island and connected lazy natural cave underworld verified');
