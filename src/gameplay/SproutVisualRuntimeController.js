@@ -7,6 +7,10 @@ import {
   ensureSproutScannerVisual,
   updateSproutScannerVisual
 } from '../rendering/SproutScannerVisual.js';
+import {
+  ensureSproutTreeLaserVisual,
+  updateSproutTreeLaserVisual
+} from '../rendering/SproutTreeLaserVisual.js';
 
 const SPROUT_RELATIVE_PLAYER_SCALE = 0.88;
 
@@ -70,6 +74,7 @@ export class SproutVisualRuntimeController {
     this.frameId = null;
     this.#restoreCompanionClaim();
     updateSproutScannerVisual(this.visual, this.elapsed, { powered: false, scanning: false });
+    updateSproutTreeLaserVisual(this.visual, this.elapsed, { powered: false, cutting: false });
     this.visual = null;
   }
 
@@ -97,6 +102,8 @@ export class SproutVisualRuntimeController {
       const scanTarget = presentation.scanTarget ?? null;
       const scanTerrainProjection = presentation.scanTerrainProjection !== false;
       const scanIntensity = Number(presentation.scanIntensity) || 0;
+      const cutting = Boolean(presentation.cutting);
+      const cutTarget = presentation.cutTarget ?? null;
       const affectionate = Boolean(presentation.affectionate);
       updateSproutVisual(this.visual, this.elapsed, { powered, scanning, affectionate });
       updateSproutScannerVisual(this.visual, this.elapsed, {
@@ -105,6 +112,11 @@ export class SproutVisualRuntimeController {
         target: scanTarget,
         terrainHeightAt: scanTerrainProjection ? this.terrainHeightAt : null,
         signalStrength: scanIntensity
+      });
+      updateSproutTreeLaserVisual(this.visual, this.elapsed, {
+        powered,
+        cutting,
+        target: cutTarget
       });
     }
 
@@ -121,6 +133,7 @@ export class SproutVisualRuntimeController {
         presentation.name = 'sprout-production-companion';
         applyRelativePlayerScale(presentation);
         ensureSproutScannerVisual(presentation);
+        ensureSproutTreeLaserVisual(presentation);
         this.visual = presentation;
       }
       return presentation;
@@ -137,6 +150,7 @@ export class SproutVisualRuntimeController {
     if (this.visual?.userData?.sproutProductionVisual) {
       applyRelativePlayerScale(this.visual);
       ensureSproutScannerVisual(this.visual);
+      ensureSproutTreeLaserVisual(this.visual);
       return this.visual;
     }
 
@@ -146,6 +160,7 @@ export class SproutVisualRuntimeController {
       if (claimed?.userData?.sproutProductionVisual) {
         applyRelativePlayerScale(claimed);
         ensureSproutScannerVisual(claimed);
+        ensureSproutTreeLaserVisual(claimed);
         this.visual = claimed;
       }
       return this.visual;
@@ -154,6 +169,7 @@ export class SproutVisualRuntimeController {
       existing.name = 'sprout-production-companion';
       applyRelativePlayerScale(existing);
       ensureSproutScannerVisual(existing);
+      ensureSproutTreeLaserVisual(existing);
       this.visual = existing;
       this.crashSite.sproutEye = null;
       return existing;
@@ -170,6 +186,7 @@ export class SproutVisualRuntimeController {
     production.renderOrder = existing.renderOrder;
     applyRelativePlayerScale(production);
     ensureSproutScannerVisual(production);
+    ensureSproutTreeLaserVisual(production);
     parent.add(production);
 
     this.crashSite.sprout = production;

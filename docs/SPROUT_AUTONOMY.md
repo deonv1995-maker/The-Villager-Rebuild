@@ -35,6 +35,8 @@ Collect Logs uses the same deployment/retrieval lifecycle and physically travels
 
 The tree command keeps the established **18 m** harvest radius as its mission area. Sprout records the Ranger's deployment origin, physically travels to the nearest active tree inside that radius, and applies laser cuts through TreeHarvestSystem.
 
+While the authoritative laser phase is active, presentation exposes a separate cutting state and trunk target. The rendering layer draws a narrow **red laser** from Sprout's authored scanner lens to the trunk with a small red impact glow. This effect is presentation-only: it does not decide which tree is valid, how many hits are required, when the tree falls, or what drops spawn. The normal cyan scanner cone/grid is off while Sprout is cutting.
+
 After the authoritative tree fall and Log drops, Sprout travels to and stores the legitimate loose Logs before finding the next active tree inside the same original radius. The mission ends when there are no more active trees in that area, or when energy/capacity prevents safe continuation.
 
 No tree, stump, regrowth or Log-drop rules are duplicated in Sprout code.
