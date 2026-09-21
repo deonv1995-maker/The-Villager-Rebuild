@@ -37,9 +37,11 @@ The cinematic lock exists only for the brief hand-off/catch presentation. Ranger
 
 Before Sprout alliance/compression, the Ranger pack remains limited to **24 bulk units**. After Sprout alliance, the same authoritative inventory is re-evaluated under Sprout compression with **96 compressed units** of capacity; quantities are not copied into a second store.
 
-Every Sprout pickup is reserved/committed through GatherableSystem and then added to the shared InventorySystem. A failed reservation, full inventory or interrupted mission leaves the legitimate object in the world.
+Every Sprout pickup is reserved/committed through GatherableSystem and then added to the shared InventorySystem. There is no second Sprout inventory. A failed reservation, full inventory or interrupted mission leaves the legitimate object in the world.
 
 ## Tree mission
+
+TreeHarvestSystem remains the single tree-felling authority. Collect Logs uses GatherableSystem reservation/commit and the same shared InventorySystem as every other Sprout pickup.
 
 The tree command retains the established treeHarvestRange of **18 m** from the Ranger's deployment origin. Sprout physically visits trees inside that area one at a time.
 
