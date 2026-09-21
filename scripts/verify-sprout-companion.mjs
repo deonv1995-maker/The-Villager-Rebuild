@@ -21,7 +21,7 @@ const checks = [
   ['tree laser uses shared tree authority rather than direct log grants', treeHarvest.includes('findNearestActiveTree') && treeHarvest.includes('harvestTree(treeId') && treeHarvest.includes('#applyChop') && !controller.includes("inventory.add('log'")],
   ['resource scans may ignore capacity while collection still honors it', gatherables.includes('{ requireCapacity = true }') && gatherables.includes('requireCapacity && !this.#canStore')],
   ['Sprout energy persists independently of active commands', save.includes('record.state.sproutCompanion') && save.includes('captureState?.() ?? null')],
-  ['documentation records stowed command-driven Sprout architecture', docs.includes('stowed') && docs.includes('passive recharge') && docs.includes('laser') && autonomyDocs.includes('command-driven')],
+  ['documentation records stowed command-driven Sprout architecture', docs.includes('stowed') && docs.includes('slowly recharges') && docs.includes('laser') && autonomyDocs.includes('command-driven')],
   ['full repository check still includes Sprout regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
 
