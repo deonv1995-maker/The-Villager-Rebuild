@@ -866,7 +866,6 @@ export class RangerController {
     const targetLong = side === 'left' ? 'left' : 'right';
     const targetShort = side === 'left' ? 'l' : 'r';
     const oppositeLong = side === 'left' ? 'right' : 'left';
-    const oppositeShort = side === 'left' ? 'r' : 'l';
     let best = null;
     let bestScore = -1;
 
@@ -880,7 +879,6 @@ export class RangerController {
       if (name.includes(targetLong)) score += 16;
       if (name === `foot${targetShort}` || name.endsWith(`foot${targetShort}`)) score += 14;
       if (name.startsWith(`${targetShort}foot`) || name.startsWith(`${targetShort}ankle`)) score += 12;
-      if (name.endsWith(`_${oppositeShort}`)) score -= 20;
       if (name.includes('slot')) score -= 2;
       if (score > bestScore) {
         best = object;
