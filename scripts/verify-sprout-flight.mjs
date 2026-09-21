@@ -10,6 +10,12 @@ const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8'
 
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds > 0, 'flight should require a deliberate held second jump');
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed > 0, 'flight should provide positive ascent');
+assert.equal(
+  PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier,
+  2.5,
+  'active rocket shoes should move at exactly 2.5x the centralized running speed'
+);
+assert.ok(PLAYER_TRAVERSAL_TUNING.movement.runSpeed > 0, 'running speed must remain centrally defined');
 assert.ok(SPROUT_COMPANION.flightEnergyPerSecond > 0, 'Sprout flight must consume shared Sprout energy');
 assert.ok(SPROUT_COMPANION.flightMinimumEnergy > 0, 'flight should not start on an empty battery');
 assert.ok(
@@ -217,8 +223,22 @@ ranger.update(PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds);
 assert.equal(flightStarts, 1, 'holding the second jump should activate Sprout flight once');
 assert.equal(ranger.isFlying(), true, 'Ranger should report active Sprout flight');
 const flyingY = ranger.root.position.y;
+ranger.setMove(0, 1);
+const flightMoveStart = ranger.root.position.clone();
 ranger.update(0.05);
 assert.ok(ranger.root.position.y > flyingY, 'active rocket shoes should continue lifting the Ranger');
+const flightHorizontalDistance = Math.hypot(
+  ranger.root.position.x - flightMoveStart.x,
+  ranger.root.position.z - flightMoveStart.z
+);
+const expectedFlightDistance = PLAYER_TRAVERSAL_TUNING.movement.runSpeed
+  * PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier
+  * 0.05;
+assert.ok(
+  Math.abs(flightHorizontalDistance - expectedFlightDistance) < 1e-9,
+  'full directional input during flight should travel at 2.5x running speed'
+);
+ranger.setMove(0, 0);
 ranger.setJumpHeld(false);
 assert.equal(ranger.isFlying(), false, 'releasing the held second jump should end flight immediately');
 
