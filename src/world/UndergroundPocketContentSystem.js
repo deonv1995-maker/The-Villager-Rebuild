@@ -3,6 +3,10 @@ import {
   UNDERGROUND_POCKET_CONTENT,
   UNDERGROUND_POCKET_REWARDS
 } from '../data/UndergroundPocketContentDefinitions.js';
+import {
+  undergroundPocketFloorYAt,
+  undergroundPocketVerticalSpanAt
+} from './UndergroundPocketProfile.js';
 
 const STATE_KIND = 'underground-pocket-content-v1';
 
@@ -257,9 +261,12 @@ export class UndergroundPocketContentSystem {
     const pocketRoot = new THREE.Group();
     pocketRoot.name = `underground-pocket-content-${pocket.ix}-${pocket.iz}`;
     pocketRoot.userData.pocketId = pocket.id;
+    const pocketFloorY = undergroundPocketFloorYAt(pocket);
     pocketRoot.position.set(
       pocket.x,
-      pocket.y - pocket.radius + 0.13,
+      Number.isFinite(pocketFloorY)
+        ? pocketFloorY
+        : pocket.y - pocket.radius,
       pocket.z
     );
     if (this.chunks) this.chunks.addObjectAt(pocketRoot, pocket.x, pocket.z);
@@ -269,19 +276,12 @@ export class UndergroundPocketContentSystem {
     const ix = pocket.ix;
     const iz = pocket.iz;
     const angleOffset = hash01(ix, iz, 203) * Math.PI * 2;
-    const floorRadius = Number.isFinite(pocket.floorRadius)
-      ? pocket.floorRadius
-      : pocket.radius;
     const contentRadius = Number.isFinite(pocket.contentRadius)
       ? pocket.contentRadius
       : pocket.radius;
-    const floorRiseAtRadius = radialDistance => {
-      const safeDistance = Math.min(Math.max(0, radialDistance), floorRadius);
-      return floorRadius - Math.sqrt(Math.max(
-        0,
-        floorRadius * floorRadius - safeDistance * safeDistance
-      ));
-    };
+    // Chamber floors are authored as a real horizontal cave floor rather than
+    // the lower half of a sphere. Dressing therefore shares one floor plane.
+    const floorRiseAtRadius = () => 0;
     const rootWorldY = pocketRoot.position.y;
     const verticalSpanAt = (localX, localZ) =>
       this.#verticalSpanAt(pocket, localX, localZ, rootWorldY);
@@ -621,32 +621,16 @@ export class UndergroundPocketContentSystem {
   }
 
   #verticalSpanAt(pocket, localX, localZ, rootWorldY) {
-    const worldX = pocket.x + localX;
-    const worldZ = pocket.z + localZ;
-    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
-      ? pocket.lobes
-      : [pocket];
-
-    let floorWorldY = Number.POSITIVE_INFINITY;
-    let ceilingWorldY = Number.NEGATIVE_INFINITY;
-    for (const lobe of lobes) {
-      if (!Number.isFinite(lobe?.radius) || lobe.radius <= 0) continue;
-      const dx = worldX - lobe.x;
-      const dz = worldZ - lobe.z;
-      const verticalRadiusSq = lobe.radius * lobe.radius - dx * dx - dz * dz;
-      if (verticalRadiusSq < 0) continue;
-      const verticalRadius = Math.sqrt(verticalRadiusSq);
-      floorWorldY = Math.min(floorWorldY, lobe.y - verticalRadius);
-      ceilingWorldY = Math.max(ceilingWorldY, lobe.y + verticalRadius);
-    }
-
-    if (!Number.isFinite(floorWorldY) || !Number.isFinite(ceilingWorldY)) return null;
-    const floorY = floorWorldY - rootWorldY;
-    const ceilingY = ceilingWorldY - rootWorldY;
+    const span = undergroundPocketVerticalSpanAt(
+      pocket,
+      pocket.x + localX,
+      pocket.z + localZ
+    );
+    if (!span) return null;
     return {
-      floorY,
-      ceilingY,
-      clearance: Math.max(0, ceilingY - floorY)
+      floorY: span.floorY - rootWorldY,
+      ceilingY: span.ceilingY - rootWorldY,
+      clearance: span.clearance
     };
   }
 

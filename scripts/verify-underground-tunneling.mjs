@@ -17,6 +17,7 @@ import {
   tunnelingExcavationFloorY,
   tunnelingExcavationHorizontalRadius
 } from '../src/world/TunnelingTerrainProfile.js';
+import { undergroundPocketVerticalSpanAt } from '../src/world/UndergroundPocketProfile.js';
 
 assert.equal(EXPLORATION_POIS.length, 0, 'the fixed cave POI must be removed');
 assert.equal(
@@ -376,34 +377,73 @@ assert.deepEqual(samePocket, pocket, 'underground pocket generation must be stab
 assert.equal(
   pocket.lobes?.length,
   2 + UNDERGROUND_TUNNELING.pocketSideLobeCount,
-  'each underground pocket must be carved from the configured deterministic lobe cluster'
+  'each underground pocket must be carved from the configured deterministic chamber lobe cluster'
 );
 assert.ok(
-  pocket.floorRadius < pocket.radius && pocket.contentRadius < pocket.floorRadius,
-  'irregular pockets must keep a stable outer boundary while reserving a safer inner content footprint'
+  Number.isFinite(pocket.floorY) &&
+    pocket.floorY < pocket.y &&
+    pocket.floorRadius < pocket.radius &&
+    pocket.contentRadius < pocket.floorRadius,
+  'irregular pockets must expose a real floor plane plus a safe inner content footprint'
 );
 assert.ok(
   pocket.lobes.some(lobe =>
-    Math.hypot(lobe.x - pocket.x, lobe.y - pocket.y, lobe.z - pocket.z)
-      > pocket.radius * 0.08
+    Math.abs(lobe.radiusX - lobe.radiusZ) > pocket.radius * 0.08
   ),
-  'pocket lobes must be spatially offset so the chamber cannot collapse back into one round sphere'
+  'at least one chamber lobe must be elliptical so the cave cannot collapse back into a round hole'
+);
+assert.ok(
+  pocket.lobes.some(lobe =>
+    Math.hypot(lobe.x - pocket.x, lobe.z - pocket.z) > pocket.radius * 0.2
+  ),
+  'side alcoves must be spatially offset from the chamber center'
 );
 for (const lobe of pocket.lobes) {
   assert.ok(
-    Math.hypot(lobe.x - pocket.x, lobe.y - pocket.y, lobe.z - pocket.z) + lobe.radius
-      <= pocket.radius + 0.0001,
+    [lobe.radiusX, lobe.radiusZ, lobe.ceilingY, lobe.ceilingDrop].every(Number.isFinite),
+    'every chamber lobe must carry explicit horizontal axes and ceiling profile data'
+  );
+  assert.ok(
+    Math.hypot(lobe.x - pocket.x, lobe.z - pocket.z)
+      + Math.max(lobe.radiusX, lobe.radiusZ)
+      <= pocket.radius * 0.961,
     'every irregular lobe must remain inside the pocket broad-phase boundary'
+  );
+  assert.ok(
+    lobe.ceilingY - lobe.ceilingDrop > pocket.floorY + PLAYER_TRAVERSAL_TUNING.body.height + 0.2,
+    'every chamber lobe must preserve walkable head clearance above the shared cave floor'
+  );
+}
+
+const centerSpan = undergroundPocketVerticalSpanAt(pocket, pocket.x, pocket.z);
+assert.ok(
+  centerSpan &&
+    Math.abs(centerSpan.floorY - pocket.floorY) < 0.0001 &&
+    centerSpan.clearance > PLAYER_TRAVERSAL_TUNING.body.height + 0.7,
+  'the chamber center must expose a broad, walkable floor rather than the bottom of a sphere'
+);
+const floorSampleRadius = pocket.floorRadius * 0.82;
+for (let sample = 0; sample < 8; sample += 1) {
+  const angle = sample * Math.PI * 2 / 8;
+  const span = undergroundPocketVerticalSpanAt(
+    pocket,
+    pocket.x + Math.cos(angle) * floorSampleRadius,
+    pocket.z + Math.sin(angle) * floorSampleRadius
+  );
+  assert.ok(span, 'the inner chamber floor must remain continuous around the player');
+  assert.ok(
+    Math.abs(span.floorY - pocket.floorY) < 0.0001,
+    'the cave floor must stay planar across the usable chamber instead of curving into a bowl'
   );
 }
 
 const discoveryLobe = pocket.lobes.reduce(
-  (highest, lobe) => lobe.y + lobe.radius > highest.y + highest.radius ? lobe : highest,
+  (highest, lobe) => lobe.ceilingY > highest.ceilingY ? lobe : highest,
   pocket.lobes[0]
 );
 const discoveryCenter = new THREE.Vector3(
   discoveryLobe.x,
-  discoveryLobe.y + discoveryLobe.radius - UNDERGROUND_TUNNELING.mineRadius * 0.45,
+  discoveryLobe.ceilingY - UNDERGROUND_TUNNELING.mineRadius * 0.45,
   discoveryLobe.z
 );
 const discoveryTarget = {
