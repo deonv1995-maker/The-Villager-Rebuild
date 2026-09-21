@@ -386,8 +386,11 @@ export class SproutCompanionController {
     }
 
     this.followSide = this.nextFollowSide;
-    this.followTarget.y = this.island.heightAt(this.followTarget.x, this.followTarget.z)
-      + SPROUT_COMPANION.hoverHeight;
+    this.followTarget.y = this.#groundHeightAt(
+      this.followTarget.x,
+      this.followTarget.z,
+      { referenceY: perceivedPosition.y }
+    ) + SPROUT_COMPANION.hoverHeight;
     return this.followTarget;
   }
 
@@ -439,7 +442,12 @@ export class SproutCompanionController {
       const z = this.playerPosition.z + Math.sin(angle) * radius;
       if (this.island.isPlayable?.(x, z, 1.2) === false) continue;
       if (!this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)) continue;
-      this.idleTarget.set(x, this.island.heightAt(x, z) + SPROUT_COMPANION.hoverHeight, z);
+      this.idleTarget.set(
+        x,
+        this.#groundHeightAt(x, z, { referenceY: this.playerPosition.y })
+          + SPROUT_COMPANION.hoverHeight,
+        z
+      );
       this.idleTargetValid = true;
       this.idleRoamRemaining = this.#randomBetween(
         SPROUT_COMPANION.idleRoamIntervalMinSeconds,
@@ -617,8 +625,22 @@ export class SproutCompanionController {
     }
   }
 
+  #groundHeightAt(x, z, { referenceY = null } = {}) {
+    const currentGroundY = this.root
+      ? this.root.position.y - SPROUT_COMPANION.hoverHeight
+      : this.playerPosition.y;
+    const supportReferenceY = Number.isFinite(referenceY)
+      ? referenceY
+      : currentGroundY;
+
+    if (typeof this.island.walkableHeightAt === 'function') {
+      return this.island.walkableHeightAt(x, z, { referenceY: supportReferenceY });
+    }
+    return this.island.heightAt(x, z);
+  }
+
   #settleHover(x, z, dt) {
-    const ground = this.island.heightAt(x, z);
+    const ground = this.#groundHeightAt(x, z);
     const hoverBob = Math.sin(this.elapsed * SPROUT_COMPANION.hoverFrequency) * SPROUT_COMPANION.hoverAmplitude;
     const targetY = ground + SPROUT_COMPANION.hoverHeight + hoverBob;
     const blend = dt > 0 ? Math.min(1, dt * 8) : 1;
@@ -651,7 +673,8 @@ export class SproutCompanionController {
     )) ?? actualFollow;
     this.root.position.set(
       point.x,
-      this.island.heightAt(point.x, point.z) + SPROUT_COMPANION.hoverHeight,
+      this.#groundHeightAt(point.x, point.z, { referenceY: this.playerPosition.y })
+        + SPROUT_COMPANION.hoverHeight,
       point.z
     );
     this.perceivedPlayerPosition.copy(this.playerPosition);
@@ -936,7 +959,7 @@ export class SproutCompanionController {
       this.root.position.z = THREE.MathUtils.lerp(this.root.position.z, targetZ, blend);
     }
 
-    const ground = this.island.heightAt(this.root.position.x, this.root.position.z);
+    const ground = this.#groundHeightAt(this.root.position.x, this.root.position.z);
     const heightOffset = state.kind === 'affection' ? -0.08 : 0.03;
     const bobSpeed = state.kind === 'scan' ? 3.2 : 4.4;
     const bobAmount = state.kind === 'scan' ? 0.035 : 0.045;
