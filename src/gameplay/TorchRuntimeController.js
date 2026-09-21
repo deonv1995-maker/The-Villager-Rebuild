@@ -159,7 +159,9 @@ export class TorchRuntimeController {
   #createPlacedTorch({ id, mountKind, mountId, position, yaw }) {
     const visual = this.#createVisual(id);
     const resolvedYaw = Number.isFinite(yaw) ? yaw : 0;
-    const wallVisualOutwardOffset = mountKind === 'wall'
+    const wallLike = mountKind === 'wall' || mountKind === 'cave-wall';
+    const groundLike = mountKind === 'world-ground' || mountKind === 'cave-ground';
+    const wallVisualOutwardOffset = wallLike
       ? Math.max(0, Number(this.definition.placement.wallVisualOutwardOffset) || 0)
       : 0;
     visual.root.position.set(
@@ -168,7 +170,9 @@ export class TorchRuntimeController {
       position.z + Math.cos(resolvedYaw) * wallVisualOutwardOffset
     );
     visual.root.rotation.set(
-      THREE.MathUtils.degToRad(Number(this.definition.placement.outwardTiltDegrees) || 0),
+      groundLike
+        ? 0
+        : THREE.MathUtils.degToRad(Number(this.definition.placement.outwardTiltDegrees) || 0),
       resolvedYaw,
       0,
       'YXZ'
