@@ -163,7 +163,11 @@ try {
   const first = [...system.activeChunks.values()][0];
   assert.ok(first.mesh.geometry.getAttribute('position').array.every(Number.isFinite));
   const reference = makeWorld();
-  reference.config = {...config, naturalMeshBudgetMs: 1e9};
+  reference.config = {
+    ...config,
+    naturalMeshBudgetMs: 1e9,
+    naturalCriticalMeshBudgetMs: 1e9
+  };
   reference.update(player);
   const referenceChunk = reference.activeChunks.get(first.key);
   assert.ok(referenceChunk, 'distance ordering must remain stable across time slices');
