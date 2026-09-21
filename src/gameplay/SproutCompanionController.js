@@ -209,7 +209,10 @@ export class SproutCompanionController {
 
     this.#stow();
     this.flightPresentation?.dispose?.();
-    this.flightPresentation = new SproutRocketShoesPresentation({ player: this.player });
+    this.flightPresentation = new SproutRocketShoesPresentation({
+      player: this.player,
+      transformSeconds: SPROUT_COMPANION.flightTransformSeconds
+    });
     this.flightActive = true;
     this.game.setStatus?.('SPROUT · ROCKET SHOES ONLINE');
     return true;
