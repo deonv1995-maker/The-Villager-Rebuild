@@ -1,78 +1,41 @@
 import * as THREE from 'three';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
-import { PanelTraversalQuery } from '../world/PanelTraversalQuery.js';
-import { selectSproutDoorRoute } from './SproutDoorRoutePlanner.js';
 
 const BLUE = 0x62cfff;
-const clampDt = dt => Math.min(Math.max(0, dt), 0.05);
+const clampDt = dt => Math.min(Math.max(0, Number(dt) || 0), 0.05);
 const easeOutCubic = value => 1 - ((1 - THREE.MathUtils.clamp(value, 0, 1)) ** 3);
 
 export class SproutCompanionController {
   constructor({ game } = {}) {
-    if (!game?.player || !game?.island?.collision || !game?.gatherables || !game?.inventory || !game?.sproutArrival) {
-      throw new Error('SproutCompanionController requires Ranger, island, gatherables, inventory and Sprout arrival state');
+    if (!game?.player || !game?.island || !game?.gatherables || !game?.inventory || !game?.sproutArrival || !game?.treeHarvest) {
+      throw new Error('SproutCompanionController requires Ranger, island, gatherables, inventory, tree harvest and Sprout arrival state');
     }
 
     this.game = game;
     this.player = game.player;
     this.island = game.island;
-    this.collision = game.island.collision;
     this.gatherables = game.gatherables;
     this.inventory = game.inventory;
     this.arrival = game.sproutArrival;
-    this.panelTraversal = game.panelConstruction?.entries
-      ? new PanelTraversalQuery({ panelConstruction: game.panelConstruction })
-      : null;
-    this.allowedResources = new Set(SPROUT_COMPANION.collectibleResourceIds);
-    this.ownerToken = Object.freeze({ id: 'sprout-companion' });
+    this.treeHarvest = game.treeHarvest;
+    this.ownerToken = Object.freeze({ id: 'sprout-command-companion' });
+
     this.root = null;
-    this.target = null;
-    this.compression = null;
     this.running = false;
     this.frameId = null;
     this.lastTimestamp = null;
-    this.scanElapsed = 0;
-    this.pocketDetectionElapsed = SPROUT_COMPANION.pocketDetectionIntervalSeconds;
-    this.pocketSignal = null;
-    this.announcedPocketSignalId = null;
-    this.announcedStrongPocketSignalId = null;
-    this.cooldown = 0;
     this.elapsed = 0;
-    this.approachElapsed = 0;
-    this.targetScanHoldRemaining = 0;
-    this.followSide = 1;
-    this.nextFollowSide = 1;
-    this.followSenseRemaining = 0;
-    this.followReactionRemaining = 0;
-    this.followDriftRemaining = 0;
-    this.followDriftLateral = 0;
-    this.followDriftBack = 0;
-    this.followDriftLateralGoal = 0;
-    this.followDriftBackGoal = 0;
-    this.currentMoveSpeed = 0;
-    this.followBlockedElapsed = 0;
-    this.doorRoute = null;
-    this.doorRouteCooldown = 0;
-    this.rangerMoving = false;
-    this.rangerIdleElapsed = 0;
-    this.hasPlayerSample = false;
-    this.hasPerceivedRanger = false;
-    this.idleTargetValid = false;
-    this.idleRoamRemaining = 0;
-    this.idleScanRemaining = 0;
-    this.idleAnimation = null;
-    this.idleAnimationCooldown = 0;
-    this.nextIdleAnimationKind = 'affection';
+    this.energy = SPROUT_COMPANION.energyMax;
+    this.command = null;
+    this.compression = null;
+    this.scanTarget = null;
+    this.scanTerrainProjection = true;
+    this.scanIntensity = 0;
+    this.pollElapsed = SPROUT_COMPANION.commandPollIntervalSeconds;
+
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3(0, 0, 1);
-    this.previousPlayerPosition = new THREE.Vector3();
-    this.perceivedPlayerPosition = new THREE.Vector3();
-    this.perceivedPlayerFacing = new THREE.Vector3(0, 0, 1);
-    this.perceivedPlayerGoalPosition = new THREE.Vector3();
-    this.perceivedPlayerGoalFacing = new THREE.Vector3(0, 0, 1);
-    this.followTarget = new THREE.Vector3();
-    this.idleTarget = new THREE.Vector3();
-    this.pocketScanTarget = new THREE.Vector3();
+    this.deployPosition = new THREE.Vector3();
     this.resourcePosition = new THREE.Vector3();
     this.tempQuaternion = new THREE.Quaternion();
     this.tempScale = new THREE.Vector3();
@@ -82,764 +45,421 @@ export class SproutCompanionController {
     if (this.running) return false;
     this.running = true;
     this.lastTimestamp = null;
-    this.frameId = window.requestAnimationFrame(this.#frame);
+    this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
     return true;
   }
 
   dispose() {
-    if (this.frameId !== null) window.cancelAnimationFrame(this.frameId);
+    if (this.frameId !== null) globalThis.cancelAnimationFrame?.(this.frameId);
     this.frameId = null;
     this.running = false;
-    this.#endIdleAnimation({ applyCooldown: false });
     this.#cancelCompression();
-    this.#clearCollectionTarget();
-    this.#clearDoorRoute();
+    this.command = null;
+    this.scanTarget = null;
+    this.#stow();
   }
 
-  getPresentationState() {
-    let scanTarget = this.target?.position ?? null;
-    let scanTerrainProjection = true;
-    let scanIntensity = 0;
-
-    if (!scanTarget && !this.compression && this.pocketSignal && this.root) {
-      const signal = this.pocketSignal.position;
-      const dx = signal.x - this.root.position.x;
-      const dy = signal.y - this.root.position.y;
-      const dz = signal.z - this.root.position.z;
-      const distance = Math.hypot(dx, dy, dz);
-      if (distance > 0.001) {
-        const scale = Math.min(1, SPROUT_COMPANION.pocketDetectionBeamLength / distance);
-        this.pocketScanTarget.set(
-          this.root.position.x + dx * scale,
-          this.root.position.y + dy * scale,
-          this.root.position.z + dz * scale
-        );
-        scanTarget = this.pocketScanTarget;
-        scanTerrainProjection = false;
-        scanIntensity = this.pocketSignal.strength;
-      }
-    }
-
+  captureState() {
     return {
-      scanning: Boolean(
-        this.target
-        || (!this.compression && this.pocketSignal)
-        || this.idleScanRemaining > 0
-        || this.idleAnimation?.kind === 'scan'
-      ),
-      scanTarget: scanTarget ? {
-        x: scanTarget.x,
-        y: scanTarget.y,
-        z: scanTarget.z
-      } : null,
-      scanTerrainProjection,
-      scanIntensity,
-      affectionate: this.idleAnimation?.kind === 'affection'
+      version: 1,
+      energy: Number(this.energy.toFixed(3))
     };
   }
 
-  #frame = timestamp => {
-    if (!this.running) return;
-    const dt = this.lastTimestamp === null
-      ? 0
-      : clampDt((timestamp - this.lastTimestamp) / 1000);
-    this.lastTimestamp = timestamp;
-    if (!this.game.isPaused?.()) this.update(dt);
-    this.frameId = window.requestAnimationFrame(this.#frame);
-  };
+  restoreState(state) {
+    const restored = Number(state?.energy);
+    this.energy = Number.isFinite(restored)
+      ? THREE.MathUtils.clamp(restored, 0, SPROUT_COMPANION.energyMax)
+      : SPROUT_COMPANION.energyMax;
+    this.command = null;
+    this.scanTarget = null;
+    this.scanIntensity = 0;
+    this.#cancelCompression();
+    this.#stow();
+    return true;
+  }
+
+  grantEnergy(amount, source = 'gameplay') {
+    const value = Number(amount);
+    if (!Number.isFinite(value) || value <= 0) return this.getEnergyState();
+    this.energy = Math.min(SPROUT_COMPANION.energyMax, this.energy + value);
+    return {
+      ...this.getEnergyState(),
+      source
+    };
+  }
+
+  getEnergyState() {
+    return {
+      energy: this.energy,
+      maxEnergy: SPROUT_COMPANION.energyMax,
+      percent: Math.round((this.energy / SPROUT_COMPANION.energyMax) * 100),
+      recharging: Boolean(this.arrival.isAllied?.() && !this.command && !this.compression && this.energy < SPROUT_COMPANION.energyMax)
+    };
+  }
+
+  getCommandState() {
+    const available = Boolean(this.arrival.isAllied?.());
+    const energy = this.getEnergyState();
+    return {
+      available,
+      ...energy,
+      activeCommandId: this.command?.id ?? null,
+      activeCommandLabel: this.command?.definition?.label ?? null,
+      commands: SPROUT_COMPANION.commandOrder.map(id => {
+        const definition = SPROUT_COMPANION.commands[id];
+        return {
+          id,
+          label: definition.label,
+          energyCost: definition.energyCost,
+          enabled: available && this.energy >= definition.energyCost,
+          active: this.command?.id === id
+        };
+      })
+    };
+  }
+
+  getPresentationState() {
+    return {
+      scanning: Boolean(this.command?.scanning && this.scanTarget && !this.compression),
+      scanTarget: this.scanTarget
+        ? { x: this.scanTarget.x, y: this.scanTarget.y, z: this.scanTarget.z }
+        : null,
+      scanTerrainProjection: this.scanTerrainProjection,
+      scanIntensity: this.scanIntensity,
+      affectionate: false
+    };
+  }
+
+  issueCommand(commandId) {
+    if (commandId === 'cancel') {
+      this.#cancelCommand('SPROUT · RECALLED');
+      return true;
+    }
+    if (!this.arrival.isAllied?.()) return false;
+
+    const definition = SPROUT_COMPANION.commands[commandId];
+    if (!definition) return false;
+    if (this.energy + 1e-6 < definition.energyCost) {
+      this.game.setStatus?.('SPROUT · LOW ENERGY · ' + Math.round(this.energy) + '%');
+      return false;
+    }
+
+    this.#cancelCompression();
+    this.command = {
+      id: definition.id,
+      definition,
+      phase: 'acquire',
+      elapsed: 0,
+      pulseElapsed: SPROUT_COMPANION.laserPulseIntervalSeconds,
+      waitElapsed: 0,
+      target: null,
+      treeId: null,
+      treePosition: null,
+      expectedLogs: 0,
+      logsCollected: 0,
+      scanning: false
+    };
+    this.scanTarget = null;
+    this.scanIntensity = 0;
+
+    if (definition.kind === 'find-resource' || definition.kind === 'scan-underground') {
+      this.#spendEnergy(definition.energyCost);
+    }
+
+    this.game.setStatus?.('SPROUT · ' + definition.label.toUpperCase());
+    return true;
+  }
 
   update(dt) {
-    if (!this.arrival.isAllied?.()) return;
-    if (!this.root && !this.#activate()) return;
-
     dt = clampDt(dt);
     this.elapsed += dt;
-    this.cooldown = Math.max(0, this.cooldown - dt);
-    this.doorRouteCooldown = Math.max(0, this.doorRouteCooldown - dt);
-    this.idleAnimationCooldown = Math.max(0, this.idleAnimationCooldown - dt);
-    this.scanElapsed += dt;
+
+    if (!this.arrival.isAllied?.()) {
+      this.#stow();
+      return;
+    }
+    if (!this.root && !this.#activate()) return;
 
     this.player.getPosition(this.playerPosition);
-    this.#updatePocketSignal(dt);
     this.player.getFacingDirection(this.playerFacing);
     this.playerFacing.y = 0;
     if (this.playerFacing.lengthSq() < 0.0001) this.playerFacing.set(0, 0, 1);
     else this.playerFacing.normalize();
 
-    this.#updateRangerMotion(dt);
-
-    if (this.idleAnimation) {
-      if (this.rangerMoving) this.#endIdleAnimation();
-      else {
-        this.#updateIdleAnimation(dt);
-        return;
-      }
+    if (!this.command && !this.compression) {
+      this.energy = Math.min(
+        SPROUT_COMPANION.energyMax,
+        this.energy + SPROUT_COMPANION.energyRechargePerSecond * dt
+      );
+      this.#stow();
+      return;
     }
 
-    this.#updatePerceivedRanger(dt);
-    this.#separateFromRanger(dt);
+    this.#deploy(dt);
 
     if (this.compression) {
-      this.#settleHover(this.root.position.x, this.root.position.z, dt);
       this.#updateCompression(dt);
       return;
     }
 
-    if (!this.target && this.doorRoute && this.#updateDoorRoute(dt)) return;
-
-    // A selected pickup gets a bounded approach and scan lock; a reserved compression always finishes.
-    if (this.target) this.approachElapsed += dt;
-    if (this.target && this.approachElapsed >= SPROUT_COMPANION.approachTimeoutSeconds) {
-      this.#clearCollectionTarget();
-      this.cooldown = 1;
-    }
-
-    const rangerDistance = Math.hypot(
-      this.root.position.x - this.playerPosition.x,
-      this.root.position.z - this.playerPosition.z
-    );
-
-    if (!this.target && rangerDistance >= SPROUT_COMPANION.hardCatchUpDistance) {
-      this.#cancelCollectionIntent();
-      if (this.#hasNearbyDoorPortal()) {
-        const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
-        if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
-        return;
-      }
-      this.followBlockedElapsed = 0;
-      this.#snapNearRanger();
+    const command = this.command;
+    if (!command) {
+      this.#stow();
       return;
     }
 
-    if (!this.target && rangerDistance >= SPROUT_COMPANION.catchUpDistance) {
-      this.#cancelCollectionIntent();
-      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.catchUpSpeed, dt);
-      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
+    command.elapsed += dt;
+    this.pollElapsed += dt;
+
+    if (command.definition.kind === 'find-resource') {
+      this.#updateFindResource(command);
       return;
     }
-
-    if (this.target) {
-      this.followBlockedElapsed = 0;
-      const live = this.gatherables.getLooseResource?.(this.target.id);
-      if (!live) {
-        this.#clearCollectionTarget();
-      } else {
-        this.target = live;
-        const distance = Math.hypot(
-          live.position.x - this.root.position.x,
-          live.position.z - this.root.position.z
-        );
-        if (distance <= SPROUT_COMPANION.beamRange) {
-          this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 7));
-          this.#settleHover(this.root.position.x, this.root.position.z, dt);
-          const scanYaw = Math.atan2(
-            live.position.x - this.root.position.x,
-            live.position.z - this.root.position.z
-          );
-          this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, scanYaw, Math.min(1, dt * 6.2));
-          this.targetScanHoldRemaining = Math.max(0, this.targetScanHoldRemaining - dt);
-          if (this.targetScanHoldRemaining > 0) return;
-          if (this.#beginCompression(live)) return;
-          this.#clearCollectionTarget();
-        } else {
-          this.#moveToward(live.position, SPROUT_COMPANION.collectionMoveSpeed, dt);
-          return;
-        }
-      }
-    }
-
-    if (this.cooldown <= 0 && this.scanElapsed >= SPROUT_COMPANION.scanIntervalSeconds) {
-      this.scanElapsed = 0;
-      this.target = this.gatherables.findNearestLooseResource?.(
-        this.playerPosition,
-        SPROUT_COMPANION.collectionRadius,
-        resourceId => this.allowedResources.has(resourceId)
-      ) ?? null;
-      if (this.target) {
-        this.approachElapsed = 0;
-        this.targetScanHoldRemaining = SPROUT_COMPANION.targetScanHoldSeconds;
-        this.idleTargetValid = false;
-        return;
-      }
-    }
-
-    if (
-      this.pocketSignal
-      && this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds
-    ) {
-      this.#updatePocketSignalFocus(dt);
+    if (command.definition.kind === 'scan-underground') {
+      this.#updateUndergroundScan(command);
       return;
     }
-
-    if (this.#tryStartIdleAnimation()) return;
-
-    if (this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds) {
-      this.#updateIdleBehavior(dt);
-    } else {
-      this.idleTargetValid = false;
-      this.idleScanRemaining = 0;
-      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
-      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
+    if (command.definition.kind === 'collect-resource') {
+      this.#updateCollectResource(command);
+      return;
+    }
+    if (command.definition.kind === 'harvest-tree') {
+      this.#updateTreeHarvest(command, dt);
     }
   }
 
-  #updatePocketSignal(dt) {
-    this.pocketDetectionElapsed += dt;
-    if (this.pocketDetectionElapsed < SPROUT_COMPANION.pocketDetectionIntervalSeconds) return;
-    this.pocketDetectionElapsed = 0;
-
-    const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
-      this.playerPosition,
-      SPROUT_COMPANION.pocketDetectionRange
-    ) ?? null;
-    this.pocketSignal = signal;
-
-    if (!signal) return;
-    if (this.idleAnimation) this.#endIdleAnimation({ applyCooldown: false });
-    if (signal.pocketId !== this.announcedPocketSignalId) {
-      this.announcedPocketSignalId = signal.pocketId;
-      this.game.setStatus?.('SPROUT · SUBSURFACE SIGNAL DETECTED');
-    }
-    if (
-      signal.distance <= SPROUT_COMPANION.pocketDetectionStrongDistance
-      && signal.pocketId !== this.announcedStrongPocketSignalId
-    ) {
-      this.announcedStrongPocketSignalId = signal.pocketId;
-      this.game.setStatus?.('SPROUT · STRONG SUBSURFACE SIGNAL');
-    }
-  }
+  #frame = timestamp => {
+    if (!this.running) return;
+    const dt = this.lastTimestamp === null ? 0 : (timestamp - this.lastTimestamp) / 1000;
+    this.lastTimestamp = timestamp;
+    if (!this.game.isPaused?.()) this.update(dt);
+    this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
+  };
 
   #activate() {
     const presentation = this.arrival.claimCompanionPresentation?.();
     if (!presentation) return false;
     this.root = presentation;
-    this.root.visible = true;
-    this.root.name = 'sprout-companion-placeholder';
+    this.root.name = 'sprout-production-companion';
     this.root.rotation.x = 0;
     this.root.rotation.z = 0;
-    this.player.getPosition(this.playerPosition);
-    this.player.getFacingDirection(this.playerFacing);
-    this.playerFacing.y = 0;
-    if (this.playerFacing.lengthSq() < 0.0001) this.playerFacing.set(0, 0, 1);
-    else this.playerFacing.normalize();
-    this.previousPlayerPosition.copy(this.playerPosition);
-    this.perceivedPlayerPosition.copy(this.playerPosition);
-    this.perceivedPlayerFacing.copy(this.playerFacing);
-    this.perceivedPlayerGoalPosition.copy(this.playerPosition);
-    this.perceivedPlayerGoalFacing.copy(this.playerFacing);
-    this.hasPlayerSample = true;
-    this.hasPerceivedRanger = true;
-    this.#sampleFollowDrift({ immediate: true });
-    this.#resolveFollowTarget();
+    this.#stow();
     return true;
   }
 
-  #updateRangerMotion(dt) {
-    if (!this.hasPlayerSample) {
-      this.previousPlayerPosition.copy(this.playerPosition);
-      this.hasPlayerSample = true;
-      return;
-    }
-
-    const moved = Math.hypot(
-      this.playerPosition.x - this.previousPlayerPosition.x,
-      this.playerPosition.z - this.previousPlayerPosition.z
-    );
-    const speed = dt > 0 ? moved / dt : 0;
-    const moving = speed >= SPROUT_COMPANION.rangerMotionThreshold;
-
-    if (moving) {
-      if (!this.rangerMoving) {
-        this.followReactionRemaining = this.#randomBetween(
-          SPROUT_COMPANION.followReactionMinSeconds,
-          SPROUT_COMPANION.followReactionMaxSeconds
-        );
-      }
-      this.rangerIdleElapsed = 0;
-      this.idleTargetValid = false;
-      this.idleScanRemaining = 0;
-    } else {
-      this.rangerIdleElapsed += dt;
-    }
-
-    this.rangerMoving = moving;
-    this.previousPlayerPosition.copy(this.playerPosition);
-  }
-
-  #updatePerceivedRanger(dt) {
-    this.followSenseRemaining -= dt;
-    this.followReactionRemaining = Math.max(0, this.followReactionRemaining - dt);
-    this.followDriftRemaining -= dt;
-
-    if (this.followDriftRemaining <= 0) {
-      this.#sampleFollowDrift();
-      this.followDriftRemaining = this.#randomBetween(
-        SPROUT_COMPANION.followDriftIntervalMinSeconds,
-        SPROUT_COMPANION.followDriftIntervalMaxSeconds
-      );
-    }
-
-    if (!this.hasPerceivedRanger || (this.followSenseRemaining <= 0 && this.followReactionRemaining <= 0)) {
-      this.perceivedPlayerGoalPosition.copy(this.playerPosition);
-      this.perceivedPlayerGoalFacing.copy(this.playerFacing);
-      this.hasPerceivedRanger = true;
-      this.followSenseRemaining = this.#randomBetween(
-        SPROUT_COMPANION.followSenseMinSeconds,
-        SPROUT_COMPANION.followSenseMaxSeconds
-      );
-    }
-
-    if (this.hasPerceivedRanger && dt > 0) {
-      const positionBlend = 1 - Math.exp(-SPROUT_COMPANION.followPerceptionResponse * dt);
-      const facingBlend = 1 - Math.exp(-SPROUT_COMPANION.followFacingResponse * dt);
-      const driftBlend = 1 - Math.exp(-SPROUT_COMPANION.followDriftResponse * dt);
-      this.perceivedPlayerPosition.lerp(this.perceivedPlayerGoalPosition, positionBlend);
-      this.perceivedPlayerFacing.lerp(this.perceivedPlayerGoalFacing, facingBlend);
-      this.perceivedPlayerFacing.y = 0;
-      if (this.perceivedPlayerFacing.lengthSq() < 0.0001) this.perceivedPlayerFacing.copy(this.playerFacing);
-      else this.perceivedPlayerFacing.normalize();
-      this.followDriftLateral = THREE.MathUtils.lerp(
-        this.followDriftLateral,
-        this.followDriftLateralGoal,
-        driftBlend
-      );
-      this.followDriftBack = THREE.MathUtils.lerp(
-        this.followDriftBack,
-        this.followDriftBackGoal,
-        driftBlend
-      );
-    }
-
-    this.#resolveFollowTarget();
-  }
-
-  #sampleFollowDrift({ immediate = false } = {}) {
-    this.followDriftLateralGoal = this.#randomBetween(
-      -SPROUT_COMPANION.followDriftRadius,
-      SPROUT_COMPANION.followDriftRadius
-    );
-    this.followDriftBackGoal = this.#randomBetween(
-      -SPROUT_COMPANION.followDriftBackRadius,
-      SPROUT_COMPANION.followDriftBackRadius
-    );
-    if (immediate) {
-      this.followDriftLateral = this.followDriftLateralGoal;
-      this.followDriftBack = this.followDriftBackGoal;
-    }
-  }
-
-  #resolveFollowTarget() {
-    const perceivedPosition = this.hasPerceivedRanger ? this.perceivedPlayerPosition : this.playerPosition;
-    const perceivedFacing = this.hasPerceivedRanger ? this.perceivedPlayerFacing : this.playerFacing;
-    const rightX = perceivedFacing.z;
-    const rightZ = -perceivedFacing.x;
-    const followDistance = Math.max(1.25, SPROUT_COMPANION.followDistance + this.followDriftBack);
-    let bestScore = Infinity;
-
-    for (const side of [this.followSide, -this.followSide]) {
-      const lateral = SPROUT_COMPANION.followSideOffset * side + this.followDriftLateral;
-      const x = perceivedPosition.x - perceivedFacing.x * followDistance + rightX * lateral;
-      const z = perceivedPosition.z - perceivedFacing.z * followDistance + rightZ * lateral;
-      const clear = this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)
-        && this.island.isPlayable?.(x, z, 1.2) !== false;
-      const score = Math.hypot(x - this.root.position.x, z - this.root.position.z)
-        + (side === this.followSide ? 0 : 0.65) + (clear ? 0 : 100);
-      if (score >= bestScore) continue;
-      bestScore = score;
-      this.followTarget.set(x, 0, z);
-      this.nextFollowSide = side;
-    }
-
-    this.followSide = this.nextFollowSide;
-    this.followTarget.y = this.#groundHeightAt(
-      this.followTarget.x,
-      this.followTarget.z,
-      { referenceY: perceivedPosition.y }
-    ) + SPROUT_COMPANION.hoverHeight;
-    return this.followTarget;
-  }
-
-  #updatePocketSignalFocus(dt) {
-    this.idleTargetValid = false;
-    this.idleScanRemaining = 0;
-
-    const distanceToFollowTarget = Math.hypot(
-      this.followTarget.x - this.root.position.x,
-      this.followTarget.z - this.root.position.z
-    );
-    if (distanceToFollowTarget > SPROUT_COMPANION.pocketSignalFocusRadius) {
-      const movement = this.#moveToward(this.followTarget, SPROUT_COMPANION.followSpeed, dt);
-      if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
-      return;
-    }
-
-    this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 7));
-    this.#settleHover(this.root.position.x, this.root.position.z, dt);
-
-    const signal = this.pocketSignal?.position;
-    if (!signal) return;
-    const dx = signal.x - this.root.position.x;
-    const dz = signal.z - this.root.position.z;
-    if (Math.hypot(dx, dz) <= 0.001) return;
-
-    const signalYaw = Math.atan2(dx, dz);
-    this.root.rotation.y = this.#lerpAngle(
-      this.root.rotation.y,
-      signalYaw,
-      Math.min(1, dt * SPROUT_COMPANION.pocketSignalTurnSpeed)
-    );
-  }
-
-  #updateIdleBehavior(dt) {
-    if (this.idleScanRemaining > 0) {
-      this.idleScanRemaining = Math.max(0, this.idleScanRemaining - dt);
-      this.#settleHover(this.root.position.x, this.root.position.z, dt);
-      const outwardYaw = Math.atan2(
-        this.root.position.x - this.playerPosition.x,
-        this.root.position.z - this.playerPosition.z
-      );
-      this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, outwardYaw, Math.min(1, dt * 2.2));
-      if (this.idleScanRemaining <= 0) this.idleTargetValid = false;
-      return;
-    }
-
-    this.idleRoamRemaining -= dt;
-    if (!this.idleTargetValid || this.idleRoamRemaining <= 0) this.#chooseIdleTarget();
-    if (!this.idleTargetValid) {
-      this.#settleHover(this.root.position.x, this.root.position.z, dt);
-      return;
-    }
-
-    const distance = Math.hypot(
-      this.idleTarget.x - this.root.position.x,
-      this.idleTarget.z - this.root.position.z
-    );
-    if (distance <= 0.24) {
-      this.idleScanRemaining = this.#randomBetween(
-        SPROUT_COMPANION.idleScanMinSeconds,
-        SPROUT_COMPANION.idleScanMaxSeconds
-      );
-      this.#settleHover(this.root.position.x, this.root.position.z, dt);
-      return;
-    }
-
-    const movement = this.#moveToward(this.idleTarget, SPROUT_COMPANION.idleRoamSpeed, dt);
-    if (this.#followMovementBlocked(movement, dt)) this.#beginDoorRoute();
-  }
-
-  #chooseIdleTarget() {
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = this.#randomBetween(
-        SPROUT_COMPANION.idleRoamMinRadius,
-        SPROUT_COMPANION.idleRoamMaxRadius
-      );
-      const x = this.playerPosition.x + Math.cos(angle) * radius;
-      const z = this.playerPosition.z + Math.sin(angle) * radius;
-      if (this.island.isPlayable?.(x, z, 1.2) === false) continue;
-      if (!this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)) continue;
-      this.idleTarget.set(
-        x,
-        this.#groundHeightAt(x, z, { referenceY: this.playerPosition.y })
-          + SPROUT_COMPANION.hoverHeight,
-        z
-      );
-      this.idleTargetValid = true;
-      this.idleRoamRemaining = this.#randomBetween(
-        SPROUT_COMPANION.idleRoamIntervalMinSeconds,
-        SPROUT_COMPANION.idleRoamIntervalMaxSeconds
-      );
-      return true;
-    }
-
-    this.idleTargetValid = false;
-    this.idleRoamRemaining = 0.5;
-    return false;
-  }
-
-  #moveToward(target, speed, dt) {
-    if (!this.root || !target || dt <= 0) return { blocked: false, movedDistance: 0 };
-    let dx = target.x - this.root.position.x;
-    let dz = target.z - this.root.position.z;
-
-    // Route around the Ranger whenever the full desired segment crosses personal space.
-    const px = this.root.position.x - this.playerPosition.x;
-    const pz = this.root.position.z - this.playerPosition.z;
-    const lengthSq = dx * dx + dz * dz;
-    const t = lengthSq > 0 ? THREE.MathUtils.clamp(-(px * dx + pz * dz) / lengthSq, 0, 1) : 0;
-    const clearance = SPROUT_COMPANION.rangerPersonalSpace;
-    if (Math.hypot(px + t * dx, pz + t * dz) < clearance + 0.08) {
-      const angle = Math.atan2(pz, px);
-      const cross = px * dz - pz * dx;
-      const turn = Math.abs(cross) < 0.01 ? this.followSide : Math.sign(cross);
-      const waypointAngle = angle + turn * 0.45;
-      dx = this.playerPosition.x + Math.cos(waypointAngle) * (clearance + 0.3) - this.root.position.x;
-      dz = this.playerPosition.z + Math.sin(waypointAngle) * (clearance + 0.3) - this.root.position.z;
-    }
-
-    const distance = Math.hypot(dx, dz);
-    if (distance < 0.015) {
-      this.currentMoveSpeed = THREE.MathUtils.lerp(this.currentMoveSpeed, 0, Math.min(1, dt * 6));
-      this.#settleHover(target.x, target.z, dt);
-      return { blocked: false, movedDistance: 0 };
-    }
-
-    const braking = THREE.MathUtils.clamp(distance / 1.15, 0.32, 1);
-    const targetSpeed = speed * braking;
-    const response = speed >= SPROUT_COMPANION.catchUpSpeed ? 7 : 3.4;
-    this.currentMoveSpeed = THREE.MathUtils.lerp(
-      this.currentMoveSpeed,
-      targetSpeed,
-      Math.min(1, dt * response)
-    );
-    const step = Math.min(distance, Math.max(0.2, this.currentMoveSpeed) * dt);
-    const desired = {
-      x: this.root.position.x + (dx / distance) * step,
-      z: this.root.position.z + (dz / distance) * step
-    };
-    const from = {
-      x: this.root.position.x,
-      y: this.root.position.y,
-      z: this.root.position.z
-    };
-    const resolved = this.collision.resolveMove(from, desired, {
-      radius: SPROUT_COMPANION.collisionRadius,
-      height: SPROUT_COMPANION.collisionHeight,
-      airborne: true
-    });
-
-    // World sliding must not reintroduce Ranger overlap.
-    if (Math.hypot(resolved.x - this.playerPosition.x, resolved.z - this.playerPosition.z)
-      < SPROUT_COMPANION.rangerPersonalSpace) {
-      this.currentMoveSpeed *= Math.max(0, 1 - dt * 8);
-      this.#settleHover(this.root.position.x, this.root.position.z, dt);
-      return { blocked: Boolean(resolved.blocked), movedDistance: 0 };
-    }
-
-    const movedX = resolved.x - this.root.position.x;
-    const movedZ = resolved.z - this.root.position.z;
-    const movedDistance = Math.hypot(movedX, movedZ);
-    this.root.position.x = resolved.x;
-    this.root.position.z = resolved.z;
-    this.#settleHover(resolved.x, resolved.z, dt);
-    if (movedDistance > 0.001) {
-      const desiredYaw = Math.atan2(movedX, movedZ);
-      this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, desiredYaw, Math.min(1, dt * 6.2));
-    }
-    return { blocked: Boolean(resolved.blocked), movedDistance };
-  }
-
-  #followMovementBlocked(movement, dt) {
-    if (!movement?.blocked) {
-      this.followBlockedElapsed = 0;
-      return false;
-    }
-    this.followBlockedElapsed += dt;
-    return this.followBlockedElapsed >= SPROUT_COMPANION.doorRouteBlockedSeconds;
-  }
-
-  #nearbyDoorPortals() {
-    if (!this.panelTraversal || !this.root) return [];
-    return this.panelTraversal.getDoorPortals().filter(portal => (
-      (portal.storey ?? 0) === 0
-      && Math.hypot(portal.x - this.root.position.x, portal.z - this.root.position.z)
-        <= SPROUT_COMPANION.doorRouteSearchRadius
-    ));
-  }
-
-  #hasNearbyDoorPortal() {
-    return this.#nearbyDoorPortals().length > 0;
-  }
-
-  #beginDoorRoute() {
-    if (this.doorRoute || this.doorRouteCooldown > 0 || !this.root) return false;
-    const portals = this.#nearbyDoorPortals();
-    if (!portals.length) {
-      this.followBlockedElapsed = 0;
-      return false;
-    }
-
-    const route = selectSproutDoorRoute({
-      from: this.root.position,
-      to: this.followTarget,
-      portals,
-      searchRadius: SPROUT_COMPANION.doorRouteSearchRadius,
-      waypointOffset: SPROUT_COMPANION.doorRouteWaypointOffset,
-      maxDetour: SPROUT_COMPANION.doorRouteMaxDetour
-    });
-    if (!route) {
-      this.followBlockedElapsed = 0;
-      return false;
-    }
-
-    this.doorRoute = {
-      ...route,
-      waypointIndex: 0,
-      elapsed: 0
-    };
-    this.followBlockedElapsed = 0;
-    this.idleTargetValid = false;
-    this.idleScanRemaining = 0;
-    return true;
-  }
-
-  #updateDoorRoute(dt) {
-    const state = this.doorRoute;
-    if (!state || !this.root) return false;
-    state.elapsed += dt;
-    if (state.elapsed >= SPROUT_COMPANION.doorRouteTimeoutSeconds) {
-      this.#clearDoorRoute({ applyCooldown: true });
-      return false;
-    }
-
-    while (state.waypointIndex < state.waypoints.length) {
-      const waypoint = state.waypoints[state.waypointIndex];
-      const distance = Math.hypot(
-        waypoint.x - this.root.position.x,
-        waypoint.z - this.root.position.z
-      );
-      if (distance > SPROUT_COMPANION.doorRouteArrivalRadius) break;
-      state.waypointIndex += 1;
-    }
-
-    if (state.waypointIndex >= state.waypoints.length) {
-      this.#clearDoorRoute({ applyCooldown: true });
-      return false;
-    }
-
-    const waypoint = state.waypoints[state.waypointIndex];
-    this.#moveToward(waypoint, SPROUT_COMPANION.catchUpSpeed, dt);
-    return true;
-  }
-
-  #clearDoorRoute({ applyCooldown = false } = {}) {
-    const hadRoute = Boolean(this.doorRoute);
-    this.doorRoute = null;
-    this.followBlockedElapsed = 0;
-    if (applyCooldown && hadRoute) {
-      this.doorRouteCooldown = SPROUT_COMPANION.doorRouteCooldownSeconds;
-    }
-  }
-
-  #groundHeightAt(x, z, { referenceY = null } = {}) {
-    const currentGroundY = this.root
-      ? this.root.position.y - SPROUT_COMPANION.hoverHeight
-      : this.playerPosition.y;
-    const supportReferenceY = Number.isFinite(referenceY)
-      ? referenceY
-      : currentGroundY;
-
-    if (typeof this.island.walkableHeightAt === 'function') {
-      return this.island.walkableHeightAt(x, z, { referenceY: supportReferenceY });
-    }
-    return this.island.heightAt(x, z);
-  }
-
-  #settleHover(x, z, dt) {
-    const ground = this.#groundHeightAt(x, z);
-    const hoverBob = Math.sin(this.elapsed * SPROUT_COMPANION.hoverFrequency) * SPROUT_COMPANION.hoverAmplitude;
-    const targetY = ground + SPROUT_COMPANION.hoverHeight + hoverBob;
-    const blend = dt > 0 ? Math.min(1, dt * 8) : 1;
-    this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, targetY, blend);
-  }
-
-  #snapNearRanger() {
-    this.#clearDoorRoute();
+  #deploy(dt) {
+    if (!this.root) return;
     const rightX = this.playerFacing.z;
     const rightZ = -this.playerFacing.x;
-    const actualFollow = new THREE.Vector3(
-      this.playerPosition.x - this.playerFacing.x * SPROUT_COMPANION.followDistance
-        + rightX * SPROUT_COMPANION.followSideOffset * this.followSide,
-      0,
-      this.playerPosition.z - this.playerFacing.z * SPROUT_COMPANION.followDistance
-        + rightZ * SPROUT_COMPANION.followSideOffset * this.followSide
+    this.deployPosition.set(
+      this.playerPosition.x - this.playerFacing.x * SPROUT_COMPANION.deployBackOffset + rightX * SPROUT_COMPANION.deploySideOffset,
+      this.playerPosition.y + SPROUT_COMPANION.hoverHeight + Math.sin(this.elapsed * SPROUT_COMPANION.hoverFrequency) * SPROUT_COMPANION.hoverAmplitude,
+      this.playerPosition.z - this.playerFacing.z * SPROUT_COMPANION.deployBackOffset + rightZ * SPROUT_COMPANION.deploySideOffset
     );
-    const candidates = [
-      actualFollow,
-      ...[0, Math.PI / 2, Math.PI, Math.PI * 1.5].map(angle => new THREE.Vector3(
-        this.playerPosition.x + Math.cos(angle) * 1.7,
-        0,
-        this.playerPosition.z + Math.sin(angle) * 1.7
-      ))
-    ];
 
-    const point = candidates.find(candidate => (
-      this.island.isPlayable?.(candidate.x, candidate.z, 1.2) !== false
-      && this.collision.isCircleClear(candidate.x, candidate.z, SPROUT_COMPANION.collisionRadius)
-    )) ?? actualFollow;
-    this.root.position.set(
-      point.x,
-      this.#groundHeightAt(point.x, point.z, { referenceY: this.playerPosition.y })
-        + SPROUT_COMPANION.hoverHeight,
-      point.z
-    );
-    this.perceivedPlayerPosition.copy(this.playerPosition);
-    this.perceivedPlayerFacing.copy(this.playerFacing);
-    this.perceivedPlayerGoalPosition.copy(this.playerPosition);
-    this.perceivedPlayerGoalFacing.copy(this.playerFacing);
-    this.currentMoveSpeed = 0;
-    this.#resolveFollowTarget();
+    if (!this.root.visible) {
+      this.root.position.copy(this.deployPosition);
+      this.root.visible = true;
+    } else {
+      this.root.position.lerp(this.deployPosition, Math.min(1, dt * 10));
+    }
+
+    const target = this.scanTarget;
+    const yaw = target
+      ? Math.atan2(target.x - this.root.position.x, target.z - this.root.position.z)
+      : Math.atan2(this.playerFacing.x, this.playerFacing.z);
+    this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, yaw, Math.min(1, dt * 8));
   }
 
-  #separateFromRanger(dt) {
-    if (!this.root || dt <= 0) return;
-    const dx = this.root.position.x - this.playerPosition.x;
-    const dz = this.root.position.z - this.playerPosition.z;
-    const distance = Math.hypot(dx, dz);
-    const radius = SPROUT_COMPANION.rangerPersonalSpace;
-    if (distance >= radius) return;
+  #stow() {
+    if (this.root) this.root.visible = false;
+  }
 
-    // Ranger motion can enter Sprout's space even while Sprout is compressing or idle.
-    // Choose a collision-safe escape direction, but move toward it at a bounded speed
-    // instead of teleporting to the personal-space edge in a single frame.
-    const angle = distance > 0.001 ? Math.atan2(dz, dx)
-      : Math.atan2(-this.playerFacing.z, -this.playerFacing.x);
-    let target = null;
-    for (const offset of [0, 0.5, -0.5, 1, -1, Math.PI]) {
-      const x = this.playerPosition.x + Math.cos(angle + offset) * (radius + 0.02);
-      const z = this.playerPosition.z + Math.sin(angle + offset) * (radius + 0.02);
-      if (this.collision.isCircleClear(x, z, SPROUT_COMPANION.collisionRadius)
-        && this.island.isPlayable?.(x, z, 1.2) !== false) {
-        target = { x, z };
-        break;
+  #spendEnergy(amount) {
+    const cost = Math.max(0, Number(amount) || 0);
+    if (this.energy + 1e-6 < cost) return false;
+    this.energy = Math.max(0, this.energy - cost);
+    return true;
+  }
+
+  #updateFindResource(command) {
+    if (command.phase === 'acquire') {
+      const target = this.gatherables.findNearestLooseResource?.(
+        this.playerPosition,
+        SPROUT_COMPANION.resourceScanRange,
+        resourceId => resourceId === command.definition.resourceId,
+        { requireCapacity: false }
+      ) ?? null;
+      if (!target) {
+        this.#finishCommand('SPROUT · NO ' + command.definition.resourceId.toUpperCase() + ' SIGNAL NEARBY');
+        return;
       }
+      command.target = target;
+      command.phase = 'scan';
+      command.elapsed = 0;
+      command.scanning = true;
+      this.scanTarget = target.position.clone();
+      this.scanTerrainProjection = true;
+      this.scanIntensity = 0.7;
+      const distance = Math.round(this.playerPosition.distanceTo(target.position));
+      this.game.setStatus?.('SPROUT · ' + target.label.toUpperCase() + ' FOUND · ' + distance + 'm');
+      return;
     }
-    if (!target) return;
 
-    const escapeX = target.x - this.root.position.x;
-    const escapeZ = target.z - this.root.position.z;
-    const escapeDistance = Math.hypot(escapeX, escapeZ);
-    if (escapeDistance <= 0.0001) return;
-    const step = Math.min(escapeDistance, SPROUT_COMPANION.rangerSeparationSpeed * dt);
-    const desired = {
-      x: this.root.position.x + (escapeX / escapeDistance) * step,
-      z: this.root.position.z + (escapeZ / escapeDistance) * step
-    };
-    const from = {
-      x: this.root.position.x,
-      y: this.root.position.y,
-      z: this.root.position.z
-    };
-    const resolved = this.collision.resolveMove(from, desired, {
-      radius: SPROUT_COMPANION.collisionRadius,
-      height: SPROUT_COMPANION.collisionHeight,
-      airborne: true
-    });
-    const previousDistance = distance;
-    const resolvedDistance = Math.hypot(
-      resolved.x - this.playerPosition.x,
-      resolved.z - this.playerPosition.z
-    );
-    if (resolvedDistance <= previousDistance + 0.0001) return;
+    if (command.elapsed >= SPROUT_COMPANION.resourceScanHoldSeconds) {
+      this.#finishCommand('SPROUT · SIGNAL MARKED');
+    }
+  }
 
-    this.root.position.x = resolved.x;
-    this.root.position.z = resolved.z;
-    this.currentMoveSpeed = Math.max(this.currentMoveSpeed, step / dt);
+  #updateUndergroundScan(command) {
+    if (command.phase === 'acquire') {
+      const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
+        this.playerPosition,
+        SPROUT_COMPANION.undergroundScanRange
+      ) ?? null;
+      if (!signal) {
+        this.#finishCommand('SPROUT · NO SUBSURFACE SIGNAL');
+        return;
+      }
+      command.target = signal;
+      command.phase = 'scan';
+      command.elapsed = 0;
+      command.scanning = true;
+      this.scanTarget = signal.position.clone
+        ? signal.position.clone()
+        : new THREE.Vector3(signal.position.x, signal.position.y, signal.position.z);
+      this.scanTerrainProjection = false;
+      this.scanIntensity = Number(signal.strength) || 0.85;
+      this.game.setStatus?.('SPROUT · SUBSURFACE SIGNAL · ' + Math.round(signal.distance) + 'm');
+      return;
+    }
+
+    if (command.elapsed >= SPROUT_COMPANION.undergroundScanHoldSeconds) {
+      this.#finishCommand('SPROUT · SUBSURFACE SCAN COMPLETE');
+    }
+  }
+
+  #updateCollectResource(command) {
+    if (this.energy + 1e-6 < SPROUT_COMPANION.collectionEnergyPerPickup) {
+      this.#finishCommand('SPROUT · LOW ENERGY · LOGS LEFT IN WORLD');
+      return;
+    }
+
+    const target = this.gatherables.findNearestLooseResource?.(
+      this.playerPosition,
+      SPROUT_COMPANION.collectionRadius,
+      resourceId => resourceId === command.definition.resourceId
+    ) ?? null;
+
+    if (!target) {
+      this.#finishCommand('SPROUT · NO STORABLE LOGS NEARBY');
+      return;
+    }
+
+    if (!this.#spendEnergy(SPROUT_COMPANION.collectionEnergyPerPickup)) return;
+    this.scanTarget = null;
+    command.scanning = false;
+    if (!this.#beginCompression(target)) {
+      this.grantEnergy(SPROUT_COMPANION.collectionEnergyPerPickup, 'reservation-refund');
+      this.#finishCommand('SPROUT · LOG COLLECTION BLOCKED');
+    }
+  }
+
+  #updateTreeHarvest(command, dt) {
+    if (command.phase === 'acquire') {
+      const target = this.treeHarvest.findNearestActiveTree?.(
+        this.playerPosition,
+        SPROUT_COMPANION.treeHarvestRange
+      ) ?? null;
+      if (!target) {
+        this.#finishCommand('SPROUT · NO TREE IN LASER RANGE');
+        return;
+      }
+      command.treeId = target.treeId;
+      command.treePosition = target.position.clone();
+      command.phase = 'laser';
+      command.elapsed = 0;
+      command.scanning = true;
+      command.pulseElapsed = SPROUT_COMPANION.laserPulseIntervalSeconds;
+      this.scanTarget = target.position.clone();
+      this.scanTerrainProjection = false;
+      this.scanIntensity = 1;
+      this.game.setStatus?.('SPROUT · LASER LOCKED · TREE ' + target.treeId);
+      return;
+    }
+
+    if (command.phase === 'laser') {
+      command.pulseElapsed += dt;
+      if (command.pulseElapsed < SPROUT_COMPANION.laserPulseIntervalSeconds) return;
+      command.pulseElapsed = 0;
+
+      if (!this.#spendEnergy(SPROUT_COMPANION.laserEnergyPerPulse)) {
+        this.#finishCommand('SPROUT · LOW ENERGY · LASER STOPPED');
+        return;
+      }
+
+      const result = this.treeHarvest.harvestTree?.(command.treeId, this.root.position) ?? null;
+      if (!result) {
+        this.#finishCommand('SPROUT · TREE TARGET LOST');
+        return;
+      }
+      if (result.position) this.scanTarget = result.position.clone();
+
+      if (!result.chopped) {
+        this.game.setStatus?.('SPROUT · LASER CUT · ' + result.remainingHits + ' PASSES LEFT');
+        return;
+      }
+
+      command.phase = 'waiting-logs';
+      command.elapsed = 0;
+      command.waitElapsed = 0;
+      command.expectedLogs = Math.max(0, Number(result.dropCount) || 0);
+      command.logsCollected = 0;
+      command.scanning = false;
+      this.scanTarget = null;
+      this.scanIntensity = 0;
+      this.game.setStatus?.('SPROUT · TREE DOWN · WAITING FOR LOGS');
+      return;
+    }
+
+    if (command.phase !== 'waiting-logs') return;
+    command.waitElapsed += dt;
+    if (command.waitElapsed < SPROUT_COMPANION.harvestDropDelaySeconds) return;
+
+    if (command.expectedLogs > 0 && command.logsCollected >= command.expectedLogs) {
+      this.#finishCommand('SPROUT · TREE HARVEST COMPLETE');
+      return;
+    }
+    if (this.energy + 1e-6 < SPROUT_COMPANION.collectionEnergyPerPickup) {
+      this.#finishCommand('SPROUT · LOW ENERGY · FELLED LOGS LEFT IN WORLD');
+      return;
+    }
+
+    const target = this.gatherables.findNearestLooseResource?.(
+      command.treePosition,
+      SPROUT_COMPANION.harvestLogCollectRadius,
+      resourceId => resourceId === 'log'
+    ) ?? null;
+
+    if (target) {
+      if (!this.#spendEnergy(SPROUT_COMPANION.collectionEnergyPerPickup)) return;
+      if (!this.#beginCompression(target)) {
+        this.grantEnergy(SPROUT_COMPANION.collectionEnergyPerPickup, 'reservation-refund');
+      }
+      return;
+    }
+
+    if (command.waitElapsed >= SPROUT_COMPANION.harvestLogWaitSeconds) {
+      this.#finishCommand(command.logsCollected > 0
+        ? 'SPROUT · TREE HARVEST COMPLETE'
+        : 'SPROUT · TREE DOWN · LOGS REMAIN IN WORLD');
+    }
   }
 
   #beginCompression(target) {
     const reserved = this.gatherables.reserveLooseResource?.(target.id, this.ownerToken);
-    if (!reserved) return false;
+    if (!reserved || !this.root) return false;
 
     const visual = reserved.root.clone(true);
     reserved.root.getWorldPosition(this.resourcePosition);
@@ -849,7 +469,7 @@ export class SproutCompanionController {
     visual.position.copy(this.resourcePosition);
     visual.quaternion.copy(this.tempQuaternion);
     visual.scale.copy(this.tempScale);
-    visual.name = `sprout-compression-${reserved.resourceId}-${reserved.id}`;
+    visual.name = 'sprout-compression-' + reserved.resourceId + '-' + reserved.id;
     this.game.sceneSystem.scene.add(visual);
 
     const beamGeometry = new THREE.BufferGeometry();
@@ -882,16 +502,6 @@ export class SproutCompanionController {
     halo.position.copy(this.resourcePosition);
     this.game.sceneSystem.scene.add(halo);
 
-    const inspectDuration = this.rangerIdleElapsed >= SPROUT_COMPANION.idleAfterSeconds
-      ? this.#randomBetween(
-        SPROUT_COMPANION.idleInspectMinSeconds,
-        SPROUT_COMPANION.idleInspectMaxSeconds
-      )
-      : 0;
-    const transferDuration = reserved.resourceId === 'log'
-      ? SPROUT_COMPANION.logCompressionSeconds
-      : SPROUT_COMPANION.compressionSeconds;
-
     this.compression = {
       id: reserved.id,
       resourceId: reserved.resourceId,
@@ -901,14 +511,11 @@ export class SproutCompanionController {
       halo,
       start: this.resourcePosition.clone(),
       startScale: this.tempScale.clone(),
-      inspectPoint: this.resourcePosition.clone(),
-      inspectDuration,
-      inspectScale: reserved.resourceId === 'log' ? 0.3 : 0.64,
-      transferDuration,
+      duration: reserved.resourceId === 'log'
+        ? SPROUT_COMPANION.logCompressionSeconds
+        : SPROUT_COMPANION.compressionSeconds,
       elapsed: 0
     };
-    this.#clearCollectionTarget();
-    this.idleTargetValid = false;
     this.#updateBeam();
     return true;
   }
@@ -918,32 +525,12 @@ export class SproutCompanionController {
     if (!state || !this.root) return;
 
     state.elapsed += dt;
+    const rawProgress = THREE.MathUtils.clamp(state.elapsed / state.duration, 0, 1);
+    const progress = easeOutCubic(rawProgress);
     const endpoint = this.root.position.clone();
     endpoint.y += 0.12;
-
-    if (state.inspectDuration > 0 && state.elapsed < state.inspectDuration) {
-      this.#updateInspectionPoint(state);
-      const pickupWindow = Math.max(0.25, Math.min(0.42, state.inspectDuration * 0.42));
-      const pickupProgress = easeOutCubic(THREE.MathUtils.clamp(state.elapsed / pickupWindow, 0, 1));
-      state.visual.position.lerpVectors(state.start, state.inspectPoint, pickupProgress);
-      const scale = THREE.MathUtils.lerp(1, state.inspectScale, pickupProgress);
-      state.visual.scale.copy(state.startScale).multiplyScalar(scale);
-      state.visual.rotation.y += dt * 1.65;
-      state.halo.position.copy(state.visual.position);
-      state.halo.scale.setScalar(0.92 + Math.sin(state.elapsed * 6.2) * 0.12);
-      this.#updateBeam();
-      return;
-    }
-
-    const transferElapsed = Math.max(0, state.elapsed - state.inspectDuration);
-    const rawProgress = THREE.MathUtils.clamp(transferElapsed / state.transferDuration, 0, 1);
-    const progress = easeOutCubic(rawProgress);
-    if (state.inspectDuration > 0) this.#updateInspectionPoint(state);
-    const transferStart = state.inspectDuration > 0 ? state.inspectPoint : state.start;
-    state.visual.position.lerpVectors(transferStart, endpoint, progress);
-    const startScaleFactor = state.inspectDuration > 0 ? state.inspectScale : 1;
-    const scale = Math.max(0.035, startScaleFactor * (1 - progress * 0.965));
-    state.visual.scale.copy(state.startScale).multiplyScalar(scale);
+    state.visual.position.lerpVectors(state.start, endpoint, progress);
+    state.visual.scale.copy(state.startScale).multiplyScalar(Math.max(0.035, 1 - progress * 0.965));
     state.halo.position.copy(state.visual.position);
     state.halo.scale.setScalar(0.8 + Math.sin(rawProgress * Math.PI * 5) * 0.18);
     this.#updateBeam();
@@ -956,27 +543,15 @@ export class SproutCompanionController {
     }
 
     this.inventory.add(pickup.resourceId, pickup.quantity);
-    this.game.hud?.setInventory(this.inventory.snapshot());
-    const quantityLabel = pickup.quantity > 1 ? `+${pickup.quantity}` : '+1';
-    this.game.setStatus?.(`SPROUT · STORED ${quantityLabel} ${pickup.label.toUpperCase()}`);
+    this.game.hud?.setInventory?.(this.inventory.snapshot());
+    if (this.command?.id === 'harvest-tree' && pickup.resourceId === 'log') {
+      this.command.logsCollected += pickup.quantity;
+    }
+
+    const quantityLabel = pickup.quantity > 1 ? '+' + pickup.quantity : '+1';
+    this.game.setStatus?.('SPROUT · STORED ' + quantityLabel + ' ' + pickup.label.toUpperCase());
     this.#destroyCompressionVisuals();
     this.compression = null;
-    this.cooldown = SPROUT_COMPANION.collectionCooldownSeconds;
-    this.scanElapsed = 0;
-  }
-
-  #updateInspectionPoint(state) {
-    if (!state?.inspectPoint || !this.root) return;
-    const yaw = this.root.rotation.y;
-    const forwardX = Math.sin(yaw);
-    const forwardZ = Math.cos(yaw);
-    const rightX = Math.cos(yaw);
-    const rightZ = -Math.sin(yaw);
-    state.inspectPoint.set(
-      this.root.position.x + forwardX * 0.5 - rightX * 0.14,
-      this.root.position.y + 0.16,
-      this.root.position.z + forwardZ * 0.5 - rightZ * 0.14
-    );
   }
 
   #updateBeam() {
@@ -992,122 +567,17 @@ export class SproutCompanionController {
     position.needsUpdate = true;
   }
 
-  #tryStartIdleAnimation() {
-    if (
-      this.idleAnimation
-      || this.target
-      || this.compression
-      || this.pocketSignal
-      || this.idleAnimationCooldown > 0
-    ) return false;
-    if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds) return false;
-
-    const distance = Math.hypot(
-      this.root.position.x - this.playerPosition.x,
-      this.root.position.z - this.playerPosition.z
-    );
-    if (distance > SPROUT_COMPANION.idleAnimationRadius) return false;
-
-    return this.#beginIdleAnimation(this.nextIdleAnimationKind);
+  #finishCommand(message = null) {
+    this.command = null;
+    this.scanTarget = null;
+    this.scanIntensity = 0;
+    this.#stow();
+    if (message) this.game.setStatus?.(message);
   }
 
-  #beginIdleAnimation(kind) {
-    if (this.idleAnimation || this.target || this.compression || this.pocketSignal || !this.root) return false;
-    if (this.rangerIdleElapsed < SPROUT_COMPANION.idleAnimationAfterSeconds || this.idleAnimationCooldown > 0) return false;
-
-    const dx = this.root.position.x - this.playerPosition.x;
-    const dz = this.root.position.z - this.playerPosition.z;
-    const length = Math.hypot(dx, dz);
-    const directionX = length > 0.001 ? dx / length : -this.playerFacing.x;
-    const directionZ = length > 0.001 ? dz / length : -this.playerFacing.z;
-    const duration = kind === 'scan'
-      ? SPROUT_COMPANION.idleScanFlourishSeconds
-      : SPROUT_COMPANION.idleAffectionSeconds;
-
-    this.idleAnimation = {
-      kind,
-      elapsed: 0,
-      duration,
-      directionX,
-      directionZ,
-      targetRadius: kind === 'scan'
-        ? SPROUT_COMPANION.rangerPersonalSpace + 0.45
-        : SPROUT_COMPANION.rangerPersonalSpace + 0.18
-    };
-    this.idleTargetValid = false;
-    this.idleScanRemaining = 0;
-    this.currentMoveSpeed = 0;
-    return true;
-  }
-
-  #updateIdleAnimation(dt) {
-    const state = this.idleAnimation;
-    if (!state || !this.root) return;
-    state.elapsed += dt;
-
-    const sway = state.kind === 'scan' ? Math.sin(state.elapsed * 1.55) * 0.16 : Math.sin(state.elapsed * 2.2) * 0.06;
-    const cos = Math.cos(sway);
-    const sin = Math.sin(sway);
-    const directionX = state.directionX * cos - state.directionZ * sin;
-    const directionZ = state.directionX * sin + state.directionZ * cos;
-    const targetX = this.playerPosition.x + directionX * state.targetRadius;
-    const targetZ = this.playerPosition.z + directionZ * state.targetRadius;
-    const safeTarget = this.collision.isCircleClear(targetX, targetZ, SPROUT_COMPANION.collisionRadius)
-      && this.island.isPlayable?.(targetX, targetZ, 1.2) !== false;
-    const blend = Math.min(1, dt * 3.8);
-
-    if (safeTarget) {
-      this.root.position.x = THREE.MathUtils.lerp(this.root.position.x, targetX, blend);
-      this.root.position.z = THREE.MathUtils.lerp(this.root.position.z, targetZ, blend);
-    }
-
-    const ground = this.#groundHeightAt(this.root.position.x, this.root.position.z);
-    const heightOffset = state.kind === 'affection' ? -0.08 : 0.03;
-    const bobSpeed = state.kind === 'scan' ? 3.2 : 4.4;
-    const bobAmount = state.kind === 'scan' ? 0.035 : 0.045;
-    const bob = Math.sin(state.elapsed * bobSpeed) * bobAmount;
-    const targetY = ground + SPROUT_COMPANION.hoverHeight + heightOffset + bob;
-    this.root.position.y = THREE.MathUtils.lerp(this.root.position.y, targetY, Math.min(1, dt * 6));
-
-    const desiredYaw = Math.atan2(
-      this.playerPosition.x - this.root.position.x,
-      this.playerPosition.z - this.root.position.z
-    );
-    this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, desiredYaw, Math.min(1, dt * 5));
-    this.root.rotation.z = state.kind === 'affection'
-      ? Math.sin(state.elapsed * 2.6) * 0.055
-      : Math.sin(state.elapsed * 1.4) * 0.022;
-
-    if (state.elapsed >= state.duration) this.#endIdleAnimation();
-  }
-
-  #endIdleAnimation({ applyCooldown = true } = {}) {
-    const state = this.idleAnimation;
-    if (!state) return false;
-    this.idleAnimation = null;
-    if (this.root) this.root.rotation.z = 0;
-    if (applyCooldown) {
-      this.idleAnimationCooldown = this.#randomBetween(
-        SPROUT_COMPANION.idleAnimationCooldownMinSeconds,
-        SPROUT_COMPANION.idleAnimationCooldownMaxSeconds
-      );
-      this.nextIdleAnimationKind = state.kind === 'affection' ? 'scan' : 'affection';
-    }
-    this.followReactionRemaining = this.#randomBetween(
-      SPROUT_COMPANION.followReactionMinSeconds,
-      SPROUT_COMPANION.followReactionMaxSeconds
-    );
-    return true;
-  }
-
-  #clearCollectionTarget() {
-    this.target = null;
-    this.targetScanHoldRemaining = 0;
-  }
-
-  #cancelCollectionIntent() {
-    this.#clearCollectionTarget();
+  #cancelCommand(message = null) {
     this.#cancelCompression();
+    this.#finishCommand(message);
   }
 
   #cancelCompression() {
@@ -1127,12 +597,6 @@ export class SproutCompanionController {
     state.beam?.material?.dispose?.();
     state.halo?.geometry?.dispose?.();
     state.halo?.material?.dispose?.();
-  }
-
-  #randomBetween(min, max) {
-    if (!Number.isFinite(min) || !Number.isFinite(max)) return 0;
-    if (max <= min) return min;
-    return min + Math.random() * (max - min);
   }
 
   #lerpAngle(from, to, t) {
