@@ -31,12 +31,21 @@ export class SproutCompanionController {
     this.scanTarget = null;
     this.scanTerrainProjection = true;
     this.scanIntensity = 0;
+    this.signalGlow = null;
+    this.playerPoseOwned = false;
     this.pollElapsed = SPROUT_COMPANION.commandPollIntervalSeconds;
 
     this.playerPosition = new THREE.Vector3();
     this.playerFacing = new THREE.Vector3(0, 0, 1);
     this.deployPosition = new THREE.Vector3();
+    this.returnPosition = new THREE.Vector3();
+    this.travelDestination = new THREE.Vector3();
+    this.travelDelta = new THREE.Vector3();
+    this.launchStart = new THREE.Vector3();
+    this.catchStart = new THREE.Vector3();
     this.resourcePosition = new THREE.Vector3();
+    this.fullScale = new THREE.Vector3(1, 1, 1);
+    this.miniScale = new THREE.Vector3(1, 1, 1);
     this.tempQuaternion = new THREE.Quaternion();
     this.tempScale = new THREE.Vector3();
   }
@@ -54,9 +63,8 @@ export class SproutCompanionController {
     this.frameId = null;
     this.running = false;
     this.#cancelCompression();
-    this.command = null;
-    this.scanTarget = null;
-    this.#stow();
+    this.#destroySignalGlow();
+    this.#hardResetCommand();
   }
 
   captureState() {
@@ -71,11 +79,9 @@ export class SproutCompanionController {
     this.energy = Number.isFinite(restored)
       ? THREE.MathUtils.clamp(restored, 0, SPROUT_COMPANION.energyMax)
       : SPROUT_COMPANION.energyMax;
-    this.command = null;
-    this.scanTarget = null;
-    this.scanIntensity = 0;
     this.#cancelCompression();
-    this.#stow();
+    this.#destroySignalGlow();
+    this.#hardResetCommand();
     return true;
   }
 
@@ -122,7 +128,7 @@ export class SproutCompanionController {
 
   getPresentationState() {
     return {
-      scanning: Boolean(this.command?.scanning && this.scanTarget && !this.compression),
+      scanning: Boolean(this.command?.scanning && !this.compression),
       scanTarget: this.scanTarget
         ? { x: this.scanTarget.x, y: this.scanTarget.y, z: this.scanTarget.z }
         : null,
@@ -146,25 +152,44 @@ export class SproutCompanionController {
       return false;
     }
 
-    this.#cancelCompression();
+    if (this.command || this.compression) this.#hardResetCommand();
+
+    this.player.getPosition(this.playerPosition);
+    const missionSpan = SPROUT_COMPANION.gatherMissionMax - SPROUT_COMPANION.gatherMissionMin + 1;
+    const targetGoal = definition.kind === 'gather-resource'
+      ? SPROUT_COMPANION.gatherMissionMin + Math.floor(Math.random() * Math.max(1, missionSpan))
+      : 0;
+
     this.command = {
       id: definition.id,
       definition,
-      phase: 'acquire',
+      stage: 'deploy',
+      stageElapsed: 0,
+      taskPhase: definition.kind === 'harvest-tree' ? 'acquire-tree' : 'acquire',
       elapsed: 0,
       pulseElapsed: SPROUT_COMPANION.laserPulseIntervalSeconds,
       waitElapsed: 0,
       target: null,
+      origin: this.playerPosition.clone(),
+      targetGoal,
+      collectedCount: 0,
       treeId: null,
       treePosition: null,
       expectedLogs: 0,
       logsCollected: 0,
-      scanning: false
+      treesFelled: 0,
+      scanning: false,
+      presentationStarted: false,
+      launched: false,
+      holdPoseStarted: false,
+      catchStarted: false,
+      mountedForStow: false,
+      completionMessage: null
     };
     this.scanTarget = null;
     this.scanIntensity = 0;
 
-    if (definition.kind === 'find-resource' || definition.kind === 'scan-underground') {
+    if (definition.kind === 'gather-resource' || definition.kind === 'scan-underground') {
       this.#spendEnergy(definition.energyCost);
     }
 
@@ -175,9 +200,10 @@ export class SproutCompanionController {
   update(dt) {
     dt = clampDt(dt);
     this.elapsed += dt;
+    this.#updateSignalGlow(dt);
 
     if (!this.arrival.isAllied?.()) {
-      this.#stow();
+      this.#hardResetCommand();
       return;
     }
     if (!this.root && !this.#activate()) return;
@@ -197,24 +223,31 @@ export class SproutCompanionController {
       return;
     }
 
-    this.#deploy(dt);
-
-    if (this.compression) {
-      this.#updateCompression(dt);
-      return;
-    }
-
     const command = this.command;
     if (!command) {
       this.#stow();
       return;
     }
 
+    if (command.stage === 'deploy') {
+      this.#updateDeployment(command, dt);
+      return;
+    }
+    if (command.stage === 'return') {
+      this.#updateReturn(command, dt);
+      return;
+    }
+
+    if (this.compression) {
+      this.#updateCompression(dt);
+      return;
+    }
+
     command.elapsed += dt;
     this.pollElapsed += dt;
 
-    if (command.definition.kind === 'find-resource') {
-      this.#updateFindResource(command);
+    if (command.definition.kind === 'gather-resource') {
+      this.#updateGatherResource(command, dt);
       return;
     }
     if (command.definition.kind === 'scan-underground') {
@@ -222,7 +255,7 @@ export class SproutCompanionController {
       return;
     }
     if (command.definition.kind === 'collect-resource') {
-      this.#updateCollectResource(command);
+      this.#updateCollectResource(command, dt);
       return;
     }
     if (command.definition.kind === 'harvest-tree') {
@@ -245,36 +278,186 @@ export class SproutCompanionController {
     this.root.name = 'sprout-production-companion';
     this.root.rotation.x = 0;
     this.root.rotation.z = 0;
+    this.fullScale.copy(this.root.scale);
+    this.miniScale.copy(this.fullScale).multiplyScalar(SPROUT_COMPANION.miniScaleFactor);
     this.#stow();
     return true;
   }
 
-  #deploy(dt) {
-    if (!this.root) return;
+  #resolveDeployPosition(target = this.deployPosition) {
     const rightX = this.playerFacing.z;
     const rightZ = -this.playerFacing.x;
-    this.deployPosition.set(
-      this.playerPosition.x - this.playerFacing.x * SPROUT_COMPANION.deployBackOffset + rightX * SPROUT_COMPANION.deploySideOffset,
-      this.playerPosition.y + SPROUT_COMPANION.hoverHeight + Math.sin(this.elapsed * SPROUT_COMPANION.hoverFrequency) * SPROUT_COMPANION.hoverAmplitude,
-      this.playerPosition.z - this.playerFacing.z * SPROUT_COMPANION.deployBackOffset + rightZ * SPROUT_COMPANION.deploySideOffset
+    return target.set(
+      this.playerPosition.x + this.playerFacing.x * 0.42 + rightX * SPROUT_COMPANION.deploySideOffset,
+      this.playerPosition.y + SPROUT_COMPANION.hoverHeight,
+      this.playerPosition.z + this.playerFacing.z * 0.42 + rightZ * SPROUT_COMPANION.deploySideOffset
     );
+  }
 
-    if (!this.root.visible) {
-      this.root.position.copy(this.deployPosition);
-      this.root.visible = true;
-    } else {
-      this.root.position.lerp(this.deployPosition, Math.min(1, dt * 10));
+  #resolveReturnPosition(target = this.returnPosition) {
+    const rightX = this.playerFacing.z;
+    const rightZ = -this.playerFacing.x;
+    return target.set(
+      this.playerPosition.x + this.playerFacing.x * 0.28 + rightX * 0.3,
+      this.playerPosition.y + 1.28,
+      this.playerPosition.z + this.playerFacing.z * 0.28 + rightZ * 0.3
+    );
+  }
+
+  #beginPlayerPose(preferences, options = {}) {
+    if (!this.playerPoseOwned) {
+      this.playerPoseOwned = Boolean(this.player.beginCinematic?.(this));
+    }
+    if (this.playerPoseOwned) {
+      this.player.playCinematicAnimation?.(preferences, options);
+    }
+    return this.playerPoseOwned;
+  }
+
+  #endPlayerPose() {
+    if (!this.playerPoseOwned) return;
+    this.player.endCinematic?.(this);
+    this.playerPoseOwned = false;
+  }
+
+  #mountMiniToHand() {
+    if (!this.root) return false;
+    this.player.mountRightHandObject?.(this.root);
+    this.root.position.set(0, 0.06, 0.08);
+    this.root.rotation.set(0, 0, 0);
+    this.root.scale.copy(this.miniScale);
+    this.root.visible = true;
+    return true;
+  }
+
+  #detachToScene() {
+    const scene = this.game.sceneSystem?.scene;
+    if (!scene || !this.root || this.root.parent === scene) return;
+    scene.attach(this.root);
+  }
+
+  #updateDeployment(command, dt) {
+    command.stageElapsed += dt;
+
+    if (!command.presentationStarted) {
+      command.presentationStarted = true;
+      this.#mountMiniToHand();
+      this.#beginPlayerPose(['Throw', 'Interact', 'Idle_B'], { loop: false, timeScale: 0.82 });
     }
 
-    const target = this.scanTarget;
-    const yaw = target
-      ? Math.atan2(target.x - this.root.position.x, target.z - this.root.position.z)
-      : Math.atan2(this.playerFacing.x, this.playerFacing.z);
-    this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, yaw, Math.min(1, dt * 8));
+    if (command.definition.kind === 'scan-underground') {
+      if (command.stageElapsed < SPROUT_COMPANION.scanRaiseSeconds) return;
+      if (!command.holdPoseStarted) {
+        command.holdPoseStarted = true;
+        this.#beginPlayerPose(['Idle_B', 'Idle_A'], { loop: true, timeScale: 0.88 });
+      }
+      command.stage = 'active';
+      command.stageElapsed = 0;
+      command.taskPhase = 'acquire';
+      return;
+    }
+
+    if (command.stageElapsed < SPROUT_COMPANION.deployHandSeconds) return;
+
+    if (!command.launched) {
+      command.launched = true;
+      this.#detachToScene();
+      this.launchStart.copy(this.root.position);
+      this.root.scale.copy(this.miniScale);
+    }
+
+    const raw = THREE.MathUtils.clamp(
+      (command.stageElapsed - SPROUT_COMPANION.deployHandSeconds) / SPROUT_COMPANION.deployGrowSeconds,
+      0,
+      1
+    );
+    const progress = easeOutCubic(raw);
+    const destination = this.#resolveDeployPosition();
+    this.root.position.lerpVectors(this.launchStart, destination, progress);
+    this.root.position.y += Math.sin(raw * Math.PI) * 0.48;
+    this.root.scale.lerpVectors(this.miniScale, this.fullScale, progress);
+    this.root.rotation.y = Math.atan2(this.playerFacing.x, this.playerFacing.z);
+    this.root.visible = true;
+
+    if (raw < 1) return;
+    this.root.scale.copy(this.fullScale);
+    command.stage = 'active';
+    command.stageElapsed = 0;
+    this.#endPlayerPose();
+  }
+
+  #updateReturn(command, dt) {
+    command.stageElapsed += dt;
+
+    if (command.definition.kind === 'scan-underground') {
+      if (!command.catchStarted) {
+        command.catchStarted = true;
+        command.stageElapsed = 0;
+        this.#beginPlayerPose(['Interact', 'Idle_B', 'Idle_A'], { loop: false, timeScale: 0.9 });
+      }
+      if (command.stageElapsed >= SPROUT_COMPANION.returnStowSeconds) this.#completeReturn();
+      return;
+    }
+
+    if (!command.catchStarted) {
+      const catchPoint = this.#resolveReturnPosition();
+      const arrived = this.#moveRootToward(
+        catchPoint,
+        dt,
+        SPROUT_COMPANION.returnApproachSpeed,
+        0,
+        SPROUT_COMPANION.returnCatchDistance
+      );
+      if (!arrived) return;
+      command.catchStarted = true;
+      command.stageElapsed = 0;
+      this.catchStart.copy(this.root.position);
+      this.#beginPlayerPose(['Interact', 'Idle_B', 'Idle_A'], { loop: false, timeScale: 0.88 });
+      return;
+    }
+
+    const raw = THREE.MathUtils.clamp(command.stageElapsed / SPROUT_COMPANION.returnCatchSeconds, 0, 1);
+    const progress = easeOutCubic(raw);
+    if (!command.mountedForStow) {
+      const catchPoint = this.#resolveReturnPosition();
+      this.root.position.lerpVectors(this.catchStart, catchPoint, progress);
+      this.root.scale.lerpVectors(this.fullScale, this.miniScale, progress);
+      if (raw >= 0.78) {
+        command.mountedForStow = true;
+        this.#mountMiniToHand();
+      }
+    }
+
+    if (raw >= 1) this.#completeReturn();
+  }
+
+  #moveRootToward(target, dt, speed, heightOffset = 0.5, threshold = SPROUT_COMPANION.missionArrivalDistance) {
+    if (!this.root || !target) return false;
+    this.#detachToScene();
+    this.travelDestination.set(target.x, target.y + heightOffset, target.z);
+    this.travelDelta.subVectors(this.travelDestination, this.root.position);
+    const distance = this.travelDelta.length();
+    if (distance <= threshold) return true;
+
+    const step = Math.min(distance, Math.max(0, speed) * dt);
+    if (step > 0 && distance > 0.0001) {
+      this.root.position.addScaledVector(this.travelDelta, step / distance);
+    }
+    const horizontal = Math.hypot(this.travelDelta.x, this.travelDelta.z);
+    if (horizontal > 0.001) {
+      const yaw = Math.atan2(this.travelDelta.x, this.travelDelta.z);
+      this.root.rotation.y = this.#lerpAngle(this.root.rotation.y, yaw, Math.min(1, dt * 8));
+    }
+    this.root.scale.copy(this.fullScale);
+    this.root.visible = true;
+    return distance - step <= threshold;
   }
 
   #stow() {
-    if (this.root) this.root.visible = false;
+    if (!this.root) return;
+    this.root.visible = false;
+    this.#detachToScene();
+    this.root.scale.copy(this.fullScale);
   }
 
   #spendEnergy(amount) {
@@ -284,167 +467,225 @@ export class SproutCompanionController {
     return true;
   }
 
-  #updateFindResource(command) {
-    if (command.phase === 'acquire') {
-      const target = this.gatherables.findNearestLooseResource?.(
-        this.playerPosition,
-        SPROUT_COMPANION.resourceScanRange,
-        resourceId => resourceId === command.definition.resourceId,
-        { requireCapacity: false }
-      ) ?? null;
-      if (!target) {
-        this.#finishCommand('SPROUT · NO ' + command.definition.resourceId.toUpperCase() + ' SIGNAL NEARBY');
-        return;
-      }
-      command.target = target;
-      command.phase = 'scan';
-      command.elapsed = 0;
-      command.scanning = true;
-      this.scanTarget = target.position.clone();
-      this.scanTerrainProjection = true;
-      this.scanIntensity = 0.7;
-      const distance = Math.round(this.playerPosition.distanceTo(target.position));
-      this.game.setStatus?.('SPROUT · ' + target.label.toUpperCase() + ' FOUND · ' + distance + 'm');
+  #updateGatherResource(command, dt) {
+    if (command.collectedCount >= command.targetGoal) {
+      this.#beginReturn('SPROUT · GATHERED ' + command.collectedCount + ' ' + command.definition.resourceId.toUpperCase());
       return;
     }
 
-    if (command.elapsed >= SPROUT_COMPANION.resourceScanHoldSeconds) {
-      this.#finishCommand('SPROUT · SIGNAL MARKED');
+    if (!command.target) {
+      const target = this.gatherables.findNearestLooseResource?.(
+        command.origin,
+        SPROUT_COMPANION.resourceScanRange,
+        resourceId => resourceId === command.definition.resourceId
+      ) ?? null;
+      if (!target) {
+        const message = command.collectedCount > 0
+          ? 'SPROUT · GATHER COMPLETE · ' + command.collectedCount + ' STORED'
+          : 'SPROUT · NO ' + command.definition.resourceId.toUpperCase() + ' NEARBY';
+        this.#beginReturn(message);
+        return;
+      }
+      command.target = target;
+      this.game.setStatus?.(
+        'SPROUT · COLLECTING ' + command.definition.resourceId.toUpperCase()
+        + ' · ' + (command.collectedCount + 1) + '/' + command.targetGoal
+      );
+    }
+
+    if (!this.#moveRootToward(command.target.position, dt, SPROUT_COMPANION.missionTravelSpeed, 0.52)) return;
+
+    if (this.energy + 1e-6 < SPROUT_COMPANION.collectionEnergyPerPickup) {
+      this.#beginReturn('SPROUT · LOW ENERGY · RETURNING');
+      return;
+    }
+    if (!this.#spendEnergy(SPROUT_COMPANION.collectionEnergyPerPickup)) return;
+
+    const target = command.target;
+    command.target = null;
+    if (!this.#beginCompression(target)) {
+      this.grantEnergy(SPROUT_COMPANION.collectionEnergyPerPickup, 'reservation-refund');
     }
   }
 
   #updateUndergroundScan(command) {
-    if (command.phase === 'acquire') {
+    if (command.taskPhase === 'acquire') {
       const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
         this.playerPosition,
         SPROUT_COMPANION.undergroundScanRange
       ) ?? null;
-      if (!signal) {
-        this.#finishCommand('SPROUT · NO SUBSURFACE SIGNAL');
-        return;
-      }
-      command.target = signal;
-      command.phase = 'scan';
+
+      command.taskPhase = 'scan';
       command.elapsed = 0;
       command.scanning = true;
-      this.scanTarget = signal.position.clone
-        ? signal.position.clone()
-        : new THREE.Vector3(signal.position.x, signal.position.y, signal.position.z);
+      this.scanTarget = null;
       this.scanTerrainProjection = false;
-      this.scanIntensity = Number(signal.strength) || 0.85;
-      this.game.setStatus?.('SPROUT · SUBSURFACE SIGNAL · ' + Math.round(signal.distance) + 'm');
+      this.scanIntensity = signal ? Math.max(0.28, Number(signal.strength) || 0.55) : 0.35;
+
+      if (signal?.position) {
+        const position = signal.position.clone
+          ? signal.position.clone()
+          : new THREE.Vector3(signal.position.x, signal.position.y, signal.position.z);
+        this.#showPocketSignal(position);
+        this.game.setStatus?.('SPROUT · FAINT SUBSURFACE SIGNAL · ' + Math.round(signal.distance) + 'm');
+      } else {
+        this.game.setStatus?.('SPROUT · FULL SCAN · NO SUBSURFACE SIGNAL');
+      }
       return;
     }
 
     if (command.elapsed >= SPROUT_COMPANION.undergroundScanHoldSeconds) {
-      this.#finishCommand('SPROUT · SUBSURFACE SCAN COMPLETE');
+      command.scanning = false;
+      this.#beginReturn('SPROUT · SUBSURFACE SCAN COMPLETE');
     }
   }
 
-  #updateCollectResource(command) {
+  #updateCollectResource(command, dt) {
     if (this.energy + 1e-6 < SPROUT_COMPANION.collectionEnergyPerPickup) {
-      this.#finishCommand('SPROUT · LOW ENERGY · LOGS LEFT IN WORLD');
+      this.#beginReturn('SPROUT · LOW ENERGY · LOGS LEFT IN WORLD');
       return;
     }
 
-    const target = this.gatherables.findNearestLooseResource?.(
-      this.playerPosition,
-      SPROUT_COMPANION.collectionRadius,
-      resourceId => resourceId === command.definition.resourceId
-    ) ?? null;
+    if (!command.target) {
+      const target = this.gatherables.findNearestLooseResource?.(
+        command.origin,
+        SPROUT_COMPANION.collectionRadius,
+        resourceId => resourceId === command.definition.resourceId
+      ) ?? null;
 
-    if (!target) {
-      this.#finishCommand('SPROUT · NO STORABLE LOGS NEARBY');
-      return;
+      if (!target) {
+        this.#beginReturn(command.collectedCount > 0
+          ? 'SPROUT · LOG COLLECTION COMPLETE · ' + command.collectedCount + ' STORED'
+          : 'SPROUT · NO STORABLE LOGS NEARBY');
+        return;
+      }
+      command.target = target;
     }
 
+    if (!this.#moveRootToward(command.target.position, dt, SPROUT_COMPANION.missionTravelSpeed, 0.56)) return;
     if (!this.#spendEnergy(SPROUT_COMPANION.collectionEnergyPerPickup)) return;
-    this.scanTarget = null;
-    command.scanning = false;
+
+    const target = command.target;
+    command.target = null;
     if (!this.#beginCompression(target)) {
       this.grantEnergy(SPROUT_COMPANION.collectionEnergyPerPickup, 'reservation-refund');
-      this.#finishCommand('SPROUT · LOG COLLECTION BLOCKED');
     }
   }
 
   #updateTreeHarvest(command, dt) {
-    if (command.phase === 'acquire') {
+    if (command.taskPhase === 'acquire-tree') {
       const target = this.treeHarvest.findNearestActiveTree?.(
-        this.playerPosition,
+        command.origin,
         SPROUT_COMPANION.treeHarvestRange
       ) ?? null;
       if (!target) {
-        this.#finishCommand('SPROUT · NO TREE IN LASER RANGE');
+        this.#beginReturn(command.treesFelled > 0
+          ? 'SPROUT · AREA HARVEST COMPLETE · ' + command.treesFelled + ' TREES'
+          : 'SPROUT · NO TREE IN HARVEST RANGE');
         return;
       }
+
       command.treeId = target.treeId;
       command.treePosition = target.position.clone();
-      command.phase = 'laser';
-      command.elapsed = 0;
-      command.scanning = true;
-      command.pulseElapsed = SPROUT_COMPANION.laserPulseIntervalSeconds;
-      this.scanTarget = target.position.clone();
-      this.scanTerrainProjection = false;
-      this.scanIntensity = 1;
-      this.game.setStatus?.('SPROUT · LASER LOCKED · TREE ' + target.treeId);
+      command.target = null;
+      command.taskPhase = 'travel-tree';
+      command.scanning = false;
+      this.scanTarget = null;
+      this.scanIntensity = 0;
+      this.game.setStatus?.('SPROUT · MOVING TO TREE ' + target.treeId);
       return;
     }
 
-    if (command.phase === 'laser') {
+    if (command.taskPhase === 'travel-tree') {
+      if (!this.#moveRootToward(
+        command.treePosition,
+        dt,
+        SPROUT_COMPANION.missionTravelSpeed,
+        SPROUT_COMPANION.hoverHeight * 0.72,
+        1.15
+      )) return;
+
+      command.taskPhase = 'laser';
+      command.pulseElapsed = SPROUT_COMPANION.laserPulseIntervalSeconds;
+      command.scanning = true;
+      this.scanTarget = command.treePosition.clone();
+      this.scanTerrainProjection = false;
+      this.scanIntensity = 1;
+      this.game.setStatus?.('SPROUT · CUTTING TREE ' + command.treeId);
+      return;
+    }
+
+    if (command.taskPhase === 'laser') {
       command.pulseElapsed += dt;
       if (command.pulseElapsed < SPROUT_COMPANION.laserPulseIntervalSeconds) return;
       command.pulseElapsed = 0;
 
       if (!this.#spendEnergy(SPROUT_COMPANION.laserEnergyPerPulse)) {
-        this.#finishCommand('SPROUT · LOW ENERGY · LASER STOPPED');
+        this.#beginReturn('SPROUT · LOW ENERGY · HARVEST PAUSED');
         return;
       }
 
       const result = this.treeHarvest.harvestTree?.(command.treeId, this.root.position) ?? null;
       if (!result) {
-        this.#finishCommand('SPROUT · TREE TARGET LOST');
+        command.taskPhase = 'acquire-tree';
+        command.scanning = false;
+        this.scanTarget = null;
         return;
       }
-      if (result.position) this.scanTarget = result.position.clone();
+      if (result.position) {
+        command.treePosition.copy(result.position);
+        this.scanTarget = result.position.clone();
+      }
 
       if (!result.chopped) {
-        this.game.setStatus?.('SPROUT · LASER CUT · ' + result.remainingHits + ' PASSES LEFT');
+        this.game.setStatus?.('SPROUT · TREE CUT · ' + result.remainingHits + ' PASSES LEFT');
         return;
       }
 
-      command.phase = 'waiting-logs';
+      command.taskPhase = 'waiting-logs';
       command.elapsed = 0;
       command.waitElapsed = 0;
       command.expectedLogs = Math.max(0, Number(result.dropCount) || 0);
       command.logsCollected = 0;
+      command.target = null;
       command.scanning = false;
       this.scanTarget = null;
       this.scanIntensity = 0;
-      this.game.setStatus?.('SPROUT · TREE DOWN · WAITING FOR LOGS');
+      this.game.setStatus?.('SPROUT · TREE DOWN · COLLECTING LOGS');
       return;
     }
 
-    if (command.phase !== 'waiting-logs') return;
+    if (command.taskPhase !== 'waiting-logs') return;
     command.waitElapsed += dt;
     if (command.waitElapsed < SPROUT_COMPANION.harvestDropDelaySeconds) return;
 
-    if (command.expectedLogs > 0 && command.logsCollected >= command.expectedLogs) {
-      this.#finishCommand('SPROUT · TREE HARVEST COMPLETE');
+    if (command.expectedLogs <= 0 || command.logsCollected >= command.expectedLogs) {
+      command.treesFelled += 1;
+      command.taskPhase = 'acquire-tree';
+      command.treeId = null;
+      command.treePosition = null;
+      command.target = null;
       return;
     }
+
     if (this.energy + 1e-6 < SPROUT_COMPANION.collectionEnergyPerPickup) {
-      this.#finishCommand('SPROUT · LOW ENERGY · FELLED LOGS LEFT IN WORLD');
+      this.#beginReturn('SPROUT · LOW ENERGY · FELLED LOGS LEFT IN WORLD');
       return;
     }
 
-    const target = this.gatherables.findNearestLooseResource?.(
-      command.treePosition,
-      SPROUT_COMPANION.harvestLogCollectRadius,
-      resourceId => resourceId === 'log'
-    ) ?? null;
+    if (!command.target) {
+      command.target = this.gatherables.findNearestLooseResource?.(
+        command.treePosition,
+        SPROUT_COMPANION.harvestLogCollectRadius,
+        resourceId => resourceId === 'log'
+      ) ?? null;
+    }
 
-    if (target) {
+    if (command.target) {
+      if (!this.#moveRootToward(command.target.position, dt, SPROUT_COMPANION.missionTravelSpeed, 0.56)) return;
       if (!this.#spendEnergy(SPROUT_COMPANION.collectionEnergyPerPickup)) return;
+      const target = command.target;
+      command.target = null;
       if (!this.#beginCompression(target)) {
         this.grantEnergy(SPROUT_COMPANION.collectionEnergyPerPickup, 'reservation-refund');
       }
@@ -452,9 +693,11 @@ export class SproutCompanionController {
     }
 
     if (command.waitElapsed >= SPROUT_COMPANION.harvestLogWaitSeconds) {
-      this.#finishCommand(command.logsCollected > 0
-        ? 'SPROUT · TREE HARVEST COMPLETE'
-        : 'SPROUT · TREE DOWN · LOGS REMAIN IN WORLD');
+      command.treesFelled += 1;
+      command.taskPhase = 'acquire-tree';
+      command.treeId = null;
+      command.treePosition = null;
+      command.target = null;
     }
   }
 
@@ -545,7 +788,11 @@ export class SproutCompanionController {
 
     this.inventory.add(pickup.resourceId, pickup.quantity);
     this.game.hud?.setInventory?.(this.inventory.snapshot());
-    if (this.command?.id === 'harvest-tree' && pickup.resourceId === 'log') {
+    if (this.command?.definition?.kind === 'gather-resource') {
+      this.command.collectedCount += pickup.quantity;
+    } else if (this.command?.definition?.kind === 'collect-resource') {
+      this.command.collectedCount += pickup.quantity;
+    } else if (this.command?.id === 'harvest-tree' && pickup.resourceId === 'log') {
       this.command.logsCollected += pickup.quantity;
     }
 
@@ -568,17 +815,62 @@ export class SproutCompanionController {
     position.needsUpdate = true;
   }
 
-  #finishCommand(message = null) {
+  #beginReturn(message = null) {
+    if (!this.command) {
+      if (message) this.game.setStatus?.(message);
+      this.#stow();
+      return;
+    }
+    this.command.stage = 'return';
+    this.command.stageElapsed = 0;
+    this.command.catchStarted = false;
+    this.command.mountedForStow = false;
+    this.command.completionMessage = message;
+    this.command.scanning = false;
+    this.command.target = null;
+    this.scanTarget = null;
+    this.scanIntensity = 0;
+
+    if (this.command.definition.kind !== 'scan-underground') {
+      this.#detachToScene();
+      this.root?.scale.copy(this.fullScale);
+    }
+  }
+
+  #completeReturn() {
+    const message = this.command?.completionMessage ?? null;
+    if (this.root) {
+      this.root.visible = false;
+      this.#detachToScene();
+      this.root.scale.copy(this.fullScale);
+    }
+    this.#endPlayerPose();
     this.command = null;
     this.scanTarget = null;
     this.scanIntensity = 0;
-    this.#stow();
     if (message) this.game.setStatus?.(message);
   }
 
   #cancelCommand(message = null) {
+    if (!this.command && !this.compression) return false;
     this.#cancelCompression();
-    this.#finishCommand(message);
+    if (this.command) {
+      this.#beginReturn(message);
+    } else {
+      this.#stow();
+      this.#endPlayerPose();
+      if (message) this.game.setStatus?.(message);
+    }
+    return true;
+  }
+
+  #hardResetCommand() {
+    this.#cancelCompression();
+    this.command = null;
+    this.scanTarget = null;
+    this.scanIntensity = 0;
+    this.#endPlayerPose();
+    this.#stow();
   }
 
   #cancelCompression() {
@@ -598,6 +890,85 @@ export class SproutCompanionController {
     state.beam?.material?.dispose?.();
     state.halo?.geometry?.dispose?.();
     state.halo?.material?.dispose?.();
+  }
+
+  #showPocketSignal(position) {
+    this.#destroySignalGlow();
+    const group = new THREE.Group();
+    group.name = 'sprout-underground-pocket-glow';
+    group.position.copy(position);
+
+    const glowMaterial = new THREE.MeshBasicMaterial({
+      color: BLUE,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending
+    });
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: BLUE,
+      transparent: true,
+      opacity: 0.24,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.72, 12, 8), glowMaterial);
+    glow.name = 'sprout-underground-pocket-glow-core';
+    glow.renderOrder = 40;
+    group.add(glow);
+
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.82, 0.035, 5, 28), ringMaterial);
+    ring.name = 'sprout-underground-pocket-glow-ring';
+    ring.rotation.x = Math.PI / 2;
+    ring.renderOrder = 41;
+    group.add(ring);
+
+    this.game.sceneSystem.scene.add(group);
+    this.signalGlow = {
+      group,
+      glow,
+      ring,
+      glowMaterial,
+      ringMaterial,
+      elapsed: 0
+    };
+  }
+
+  #updateSignalGlow(dt) {
+    const state = this.signalGlow;
+    if (!state) return;
+    state.elapsed += dt;
+    const total = SPROUT_COMPANION.undergroundSignalSeconds;
+    const fade = Math.min(total, SPROUT_COMPANION.undergroundSignalFadeSeconds);
+    if (state.elapsed >= total) {
+      this.#destroySignalGlow();
+      return;
+    }
+
+    const fadeStart = total - fade;
+    const fadeFactor = state.elapsed <= fadeStart
+      ? 1
+      : THREE.MathUtils.clamp(1 - ((state.elapsed - fadeStart) / Math.max(0.001, fade)), 0, 1);
+    const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * 4.2);
+    state.glowMaterial.opacity = (0.1 + pulse * 0.08) * fadeFactor;
+    state.ringMaterial.opacity = (0.16 + pulse * 0.1) * fadeFactor;
+    const scale = 0.92 + pulse * 0.14;
+    state.glow.scale.setScalar(scale);
+    state.ring.scale.setScalar(0.96 + pulse * 0.08);
+  }
+
+  #destroySignalGlow() {
+    const state = this.signalGlow;
+    if (!state) return;
+    state.group?.parent?.remove(state.group);
+    state.glow?.geometry?.dispose?.();
+    state.ring?.geometry?.dispose?.();
+    state.glowMaterial?.dispose?.();
+    state.ringMaterial?.dispose?.();
+    this.signalGlow = null;
   }
 
   #lerpAngle(from, to, t) {
