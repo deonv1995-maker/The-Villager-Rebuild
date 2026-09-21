@@ -61,6 +61,10 @@ export class ExplorationPoiSystem {
     return this.pocketContents.getInteractionTarget(playerPosition);
   }
 
+  getUndiscoveredPocketSignal(playerPosition, maxDistance) {
+    return this.tunneling.getUndiscoveredPocketSignal(playerPosition, maxDistance);
+  }
+
   collectUndergroundTarget(target, options = {}) {
     return this.pocketContents.collect(target, options);
   }
