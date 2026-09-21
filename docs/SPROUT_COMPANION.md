@@ -22,7 +22,7 @@ Collect Logs uses the existing `GatherableSystem` reservation/commit transaction
 
 ## Shared inventory capacity
 
-Before Sprout alliance/compression, the Ranger pack remains limited to **24 bulk units**. After Sprout alliance, the same authoritative inventory is re-evaluated under Sprout compression with **96 compressed units** of capacity; quantities are not copied into a second store. Manual Log pickup remains inventory-backed and still obeys the current Ranger/Sprout capacity profile.
+Before Sprout alliance/compression, the Ranger pack remains limited to **24 bulk units**. After Sprout alliance, the same authoritative inventory is re-evaluated under Sprout compression with **96 compressed units** of capacity; quantities are not copied into a second store. The manual Log pickup path remains inventory-backed and still obeys the current Ranger/Sprout capacity profile.
 
 The tree command uses `TreeHarvestSystem` as the single tree-felling authority. Each laser pulse applies the same authoritative tree-harvest hit used by Ranger axe harvesting. The normal authored fall, stump/regrowth state and world Log drops are therefore preserved. Sprout collects those legitimate loose Logs afterward when energy and inventory capacity allow.
 
