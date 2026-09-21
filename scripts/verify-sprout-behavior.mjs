@@ -218,6 +218,26 @@ function fixture() {
   const f = fixture();
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('harvest-tree'), true);
+
+  let cuttingPresentation = null;
+  for (let frame = 0; frame < 280 && f.controller.getCommandState().activeCommandId; frame += 1) {
+    f.tick();
+    const presentation = f.controller.getPresentationState();
+    if (presentation.cutting) {
+      cuttingPresentation = presentation;
+      break;
+    }
+  }
+  assert.ok(cuttingPresentation, 'Tree mission exposes a dedicated cutting presentation while Sprout lasers the trunk');
+  assert.equal(cuttingPresentation.scanning, false, 'Tree cutting does not reuse the cyan scanner presentation');
+  assert.equal(cuttingPresentation.scanTarget, null, 'Tree cutting does not publish the tree through the scanner target');
+  assert.ok(
+    Number.isFinite(cuttingPresentation.cutTarget?.x)
+      && Number.isFinite(cuttingPresentation.cutTarget?.y)
+      && Number.isFinite(cuttingPresentation.cutTarget?.z),
+    'Tree cutting publishes a presentation-only laser target'
+  );
+
   for (let frame = 0; frame < 900 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
 
   assert.equal(f.trees.filter(tree => tree.active).length, 0, 'Tree mission clears every active tree in the established harvest radius');
