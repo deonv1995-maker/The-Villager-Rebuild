@@ -424,6 +424,32 @@ assert.equal(
   'pocket discovery must become stable tunneling state'
 );
 
+const hiddenOnlySignal = world.getUndiscoveredPocketSignal(
+  new THREE.Vector3(pocket.x, pocket.y, pocket.z),
+  1,
+  { allowSurface: true }
+);
+assert.equal(
+  hiddenOnlySignal,
+  null,
+  'default pocket sensing must continue to exclude already discovered chambers'
+);
+const repeatableClosestSignal = world.getUndiscoveredPocketSignal(
+  new THREE.Vector3(pocket.x, pocket.y, pocket.z),
+  1,
+  { allowSurface: true, includeDiscovered: true }
+);
+assert.equal(
+  repeatableClosestSignal?.pocketId,
+  pocket.id,
+  'manual Sprout scan mode must be able to reacquire the closest discovered pocket'
+);
+assert.equal(
+  repeatableClosestSignal?.distance,
+  0,
+  'repeatable closest-pocket sensing must use the Ranger position rather than scan history'
+);
+
 const state = world.captureState();
 assert.equal(state.kind, 'global-tunneling-v1');
 assert.equal(state.schemaVersion, UNDERGROUND_TUNNELING.schemaVersion);
