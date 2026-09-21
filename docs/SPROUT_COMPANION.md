@@ -84,6 +84,7 @@ After allegiance, Sprout's existing cyan scanner also helps the Ranger search fo
 - the scanner projects only a short beam in the hidden pocket's direction, never the full distance to the chamber;
 - terrain-grid and exact target-marker projection are disabled for this signal so the pocket coordinate remains hidden;
 - scanner pulse speed/brightness increases with proximity, with a one-time strong-signal status when the Ranger closes to the current strong range;
+- while the Ranger pauses with a live pocket signal, Sprout suppresses generic idle roaming/flourishes, settles near the normal follow position and turns its body toward the signal so the short beam reads clearly on mobile;
 - normal loose-resource pickup scanning keeps presentation priority whenever Sprout is actively collecting something.
 
 `UndergroundTunnelingSystem` remains the geology authority that decides whether a hidden pocket exists and whether the Ranger is underground. `ExplorationPoiSystem` exposes that read-only signal to Sprout. `SproutCompanionController` owns only the companion reaction/presentation, so the detector cannot create, move, discover or award pocket contents.

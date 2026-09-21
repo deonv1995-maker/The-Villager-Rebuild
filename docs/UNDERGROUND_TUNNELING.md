@@ -216,6 +216,7 @@ After CI and Pages deployment, verify on Android/PWA:
 - the original terrain surface remains closed anywhere not actually excavated;
 - create a second tunnel far from the first and confirm it behaves identically;
 - with Sprout allied, descend into an active tunnel and confirm a cyan directional scanner signal appears only when an undiscovered pocket is within range;
+- stop moving while the signal is active and confirm Sprout settles near the Ranger, suppresses unrelated idle flourishes and turns toward the signal direction;
 - move toward/away from the indicated direction and confirm the scan becomes stronger/weaker without showing an exact terrain target marker;
 - break into the indicated pocket and confirm that hidden-pocket signal stops for that discovered chamber;
 - continue tunneling until a larger underground pocket is opened and confirm rocks, cave formations and pocket dressing appear only after discovery;

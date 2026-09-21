@@ -56,6 +56,8 @@ export const SPROUT_COMPANION = Object.freeze({
   pocketDetectionRange: 20,
   pocketDetectionBeamLength: 2.6,
   pocketDetectionStrongDistance: 7,
+  pocketSignalFocusRadius: 0.75,
+  pocketSignalTurnSpeed: 5.2,
   targetScanHoldSeconds: 0.55,
   collectionCooldownSeconds: 0.12,
   compressionSeconds: 0.52,
