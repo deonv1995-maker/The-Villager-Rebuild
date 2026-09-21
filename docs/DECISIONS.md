@@ -227,3 +227,12 @@ immediate player edits and resumable natural streaming; cache shared lattice
 samples and restart suspended work when density changes. A chunk-count cap alone
 is not a frame-time budget. See `UNDERGROUND_CAVE_PRESENTATION.md` for research,
 benchmark scope, regression coverage and outstanding device acceptance.
+
+
+## 2026-09-21 — Natural cave route meanders
+
+Natural cave routes may bend and dip inside the existing deterministic network, but
+their endpoints, surface mouths, density/collision authority and streaming architecture
+remain shared with UndergroundTunnelingSystem. Sample coherent noise once when building
+the route graph and cache cubic controls; do not add per-density-query path noise that
+would trade visual variety for renewed mobile CPU spikes.
