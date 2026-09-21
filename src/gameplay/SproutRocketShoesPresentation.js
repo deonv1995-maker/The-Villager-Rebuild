@@ -141,7 +141,7 @@ function createShoe(sideName, materials) {
 
   const innerFlame = mesh(
     new THREE.ConeGeometry(0.045, 0.26, 7),
-    materials.cyan,
+    materials.innerFlame,
     `sprout-rocket-shoe-${sideName}-inner-flame`,
     { shadow: false }
   );
@@ -266,6 +266,13 @@ export class SproutRocketShoesPresentation {
         depthWrite: false,
         blending: THREE.AdditiveBlending
       }),
+      innerFlame: new THREE.MeshBasicMaterial({
+        color: SPROUT_VISUAL_COLORS.cyan,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      }),
       transform: new THREE.MeshBasicMaterial({
         color: SPROUT_VISUAL_COLORS.cyan,
         transparent: true,
@@ -279,7 +286,7 @@ export class SproutRocketShoesPresentation {
     this.right = createShoe('right', this.materials);
     this.#mount('left', this.left.root);
     this.#mount('right', this.right.root);
-    this.#applyTransformPose(0, 1);
+    this.#applyTransformPose(0, 0);
   }
 
   update(dt, energyRatio = 1) {
