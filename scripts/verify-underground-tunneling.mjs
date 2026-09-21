@@ -373,11 +373,38 @@ for (let ix = -12; ix <= 12 && !pocket; ix += 1) {
 assert.ok(pocket, 'deterministic underground generation must provide discoverable empty pockets');
 const samePocket = world.tunneling.getPocketAtCell(pocket.ix, pocket.iz);
 assert.deepEqual(samePocket, pocket, 'underground pocket generation must be stable for the same world cell');
+assert.equal(
+  pocket.lobes?.length,
+  2 + UNDERGROUND_TUNNELING.pocketSideLobeCount,
+  'each underground pocket must be carved from the configured deterministic lobe cluster'
+);
+assert.ok(
+  pocket.floorRadius < pocket.radius && pocket.contentRadius < pocket.floorRadius,
+  'irregular pockets must keep a stable outer boundary while reserving a safer inner content footprint'
+);
+assert.ok(
+  pocket.lobes.some(lobe =>
+    Math.hypot(lobe.x - pocket.x, lobe.y - pocket.y, lobe.z - pocket.z)
+      > pocket.radius * 0.08
+  ),
+  'pocket lobes must be spatially offset so the chamber cannot collapse back into one round sphere'
+);
+for (const lobe of pocket.lobes) {
+  assert.ok(
+    Math.hypot(lobe.x - pocket.x, lobe.y - pocket.y, lobe.z - pocket.z) + lobe.radius
+      <= pocket.radius + 0.0001,
+    'every irregular lobe must remain inside the pocket broad-phase boundary'
+  );
+}
 
+const discoveryLobe = pocket.lobes.reduce(
+  (highest, lobe) => lobe.y + lobe.radius > highest.y + highest.radius ? lobe : highest,
+  pocket.lobes[0]
+);
 const discoveryCenter = new THREE.Vector3(
-  pocket.x,
-  pocket.y + pocket.radius - UNDERGROUND_TUNNELING.mineRadius * 0.45,
-  pocket.z
+  discoveryLobe.x,
+  discoveryLobe.y + discoveryLobe.radius - UNDERGROUND_TUNNELING.mineRadius * 0.45,
+  discoveryLobe.z
 );
 const discoveryTarget = {
   type: 'mineable-ground',
@@ -474,4 +501,4 @@ assert.match(
   'clipped mining recovery must search nearby 3D directions instead of relying only on the aim ray'
 );
 
-console.log('global lazy tunneling, cave-safe traversal, deterministic pockets, content activation and persistence verified');
+console.log('global lazy tunneling, cave-safe traversal, deterministic irregular pockets, content activation and persistence verified');

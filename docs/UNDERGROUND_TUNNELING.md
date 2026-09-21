@@ -89,7 +89,8 @@ A pocket has:
 - stable cell-derived identity;
 - deterministic X/Z position;
 - depth below the local natural terrain;
-- deterministic radius;
+- deterministic outer radius used only as the safe broad-phase/chunk boundary;
+- deterministic overlapping chamber lobes that create an asymmetric cave silhouette;
 - enough overburden to remain hidden from the surface;
 - enough bottom clearance to remain inside the current tunneling depth.
 
@@ -97,7 +98,7 @@ Pockets exist in the density function from world creation but generate no scene 
 
 There is still no surface marker, compass marker, or exact pocket coordinate. After Sprout is allied, the existing companion scanner gains a bounded **underground pocket detector**. It only queries from an active underground tunneling column, ignores already discovered pockets, and can sense the nearest hidden pocket within 20 m. Sprout projects a short cyan scan in the pocket's direction rather than drawing a target on the terrain; the scanner pulse becomes faster/brighter as distance closes. This keeps pockets hidden while replacing blind random tunneling with readable directional exploration.
 
-Generation uses 28 m world-space cells; each eligible cell has a 34% deterministic pocket chance. Pocket centers sit about 5.2–14.2 m below the local natural surface, with radii of about 2.7–4.4 m. Before Sprout is allied, or when no signal is in range, the practical search pattern remains to descend several metres and drive longer horizontal/branch tunnels so excavation crosses multiple world cells instead of repeatedly widening one chamber.
+Generation uses 28 m world-space cells; each eligible cell has a 34% deterministic pocket chance. Pocket centers sit about 5.2–14.2 m below the local natural surface, with outer radii of about 2.7–4.4 m. The empty chamber is no longer one sphere: each pocket deterministically combines a lower floor lobe, an offset upper lobe and three offset side lobes. All lobes remain inside the same outer radius, so chunk activation, Sprout sensing and persistence keep their existing bounds while the visible cave gains uneven walls, alcoves and ceiling variation. Pocket dressing and rewards use a smaller inner content footprint tied to the floor lobe so irregular walls do not swallow deterministic content. Before Sprout is allied, or when no signal is in range, the practical search pattern remains to descend several metres and drive longer horizontal/branch tunnels so excavation crosses multiple world cells instead of repeatedly widening one chamber.
 
 A pocket becomes **discovered** when a player excavation sphere first intersects it. Its complete local geometry is then activated so the cut can open naturally into a larger chamber.
 
@@ -191,6 +192,7 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 - tunneling at a second distant location to prove there is no fixed cave footprint;
 - lazy chunk activation rather than a world-sized voxel allocation;
 - deterministic pocket generation and discovery;
+- deterministic multi-lobe pocket silhouettes that remain inside the stable outer pocket boundary;
 - Sprout's bounded underground-only signal for the nearest still-hidden pocket, with no exact terrain marker;
 - deterministic content activation without rerolling or duplicating pocket rewards;
 - capacity-safe underground collection;
@@ -219,7 +221,8 @@ After CI and Pages deployment, verify on Android/PWA:
 - stop moving while the signal is active and confirm Sprout settles near the Ranger, suppresses unrelated idle flourishes and turns toward the signal direction;
 - move toward/away from the indicated direction and confirm the scan becomes stronger/weaker without showing an exact terrain target marker;
 - break into the indicated pocket and confirm that hidden-pocket signal stops for that discovered chamber;
-- continue tunneling until a larger underground pocket is opened and confirm rocks, cave formations and pocket dressing appear only after discovery;
+- continue tunneling until a larger underground pocket is opened and confirm its chamber is visibly asymmetric rather than a clean sphere, with uneven side alcoves/ceiling contours;
+- confirm rocks, cave formations and pocket dressing appear only after discovery and remain inside the usable chamber floor;
 - confirm some pockets can contain hidden ruined-stone structures, Ancient Relic treasure and cyan Sprout Upgrade Shards;
 - collect a cave Stone pile/relic/shard and confirm the inventory icon/count updates;
 - fill shared storage, approach another underground collectible and confirm FULL is shown without deleting the find;
