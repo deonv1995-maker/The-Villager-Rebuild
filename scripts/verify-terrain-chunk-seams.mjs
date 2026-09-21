@@ -34,7 +34,8 @@ const edgeSamples = (mesh, localX) => {
 
 const interpolatedSample = (coarse, z) => {
   if (z <= coarse[0].z + EPSILON) return coarse[0];
-  if (z >= coarse.at(-1).z - EPSILON) return coarse.at(-1);
+  const last = coarse[coarse.length - 1];
+  if (z >= last.z - EPSILON) return last;
 
   let upperIndex = coarse.findIndex(sample => sample.z >= z - EPSILON);
   if (upperIndex <= 0) upperIndex = 1;
@@ -92,8 +93,13 @@ const assertMixedDetailSeam = ({
       Math.abs(sample.y - expected.y) <= EPSILON,
       `${label}: refined edge height must stay on the coarse neighbor polyline at z=${sample.z}`
     );
+    const colorDistance = Math.hypot(
+      sample.color.r - expected.color.r,
+      sample.color.g - expected.color.g,
+      sample.color.b - expected.color.b
+    );
     assert.ok(
-      sample.color.distanceTo(expected.color) <= EPSILON,
+      colorDistance <= EPSILON,
       `${label}: refined edge colour must interpolate from the same canonical coarse samples`
     );
     assert.ok(
