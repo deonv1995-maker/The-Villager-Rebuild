@@ -83,7 +83,7 @@
     "verify:ambient": "node scripts/verify-ambient-world-details.mjs",
     "verify:gatherables": "node scripts/verify-world-gatherable-distribution.mjs",
     "verify:streaming": "node scripts/verify-world-streaming.mjs",
-    "verify:cave-network": "node scripts/verify-natural-cave-network.mjs",
+    "verify:cave-network": "node scripts/verify-natural-cave-network.mjs && node scripts/verify-cave-noise-streaming.mjs",
     "verify:tunneling": "node scripts/verify-underground-tunneling.mjs",
     "verify:pocket-content": "node scripts/verify-underground-pocket-content.mjs",
     "verify:pickaxe-terrain": "node scripts/verify-pickaxe-terrain-sculpting.mjs",

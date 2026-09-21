@@ -15,6 +15,39 @@ const hash01 = (x, z, salt = 0) => {
   return (value >>> 0) / 0xffffffff;
 };
 
+// Coherent value noise is stable in world space, including at chunk seams.
+// Raw independent random samples would produce jagged, disconnected holes.
+const smooth = t => t * t * (3 - 2 * t);
+export const naturalCaveNoiseAt = (x, y, z) => {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const tx = smooth(x - ix), ty = smooth(y - iy), tz = smooth(z - iz);
+  const plane = dz => lerp(
+    lerp(hash01(ix, iz + dz, iy), hash01(ix + 1, iz + dz, iy), tx),
+    lerp(hash01(ix, iz + dz, iy + 1), hash01(ix + 1, iz + dz, iy + 1), tx),
+    ty
+  );
+  return lerp(plane(0), plane(1), tz);
+};
+
+const erosionExtent = config =>
+  config.naturalNoiseAmplitude + config.naturalNoiseDetailAmplitude;
+
+const erodedNaturalField = (field, floorY, x, y, z, config, weight = 1) => {
+  const amplitude = erosionExtent(config) * weight;
+  // Far-away and already-empty samples need no noise calculation.
+  if (field > amplitude || field < -amplitude || y <= floorY || weight <= 0) return field;
+  const f = config.naturalNoiseFrequency;
+  const d = config.naturalNoiseDetailFrequency;
+  const erosion = weight * (
+    naturalCaveNoiseAt(x * f, y * f, z * f) * config.naturalNoiseAmplitude
+    + naturalCaveNoiseAt(x * d + 19, y * d - 7, z * d + 31)
+      * config.naturalNoiseDetailAmplitude
+  );
+  // Preserve existing routes and support floors. Noise only erodes walls/roof.
+  // Ease out at floor level so shelves meet the walkable floor without a step.
+  return Math.max(floorY - y, field - erosion * smooth(clamp01(y - floorY)));
+};
+
 const surfaceHeightAt = (terrain, x, z) =>
   typeof terrain.naturalHeightAt === 'function'
     ? terrain.naturalHeightAt(x, z)
@@ -40,18 +73,24 @@ export const naturalCaveSegmentFieldAt = (x, y, z, segment, config) => {
   const t = segmentProjectionT(segment, x, z);
   const center = pointAlongSegment(segment, t);
   const radius = lerp(segment.radiusA, segment.radiusB, t);
-  return tunnelingExcavationFieldAt(
+  const field = tunnelingExcavationFieldAt(
     x,
     y,
     z,
     { x: center.x, y: center.y, z: center.z, radius },
     config
   );
+  // Keep the established surface-mouth cut exact; add erosion deeper inside.
+  const weight = segment.kind === 'entrance' ? 0 : 1;
+  return erodedNaturalField(
+    field, center.y - radius * config.tunnelFloorDropScale,
+    x, y, z, config, weight
+  );
 };
 
 export const naturalCaveSegmentBounds = (segment, config) => {
   const radius = Math.max(segment.radiusA, segment.radiusB);
-  const extent = tunnelingExcavationExtent(radius, config);
+  const extent = tunnelingExcavationExtent(radius, config) + erosionExtent(config);
   return Object.freeze({
     minX: Math.min(segment.a.x, segment.b.x) - extent,
     minY: Math.min(segment.a.y, segment.b.y) - extent,
@@ -572,7 +611,10 @@ export const naturalCaveFeatureFieldAt = (x, y, z, feature, config) => {
     return naturalCaveSegmentFieldAt(x, y, z, feature, config);
   }
   if (feature.type === 'chamber') {
-    return undergroundPocketFieldAt(feature, x, y, z);
+    return erodedNaturalField(
+      undergroundPocketFieldAt(feature, x, y, z), feature.floorY,
+      x, y, z, config
+    );
   }
   return Number.POSITIVE_INFINITY;
 };
@@ -580,7 +622,7 @@ export const naturalCaveFeatureFieldAt = (x, y, z, feature, config) => {
 export const naturalCaveFeatureBounds = (feature, config) => {
   if (feature.type === 'segment') return feature.bounds;
   if (feature.type === 'chamber') {
-    const radius = feature.radius + config.cellSize;
+    const radius = feature.radius + config.cellSize + erosionExtent(config) * 2;
     return Object.freeze({
       minX: feature.x - radius,
       minY: feature.y - radius,

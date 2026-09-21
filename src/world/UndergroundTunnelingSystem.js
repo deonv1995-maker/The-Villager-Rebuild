@@ -116,6 +116,8 @@ export class UndergroundTunnelingSystem {
     this.pendingNaturalChunkRebuilds = [];
     this.pendingNaturalChunkRebuildKeys = new Set();
     this.builtNaturalChunkKeys = new Set();
+    this.naturalChunkBuild = null;
+    this.densityRevision = 0;
 
     this.tempA = new THREE.Vector3();
     this.tempB = new THREE.Vector3();
@@ -483,6 +485,7 @@ export class UndergroundTunnelingSystem {
   }
 
   refreshTerrainSurface(change = null) {
+    this.densityRevision += 1;
     const hasLocalChange =
       Number.isFinite(change?.x) &&
       Number.isFinite(change?.z) &&
@@ -848,8 +851,7 @@ export class UndergroundTunnelingSystem {
     return false;
   }
 
-  #densityAt(x, y, z) {
-    const surfaceY = this.terrain.heightAt(x, z);
+  #densityAt(x, y, z, surfaceY = this.terrain.heightAt(x, z)) {
     let density = surfaceY - y;
 
     const chunkKey = this.#chunkKeyForPoint(x, y, z);
@@ -883,7 +885,7 @@ export class UndergroundTunnelingSystem {
       density = Math.min(density, this.#pocketFieldAt(x, y, z, pocket));
     }
 
-    const floorBucket = this.floorEditBuckets.get(this.#chunkKeyForPoint(x, y, z));
+    const floorBucket = this.floorEditBuckets.get(chunkKey);
     if (floorBucket) {
       for (const edit of floorBucket) {
         density = this.#applyFloorEditDensity(density, x, y, z, edit);
@@ -1375,11 +1377,11 @@ export class UndergroundTunnelingSystem {
   }
 
   #processNaturalChunkRebuildQueue(playerPosition) {
-    if (!this.pendingNaturalChunkRebuilds.length) return 0;
+    if (!this.naturalChunkBuild && !this.pendingNaturalChunkRebuilds.length) return 0;
     const px = Number(playerPosition?.x);
     const py = Number(playerPosition?.y);
     const pz = Number(playerPosition?.z);
-    if ([px, py, pz].every(Number.isFinite)) {
+    if (!this.naturalChunkBuild && [px, py, pz].every(Number.isFinite)) {
       this.pendingNaturalChunkRebuilds.sort((a, b) => {
         const adx = a.x - px;
         const ady = a.y - py;
@@ -1396,15 +1398,30 @@ export class UndergroundTunnelingSystem {
       1,
       Math.floor(this.config.naturalChunkBuildsPerUpdate ?? 1)
     );
+    const deadline = performance.now() + this.config.naturalMeshBudgetMs;
     let rebuilt = 0;
-    while (rebuilt < budget && this.pendingNaturalChunkRebuilds.length) {
-      const entry = this.pendingNaturalChunkRebuilds.shift();
-      if (!entry) break;
-      this.pendingNaturalChunkRebuildKeys.delete(entry.key);
-      if (this.builtNaturalChunkKeys.has(entry.key)) continue;
-      this.#ensureChunk(entry.key);
-      this.#rebuildChunk(entry.key);
-      rebuilt += 1;
+    while (rebuilt < budget && (this.naturalChunkBuild || this.pendingNaturalChunkRebuilds.length)) {
+      if (!this.naturalChunkBuild) {
+        const entry = this.pendingNaturalChunkRebuilds.shift();
+        if (!entry) break;
+        if (this.builtNaturalChunkKeys.has(entry.key)) continue;
+        this.naturalChunkBuild = {
+          key: entry.key,
+          revision: this.densityRevision,
+          iterator: this.#buildChunkGeometry(entry.key)
+        };
+      }
+      const job = this.naturalChunkBuild;
+      if (job.revision !== this.densityRevision) {
+        job.iterator = this.#buildChunkGeometry(job.key);
+        job.revision = this.densityRevision;
+      }
+      if (job.iterator.next().done) {
+        this.naturalChunkBuild = null;
+        rebuilt += 1;
+      }
+      // Yield between sample columns / mesh cells, even within one chunk.
+      if (performance.now() >= deadline) break;
     }
     return rebuilt;
   }
@@ -1458,8 +1475,19 @@ export class UndergroundTunnelingSystem {
   }
 
   #rebuildChunk(key) {
-    const chunk = this.activeChunks.get(key);
-    if (!chunk) return;
+    if (!this.activeChunks.has(key)) return;
+    this.densityRevision += 1;
+    if (this.naturalChunkBuild?.key === key) this.naturalChunkBuild = null;
+    // Player edits stay immediate and use exactly the same mesher as streaming.
+    const iterator = this.#buildChunkGeometry(key);
+    while (!iterator.next().done) { /* drain local edit */ }
+  }
+
+  *#buildChunkGeometry(key) {
+    const [chunkX, chunkY, chunkZ] = key.split(':').map(Number);
+    const minX = chunkX * this.chunkSize;
+    const minY = chunkY * this.chunkSize;
+    const minZ = chunkZ * this.chunkSize;
 
     const positions = [];
     const colors = [];
@@ -1468,6 +1496,22 @@ export class UndergroundTunnelingSystem {
     const cells = this.config.chunkCells;
     const step = this.config.cellSize;
 
+    // Shared corners are sampled once: 13^3 rather than 8 * 12^3 queries.
+    const stride = cells + 1;
+    const samples = new Float64Array(stride * stride * stride);
+    for (let iz = 0; iz <= cells; iz += 1) {
+      const z = minZ + iz * step;
+      for (let ix = 0; ix <= cells; ix += 1) {
+        const x = minX + ix * step;
+        const surfaceY = this.terrain.heightAt(x, z);
+        for (let iy = 0; iy <= cells; iy += 1) {
+          samples[ix + stride * (iy + stride * iz)] =
+            this.#densityAt(x, minY + iy * step, z, surfaceY);
+        }
+        yield;
+      }
+    }
+
     for (let iz = 0; iz < cells; iz += 1) {
       for (let iy = 0; iy < cells; iy += 1) {
         for (let ix = 0; ix < cells; ix += 1) {
@@ -1475,13 +1519,16 @@ export class UndergroundTunnelingSystem {
             const [ox, oy, oz] = CUBE_CORNERS[corner];
             const point = cubePoints[corner];
             point.set(
-              chunk.bounds.minX + (ix + ox) * step,
-              chunk.bounds.minY + (iy + oy) * step,
-              chunk.bounds.minZ + (iz + oz) * step
+              minX + (ix + ox) * step,
+              minY + (iy + oy) * step,
+              minZ + (iz + oz) * step
             );
-            cubeValues[corner] = this.#densityAt(point.x, point.y, point.z);
+            cubeValues[corner] = samples[ix + ox + stride * (iy + oy + stride * (iz + oz))];
           }
 
+          // Most cubes are entirely rock or entirely air.
+          if (cubeValues.every(value => value >= ISO_LEVEL)
+            || cubeValues.every(value => value < ISO_LEVEL)) continue;
           for (const tetra of CUBE_TETRAHEDRA) {
             this.#polygonizeTetrahedron(
               tetra,
@@ -1491,7 +1538,9 @@ export class UndergroundTunnelingSystem {
               colors
             );
           }
+          yield;
         }
+        yield;
       }
     }
 
@@ -1503,6 +1552,7 @@ export class UndergroundTunnelingSystem {
       geometry.computeBoundingSphere();
     }
 
+    const chunk = this.#ensureChunk(key);
     const previous = chunk.mesh.geometry;
     chunk.mesh.geometry = geometry;
     previous?.dispose?.();
@@ -1691,6 +1741,8 @@ export class UndergroundTunnelingSystem {
     this.activeChunks.clear();
     this.activeColumns.clear();
     this.activatedNaturalFeatureIds.clear();
+    this.naturalChunkBuild = null;
+    this.densityRevision += 1;
     this.pendingNaturalChunkRebuilds.length = 0;
     this.pendingNaturalChunkRebuildKeys.clear();
     this.builtNaturalChunkKeys.clear();
