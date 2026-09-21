@@ -1,35 +1,49 @@
 # Sprout command autonomy
 
-Status: **command-driven companion behavior**.
+Status: **command-driven, mission-only physical autonomy**.
 
-Sprout no longer runs permanent follow, catch-up, idle roaming or constructed-door pathfinding. Those responsibilities made Sprout a second traversal problem across deformable caves, terrain edits and future player construction.
+Sprout remains stowed when unused. Permanent Ranger following, catch-up teleporting, idle roaming and semantic-door follower routing stay retired. The active autonomy boundary is a bounded player-issued mission: deploy from the Ranger, perform one command physically, return to the Ranger and stow.
 
-The active boundary is deliberately smaller: the Ranger selects a task, Sprout deploys beside the Ranger, performs that task through an existing world authority, and returns to storage.
+## Mission-only locomotion
 
-## Deployment
+Collection and tree missions may move Sprout through the live world because physical travel is part of the task. This is not a return to an always-running follower controller.
 
-Sprout is stowed while unused. Deployment is a short-range presentation anchored beside the Ranger, not world navigation. Cave layers, doors, cliffs and terrain deformation therefore do not need Sprout-specific routing merely to keep the companion near the player.
+`SproutCompanionController` reuses the **shared world collision** resolver and island walkable-height authority for active mission movement. It does not own a second terrain model, a duplicate building collision system or permanent companion navigation. The mission origin and range are fixed when the Ranger issues the command.
 
-The production model and scanner remain presentation-only. Ranger movement, world collision and resource ownership are unchanged.
+## Deployment lifecycle
 
-## Command behavior
+Free-roaming missions share one lifecycle:
 
-Find-resource commands query `GatherableSystem` for the nearest matching signal within the configured scan radius and point the scanner at it. The underground command queries the existing hidden-pocket detector.
+`stowed mini Sprout -> Ranger hand/release animation -> growth/deployment -> physical mission -> return -> shrink into Ranger hand -> stowed`
 
-Collect Logs reserves legitimate loose Logs through `GatherableSystem` and commits them only after the compression presentation finishes.
+The Ranger cinematic boundary is used only for the short handoff beats. The Ranger is not held in a cinematic for the duration of collection or tree work.
 
-Laser tree harvesting queries `TreeHarvestSystem` for a nearby active tree and invokes the same shared tree-harvest action used by Ranger harvesting. The laser does not directly add Logs. The tree falls, authoritative world drops appear, and Sprout collects those drops afterward if energy and inventory capacity permit.
+The cave scan keeps Sprout miniaturized in the Ranger's raised hand for the full scan, because that command is a local sensor action rather than a travel mission.
+
+## Resource missions
+
+Sticks, Grass, Stone and Mushrooms use bounded batch collection. One deployment collects a randomly selected 2–5 legitimate matching resources, if available. Each target is approached physically before the established compression reservation/commit occurs.
+
+Loose Logs use the same physical approach but continue through valid Logs in the mission radius rather than using a 2–5 forage batch.
+
+Capacity, reservation and removal remain owned by `GatherableSystem` and `InventorySystem`. Sprout never receives an item merely because a target was sensed or approached.
+
+## Tree mission
+
+The tree command keeps the prior 18 m harvesting distance as one fixed mission area. Sprout repeatedly selects an active tree from `TreeHarvestSystem`, physically approaches it, performs shared-authority laser harvest hits, waits for the normal fall/drop sequence, physically collects the resulting Logs, then checks for another active tree in the same area.
+
+No direct Log grants are allowed. If energy/capacity/movement stops the mission, legitimate world state is left intact.
+
+## Underground sensing
+
+The underground service chooses the nearest valid undiscovered pocket. During the Ranger-held scan, Sprout presents the scanner effect and may expose a rendering cue for that returned signal.
+
+The cue is a faint cyan glow that lingers for approximately five seconds and fades. It is not a second detector, does not search for pockets itself, and does not become a persistent waypoint.
 
 ## Energy behavior
 
-Energy slowly recharges only while Sprout is not executing a command or compressing a resource. Energy provenance is independent from monetization. One grant boundary allows future gameplay rewards, rewarded ads or purchases to add charge without embedding commercial logic into harvesting or scanning.
-
-## Retired follower responsibilities
-
-The active Sprout controller no longer owns continuous Ranger-follow perception, catch-up teleport behavior, semantic-door route planning, idle roaming, automatic loose-resource vacuuming, or cave-follow layer selection.
-
-Shared traversal and world systems remain available for Ranger, villagers and future NPCs; Sprout simply does not need them to remain present beside the Ranger.
+Energy slowly recharges only while Sprout is stowed and no transfer is active. Scan costs, per-pickup compression costs and per-laser-pass costs remain centralized in `SproutCompanionDefinitions`.
 
 ## Verification target
 
-Device testing should confirm that the Sprout button does not obstruct action/jump controls, the command tray remains readable in portrait and landscape, energy changes are clear at a glance, Sprout stays hidden while unused, scans visibly point toward targets, laser harvesting preserves the normal falling-tree sequence, and Logs remain in the world whenever energy or capacity prevents collection.
+Device testing should confirm that mission movement respects world collision, deployed Sprout visibly travels all the way to resources, the Ranger handoff animation does not leave input locked after deployment/retrieval, batch missions stop between two and five pickups when enough resources exist, tree missions exhaust the in-range trees without touching out-of-range trees, and the cave cue fades on its own after the five-second signal window.
