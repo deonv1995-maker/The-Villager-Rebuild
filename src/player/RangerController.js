@@ -333,6 +333,12 @@ export class RangerController {
     return target.copy(this.root.position);
   }
 
+  getRightHandWorldPosition(target = new THREE.Vector3()) {
+    if (!this.spearHandAnchor) return null;
+    this.root.updateMatrixWorld(true);
+    return this.spearHandAnchor.getWorldPosition(target);
+  }
+
   getCameraMode() {
     return this.cameraMode;
   }
