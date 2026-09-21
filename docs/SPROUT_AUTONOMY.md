@@ -41,7 +41,9 @@ No tree, stump, regrowth or Log-drop rules are duplicated in Sprout code.
 
 ## Underground scan
 
-Underground scanning intentionally uses a different presentation. The Ranger raises **Mini Sprout** and keeps him in hand while Sprout performs the full scan. Sprout does not grow or leave the Ranger for this command.
+Underground scanning intentionally uses a different presentation. The Ranger raises **Mini Sprout** overhead in the right hand and keeps him held there while Sprout performs the full scan. Sprout does not grow or leave the Ranger for this command, and the current first-person/third-person camera mode is preserved.
+
+The held scan produces exactly **three** expanding cyan-blue ground-grid pulses around the Ranger. Each circular lattice grows to about **18 m** and fades with distance before the next pulse begins; only after the third pulse completes does the Ranger lower the hand and stow Mini Sprout. The grid is a visual scan effect only and remains separate from the **56 m** underground-pocket query and the pocket-location cue.
 
 The existing underground geology service remains authoritative for pocket generation and proximity. Sprout's explicit scan uses a **56 m** search radius and performs a fresh closest-pocket query from the Ranger's current position every time the command is used. That manual query may include an already discovered pocket, while other detector callers keep the established undiscovered-pocket default. The scan is allowed from the surface as well as from an existing tunnel.
 
@@ -63,4 +65,4 @@ The active responsibility is narrower: execute an explicit temporary mission, us
 
 ## Verification target
 
-Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, upright world orientation after detaching from the tilted hand bone, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, hand-held scan from both surface and tunnel, usable surface cue above the closest pocket on every manual scan, repeat-scan restart behavior, a 10-second readable hold followed by an 8-second slow fade, and clean stow afterward.
+Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, upright world orientation after detaching from the tilted hand bone, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, the raised right-hand cave-scan pose from both surface and tunnel, exactly three expanding ground-grid pulses that fade outward before stow, usable surface cue above the closest pocket on every manual scan, repeat-scan restart behavior, a 10-second readable hold followed by an 8-second slow fade, and clean stow afterward.
