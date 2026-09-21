@@ -14,7 +14,8 @@ export const PLAYER_TRAVERSAL_TUNING = Object.freeze({
   flight: Object.freeze({
     holdDelaySeconds: 0.18,
     ascentSpeed: 4.8,
-    verticalResponse: 10
+    verticalResponse: 10,
+    directionalSpeedMultiplier: 2.5
   })
 });
 
