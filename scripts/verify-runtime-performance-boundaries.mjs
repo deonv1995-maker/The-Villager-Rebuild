@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import * as THREE from 'three';
+import { UNDERGROUND_TUNNELING } from '../src/data/UndergroundTunnelingDefinitions.js';
 import { WorldChunkSystem } from '../src/world/WorldChunkSystem.js';
 import { WorldCollisionSystem } from '../src/world/WorldCollisionSystem.js';
 import {
@@ -125,13 +126,14 @@ assert.equal(
   'equivalent presentation exclusions must be detected without redundant invalidation'
 );
 
-const [grassSource, groundCoverSource, jungleSource, ambientSource, treeOcclusionSource, chunkSource, packageSource] = await Promise.all([
+const [grassSource, groundCoverSource, jungleSource, ambientSource, treeOcclusionSource, chunkSource, tunnelingSource, packageSource] = await Promise.all([
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
   readFile('src/world/GroundCoverPresentationSystem.js', 'utf8'),
   readFile('src/world/JungleFloorPresentationSystem.js', 'utf8'),
   readFile('src/world/AmbientWorldDetailSystem.js', 'utf8'),
   readFile('src/world/TreeOcclusionSystem.js', 'utf8'),
   readFile('src/world/WorldChunkSystem.js', 'utf8'),
+  readFile('src/world/UndergroundTunnelingSystem.js', 'utf8'),
   readFile('package.json', 'utf8')
 ]);
 
@@ -184,6 +186,26 @@ assert.equal(
   chunkSource.slice(chunkUpdateStart, chunkStatsStart).includes('new THREE.Sphere'),
   false,
   'chunk culling must not allocate a new sphere for every chunk on every frame'
+);
+
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate >= 1
+    && UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate <= 2,
+  'natural cave marching geometry must keep a strict mobile-safe per-frame build budget'
+);
+const naturalActivationStart = tunnelingSource.indexOf('  #activateNaturalFeature(feature) {');
+const ensureSphereStart = tunnelingSource.indexOf('  #ensureChunksForSphere(center, radius) {', naturalActivationStart);
+assert.ok(naturalActivationStart >= 0 && ensureSphereStart > naturalActivationStart, 'natural cave activation implementation must remain inspectable');
+const naturalActivationSource = tunnelingSource.slice(naturalActivationStart, ensureSphereStart);
+assert.equal(
+  naturalActivationSource.includes('for (const key of keys) this.#rebuildChunk(key)'),
+  false,
+  'natural cave activation must not synchronously rebuild every touched 3D chunk in one frame'
+);
+assert.ok(
+  naturalActivationSource.includes('#queueNaturalChunkRebuild(key)')
+    && naturalActivationSource.includes('#processNaturalChunkRebuildQueue(playerPosition)'),
+  'natural cave activation must queue render geometry and drain it through the bounded update path'
 );
 
 const packageJson = JSON.parse(packageSource);

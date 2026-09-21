@@ -10,11 +10,13 @@ The playable mainland is intentionally larger than the original Foundation islan
 
 `WorldChunkSystem` owns presentation only. It partitions terrain meshes, shallow-water meshes, tree instancing, grass, ferns and static environment dressing into 72-unit chunks. Each frame it keeps the Ranger's immediate neighborhood available and uses the active camera frustum plus a bounded render distance for the surrounding chunks. Off-screen/distant chunk roots are hidden as a unit.
 
-This separation is deliberate: collision, harvesting and future NPC navigation must not depend on whether a mesh happens to be on screen.
+This separation is deliberate: collision, harvesting and future NPC navigation must not depend on whether a mesh happens to be on screen. Camera culling controls what is drawn; it is not permission to defer authoritative world queries or physics.
+
+Expensive procedural presentation has a second boundary: **materialization budget**. Natural cave density/collision columns become authoritative as soon as their nearby feature activates, while marching-tetrahedra cave meshes are queued nearest-first and built incrementally. This prevents an off-screen or not-yet-visible procedural region from consuming a full frame simply because its logical feature entered the activation radius.
 
 ## Mainland scale and Day-1 compatibility
 
-The mainland uses approximately **2.25x the original Foundation linear coast scale**. The existing Day-1 beach coordinates are preserved by shaping the old southern coast into a deep inlet. This prevents the tutorial spawn/resources/hunt route from becoming an inland location merely because the wider island grows around it.
+The mainland uses approximately **2.70x the original Foundation linear coast scale**. The existing Day-1 beach coordinates are preserved by shaping the old southern coast into a deep inlet. This prevents the tutorial spawn/resources/hunt route from becoming an inland location merely because the wider island grows around it.
 
 The larger mainland adds outer regional ridges, valleys, highlands and macro exploration regions without creating a second terrain surface.
 
@@ -61,5 +63,7 @@ Tree harvesting and camera occlusion use that registry, so chopping/fading still
 - Keep chunk roots at world origin transforms; instances retain world-space placement matrices.
 - Keep deep ocean and distant-horizon silhouettes as a very small fixed number of draw calls rather than unnecessarily subdividing them.
 - Prefer bounded pools/budgets for reactive effects.
+- Time-slice expensive procedural mesh creation; render culling alone does not remove geometry-generation cost.
+- Keep collision/simulation authority independent from whether queued presentation geometry has finished materializing.
 - Keep world scatter budgets bounded when mainland area increases; do not scale object counts directly with total land area without mobile profiling.
 - New world dressing that can become numerous should register with `WorldChunkSystem` rather than attaching directly to the permanent root.

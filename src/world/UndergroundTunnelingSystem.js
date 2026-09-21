@@ -113,6 +113,9 @@ export class UndergroundTunnelingSystem {
     this.naturalCaveNetwork = null;
     this.naturalFeatureBuckets = new Map();
     this.activatedNaturalFeatureIds = new Set();
+    this.pendingNaturalChunkRebuilds = [];
+    this.pendingNaturalChunkRebuildKeys = new Set();
+    this.builtNaturalChunkKeys = new Set();
 
     this.tempA = new THREE.Vector3();
     this.tempB = new THREE.Vector3();
@@ -160,6 +163,7 @@ export class UndergroundTunnelingSystem {
       ) continue;
       activated += this.#activateNaturalFeature(feature);
     }
+    this.#processNaturalChunkRebuildQueue(playerPosition);
     return activated;
   }
 
@@ -603,6 +607,8 @@ export class UndergroundTunnelingSystem {
       naturalSegmentCount: this.naturalCaveNetwork?.segments.length ?? 0,
       naturalChamberCount: this.naturalCaveNetwork?.chambers.length ?? 0,
       activatedNaturalFeatureCount: this.activatedNaturalFeatureIds.size,
+      pendingNaturalChunkRebuildCount: this.pendingNaturalChunkRebuildKeys.size,
+      builtNaturalChunkCount: this.builtNaturalChunkKeys.size,
       discoveredPocketIds: [...this.discoveredPocketIds].sort(),
       chunkSize: this.chunkSize,
       maxDepth: this.config.maxDepth
@@ -1333,14 +1339,74 @@ export class UndergroundTunnelingSystem {
     if (!feature || this.activatedNaturalFeatureIds.has(feature.id)) return 0;
     const bounds = naturalCaveFeatureBounds(feature, this.config);
     const keys = this.#chunkKeysForBounds(bounds);
-    let activatedChunks = 0;
+    let queuedChunks = 0;
     for (const key of keys) {
-      if (!this.activeChunks.has(key)) activatedChunks += 1;
-      this.#ensureChunk(key);
+      this.#activateChunkColumn(key);
+      if (this.#queueNaturalChunkRebuild(key)) queuedChunks += 1;
     }
-    for (const key of keys) this.#rebuildChunk(key);
     this.activatedNaturalFeatureIds.add(feature.id);
-    return activatedChunks;
+    return queuedChunks;
+  }
+
+  #activateChunkColumn(key) {
+    const [ix, , iz] = key.split(':').map(Number);
+    if (!Number.isFinite(ix) || !Number.isFinite(iz)) return false;
+    this.activeColumns.add(this.#columnKey(ix, iz));
+    return true;
+  }
+
+  #queueNaturalChunkRebuild(key) {
+    if (
+      !key
+      || this.builtNaturalChunkKeys.has(key)
+      || this.pendingNaturalChunkRebuildKeys.has(key)
+    ) return false;
+
+    const [ix, iy, iz] = key.split(':').map(Number);
+    if (![ix, iy, iz].every(Number.isFinite)) return false;
+    this.pendingNaturalChunkRebuildKeys.add(key);
+    this.pendingNaturalChunkRebuilds.push({
+      key,
+      x: (ix + 0.5) * this.chunkSize,
+      y: (iy + 0.5) * this.chunkSize,
+      z: (iz + 0.5) * this.chunkSize
+    });
+    return true;
+  }
+
+  #processNaturalChunkRebuildQueue(playerPosition) {
+    if (!this.pendingNaturalChunkRebuilds.length) return 0;
+    const px = Number(playerPosition?.x);
+    const py = Number(playerPosition?.y);
+    const pz = Number(playerPosition?.z);
+    if ([px, py, pz].every(Number.isFinite)) {
+      this.pendingNaturalChunkRebuilds.sort((a, b) => {
+        const adx = a.x - px;
+        const ady = a.y - py;
+        const adz = a.z - pz;
+        const bdx = b.x - px;
+        const bdy = b.y - py;
+        const bdz = b.z - pz;
+        return adx * adx + ady * ady + adz * adz
+          - (bdx * bdx + bdy * bdy + bdz * bdz);
+      });
+    }
+
+    const budget = Math.max(
+      1,
+      Math.floor(this.config.naturalChunkBuildsPerUpdate ?? 1)
+    );
+    let rebuilt = 0;
+    while (rebuilt < budget && this.pendingNaturalChunkRebuilds.length) {
+      const entry = this.pendingNaturalChunkRebuilds.shift();
+      if (!entry) break;
+      this.pendingNaturalChunkRebuildKeys.delete(entry.key);
+      if (this.builtNaturalChunkKeys.has(entry.key)) continue;
+      this.#ensureChunk(entry.key);
+      this.#rebuildChunk(entry.key);
+      rebuilt += 1;
+    }
+    return rebuilt;
   }
 
   #ensureChunksForSphere(center, radius) {
@@ -1381,7 +1447,7 @@ export class UndergroundTunnelingSystem {
       }
     };
     this.activeChunks.set(key, chunk);
-    this.activeColumns.add(this.#columnKey(ix, iz));
+    this.#activateChunkColumn(key);
     return chunk;
   }
 
@@ -1443,6 +1509,8 @@ export class UndergroundTunnelingSystem {
     chunk.mesh.userData.excavationCount = this.excavations.length;
     chunk.mesh.userData.floorEditCount = this.floorEdits.length;
     chunk.mesh.userData.discoveredPocketCount = this.discoveredPocketIds.size;
+    this.builtNaturalChunkKeys.add(key);
+    this.pendingNaturalChunkRebuildKeys.delete(key);
   }
 
   #polygonizeTetrahedron(tetra, cubePoints, cubeValues, positions, colors) {
@@ -1623,6 +1691,9 @@ export class UndergroundTunnelingSystem {
     this.activeChunks.clear();
     this.activeColumns.clear();
     this.activatedNaturalFeatureIds.clear();
+    this.pendingNaturalChunkRebuilds.length = 0;
+    this.pendingNaturalChunkRebuildKeys.clear();
+    this.builtNaturalChunkKeys.clear();
     this.surfaceOpenings.length = 0;
   }
 }

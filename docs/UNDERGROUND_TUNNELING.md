@@ -21,7 +21,7 @@ The island is not voxelized globally.
 - player excavation profiles subtract additional empty volume;
 - deterministic hidden pockets subtract optional discoverable chambers.
 
-Natural cave topology and surface mouths are known deterministically at boot, but the complete underground mesh is never generated globally. Passage/chamber chunks materialize only as the Ranger approaches them; player excavation and discovered pockets use the same lazy marching-tetrahedra chunk path.
+Natural cave topology and surface mouths are known deterministically at boot, but the complete underground mesh is never generated globally. Passage/chamber chunks materialize only as the Ranger approaches them; player excavation and discovered pockets use the same lazy marching-tetrahedra chunk path. Natural cave activation registers nearby density/collision columns immediately, then materializes render geometry nearest-to-the-Ranger through a strict per-frame queue instead of rebuilding every touched 3D chunk in one frame.
 
 Current tuning:
 
@@ -29,7 +29,8 @@ Current tuning:
 - tunneling chunk: 12 cells per axis (8.64 m);
 - Ranger-clear Pickaxe cut diameter is derived from shared player body height;
 - first-person mine reach is 4.6 m so the MINE action appears before the Ranger has to stand against the wall;
-- current protected mining depth is 18 m below the local natural surface.
+- current protected mining depth is 18 m below the local natural surface;
+- natural cave streaming builds at most 1 new marching-tetrahedra render chunk per update while queued collision columns remain immediately authoritative.
 
 The 18 m depth is an explicit first-milestone mobile/performance boundary, not a permanent world-design limit.
 
@@ -49,7 +50,7 @@ Each of the six branches contains:
 
 All deep branches connect into one larger central chamber, so caves read as a continuous explorable underworld rather than isolated round pockets. Passage radii deliberately vary while retaining Ranger body clearance.
 
-Surface mouths are always published to the terrain so their openings exist before the Ranger arrives. The corresponding 3D cave chunks remain lazy: approaching within the bounded activation radius materializes only nearby segments/chambers and registers those columns with the existing volume collision query.
+Surface mouths are always published to the terrain so their openings exist before the Ranger arrives. The corresponding 3D cave chunks remain lazy: approaching within the bounded activation radius registers nearby density columns with the existing volume collision query immediately, queues only the affected render chunks, prioritizes the chunks nearest the Ranger in 3D, and drains that queue at the configured per-update build budget. Collision therefore never depends on whether a visual chunk has finished materializing, while expensive marching geometry cannot arrive as one large frame spike.
 
 The natural network adds no second reward, collision, save or terrain authority. Existing hidden pockets remain separate deterministic discoveries that can intersect or extend the underworld, and player tunneling can create new shortcuts between any of these spaces.
 
