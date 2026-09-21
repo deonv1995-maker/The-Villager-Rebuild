@@ -318,6 +318,35 @@ for (const resourceId of tuning.collectibleResourceIds) {
   assert.equal(f.inventory.get('stick'), 0);
 }
 {
+  const f = fixture();
+  let highestSurfaceQueries = 0;
+  let walkableQueries = 0;
+  f.controller.island.heightAt = () => {
+    highestSurfaceQueries += 1;
+    return 0;
+  };
+  f.controller.island.walkableHeightAt = (x, z, { referenceY = null } = {}) => {
+    walkableQueries += 1;
+    return Number.isFinite(referenceY) && referenceY < -2 ? -5 : 0;
+  };
+
+  f.position.set(0, -5, 14);
+  f.tick();
+  assert.ok(walkableQueries > 0, 'Cave catch-up must query the shared layer-aware walkable support');
+  assert.equal(highestSurfaceQueries, 0, 'Cave catch-up must not force Sprout onto the highest surface layer');
+  assert.ok(
+    Math.abs(f.root.position.y - (-5 + tuning.hoverHeight)) < 0.001,
+    'Hard catch-up must place Sprout above the Ranger\'s cave floor instead of above the surface'
+  );
+
+  f.position.set(0, 0, -14);
+  f.tick();
+  assert.ok(
+    Math.abs(f.root.position.y - tuning.hoverHeight) < 0.001,
+    'Returning to the overworld must resolve Sprout back onto the surface layer'
+  );
+}
+{
   const root = createSproutVisual();
   let triangles = 0, meshes = 0;
   root.traverse(object => {
@@ -330,4 +359,4 @@ for (const resourceId of tuning.collectibleResourceIds) {
   console.log(`Sprout production model: ${meshes} meshes, ${triangles} triangles`);
   disposeSproutVisual(root);
 }
-console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, semantic-door exit routing, eased delayed follow sensing, bounded Ranger separation, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
+console.log('Sprout runtime behavior checks passed: scan-lock sequence, transaction, catch-up, semantic-door exit routing, cave-layer grounding, eased delayed follow sensing, bounded Ranger separation, idle roam/inspection, automatic idle flourish, Ranger space, hover and mobile geometry.');
