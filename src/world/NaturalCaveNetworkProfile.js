@@ -61,6 +61,47 @@ const pointAlongSegment = (segment, t) => ({
   z: lerp(segment.a.z, segment.b.z, t)
 });
 
+export const naturalCaveSegmentCenterAt = (segment, t) => {
+  const resolvedT = clamp01(t);
+  const curve = segment.curve;
+  if (!curve?.controlA || !curve?.controlB) {
+    return pointAlongSegment(segment, resolvedT);
+  }
+
+  const u = 1 - resolvedT;
+  const uu = u * u;
+  const tt = resolvedT * resolvedT;
+  const aWeight = uu * u;
+  const controlAWeight = 3 * uu * resolvedT;
+  const controlBWeight = 3 * u * tt;
+  const bWeight = tt * resolvedT;
+  return {
+    x:
+      segment.a.x * aWeight
+      + curve.controlA.x * controlAWeight
+      + curve.controlB.x * controlBWeight
+      + segment.b.x * bWeight,
+    y:
+      segment.a.y * aWeight
+      + curve.controlA.y * controlAWeight
+      + curve.controlB.y * controlBWeight
+      + segment.b.y * bWeight,
+    z:
+      segment.a.z * aWeight
+      + curve.controlA.z * controlAWeight
+      + curve.controlB.z * controlBWeight
+      + segment.b.z * bWeight
+  };
+};
+
+const naturalCaveSegmentRadiusAt = (segment, t) => {
+  const resolvedT = clamp01(t);
+  const baseRadius = lerp(segment.radiusA, segment.radiusB, resolvedT);
+  const bulge = Math.max(0, Number(segment.curve?.radiusBulge) || 0);
+  const middleWeight = Math.sin(Math.PI * resolvedT) ** 2;
+  return baseRadius + bulge * middleWeight;
+};
+
 const segmentProjectionT = (segment, x, z) => {
   const dx = segment.b.x - segment.a.x;
   const dz = segment.b.z - segment.a.z;
@@ -71,8 +112,8 @@ const segmentProjectionT = (segment, x, z) => {
 
 export const naturalCaveSegmentFieldAt = (x, y, z, segment, config) => {
   const t = segmentProjectionT(segment, x, z);
-  const center = pointAlongSegment(segment, t);
-  const radius = lerp(segment.radiusA, segment.radiusB, t);
+  const center = naturalCaveSegmentCenterAt(segment, t);
+  const radius = naturalCaveSegmentRadiusAt(segment, t);
   const field = tunnelingExcavationFieldAt(
     x,
     y,
@@ -89,24 +130,40 @@ export const naturalCaveSegmentFieldAt = (x, y, z, segment, config) => {
 };
 
 export const naturalCaveSegmentBounds = (segment, config) => {
-  const radius = Math.max(segment.radiusA, segment.radiusB);
+  const bulge = Math.max(0, Number(segment.curve?.radiusBulge) || 0);
+  const radius = Math.max(segment.radiusA, segment.radiusB) + bulge;
   const extent = tunnelingExcavationExtent(radius, config) + erosionExtent(config);
+  const controlPoints = [
+    segment.a,
+    segment.curve?.controlA,
+    segment.curve?.controlB,
+    segment.b
+  ].filter(Boolean);
+  const xs = controlPoints.map(point => point.x);
+  const ys = controlPoints.map(point => point.y);
+  const zs = controlPoints.map(point => point.z);
   return Object.freeze({
-    minX: Math.min(segment.a.x, segment.b.x) - extent,
-    minY: Math.min(segment.a.y, segment.b.y) - extent,
-    minZ: Math.min(segment.a.z, segment.b.z) - extent,
-    maxX: Math.max(segment.a.x, segment.b.x) + extent,
-    maxY: Math.max(segment.a.y, segment.b.y) + extent,
-    maxZ: Math.max(segment.a.z, segment.b.z) + extent
+    minX: Math.min(...xs) - extent,
+    minY: Math.min(...ys) - extent,
+    minZ: Math.min(...zs) - extent,
+    maxX: Math.max(...xs) + extent,
+    maxY: Math.max(...ys) + extent,
+    maxZ: Math.max(...zs) + extent
   });
 };
 
 const horizontalDistanceToSegment = (segment, x, z) => {
-  const t = segmentProjectionT(segment, x, z);
-  const px = lerp(segment.a.x, segment.b.x, t);
-  const pz = lerp(segment.a.z, segment.b.z, t);
-  const radius = lerp(segment.radiusA, segment.radiusB, t);
-  return Math.max(0, Math.hypot(x - px, z - pz) - radius);
+  // Five cheap curve samples are enough for the generous activation radius and
+  // avoid running noise or an iterative closest-point solver every frame.
+  let distance = Number.POSITIVE_INFINITY;
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    const point = naturalCaveSegmentCenterAt(segment, t);
+    distance = Math.min(
+      distance,
+      Math.max(0, Math.hypot(x - point.x, z - point.z) - naturalCaveSegmentRadiusAt(segment, t))
+    );
+  }
+  return distance;
 };
 
 export const naturalCaveFeatureDistance2D = (feature, x, z) => {
@@ -294,15 +351,82 @@ const makeSegment = ({
   radiusB,
   config
 }) => {
+  const start = makePoint(a.x, a.y, a.z);
+  const end = makePoint(b.x, b.y, b.z);
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const length = Math.hypot(dx, dz);
+  const curveWeight = kind === 'entrance'
+    ? 0
+    : clamp01((length - config.naturalRouteWarpMinLength) / Math.max(1, config.naturalRouteWarpMinLength));
+  let curve = null;
+
+  if (curveWeight > 0 && length > 0.000001) {
+    const perpendicularX = -dz / length;
+    const perpendicularZ = dx / length;
+    const frequency = config.naturalRouteNoiseFrequency;
+    const oneThirdX = lerp(start.x, end.x, 1 / 3);
+    const oneThirdZ = lerp(start.z, end.z, 1 / 3);
+    const twoThirdX = lerp(start.x, end.x, 2 / 3);
+    const twoThirdZ = lerp(start.z, end.z, 2 / 3);
+    // Static world-space noise is sampled once while the route graph is built.
+    // Runtime density queries evaluate only the cached cubic controls.
+    const noiseA = naturalCaveNoiseAt(
+      oneThirdX * frequency,
+      networkIndex * 0.41 + 5.3,
+      oneThirdZ * frequency
+    );
+    const noiseB = naturalCaveNoiseAt(
+      twoThirdX * frequency + 17.1,
+      networkIndex * 0.41 - 9.7,
+      twoThirdZ * frequency - 11.4
+    );
+    const maxWarp = Math.min(
+      config.naturalRouteMaxLateralWarp,
+      length * config.naturalRouteLateralWarpFraction
+    ) * curveWeight;
+    const maxDip = Math.min(
+      config.naturalRouteMaxVerticalDip,
+      length * config.naturalRouteVerticalDipFraction
+    ) * curveWeight;
+    const offsetA = (noiseA * 2 - 1) * maxWarp;
+    const offsetB = (noiseB * 2 - 1) * maxWarp;
+    const dipA = maxDip * (0.45 + noiseB * 0.55);
+    const dipB = maxDip * (0.45 + noiseA * 0.55);
+    const controlA = makePoint(
+      oneThirdX + perpendicularX * offsetA,
+      lerp(start.y, end.y, 1 / 3) - dipA,
+      oneThirdZ + perpendicularZ * offsetA
+    );
+    const controlB = makePoint(
+      twoThirdX + perpendicularX * offsetB,
+      lerp(start.y, end.y, 2 / 3) - dipB,
+      twoThirdZ + perpendicularZ * offsetB
+    );
+    curve = Object.freeze({
+      controlA,
+      controlB,
+      radiusBulge:
+        config.naturalRouteRadiusBulge
+        * curveWeight
+        * (0.65 + naturalCaveNoiseAt(
+          (start.x + end.x) * 0.5 * frequency + 31,
+          networkIndex * 0.29,
+          (start.z + end.z) * 0.5 * frequency - 23
+        ) * 0.35)
+    });
+  }
+
   const segment = {
     type: 'segment',
     id,
     networkIndex,
     kind,
-    a: makePoint(a.x, a.y, a.z),
-    b: makePoint(b.x, b.y, b.z),
+    a: start,
+    b: end,
     radiusA,
-    radiusB
+    radiusB,
+    curve
   };
   segment.bounds = naturalCaveSegmentBounds(segment, config);
   return Object.freeze(segment);
