@@ -1,18 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
+import { SPROUT_VISUAL_COLORS as COLORS } from '../rendering/SproutVisualAsset.js';
 
-const COLORS = Object.freeze({
-  shell: 0xe7e1cf,
-  shellShade: 0xbab7aa,
-  green: 0x365d46,
-  greenDark: 0x213b2f,
-  orange: 0xd8833d,
-  face: 0x11191b,
-  cyan: 0x67d7f0,
-  joint: 0x6d7470,
-  flame: 0xbaf4ff
-});
+const FLAME_COLOR = 0xbaf4ff;
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
 const easeOutCubic = value => 1 - ((1 - clamp01(value)) ** 3);
@@ -290,7 +281,7 @@ export class SproutRocketShoesPresentation {
         metalness: 0.05
       }),
       flame: new THREE.MeshBasicMaterial({
-        color: COLORS.flame,
+        color: FLAME_COLOR,
         transparent: true,
         opacity: 0.84,
         depthWrite: false,
