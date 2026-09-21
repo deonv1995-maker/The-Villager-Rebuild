@@ -45,7 +45,9 @@ TreeHarvestSystem remains the single tree-felling authority. Collect Logs uses G
 
 The tree command retains the established treeHarvestRange of **18 m** from the Ranger's deployment origin. Sprout physically visits trees inside that area one at a time.
 
-Each laser pulse still calls TreeHarvestSystem.harvestTree. The normal authored fall, stump state, regrowth and world Log drops therefore remain authoritative. Sprout then physically travels to those drops and stores them through the normal gatherable transaction before moving to the next tree. Sprout never creates replacement Logs if harvesting or collection is interrupted.
+Each laser pulse still calls TreeHarvestSystem.harvestTree. During that pulse sequence the companion controller exposes a dedicated cutting presentation target, and the rendering layer beams a narrow **red laser** from Sprout's authored scanner lens into the tree trunk with a small red impact glow. Tree cutting does not reuse the cyan scan cone/grid, and the red beam has no harvesting authority of its own.
+
+The normal authored fall, stump state, regrowth and world Log drops therefore remain authoritative. Sprout then physically travels to those drops and stores them through the normal gatherable transaction before moving to the next tree. Sprout never creates replacement Logs if harvesting or collection is interrupted.
 
 The mission ends when no active trees remain inside the original harvest radius. If energy or capacity prevents completion, remaining trees/Logs stay as real world state.
 
