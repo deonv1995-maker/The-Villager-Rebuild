@@ -139,11 +139,11 @@ collision.setVolumeQuery({
   hasActivityAt: (x, z) => world.hasTunnelingActivityAt(x, z)
 });
 
-assert.equal(world.create(), 0, 'world boot must not create a prebuilt cave entrance');
+assert.equal(world.create(), 0, 'world boot must keep natural caves inside the generic exploration/tunneling system');
 assert.equal(
   world.getDebugState().activeChunkCount,
   0,
-  'world boot must allocate no 3D tunneling chunks before the player excavates'
+  'world boot must allocate no 3D tunneling chunks before the player approaches a cave or excavates'
 );
 assert.equal(
   tunnelGroup.children.some(child => child.name.startsWith('mineable-cave-')),
@@ -155,6 +155,14 @@ assert.ok(
   'world boot must create the generic lazy tunneling root'
 );
 
+const naturalOpenings = terrain.getTunnelingOpenings();
+assert.equal(
+  naturalOpenings.length,
+  UNDERGROUND_TUNNELING.naturalNetworkCount,
+  'world boot must publish deterministic walk-in natural cave mouths without materializing their 3D interiors'
+);
+const exclusionsBeforeMining = publishedExclusions.length;
+
 const findPlayableGround = ({
   minDistanceFrom = null,
   minDistance = 0
@@ -163,6 +171,9 @@ const findPlayableGround = ({
     for (let x = -150; x <= 150; x += 12) {
       if (!terrain.isPlayable(x, z, 2.2)) continue;
       if (terrain.heightAt(x, z) <= terrain.waterLevel + 0.8) continue;
+      if (naturalOpenings.some(opening =>
+        Math.hypot(x - opening.x, z - opening.z) < opening.radius + 8
+      )) continue;
       if (
         minDistanceFrom &&
         Math.hypot(x - minDistanceFrom.x, z - minDistanceFrom.z) < minDistance
@@ -210,7 +221,7 @@ assert.equal(
   true,
   'one Ranger-clear strike must activate only a small local set of 3D chunks'
 );
-assert.equal(publishedExclusions.length > 0, true, 'surface breakthrough must publish vegetation exclusions');
+assert.equal(publishedExclusions.length > exclusionsBeforeMining, true, 'player-made surface breakthrough must add a vegetation exclusion beyond the natural cave mouths');
 
 assert.equal(
   firstTerrainChunk.userData.terrainSegments,
