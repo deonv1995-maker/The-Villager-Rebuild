@@ -160,3 +160,40 @@ Acceptance remains device-based: approach a cave from outside, enter without wai
 walls to appear, traverse several neck/gallery cycles, verify the spaces no longer read as
 a continuous man-made tunnel, mine/sculpt, save/Continue underground, and watch for
 sustained Android/PWA frame drops or visible chunk pop-in.
+
+## Multi-strata cave topology and darkness — 2026-09-21
+
+Device feedback showed that lateral bends and gallery-width pulses still left the network
+reading as one mostly horizontal tunnel plane. Natural topology now spans roughly the upper,
+middle and deep underground bands inside the same deterministic density authority. Each
+entrance branch has an entry room, side room, a large lower drop room, a deep room and a
+sealed side room before the deep network converges on a much larger central chamber.
+
+Connections deliberately use different vertical roles: moderate slopes, a steep plunge into
+the drop room, a substantial return incline, wider gallery routes and signed vertical
+meanders between connector endpoints. The generator is therefore allowed to rise as well as
+descend instead of applying only small downward offsets. The configured maximum cave depth
+is larger, but geometry remains lazily chunked; the island is not globally voxelized.
+
+A sealed room is connected only by a sub-Ranger fissure. The fissure remains genuinely empty
+density so the player can see light/space through it, but its vertical clearance is far below
+Ranger height and gallery bulges/strong erosion are disabled there. Mining the surrounding
+rock uses the existing excavation authority and is the intended way to enlarge the opening.
+This creates mine-through discoveries without a scripted door or second collision system.
+
+Global sun, hemisphere, sky-fill and ambient light are depth-attenuated only while Ranger is
+actually occupying cave air. The surface/day-night curve remains unchanged. Deep caves are
+therefore dark enough to require local illumination; Sprout supplies one bounded cyan
+navigation light while allied, and persistent crafted torches provide warm local light.
+
+Streaming now filters activation by both horizontal and vertical feature distance so deeper
+strata do not fill the queue while Ranger is still near the entrance. The normal 2 ms/2-chunk
+budget remains. Only missing geometry within the configured near-player critical radius may
+use the bounded 4 ms/3-chunk recovery budget. This is specifically to reduce visible
+background/sky holes without reverting to synchronous cave generation.
+
+Device acceptance must cover: the entrance transition, a steep drop into a wide room, an
+uphill route back toward another stratum, a gentler slope, a sealed room visible through its
+non-traversable fissure, mining through that fissure, deep darkness with Sprout illumination,
+ground/cave-wall torch placement, and visible-chunk pop-in while moving quickly between levels.
+
