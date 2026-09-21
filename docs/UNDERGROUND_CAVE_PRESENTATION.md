@@ -197,3 +197,29 @@ uphill route back toward another stratum, a gentler slope, a sealed room visible
 non-traversable fissure, mining through that fissure, deep darkness with Sprout illumination,
 ground/cave-wall torch placement, and visible-chunk pop-in while moving quickly between levels.
 
+
+## Local cave render prewarming and stale-job pruning — 2026-09-21
+
+Device feedback continued to show slow cave appearance even after vertical-aware activation.
+The remaining issue was queue scope: activating one nearby long gallery, drop or chamber could
+enqueue every render chunk touched by that feature's full conservative bounds. Those distant
+jobs then remained pending after the Ranger moved, competing with geometry that had become
+immediately visible.
+
+Natural-cave density remains global and deterministic inside the existing chunk buckets, so
+collision, mining, support queries and saves still read the same cave topology. Rendering now
+uses a separate cached list of feature-overlap chunk keys and admits only keys inside a local
+3D prewarm window around the Ranger. The filtered feature key lists are built once when the
+network is initialized; update frames do not repeatedly enumerate full feature bounds.
+
+Pending natural render jobs also have a larger retention window. A job outside that window is
+discarded, including a partially sampled natural-streaming job, and can be requested again if
+the Ranger later returns. The retention window is deliberately larger than the prewarm window
+so ordinary walking does not churn work. Completed chunks, player excavation rebuilds and the
+shared density authority are not canceled by this rule.
+
+The normal 2 ms / two-completion budget and the bounded near-player 4 ms / three-completion
+recovery budget are unchanged. The optimization reduces irrelevant work rather than raising
+the mobile frame-time allowance. Regression coverage verifies the initial prewarm window,
+post-travel queue retention and the cached render-key architecture. Physical Android/PWA
+acceptance still needs to confirm that walls/rooms appear sooner during fast cave traversal.
