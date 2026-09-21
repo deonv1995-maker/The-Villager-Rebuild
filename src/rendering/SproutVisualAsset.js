@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 
-const COLORS = Object.freeze({
+export const SPROUT_VISUAL_COLORS = Object.freeze({
   shell: 0xe7e1cf,
   shellShade: 0xbab7aa,
   green: 0x365d46,
@@ -11,6 +11,8 @@ const COLORS = Object.freeze({
   cyan: 0x67d7f0,
   joint: 0x6d7470
 });
+
+const COLORS = SPROUT_VISUAL_COLORS;
 
 const PRESENTATION_SCALE = 0.75;
 const MOTION = Object.freeze({
