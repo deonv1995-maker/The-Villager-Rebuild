@@ -289,3 +289,17 @@ Streaming activation must be vertical-aware as cave depth expands. Distant strat
 normal 2 ms/2-chunk mesh budget; only genuinely near missing geometry may use the bounded
 4 ms/3-chunk recovery budget. Do not solve cave pop-in by synchronous full-network meshing.
 
+
+## 2026-09-21 — Natural cave rendering uses a local prewarm window
+
+Decision: keep the complete deterministic cave network in the existing underground density
+buckets, but do not enqueue every render chunk belonging to a nearby feature. Cache each
+feature's valid render-chunk footprint once, then request only the subset inside the Ranger's
+local horizontal/vertical prewarm window. Pending natural-streaming jobs outside a larger
+retention window may be discarded and requested again later.
+
+Reason: long galleries, large rooms and multi-strata drops can have conservative bounds far
+beyond what the player can currently see. Queueing those remote chunks wastes the same bounded
+mesh budget needed for nearby walls and rooms, which presents as slow cave loading. This change
+reduces irrelevant work without increasing the established 2 ms normal or 4 ms emergency
+mobile budgets, and without creating a second density, collision, mining or save authority.
