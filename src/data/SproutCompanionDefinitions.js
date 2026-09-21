@@ -4,6 +4,20 @@ export const SPROUT_COMPANION = Object.freeze({
   hoverFrequency: 2.8,
   deployBackOffset: 0.18,
   deploySideOffset: 0.58,
+  miniScaleFactor: 0.18,
+  deployHandSeconds: 0.28,
+  deployGrowSeconds: 0.62,
+  scanRaiseSeconds: 0.7,
+  returnApproachSpeed: 6.2,
+  missionTravelSpeed: 5.4,
+  missionArrivalDistance: 0.5,
+  returnCatchDistance: 0.55,
+  returnCatchSeconds: 0.68,
+  returnStowSeconds: 0.28,
+  gatherMissionMin: 2,
+  gatherMissionMax: 5,
+  undergroundSignalSeconds: 5,
+  undergroundSignalFadeSeconds: 1.6,
   energyMax: 100,
   energyRechargePerSecond: 0.35,
   resourceScanRange: 34,
@@ -34,30 +48,30 @@ export const SPROUT_COMPANION = Object.freeze({
   commands: Object.freeze({
     'find-stick': Object.freeze({
       id: 'find-stick',
-      kind: 'find-resource',
+      kind: 'gather-resource',
       resourceId: 'stick',
-      label: 'Find sticks',
+      label: 'Gather sticks',
       energyCost: 4
     }),
     'find-grass': Object.freeze({
       id: 'find-grass',
-      kind: 'find-resource',
+      kind: 'gather-resource',
       resourceId: 'grass',
-      label: 'Find grass',
+      label: 'Gather grass',
       energyCost: 4
     }),
     'find-stone': Object.freeze({
       id: 'find-stone',
-      kind: 'find-resource',
+      kind: 'gather-resource',
       resourceId: 'stone',
-      label: 'Find stone',
+      label: 'Gather stone',
       energyCost: 4
     }),
     'find-mushroom': Object.freeze({
       id: 'find-mushroom',
-      kind: 'find-resource',
+      kind: 'gather-resource',
       resourceId: 'mushroom',
-      label: 'Find mushrooms',
+      label: 'Gather mushrooms',
       energyCost: 4
     }),
     'collect-logs': Object.freeze({
@@ -70,7 +84,7 @@ export const SPROUT_COMPANION = Object.freeze({
     'harvest-tree': Object.freeze({
       id: 'harvest-tree',
       kind: 'harvest-tree',
-      label: 'Laser tree + collect',
+      label: 'Harvest nearby trees',
       energyCost: 4
     }),
     'scan-underground': Object.freeze({

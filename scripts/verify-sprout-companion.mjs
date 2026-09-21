@@ -13,15 +13,18 @@ const autonomyDocs = read('docs/SPROUT_AUTONOMY.md');
 const packageJson = JSON.parse(read('package.json'));
 
 const checks = [
-  ['Sprout has one command controller and no follow/pathfinding dependency', !controller.includes('PanelTraversalQuery') && !controller.includes('SproutDoorRoutePlanner') && !controller.includes('resolveMove(')],
+  ['Sprout remains command-driven without restoring permanent follow/pathfinding', !controller.includes('PanelTraversalQuery') && !controller.includes('SproutDoorRoutePlanner') && !controller.includes('resolveMove(')],
+  ['normal missions use the Ranger hand mount plus grow/launch and return/shrink stages', controller.includes('#mountMiniToHand()') && controller.includes("['Throw', 'Interact', 'Idle_B']") && controller.includes('#updateReturn(command, dt)') && definitions.includes('miniScaleFactor')],
+  ['stick, grass, stone and mushroom commands are physical gather missions capped at two through five', definitions.includes('gatherMissionMin: 2') && definitions.includes('gatherMissionMax: 5') && definitions.includes("kind: 'gather-resource'") && controller.includes('#updateGatherResource(command, dt)')],
+  ['physical pickups still use GatherableSystem reservation and shared InventorySystem', controller.includes('reserveLooseResource?.') && controller.includes('takeReservedLooseResource?.') && controller.includes('this.inventory.add(') && gatherables.includes('{ requireCapacity = true }')],
+  ['tree mission preserves the established radius and repeatedly uses shared tree harvest authority', definitions.includes('treeHarvestRange: 18') && controller.includes('command.origin') && controller.includes("command.taskPhase = 'acquire-tree'") && treeHarvest.includes('harvestTree(treeId') && !controller.includes("inventory.add('log'")],
+  ['underground scan is hand-held and leaves a five-second faint pocket glow', definitions.includes('undergroundSignalSeconds: 5') && controller.includes("command.definition.kind === 'scan-underground'") && controller.includes('sprout-underground-pocket-glow') && controller.includes('#showPocketSignal(position)')],
   ['Sprout is stowed while idle and recharges only when unused', controller.includes('!this.command && !this.compression') && controller.includes('energyRechargePerSecond') && controller.includes('this.#stow()')],
   ['energy tuning is centralized and monetization-agnostic', definitions.includes('energyMax: 100') && definitions.includes('energyRechargePerSecond') && controller.includes('grantEnergy(amount, source =')],
-  ['mobile Sprout menu exposes command selections and an energy gauge', menu.includes('SPROUT COMMANDS') && menu.includes('sprout-energy-fill') && menu.includes('data.sproutCommand') === false && menu.includes('dataset.sproutCommand')],
+  ['mobile Sprout menu exposes command selections and an energy gauge', menu.includes('SPROUT COMMANDS') && menu.includes('sprout-energy-fill') && menu.includes('dataset.sproutCommand')],
   ['main boots the Sprout command menu beside the companion controller', main.includes('SproutCommandMenuController') && main.includes('game.sproutCommandMenu')],
-  ['tree laser uses shared tree authority rather than direct log grants', treeHarvest.includes('findNearestActiveTree') && treeHarvest.includes('harvestTree(treeId') && treeHarvest.includes('#applyChop') && !controller.includes("inventory.add('log'")],
-  ['resource scans may ignore capacity while collection still honors it', gatherables.includes('{ requireCapacity = true }') && gatherables.includes('requireCapacity && !this.#canStore')],
-  ['Sprout energy persists independently of active commands', save.includes('record.state.sproutCompanion') && save.includes('captureState?.() ?? null')],
-  ['documentation records stowed command-driven Sprout architecture', docs.includes('stowed') && docs.includes('slowly recharges') && docs.includes('laser') && autonomyDocs.includes('command-driven')],
+  ['Sprout energy persists independently of in-flight missions', save.includes('record.state.sproutCompanion') && save.includes('captureState?.() ?? null')],
+  ['documentation records the physical mission and underground scan contracts', docs.includes('2 through 5') && docs.includes('18 m') && docs.includes('5 seconds') && autonomyDocs.includes('physical mission companion')],
   ['full repository check still includes Sprout regression', packageJson.scripts.check.includes('npm run verify:sprout-companion')]
 ];
 

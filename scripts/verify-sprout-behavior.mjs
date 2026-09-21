@@ -30,41 +30,89 @@ function fixture() {
 
   const position = new THREE.Vector3();
   const facing = new THREE.Vector3(0, 0, 1);
+  const playerRoot = new THREE.Group();
+  const hand = new THREE.Group();
+  hand.position.set(0.35, 1.25, 0.18);
+  playerRoot.add(hand);
+  scene.add(playerRoot);
+
   const root = createSproutVisual();
   scene.add(root);
   const statuses = [];
+  let cinematicDriver = null;
   let harvestCalls = 0;
-  let treeActive = true;
-  const treePosition = new THREE.Vector3(0, 0, -6);
+  const trees = [
+    { id: 7, position: new THREE.Vector3(0, 0, -6), hits: 0, active: true },
+    { id: 8, position: new THREE.Vector3(4, 0, -9), hits: 0, active: true }
+  ];
   const treeHarvest = {
-    findNearestActiveTree() {
-      return treeActive ? { treeId: 7, label: 'Tree', position: treePosition.clone() } : null;
+    findNearestActiveTree(origin, range) {
+      let best = null;
+      let bestDistance = Infinity;
+      for (const tree of trees) {
+        if (!tree.active) continue;
+        const distance = origin.distanceTo(tree.position);
+        if (distance > range || distance >= bestDistance) continue;
+        bestDistance = distance;
+        best = { treeId: tree.id, label: 'Tree', position: tree.position.clone() };
+      }
+      return best;
     },
     harvestTree(treeId) {
-      assert.equal(treeId, 7);
+      const tree = trees.find(entry => entry.id === treeId && entry.active);
+      if (!tree) return null;
       harvestCalls += 1;
-      if (harvestCalls < 3) {
-        return { chopped: false, remainingHits: 3 - harvestCalls, position: treePosition.clone() };
+      tree.hits += 1;
+      if (tree.hits < 3) {
+        return { chopped: false, remainingHits: 3 - tree.hits, position: tree.position.clone() };
       }
-      treeActive = false;
+      tree.active = false;
       for (let index = 0; index < 3; index += 1) {
-        gatherables.spawn('log', { x: index * 0.35, z: -6 + index * 0.2, quantity: 1 });
+        gatherables.spawn('log', {
+          x: tree.position.x + index * 0.28,
+          z: tree.position.z + index * 0.18,
+          quantity: 1
+        });
       }
       return {
         chopped: true,
         remainingHits: 0,
-        position: treePosition.clone(),
+        position: tree.position.clone(),
         dropResourceId: 'log',
         dropCount: 3
       };
     }
   };
 
-  const game = {
-    player: {
-      getPosition: out => out.copy(position),
-      getFacingDirection: out => out.copy(facing)
+  const player = {
+    cinematicDriver: null,
+    getPosition: out => out.copy(position),
+    getFacingDirection: out => out.copy(facing),
+    beginCinematic(driver) {
+      if (cinematicDriver) return false;
+      cinematicDriver = driver;
+      this.cinematicDriver = driver;
+      return true;
     },
+    endCinematic(driver) {
+      if (cinematicDriver !== driver) return false;
+      cinematicDriver = null;
+      this.cinematicDriver = null;
+      return true;
+    },
+    playCinematicAnimation(preferences) {
+      return { name: Array.isArray(preferences) ? preferences[0] : preferences, duration: 0.6 };
+    },
+    mountRightHandObject(object) {
+      hand.add(object);
+      object.position.set(0, 0, 0);
+      object.quaternion.identity();
+      return true;
+    }
+  };
+
+  const game = {
+    player,
     island: terrain,
     gatherables,
     inventory,
@@ -92,9 +140,12 @@ function fixture() {
     tick,
     add,
     root,
+    hand,
+    scene,
     inventory,
     gatherables,
     statuses,
+    trees,
     get harvestCalls() { return harvestCalls; }
   };
 }
@@ -112,65 +163,78 @@ function fixture() {
 
 {
   const f = fixture();
-  f.add('stick', 0, -8);
+  for (let index = 0; index < 8; index += 1) f.add('stick', index * 0.9, -5 - index * 0.35);
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('find-stick'), true);
   f.tick(2);
-  assert.equal(f.root.visible, true, 'Resource scan deploys Sprout beside the Ranger');
-  assert.equal(f.controller.getPresentationState().scanning, true);
-  assert.ok(f.controller.getPresentationState().scanTarget, 'Resource scan exposes a visual target');
-  assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['find-stick'].energyCost);
-  f.tick(Math.ceil((tuning.resourceScanHoldSeconds + 0.2) / 0.05));
-  assert.equal(f.root.visible, false, 'Scan completion returns Sprout to storage');
+  assert.equal(f.root.visible, true, 'Gather command begins with visible Mini Sprout deployment');
+  assert.equal(f.root.parent, f.hand, 'Mini Sprout is mounted in the Ranger hand before launch');
+
+  for (let frame = 0; frame < 600 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+  const gathered = f.inventory.get('stick');
+  assert.ok(
+    gathered >= tuning.gatherMissionMin && gathered <= tuning.gatherMissionMax,
+    'Resource mission physically gathers between two and five matching items'
+  );
+  assert.equal(f.root.visible, false, 'Gather mission returns, shrinks and stows Sprout');
+  assert.ok(
+    f.controller.getEnergyState().energy <= before - tuning.commands['find-stick'].energyCost - gathered * tuning.collectionEnergyPerPickup,
+    'Gather mission spends deployment scan energy plus per-pickup compression energy'
+  );
 }
 
 {
   const f = fixture();
-  f.add('log', 2, -3);
+  f.add('log', 7, -3);
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('collect-logs'), true);
-  for (let frame = 0; frame < 40 && f.inventory.get('log') < 1; frame += 1) f.tick();
-  assert.equal(f.inventory.get('log'), 1, 'Collect Logs compresses a legitimate world log into shared inventory');
-  assert.equal(
-    f.controller.getEnergyState().energy,
-    before - tuning.collectionEnergyPerPickup,
-    'Log compression spends energy before idle recharge resumes'
+  f.tick(Math.ceil((tuning.deployHandSeconds + tuning.deployGrowSeconds + 0.2) / 0.05));
+  assert.ok(f.root.position.distanceTo(new THREE.Vector3(0, tuning.hoverHeight, 0)) > 0.4, 'Sprout leaves the Ranger before collecting a loose Log');
+  for (let frame = 0; frame < 320 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+  assert.equal(f.inventory.get('log'), 1, 'Collect Logs stores a legitimate world Log through shared inventory');
+  assert.ok(
+    f.controller.getEnergyState().energy <= before - tuning.collectionEnergyPerPickup,
+    'Loose Log compression spends the existing pickup energy cost'
   );
-  assert.equal(f.gatherables.items.some(item => item.resourceId === 'log' && item.active), false);
+  assert.equal(f.root.visible, false, 'Loose Log collection uses the same retrieval/stow lifecycle');
 }
 
 {
   const f = fixture();
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('harvest-tree'), true);
-  for (let frame = 0; frame < 180 && f.inventory.get('log') < 3; frame += 1) f.tick();
-  assert.equal(f.harvestCalls, 3, 'Sprout laser uses the shared tree harvest authority for all three cuts');
-  assert.equal(f.inventory.get('log'), 3, 'Laser tree command collects the resulting authoritative log drops');
-  assert.equal(
-    f.controller.getEnergyState().energy,
-    before - tuning.laserEnergyPerPulse * 3 - tuning.collectionEnergyPerPickup * 3,
-    'Laser passes and log compression both consume Sprout energy before recharge resumes'
+  for (let frame = 0; frame < 900 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+
+  assert.equal(f.trees.filter(tree => tree.active).length, 0, 'Tree mission clears every active tree in the established harvest radius');
+  assert.equal(f.harvestCalls, 6, 'Both trees use the shared three-hit TreeHarvestSystem authority');
+  assert.equal(f.inventory.get('log'), 6, 'Sprout physically collects all authoritative Log drops from both trees');
+  assert.ok(
+    f.controller.getEnergyState().energy <= before - tuning.laserEnergyPerPulse * 6 - tuning.collectionEnergyPerPickup * 6,
+    'Area harvesting retains laser and Log compression energy costs'
   );
-  f.tick(2);
-  assert.equal(f.root.visible, false, 'Sprout is stowed again after harvest completion');
+  assert.equal(f.root.visible, false, 'Area harvest returns and stows Sprout after no trees remain');
 }
 
 {
   const f = fixture();
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('scan-underground'), true);
-  f.tick(2);
+  f.tick(Math.ceil((tuning.scanRaiseSeconds + 0.2) / 0.05));
   const presentation = f.controller.getPresentationState();
-  assert.equal(presentation.scanning, true);
+  assert.equal(presentation.scanning, true, 'Mini Sprout performs the scan while held');
   assert.equal(presentation.scanTerrainProjection, false);
-  assert.equal(Math.round(presentation.scanTarget.y), -6);
+  assert.equal(f.root.parent, f.hand, 'Underground scan keeps Mini Sprout in the Ranger hand');
+  assert.ok(f.scene.getObjectByName('sprout-underground-pocket-glow'), 'Closest underground pocket receives a faint world-space glow');
   assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['scan-underground'].energyCost);
+
+  f.tick(Math.ceil((tuning.undergroundSignalSeconds + 0.2) / 0.05));
+  assert.equal(f.scene.getObjectByName('sprout-underground-pocket-glow'), undefined, 'Underground glow fades completely after about five seconds');
 }
 
 {
   const f = fixture();
   f.controller.restoreState({ energy: 1 });
-  assert.equal(f.controller.issueCommand('harvest-tree'), false, 'Insufficient energy blocks a laser command');
+  assert.equal(f.controller.issueCommand('harvest-tree'), false, 'Insufficient energy blocks a tree harvest command');
   const saved = f.controller.captureState();
   assert.equal(saved.energy, 1);
   f.controller.restoreState({ energy: 73.5 });
@@ -190,4 +254,4 @@ function fixture() {
   disposeSproutVisual(root);
 }
 
-console.log('Sprout command/energy behavior checks passed.');
+console.log('Sprout physical mission behavior checks passed.');
