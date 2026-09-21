@@ -43,7 +43,7 @@ Every Sprout pickup is reserved/committed through GatherableSystem and then adde
 
 The tree command retains the established treeHarvestRange of **18 m** from the Ranger's deployment origin. Sprout physically visits trees inside that area one at a time.
 
-Each laser pulse still calls TreeHarvestSystem.harvestTree. Normal hit count, falling animation, stump state, regrowth and world Log drops therefore remain authoritative. Sprout then physically travels to those drops and stores them through the normal gatherable transaction before moving to the next tree.
+Each laser pulse still calls TreeHarvestSystem.harvestTree. The normal authored fall, stump state, regrowth and world Log drops therefore remain authoritative. Sprout then physically travels to those drops and stores them through the normal gatherable transaction before moving to the next tree. Sprout never creates replacement Logs if harvesting or collection is interrupted.
 
 The mission ends when no active trees remain inside the original harvest radius. If energy or capacity prevents completion, remaining trees/Logs stay as real world state.
 
