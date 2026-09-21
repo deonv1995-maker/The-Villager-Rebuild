@@ -156,7 +156,10 @@ export class TorchPlacementTargetResolver {
       id: `${kind}:${quantize(x)}:${quantize(y)}:${quantize(z)}`,
       label,
       position: { x, y: y + 0.025, z },
-      yaw: Math.atan2(this.aimDirection.x, this.aimDirection.z)
+      yaw: Math.atan2(this.aimDirection.x, this.aimDirection.z),
+      // Ground is the fallback "place anywhere" surface. Explicit wall/post/cave
+      // wall targets should win when the player is actually aiming at one.
+      scoreBias: 0.8
     };
   }
 
@@ -298,6 +301,9 @@ export class TorchPlacementTargetResolver {
       : (dx * this.aimDirection.x + dz * this.aimDirection.z) / horizontalDistance;
     if (forwardDot < this.definition.placement.minFacingDot) return null;
 
-    return distance + (1 - forwardDot) * this.definition.placement.aimPenalty;
+    const scoreBias = Math.max(0, Number(target.scoreBias) || 0);
+    return distance
+      + (1 - forwardDot) * this.definition.placement.aimPenalty
+      + scoreBias;
   }
 }
