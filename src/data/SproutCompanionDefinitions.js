@@ -32,6 +32,8 @@ export const SPROUT_COMPANION = Object.freeze({
   energyRechargePerSecond: 0.35,
   flightEnergyPerSecond: 8,
   flightMinimumEnergy: 1,
+  flightTransformSeconds: 0.18,
+  flightThrusterIgnitionRatio: 0.72,
   resourceScanRange: 34,
   resourceScanHoldSeconds: 3.2,
   undergroundScanRange: 56,

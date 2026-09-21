@@ -10,7 +10,7 @@ const PLAYER_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.height;
 const DEFAULT_WALK_SPEED = 3.4;
 const ANALOG_WALK_MIN_SPEED = 1.35;
 const ANALOG_WALK_MAX_SPEED = 4.5;
-const SPRINT_SPEED = 6;
+const SPRINT_SPEED = PLAYER_TRAVERSAL_TUNING.movement.runSpeed;
 const RUN_ANIMATION_THRESHOLD = 4;
 const CAMERA_DEFAULT_PITCH = 0.12;
 const THIRD_PERSON_PITCH_MIN = -0.75;
@@ -669,11 +669,16 @@ export class RangerController {
     const length = Math.hypot(inputX, inputY);
     const analogStrength = mobileInputActive ? THREE.MathUtils.clamp(length, 0, 1) : 1;
     const sprinting = this.input.sprint || this.keys.has('ShiftLeft');
-    const speed = sprinting
+    const flyingAtFrameStart = Boolean(this.flightAssist?.isFlightActive?.());
+    const speed = flyingAtFrameStart
       ? SPRINT_SPEED
-      : mobileInputActive
-        ? THREE.MathUtils.lerp(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength)
-        : DEFAULT_WALK_SPEED;
+        * PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier
+        * (mobileInputActive ? analogStrength : 1)
+      : sprinting
+        ? SPRINT_SPEED
+        : mobileInputActive
+          ? THREE.MathUtils.lerp(ANALOG_WALK_MIN_SPEED, ANALOG_WALK_MAX_SPEED, analogStrength)
+          : DEFAULT_WALK_SPEED;
     const runningAnimation = sprinting || (mobileInputActive && speed >= RUN_ANIMATION_THRESHOLD);
     const throwing = this.isSpearThrowing();
     const toolActing = this.isToolActing();
@@ -722,7 +727,7 @@ export class RangerController {
       this.root.position.y = previousGround;
     }
 
-    let flying = Boolean(this.flightAssist?.isFlightActive?.());
+    let flying = flyingAtFrameStart;
     if (!this.grounded && this.flightHoldArmed && this.jumpHeld && this.jumpStage === 2 && !flying) {
       this.flightHoldElapsed += dt;
       if (this.flightHoldElapsed >= PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds) {

@@ -10,8 +10,22 @@ const read = path => readFileSync(new URL('../' + path, import.meta.url), 'utf8'
 
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds > 0, 'flight should require a deliberate held second jump');
 assert.ok(PLAYER_TRAVERSAL_TUNING.flight.ascentSpeed > 0, 'flight should provide positive ascent');
+assert.equal(
+  PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier,
+  2.5,
+  'active rocket shoes should move at exactly 2.5x the centralized running speed'
+);
+assert.ok(PLAYER_TRAVERSAL_TUNING.movement.runSpeed > 0, 'running speed must remain centrally defined');
 assert.ok(SPROUT_COMPANION.flightEnergyPerSecond > 0, 'Sprout flight must consume shared Sprout energy');
 assert.ok(SPROUT_COMPANION.flightMinimumEnergy > 0, 'flight should not start on an empty battery');
+assert.ok(
+  SPROUT_COMPANION.flightTransformSeconds > 0 && SPROUT_COMPANION.flightTransformSeconds <= 0.2,
+  'Sprout-to-shoe transformation should remain a fast sub-200ms presentation'
+);
+assert.ok(
+  SPROUT_COMPANION.flightThrusterIgnitionRatio > 0.5 && SPROUT_COMPANION.flightThrusterIgnitionRatio < 1,
+  'thrusters should ignite near the end of the transformation instead of before the shoes form'
+);
 
 const playerRoot = new THREE.Group();
 const leftFoot = new THREE.Group();
@@ -31,10 +45,55 @@ const presentationPlayer = {
 const presentation = new SproutRocketShoesPresentation({ player: presentationPlayer });
 assert.ok(leftFoot.getObjectByName('sprout-rocket-shoe-left'), 'left rocket shoe should mount to the left foot');
 assert.ok(rightFoot.getObjectByName('sprout-rocket-shoe-right'), 'right rocket shoe should mount to the right foot');
+assert.equal(
+  leftFoot.getObjectByName('sprout-rocket-shoe-left')?.userData.visualIdentity,
+  'sprout-production-shell',
+  'formed equipment should explicitly retain Sprout production-visual identity'
+);
+for (const name of [
+  'sprout-rocket-shoe-left-transform-shell',
+  'sprout-rocket-shoe-left-transform-green-panel',
+  'sprout-rocket-shoe-left-transform-orange-band',
+  'sprout-rocket-shoe-left-transform-eye',
+  'sprout-rocket-shoe-left-green-side-panel',
+  'sprout-rocket-shoe-left-expression-eye',
+  'sprout-rocket-shoe-left-leaf-fin',
+  'sprout-rocket-shoe-left-antigrav-ring'
+]) {
+  assert.ok(leftFoot.getObjectByName(name), `transformed shoe should retain Sprout motif: ${name}`);
+}
+
 presentation.update(0.05, 0.75);
 assert.ok(
+  presentation.getTransformProgress() > 0 && presentation.getTransformProgress() < 1,
+  'rocket shoes should visibly pass through a fast intermediate transformation state'
+);
+assert.equal(
+  leftFoot.getObjectByName('sprout-rocket-shoe-left-transform-pod')?.visible,
+  true,
+  'compact Sprout-like pod should remain visible during the early transformation'
+);
+assert.equal(
+  leftFoot.getObjectByName('sprout-rocket-shoe-left-flame')?.visible,
+  false,
+  'thruster flame should wait until the shoe has mostly formed'
+);
+
+for (let frame = 0; frame < 4; frame += 1) presentation.update(0.05, 0.75);
+assert.equal(presentation.getTransformProgress(), 1, 'fast transformation should complete within its tuned duration');
+assert.equal(
+  leftFoot.getObjectByName('sprout-rocket-shoe-left-transform-pod')?.visible,
+  false,
+  'temporary Sprout pod should collapse into the completed shoe'
+);
+assert.equal(
+  leftFoot.getObjectByName('sprout-rocket-shoe-left-flame')?.visible,
+  true,
+  'thrusters should ignite once the transformed shoe has formed'
+);
+assert.ok(
   leftFoot.getObjectByName('sprout-rocket-shoe-left-flame')?.scale.y > 0,
-  'rocket-shoe flame should animate while flight is active'
+  'rocket-shoe flame should animate after transformation'
 );
 presentation.dispose();
 assert.equal(leftFoot.children.length, 0, 'left rocket shoe should detach when flight ends');
@@ -164,8 +223,22 @@ ranger.update(PLAYER_TRAVERSAL_TUNING.flight.holdDelaySeconds);
 assert.equal(flightStarts, 1, 'holding the second jump should activate Sprout flight once');
 assert.equal(ranger.isFlying(), true, 'Ranger should report active Sprout flight');
 const flyingY = ranger.root.position.y;
+ranger.setMove(0, 1);
+const flightMoveStart = ranger.root.position.clone();
 ranger.update(0.05);
 assert.ok(ranger.root.position.y > flyingY, 'active rocket shoes should continue lifting the Ranger');
+const flightHorizontalDistance = Math.hypot(
+  ranger.root.position.x - flightMoveStart.x,
+  ranger.root.position.z - flightMoveStart.z
+);
+const expectedFlightDistance = PLAYER_TRAVERSAL_TUNING.movement.runSpeed
+  * PLAYER_TRAVERSAL_TUNING.flight.horizontalSpeedMultiplier
+  * 0.05;
+assert.ok(
+  Math.abs(flightHorizontalDistance - expectedFlightDistance) < 1e-9,
+  'full directional input during flight should travel at 2.5x running speed'
+);
+ranger.setMove(0, 0);
 ranger.setJumpHeld(false);
 assert.equal(ranger.isFlying(), false, 'releasing the held second jump should end flight immediately');
 
