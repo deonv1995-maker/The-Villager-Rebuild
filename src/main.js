@@ -185,6 +185,7 @@ async function bootGameplay(titleScene = null, { resume = false, profile = null 
     const sproutCompanion = new SproutCompanionController({ game });
     sproutCompanion.start();
     game.sproutCompanion = sproutCompanion;
+    game.player.setFlightAssistProvider?.(sproutCompanion);
 
     const sproutCommandMenu = new SproutCommandMenuController({
       game,
