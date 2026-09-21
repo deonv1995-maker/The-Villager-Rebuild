@@ -308,6 +308,77 @@ body.log-carrying #boot-status {
   width: 76px;
   height: 76px;
 }
+.hud-button.jump.flight-locked {
+  filter: drop-shadow(0 0 8px rgba(103, 215, 240, .7));
+}
+.flight-control-guide {
+  position: absolute;
+  right: max(18px, calc(env(safe-area-inset-right) + 14px));
+  top: 50%;
+  width: 156px;
+  height: 156px;
+  transform: translateY(-50%);
+  border: 1px solid rgba(103, 215, 240, .72);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(103, 215, 240, .18) 0 16%, rgba(23, 38, 44, .24) 17% 54%, rgba(23, 38, 44, .08) 55% 100%);
+  box-shadow:
+    0 0 0 1px rgba(103, 215, 240, .14) inset,
+    0 0 20px rgba(103, 215, 240, .12);
+  color: #baf4ff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .06em;
+  pointer-events: none;
+  opacity: .84;
+}
+.flight-control-guide[hidden] { display: none; }
+.flight-control-guide::before,
+.flight-control-guide::after {
+  content: '';
+  position: absolute;
+  background: rgba(103, 215, 240, .34);
+}
+.flight-control-guide::before {
+  left: 50%;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+}
+.flight-control-guide::after {
+  left: 14px;
+  right: 14px;
+  top: 50%;
+  height: 1px;
+}
+.flight-control-state,
+.flight-control-up,
+.flight-control-down,
+.flight-control-left,
+.flight-control-right,
+.flight-control-center {
+  position: absolute;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+}
+.flight-control-state {
+  left: 50%;
+  top: -22px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: #dffaff;
+  font-size: 8px;
+}
+.flight-control-up { left: 50%; top: 9px; transform: translateX(-50%); }
+.flight-control-down { left: 50%; bottom: 9px; transform: translateX(-50%); }
+.flight-control-left { left: 8px; top: 50%; transform: translateY(-50%); }
+.flight-control-right { right: 8px; top: 50%; transform: translateY(-50%); }
+.flight-control-center {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -53%);
+  font-size: 18px;
+  color: #67d7f0;
+}
 .hud-button.action {
   right: max(100px, calc(env(safe-area-inset-right) + 96px));
   bottom: max(28px, calc(env(safe-area-inset-bottom) + 22px));

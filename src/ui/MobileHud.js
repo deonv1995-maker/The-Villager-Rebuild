@@ -9,6 +9,8 @@ const MOVE_DEADZONE_PX = 7;
 const SPRINT_TARGET_OFFSET_PX = 145;
 const SPRINT_TARGET_RADIUS_PX = 34;
 const SPRINT_TARGET_EDGE_PADDING_PX = 42;
+const FLIGHT_CONTROL_RADIUS_PX = 82;
+const FLIGHT_CONTROL_DEADZONE_PX = 8;
 const CRAFT_PLACEMENT_ACTION_ID = 'craft-placement';
 
 export class MobileHud {
@@ -140,6 +142,14 @@ export class MobileHud {
         <span data-role="camera-mode-label" aria-hidden="true">3P</span>
         <small aria-hidden="true">VIEW</small>
       </button>
+      <div class="flight-control-guide" data-role="flight-control-guide" aria-hidden="true" hidden>
+        <span class="flight-control-state">FLIGHT LOCKED</span>
+        <span class="flight-control-up">▲ UP</span>
+        <span class="flight-control-down">▼ DOWN</span>
+        <span class="flight-control-left">◀ TURN</span>
+        <span class="flight-control-right">TURN ▶</span>
+        <span class="flight-control-center">●</span>
+      </div>
       <button class="hud-button action" type="button" aria-label="Action" disabled>
         <img class="button-bg" src="${ui.buttonCircle}" alt="">
         <img class="button-icon" data-role="action-icon" src="${ui.hand}" alt="">
@@ -177,6 +187,8 @@ export class MobileHud {
     this.buildTrayToggleChevron = this.root.querySelector('[data-role="build-toggle-chevron"]');
     this.cameraToggle = this.root.querySelector('[data-role="camera-toggle"]');
     this.cameraModeLabel = this.root.querySelector('[data-role="camera-mode-label"]');
+    this.flightControlGuide = this.root.querySelector('[data-role="flight-control-guide"]');
+    this.jumpButton = this.root.querySelector('.jump');
     this.toolButtons = new Map(
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
@@ -187,6 +199,7 @@ export class MobileHud {
     this.#bindButtons();
     this.#bindLook();
     this.cameraModeUnsubscribe = this.player.onCameraModeChange?.(mode => this.setCameraMode(mode)) ?? null;
+    this.flightModeUnsubscribe = this.player.onFlightModeChange?.(locked => this.setFlightLockedMode(locked)) ?? null;
     this.#renderAction();
   }
 
@@ -328,6 +341,19 @@ export class MobileHud {
         firstPerson ? 'Switch to third-person view' : 'Switch to first-person view'
       );
       this.cameraToggle.title = firstPerson ? 'Third-person view (P)' : 'First-person view (P)';
+    }
+  }
+
+  setFlightLockedMode(locked) {
+    const active = Boolean(locked);
+    if (this.flightControlGuide) this.flightControlGuide.hidden = !active;
+    this.root.classList.toggle('flight-locked', active);
+    if (this.jumpButton) {
+      this.jumpButton.classList.toggle('flight-locked', active);
+      this.jumpButton.setAttribute(
+        'aria-label',
+        active ? 'Flight locked, boost remains active' : 'Jump'
+      );
     }
   }
 
@@ -679,7 +705,7 @@ export class MobileHud {
   }
 
   #bindButtons() {
-    const jump = this.root.querySelector('.jump');
+    const jump = this.jumpButton ?? this.root.querySelector('.jump');
 
     const releaseJump = event => {
       event?.preventDefault?.();
@@ -765,19 +791,46 @@ export class MobileHud {
     let pointer = null;
     let lastX = 0;
     let lastY = 0;
+    let originX = 0;
+    let originY = 0;
+    let flightControl = false;
+
+    const updateFlightControl = event => {
+      const rawDx = event.clientX - originX;
+      const rawDy = event.clientY - originY;
+      const rawLength = Math.hypot(rawDx, rawDy);
+      if (rawLength <= FLIGHT_CONTROL_DEADZONE_PX) {
+        this.player.setFlightControl?.(0, 0);
+        return;
+      }
+
+      const usableLength = Math.min(rawLength, FLIGHT_CONTROL_RADIUS_PX);
+      const scale = usableLength / rawLength;
+      const turn = rawDx * scale / FLIGHT_CONTROL_RADIUS_PX;
+      const vertical = -rawDy * scale / FLIGHT_CONTROL_RADIUS_PX;
+      this.player.setFlightControl?.(turn, vertical);
+    };
 
     this.canvas.addEventListener('pointerdown', event => {
       if (pointer !== null || event.clientX < window.innerWidth * MOVE_SIDE_RATIO) return;
       pointer = event.pointerId;
       lastX = event.clientX;
       lastY = event.clientY;
-      this.player.beginCameraLook?.();
+      originX = event.clientX;
+      originY = event.clientY;
+      flightControl = Boolean(this.player.isFlightLocked?.());
+      if (flightControl) this.player.setFlightControl?.(0, 0);
+      else this.player.beginCameraLook?.();
       this.canvas.setPointerCapture(pointer);
       event.preventDefault();
     });
 
     this.canvas.addEventListener('pointermove', event => {
       if (event.pointerId !== pointer) return;
+      if (flightControl) {
+        updateFlightControl(event);
+        return;
+      }
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
       lastX = event.clientX;
@@ -788,7 +841,9 @@ export class MobileHud {
     const release = event => {
       if (event.pointerId !== pointer) return;
       pointer = null;
-      this.player.endCameraLook?.();
+      if (flightControl) this.player.setFlightControl?.(0, 0);
+      else this.player.endCameraLook?.();
+      flightControl = false;
     };
     this.canvas.addEventListener('pointerup', release);
     this.canvas.addEventListener('pointercancel', release);
