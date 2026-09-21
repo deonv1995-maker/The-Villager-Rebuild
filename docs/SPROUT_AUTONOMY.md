@@ -1,35 +1,64 @@
 # Sprout command autonomy
 
-Status: **command-driven companion behavior**.
+Status: **command-driven physical mission companion**.
 
-Sprout no longer runs permanent follow, catch-up, idle roaming or constructed-door pathfinding. Those responsibilities made Sprout a second traversal problem across deformable caves, terrain edits and future player construction.
+Sprout remains stowed with the Ranger while unused. He is not a permanent follower and does not own a second general-purpose NPC navigation system. A player-selected command temporarily deploys Sprout into the world, lets him travel to the relevant world objects, performs the task through existing authorities, and then returns him to the Ranger.
 
-The active boundary is deliberately smaller: the Ranger selects a task, Sprout deploys beside the Ranger, performs that task through an existing world authority, and returns to storage.
+## Deployment and retrieval
 
-## Deployment
+Normal gathering, loose-Log collection and tree harvesting share one presentation lifecycle:
 
-Sprout is stowed while unused. Deployment is a short-range presentation anchored beside the Ranger, not world navigation. Cave layers, doors, cliffs and terrain deformation therefore do not need Sprout-specific routing merely to keep the companion near the player.
+1. the Ranger takes Mini Sprout out and holds him in the right hand;
+2. the Ranger uses the existing authored throw/interaction animation while Mini Sprout is released gently into the air;
+3. Sprout grows to normal presentation scale during the short launch;
+4. Sprout physically travels to each target and performs the mission;
+5. when the mission ends, Sprout travels back to the Ranger;
+6. the Ranger holds out a hand, Sprout shrinks back to Mini Sprout, and he is stowed.
 
-The production model and scanner remain presentation-only. Ranger movement, world collision and resource ownership are unchanged.
+The temporary deployment pose uses the Ranger's existing cinematic/hand-mount boundaries. It does not create a new Ranger animation rig.
 
-## Command behavior
+Sprout mission travel is intentionally lightweight direct travel between known task targets. It is not a replacement for Ranger, villager or future NPC traversal/pathfinding.
 
-Find-resource commands query `GatherableSystem` for the nearest matching signal within the configured scan radius and point the scanner at it. The underground command queries the existing hidden-pocket detector.
+## Resource gathering
 
-Collect Logs reserves legitimate loose Logs through `GatherableSystem` and commits them only after the compression presentation finishes.
+The existing command ids for sticks, grass, stone and mushrooms now run gather missions rather than remote pointer scans. Each deployment chooses a mission target count between **2 and 5** and physically visits valid matching loose resources inside the configured gather radius.
 
-Laser tree harvesting queries `TreeHarvestSystem` for a nearby active tree and invokes the same shared tree-harvest action used by Ranger harvesting. The laser does not directly add Logs. The tree falls, authoritative world drops appear, and Sprout collects those drops afterward if energy and inventory capacity permit.
+Each collected object is still reserved and committed through GatherableSystem, then added to the shared InventorySystem. Sprout never creates substitute resources and never bypasses capacity.
+
+If fewer valid items exist, capacity is exhausted, or energy runs out, Sprout returns with what he legitimately collected.
+
+## Loose Logs
+
+Collect Logs uses the same deployment/retrieval lifecycle and physically travels to loose Logs inside the established collection radius. Reservation, compression, inventory capacity and persistence remain owned by the existing shared systems.
+
+## Tree harvesting
+
+The tree command keeps the established **18 m** harvest radius as its mission area. Sprout records the Ranger's deployment origin, physically travels to the nearest active tree inside that radius, and applies laser cuts through TreeHarvestSystem.
+
+After the authoritative tree fall and Log drops, Sprout travels to and stores the legitimate loose Logs before finding the next active tree inside the same original radius. The mission ends when there are no more active trees in that area, or when energy/capacity prevents safe continuation.
+
+No tree, stump, regrowth or Log-drop rules are duplicated in Sprout code.
+
+## Underground scan
+
+Underground scanning intentionally uses a different presentation. The Ranger raises **Mini Sprout** and keeps him in hand while Sprout performs the full scan. Sprout does not grow or leave the Ranger for this command.
+
+The existing underground geology service remains authoritative for the nearest undiscovered pocket. When a signal exists, the controller creates one faint blue world-space glow at that pocket position. The signal lasts about **5 seconds**, fades away completely, and does not reappear until another explicit scan.
+
+The glow is a temporary presentation only. It does not alter pocket discovery, terrain density, mining, rewards or save state.
 
 ## Energy behavior
 
-Energy slowly recharges only while Sprout is not executing a command or compressing a resource. Energy provenance is independent from monetization. One grant boundary allows future gameplay rewards, rewarded ads or purchases to add charge without embedding commercial logic into harvesting or scanning.
+Energy slowly recharges only while Sprout is stowed and no transfer is active. Gather deployment/scan costs, laser pulses and compressed pickups remain centrally configured.
 
-## Retired follower responsibilities
+SproutCompanionController.grantEnergy(amount, source) remains the future reward boundary. Gameplay rewards, rewarded ads, purchases or another release-time source may grant charge without embedding commercial logic into gathering, harvesting or scanning.
 
-The active Sprout controller no longer owns continuous Ranger-follow perception, catch-up teleport behavior, semantic-door route planning, idle roaming, automatic loose-resource vacuuming, or cave-follow layer selection.
+## Retired responsibilities
 
-Shared traversal and world systems remain available for Ranger, villagers and future NPCs; Sprout simply does not need them to remain present beside the Ranger.
+Sprout still does not own permanent follow, catch-up teleporting, idle roaming, semantic-door routing, cave-follow layer selection or a second autonomous inventory.
+
+The active responsibility is narrower: execute an explicit temporary mission, using shared world authorities, then return to storage.
 
 ## Verification target
 
-Device testing should confirm that the Sprout button does not obstruct action/jump controls, the command tray remains readable in portrait and landscape, energy changes are clear at a glance, Sprout stays hidden while unused, scans visibly point toward targets, laser harvesting preserves the normal falling-tree sequence, and Logs remain in the world whenever energy or capacity prevents collection.
+Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, underground hand-held scan, five-second faint blue pocket glow, and clean stow afterward.
