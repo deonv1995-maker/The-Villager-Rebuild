@@ -4,7 +4,7 @@ This document records the visual rules for discovered underground pockets.
 
 ## Goal
 
-Caves must read as authored places rather than smooth empty blobs or round holes, while preserving the existing tunneling architecture, collision authority, save format and mobile performance boundaries.
+Caves must read as a connected underground landscape rather than smooth empty blobs or round holes, while preserving the existing tunneling architecture, collision authority, save format and mobile performance boundaries.
 
 The visual direction draws from common cave-composition patterns used in exploration and platform games: asymmetrical silhouettes, strong ceiling/floor contrast, perimeter massing, recognizable focal formations, restrained emissive accents and environmental landmarks. The implementation uses those principles rather than copying any specific game's assets or layouts.
 
@@ -37,6 +37,14 @@ The cave-density mesh still determines the real walkable void. The deterministic
 The central content footprint must remain readable for Ranger traversal and interactions. Major decorative formations should cluster toward the outer chamber band. Treasure, Sprout shards and collectible stone continue to use their existing interaction rules and deterministic placement.
 
 Crystals may use emissive materials for visual contrast, but the system should avoid adding point lights by default. This gives caves a stronger visual hierarchy without multiplying mobile lighting cost.
+
+## Natural network morphology
+
+The deterministic natural cave network shares the same density/chamber profile rules as player tunneling and hidden pockets. Its surface entrances should read as elongated cave mouths, then transition through descending passages, tight necks, wider galleries, side chambers and larger chambers before joining deeper connectors.
+
+Natural cave morphology is traversal geometry, not a second presentation collider. Decorative pocket content and collectible rewards remain owned by `UndergroundPocketContentSystem`; the natural network does not create a parallel reward economy in this pass. Its primary purpose is exploration scale, connectivity and spatial variety.
+
+The 3D natural cave mesh remains lazy. Only nearby network features are materialized into tunneling chunks, so richer underground topology does not turn the full island into a globally allocated voxel volume.
 
 ## Future expansion
 
