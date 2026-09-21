@@ -50,6 +50,7 @@ function fixture() {
   scene.add(root);
   const statuses = [];
   let cinematicDriver = null;
+  const cinematicRightHandOffset = new THREE.Vector3();
   let harvestCalls = 0;
   const trees = [
     { id: 7, position: new THREE.Vector3(0, 0, -6), hits: 0, active: true },
@@ -113,6 +114,10 @@ function fixture() {
     playCinematicAnimation(preferences) {
       return { name: Array.isArray(preferences) ? preferences[0] : preferences, duration: 0.6 };
     },
+    setCinematicRightHandOffset(offset = {}) {
+      cinematicRightHandOffset.set(Number(offset.x) || 0, Number(offset.y) || 0, Number(offset.z) || 0);
+      return true;
+    },
     mountRightHandObject(object) {
       hand.add(object);
       object.position.set(0, 0, 0);
@@ -156,6 +161,7 @@ function fixture() {
     gatherables,
     statuses,
     trees,
+    cinematicRightHandOffset,
     get lastPocketSignalRequest() { return lastPocketSignalRequest; },
     get harvestCalls() { return harvestCalls; }
   };
@@ -234,11 +240,25 @@ function fixture() {
   const f = fixture();
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('scan-underground'), true);
-  f.tick(Math.ceil((tuning.scanRaiseSeconds + 0.2) / 0.05));
+  f.tick(Math.ceil(tuning.scanRaiseSeconds / 0.05) + 1);
   const presentation = f.controller.getPresentationState();
   assert.equal(presentation.scanning, true, 'Mini Sprout performs the scan while held');
   assert.equal(presentation.scanTerrainProjection, false);
   assert.equal(f.root.parent, f.hand, 'Underground scan keeps Mini Sprout in the Ranger hand');
+  assert.ok(
+    Math.abs(f.cinematicRightHandOffset.y - tuning.scanHandRaiseOffset.y) < 0.001,
+    'Underground scan raises the Ranger right hand for the held Mini Sprout pose'
+  );
+  const groundScan = f.scene.getObjectByName('sprout-ground-grid-scan');
+  assert.ok(groundScan, 'Underground scan creates a world-space ground grid pulse');
+  assert.ok(groundScan.getObjectByName('sprout-ground-grid-lines'), 'Ground scan contains expanding gridlines');
+  assert.ok(groundScan.getObjectByName('sprout-ground-grid-ring'), 'Ground scan contains a circular pulse edge');
+  f.tick(22);
+  assert.equal(groundScan.visible, false, 'First grid pulse dissipates into the configured gap');
+  f.tick(7);
+  assert.equal(groundScan.visible, true, 'Second grid pulse expands after the first gap');
+  f.tick(28);
+  assert.equal(groundScan.visible, true, 'Third grid pulse begins before Sprout can stow');
   assert.equal(f.lastPocketSignalRequest?.options?.allowSurface, true, 'Sprout explicitly allows pocket sensing from the surface');
   assert.equal(f.lastPocketSignalRequest?.options?.includeDiscovered, true, 'Manual scans always consider the closest pocket, including one already discovered');
   assert.equal(f.lastPocketSignalRequest?.range, tuning.undergroundScanRange, 'Sprout uses the configured surface scan range');
@@ -251,6 +271,8 @@ function fixture() {
   assert.equal(f.controller.getEnergyState().energy, before - tuning.commands['scan-underground'].energyCost);
 
   for (let frame = 0; frame < 180 && f.controller.getCommandState().activeCommandId; frame += 1) f.tick();
+  assert.equal(f.scene.getObjectByName('sprout-ground-grid-scan'), undefined, 'Ground scan visual is removed after the third pulse');
+  assert.ok(f.cinematicRightHandOffset.lengthSq() < 0.000001, 'Ranger scan hand lowers before Mini Sprout is stowed');
   const firstGlow = f.scene.getObjectByName('sprout-underground-pocket-glow');
   assert.ok(firstGlow, 'Pocket cue remains visible after the held scan finishes');
 

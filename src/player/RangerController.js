@@ -91,6 +91,11 @@ export class RangerController {
     this.spearVisual = null;
     this.spearMount = null;
     this.spearHandAnchor = null;
+    this.cinematicRightHandBone = null;
+    this.cinematicRightHandOffset = new THREE.Vector3();
+    this.cinematicRightHandAppliedOffset = new THREE.Vector3();
+    this.tempCinematicHandOffset = new THREE.Vector3();
+    this.tempCinematicParentQuaternion = new THREE.Quaternion();
     this.spearRestPosition = new THREE.Vector3(0.48, 1.18, 0.1);
     this.spearRestQuaternion = new THREE.Quaternion();
     this.spearThrowDuration = 0.72;
@@ -146,6 +151,7 @@ export class RangerController {
     });
     this.root.add(this.model);
     this.spearHandAnchor = this.#findRightHandAnchor(this.model);
+    this.cinematicRightHandBone = this.#findRightHandBone(this.model);
 
     this.mixer = new THREE.AnimationMixer(this.model);
     const clips = [
@@ -249,6 +255,8 @@ export class RangerController {
 
   endCinematic(driver) {
     if (!this.cinematicDriver || (driver && this.cinematicDriver !== driver)) return false;
+    this.#removeCinematicRightHandOffset();
+    this.cinematicRightHandOffset.set(0, 0, 0);
     const preserveFirstPersonView = this.cinematicPreserveCameraMode && this.isFirstPerson();
     this.cinematicDriver = null;
     this.cinematicPreserveCameraMode = false;
@@ -418,6 +426,16 @@ export class RangerController {
     return moved;
   }
 
+  setCinematicRightHandOffset({ x = 0, y = 0, z = 0 } = {}) {
+    if (!this.cinematicDriver) return false;
+    this.cinematicRightHandOffset.set(
+      Number.isFinite(Number(x)) ? Number(x) : 0,
+      Number.isFinite(Number(y)) ? Number(y) : 0,
+      Number.isFinite(Number(z)) ? Number(z) : 0
+    );
+    return true;
+  }
+
   mountRightHandObject(object) {
     if (!object) return false;
     if (this.spearHandAnchor) {
@@ -582,8 +600,10 @@ export class RangerController {
     this.firstPersonMoveRunning = false;
 
     if (this.cinematicDriver) {
+      this.#removeCinematicRightHandOffset();
       this.cinematicDriver.update?.(dt, this);
       this.mixer?.update(dt);
+      this.#applyCinematicRightHandOffset();
       this.#updateSpearAnchor();
       if (this.spearMount) {
         this.spearMount.position.copy(this.spearRestPosition);
@@ -788,6 +808,52 @@ export class RangerController {
 
     this.tempRootQuaternion.invert();
     this.spearRestQuaternion.copy(this.tempRootQuaternion).multiply(this.tempHandQuaternion);
+  }
+
+  #applyCinematicRightHandOffset() {
+    const bone = this.cinematicRightHandBone;
+    const parent = bone?.parent;
+    if (!bone || !parent || this.cinematicRightHandOffset.lengthSq() < 1e-8) return;
+
+    this.root.updateMatrixWorld(true);
+    parent.updateMatrixWorld(true);
+    this.root.getWorldQuaternion(this.tempRootQuaternion);
+    parent.getWorldQuaternion(this.tempCinematicParentQuaternion).invert();
+    this.tempCinematicHandOffset
+      .copy(this.cinematicRightHandOffset)
+      .applyQuaternion(this.tempRootQuaternion)
+      .applyQuaternion(this.tempCinematicParentQuaternion);
+
+    bone.position.add(this.tempCinematicHandOffset);
+    this.cinematicRightHandAppliedOffset.copy(this.tempCinematicHandOffset);
+  }
+
+  #removeCinematicRightHandOffset() {
+    const bone = this.cinematicRightHandBone;
+    if (bone && this.cinematicRightHandAppliedOffset.lengthSq() >= 1e-8) {
+      bone.position.sub(this.cinematicRightHandAppliedOffset);
+    }
+    this.cinematicRightHandAppliedOffset.set(0, 0, 0);
+  }
+
+  #findRightHandBone(root) {
+    let best = null;
+    let bestScore = -1;
+    root.traverse(object => {
+      if (!object.isBone || !object.name) return;
+      const name = object.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!name.includes('hand')) return;
+      if (name.includes('left') || name === 'handl' || name.startsWith('lhand')) return;
+      let score = 1;
+      if (name.includes('right')) score += 8;
+      if (name === 'handr' || name.startsWith('rhand') || name.endsWith('handr')) score += 12;
+      if (name.includes('wrist')) score += 2;
+      if (score > bestScore) {
+        best = object;
+        bestScore = score;
+      }
+    });
+    return best;
   }
 
   #findRightHandAnchor(root) {

@@ -51,7 +51,9 @@ The mission ends when no active trees remain inside the original harvest radius.
 
 ## Underground scan
 
-Underground scan does not use the normal grow-and-deploy sequence. The Ranger raises Mini Sprout and holds him while the scanner runs.
+Underground scan does not use the normal grow-and-deploy sequence. The Ranger visibly raises the right hand with Mini Sprout and holds him aloft while the scanner runs. The active camera mode is preserved; in first person Mini Sprout rises into the upper view instead of forcing a camera change.
+
+The scan presentation emits exactly **three** cyan-blue ground-grid pulses centered on the Ranger. Each lattice expands outward in a circle to roughly **18 m** and fades as it travels away from the Ranger, with a brief gap before the next pulse. The third pulse must finish before the hand lowers and Mini Sprout is stowed. This grid is presentation-only and does not change the authoritative **56 m** geology query.
 
 The underground exploration service identifies the closest pocket within the configured **56 m** scan radius. Every manual Sprout scan performs a fresh nearest-pocket query from the Ranger's current position, including pockets that have already been discovered, so rescanning the same area always produces the closest available cue. Other geology callers keep the established hidden-pocket-only default. The explicit Sprout scan is allowed both on the surface and inside excavated tunnels.
 
@@ -69,7 +71,7 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 
 - SproutCompanionController owns command state, energy, deployment/retrieval presentation, temporary mission travel, scanner intent, pocket glow and compression presentation.
 - SproutCommandMenuController owns only the mobile Sprout menu and reads controller state.
-- RangerController owns the Ranger rig, authored cinematic animations and right-hand mount.
+- RangerController owns the Ranger rig, authored cinematic animations, right-hand mount and generic cinematic right-hand offset hook. SproutCompanionController decides when that presentation hook is used.
 - TreeHarvestSystem remains authoritative for tree hits, felling, Log spawning, stumps and regrowth.
 - GatherableSystem remains authoritative for loose-resource identity and reservation/commit.
 - InventorySystem remains authoritative for counts and capacity.
@@ -78,4 +80,4 @@ SproutCompanionController.grantEnergy(amount, source) remains the monetization-a
 
 ## Device verification
 
-Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, the same deployment/scan/retrieval sequence stays entirely in first person when 1P is active, Mini Sprout remains visible as a first-person view prop without unhiding the third-person Ranger body, the view does not snap behind the Ranger after retrieval, Sprout remains upright after leaving the Ranger's hand/view mount, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, a surface scan produces a usable ground cue when a pocket is within 56 m, every manual scan reacquires the closest pocket even when it was previously discovered, and the glow holds for 10 seconds before completing an 8-second slow fade.
+Verify on the deployed Android/PWA build that deployment and retrieval read naturally in third person, the same deployment/scan/retrieval sequence stays entirely in first person when 1P is active, Mini Sprout remains visible as a first-person view prop without unhiding the third-person Ranger body, the view does not snap behind the Ranger after retrieval, Sprout remains upright after leaving the Ranger's hand/view mount, physical mission travel does not visibly teleport, 2–5 gather missions stop correctly, all trees inside the 18 m mission area are processed, Logs are collected only after normal world drops exist, the cave scan visibly raises the Ranger's right hand, all three expanding ground-grid pulses are readable and dissipate outward before the hand lowers, a surface scan produces a usable ground cue when a pocket is within 56 m, every manual scan reacquires the closest pocket even when it was previously discovered, and the glow holds for 10 seconds before completing an 8-second slow fade.
