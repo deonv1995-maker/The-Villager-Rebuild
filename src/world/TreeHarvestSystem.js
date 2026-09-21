@@ -205,11 +205,44 @@ export class TreeHarvestSystem {
     };
   }
 
+  findNearestActiveTree(position, maxDistance) {
+    if (!position || !Number.isFinite(maxDistance) || maxDistance <= 0) return null;
+    let nearest = null;
+    let nearestDistanceSq = maxDistance * maxDistance;
+    for (const tree of this.trees) {
+      if (!tree.active) continue;
+      const dx = tree.obstacle.x - position.x;
+      const dz = tree.obstacle.z - position.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq > nearestDistanceSq) continue;
+      nearest = tree;
+      nearestDistanceSq = distanceSq;
+    }
+    if (!nearest) return null;
+    return {
+      treeId: nearest.treeId,
+      label: this.definition.label,
+      position: new THREE.Vector3(
+        nearest.obstacle.x,
+        this.terrain.heightAt(nearest.obstacle.x, nearest.obstacle.z),
+        nearest.obstacle.z
+      )
+    };
+  }
+
+  harvestTree(treeId, sourcePosition) {
+    const tree = this.trees.find(candidate => candidate.treeId === treeId && candidate.active);
+    if (!tree) return null;
+    return this.#applyChop(tree, sourcePosition);
+  }
+
   chop(playerPosition) {
     this.update(playerPosition, true);
     if (!this.target) return null;
+    return this.#applyChop(this.target, playerPosition);
+  }
 
-    const tree = this.target;
+  #applyChop(tree, sourcePosition) {
     tree.hits += 1;
     const remainingHits = Math.max(0, this.definition.hitsRequired - tree.hits);
     const position = new THREE.Vector3(
@@ -220,7 +253,7 @@ export class TreeHarvestSystem {
     this.hitFeedback.emit(position, 'wood');
 
     if (remainingHits > 0) {
-      this.treeShake.hit(tree.treeId, playerPosition, tree.obstacle);
+      this.treeShake.hit(tree.treeId, sourcePosition ?? position, tree.obstacle);
       return {
         chopped: false,
         remainingHits,
@@ -237,7 +270,7 @@ export class TreeHarvestSystem {
     tree.cleared = false;
     this.#hideTreeInstance(tree);
     this.collision.removeObstacle(tree.obstacle);
-    this.fellingPresentation.begin(tree, playerPosition);
+    this.fellingPresentation.begin(tree, sourcePosition ?? position);
     this.choppedCount += 1;
     this.target = null;
     this.indicator.visible = false;
