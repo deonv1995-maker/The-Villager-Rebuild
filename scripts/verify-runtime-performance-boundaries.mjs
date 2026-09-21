@@ -193,6 +193,26 @@ assert.ok(
     && UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate <= 2,
   'natural cave marching geometry must keep a strict mobile-safe per-frame build budget'
 );
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalCriticalChunkBuildsPerUpdate
+    >= UNDERGROUND_TUNNELING.naturalChunkBuildsPerUpdate
+    && UNDERGROUND_TUNNELING.naturalCriticalChunkBuildsPerUpdate <= 3,
+  'near-player cave recovery may finish at most three chunks in one update'
+);
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalCriticalMeshBudgetMs
+    >= UNDERGROUND_TUNNELING.naturalMeshBudgetMs
+    && UNDERGROUND_TUNNELING.naturalCriticalMeshBudgetMs <= 4,
+  'near-player cave recovery must retain a hard mobile-sized millisecond budget'
+);
+const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition) {');
+const naturalUpdateEnd = tunnelingSource.indexOf('  getNaturalCaveNetwork()', naturalUpdateStart);
+const naturalUpdateSource = tunnelingSource.slice(naturalUpdateStart, naturalUpdateEnd);
+assert.ok(
+  naturalUpdateSource.includes('naturalCaveFeatureVerticalDistance(feature, y)')
+    && naturalUpdateSource.includes('naturalActivationVerticalRadius'),
+  'multi-level cave prewarming must filter unrelated vertical strata before queueing geometry'
+);
 const naturalActivationStart = tunnelingSource.indexOf('  #activateNaturalFeature(feature) {');
 const ensureSphereStart = tunnelingSource.indexOf('  #ensureChunksForSphere(center, radius) {', naturalActivationStart);
 assert.ok(naturalActivationStart >= 0 && ensureSphereStart > naturalActivationStart, 'natural cave activation implementation must remain inspectable');
@@ -206,6 +226,12 @@ assert.ok(
   naturalActivationSource.includes('#queueNaturalChunkRebuild(key)')
     && naturalActivationSource.includes('#processNaturalChunkRebuildQueue(playerPosition)'),
   'natural cave activation must queue render geometry and drain it through the bounded update path'
+);
+assert.ok(
+  naturalActivationSource.includes('naturalCriticalRenderRadius')
+    && naturalActivationSource.includes('naturalCriticalMeshBudgetMs')
+    && naturalActivationSource.includes('naturalCriticalChunkBuildsPerUpdate'),
+  'visible nearby cave gaps must use only the explicit bounded critical streaming budget'
 );
 assert.ok(
   naturalActivationSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
