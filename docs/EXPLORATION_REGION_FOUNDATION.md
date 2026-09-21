@@ -4,7 +4,7 @@
 
 The exploration foundation now has two layers: the larger chunk-streamed mainland and visibly distinct macro regions that are strong enough to read during normal play.
 
-The mainland remains **2.25x the original linear coast scale**. The established Day-1 area is preserved, while outer land is divided into deterministic exploration regions that future wildlife, resources, ruins and additional cave entrances can consume through one shared world model.
+The mainland is now **2.70x the original linear coast scale**. The established Day-1 area is preserved, while outer land is divided into deterministic exploration regions that future wildlife, resources, ruins and additional cave entrances can consume through one shared world model.
 
 ## Source of truth
 
@@ -125,7 +125,7 @@ It does **not** add a full cave dungeon, abandoned structures, hostile explorati
 
 `npm run verify:streaming` protects:
 
-- the 2.25x mainland scale and Day-1 isolation;
+- the 2.70x mainland scale and Day-1 isolation;
 - deterministic exploration-region definitions;
 - a strong jungle canopy floor and bounded regional tree quota;
 - the western jungle ground profile, including fertile soil strength, reduced generic grass/meadow cover, fern floor and bounded vine/moss-rock/fallen-log density;
