@@ -52,6 +52,15 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalNoiseDetailFrequency: 0.61,
   naturalNoiseAmplitude: 0.95,
   naturalNoiseDetailAmplitude: 0.25,
+  // Primary passages cache low-frequency static-noise bends at world creation.
+  // Density sampling then evaluates only the cheap cached cubic route.
+  naturalRouteNoiseFrequency: 0.055,
+  naturalRouteWarpMinLength: 8,
+  naturalRouteLateralWarpFraction: 0.11,
+  naturalRouteMaxLateralWarp: 2.6,
+  naturalRouteVerticalDipFraction: 0.035,
+  naturalRouteMaxVerticalDip: 0.9,
+  naturalRouteRadiusBulge: 0.42,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
   naturalEntranceRadiusFractionMin: 0.5,

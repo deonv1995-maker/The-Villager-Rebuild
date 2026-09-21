@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { UNDERGROUND_TUNNELING as config } from '../src/data/UndergroundTunnelingDefinitions.js';
-import { naturalCaveNoiseAt, naturalCaveSegmentFieldAt, naturalCaveSegmentBounds } from '../src/world/NaturalCaveNetworkProfile.js';
+import {
+  naturalCaveNoiseAt,
+  naturalCaveSegmentCenterAt,
+  naturalCaveSegmentFieldAt,
+  naturalCaveSegmentBounds
+} from '../src/world/NaturalCaveNetworkProfile.js';
 import { tunnelingExcavationFieldAt } from '../src/world/TunnelingTerrainProfile.js';
 import { UndergroundTunnelingSystem } from '../src/world/UndergroundTunnelingSystem.js';
 
@@ -34,6 +39,32 @@ for (const x of [-8.64, -1, 0, 8.64, 17.28]) {
   assert.ok(Math.abs(naturalCaveNoiseAt(x - 1e-7, -4.2, 3.7) - naturalCaveNoiseAt(x + 1e-7, -4.2, 3.7)) < 1e-5, 'noise must be continuous across negative coordinates and chunk borders');
 }
 
+const curvedSegment = {
+  kind: 'gallery',
+  a: {x: 0, y: -8, z: 0},
+  b: {x: 0, y: -8, z: 30},
+  radiusA: 2,
+  radiusB: 2,
+  curve: {
+    controlA: {x: 2.2, y: -8.6, z: 10},
+    controlB: {x: -1.6, y: -8.35, z: 20},
+    radiusBulge: 0.36
+  }
+};
+assert.deepEqual(naturalCaveSegmentCenterAt(curvedSegment, 0), curvedSegment.a, 'curve must preserve the route start');
+assert.deepEqual(naturalCaveSegmentCenterAt(curvedSegment, 1), curvedSegment.b, 'curve must preserve the route end');
+const curvedQuarter = naturalCaveSegmentCenterAt(curvedSegment, 0.25);
+const curvedMiddle = naturalCaveSegmentCenterAt(curvedSegment, 0.5);
+assert.ok(Math.abs(curvedQuarter.x) > 0.45, 'cached controls must visibly bend the route away from a straight corridor');
+assert.ok(curvedMiddle.y < -8.2, 'natural routes must be able to dip between established endpoints');
+assert.ok(
+  naturalCaveSegmentFieldAt(curvedMiddle.x, curvedMiddle.y, curvedMiddle.z, curvedSegment, config) < 0,
+  'the curved centerline must remain open cave space'
+);
+const curvedBounds = naturalCaveSegmentBounds(curvedSegment, config);
+assert.ok(curvedBounds.maxX > curvedSegment.curve.controlA.x, 'bounds must include positive route meanders');
+assert.ok(curvedBounds.minX < curvedSegment.curve.controlB.x, 'bounds must include negative route meanders');
+
 const terrain = {heightAt: () => 8, naturalHeightAt: () => 8, centerZ: 0, coastRadiusAt: () => 120, isPlayable: () => true, setTunnelingOpenings() {}};
 const makeWorld = () => {
   const system = new UndergroundTunnelingSystem({group: new THREE.Group(), terrain});
@@ -41,7 +72,23 @@ const makeWorld = () => {
   return system;
 };
 const system = makeWorld();
-const entrance = system.getNaturalCaveNetwork().entrances[0];
+const network = system.getNaturalCaveNetwork();
+const curvedNetworkSegments = network.segments.filter(segment => segment.kind !== 'entrance' && segment.curve);
+assert.ok(curvedNetworkSegments.length >= network.segments.length * 0.6, 'most underground route sections must use cached natural meanders');
+assert.ok(network.segments.filter(segment => segment.kind === 'entrance').every(segment => segment.curve === null), 'surface mouth cuts must keep their established exact alignment');
+assert.ok(curvedNetworkSegments.some(segment => {
+  const oneThird = naturalCaveSegmentCenterAt(segment, 1 / 3);
+  const straightX = segment.a.x + (segment.b.x - segment.a.x) / 3;
+  const straightZ = segment.a.z + (segment.b.z - segment.a.z) / 3;
+  return Math.hypot(oneThird.x - straightX, oneThird.z - straightZ) > 0.35;
+}), 'generated natural passages must contain visible horizontal bends');
+const deterministicWorld = makeWorld();
+assert.deepEqual(
+  deterministicWorld.getNaturalCaveNetwork().segments.map(segment => segment.curve),
+  network.segments.map(segment => segment.curve),
+  'cached route meanders must be deterministic for the same world'
+);
+const entrance = network.entrances[0];
 const player = {...entrance, y: 8};
 // Advance a deterministic clock per scheduler checkpoint. Avoid flaky wall-time assertions.
 const realNow = performance.now;
