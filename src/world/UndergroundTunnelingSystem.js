@@ -107,6 +107,7 @@ export class UndergroundTunnelingSystem {
     this.surfaceOpenings = [];
     this.naturalCaveNetwork = null;
     this.naturalFeatureBuckets = new Map();
+    this.naturalFeatureChunkKeys = new Map();
     this.activatedNaturalFeatureIds = new Set();
     this.pendingNaturalChunkRebuilds = [];
     this.pendingNaturalChunkRebuildKeys = new Set();
@@ -159,7 +160,6 @@ export class UndergroundTunnelingSystem {
 
     let activated = 0;
     for (const feature of this.naturalCaveNetwork.features) {
-      if (this.activatedNaturalFeatureIds.has(feature.id)) continue;
       if (
         naturalCaveFeatureDistance2D(feature, x, z)
           > this.config.naturalActivationRadius
@@ -169,8 +169,9 @@ export class UndergroundTunnelingSystem {
         && naturalCaveFeatureVerticalDistance(feature, y)
           > this.config.naturalActivationVerticalRadius
       ) continue;
-      activated += this.#activateNaturalFeature(feature);
+      activated += this.#activateNaturalFeature(feature, playerPosition);
     }
+    this.#pruneNaturalChunkRebuildQueue(playerPosition);
     this.#processNaturalChunkRebuildQueue(playerPosition);
     return activated;
   }
@@ -1386,40 +1387,73 @@ export class UndergroundTunnelingSystem {
     if (this.naturalCaveNetwork) return this.naturalCaveNetwork;
     this.naturalCaveNetwork = buildNaturalCaveNetwork(this.terrain, this.config);
     this.naturalFeatureBuckets.clear();
+    this.naturalFeatureChunkKeys.clear();
 
     for (const feature of this.naturalCaveNetwork.features) {
       const bounds = naturalCaveFeatureBounds(feature, this.config);
+      const renderKeys = [];
+      const horizontalChunkReach =
+        this.chunkSize * Math.SQRT1_2 + this.config.cellSize * 1.5;
       for (const key of this.#chunkKeysForBounds(bounds)) {
         const bucket = this.naturalFeatureBuckets.get(key) ?? [];
         bucket.push(feature);
         this.naturalFeatureBuckets.set(key, bucket);
+
+        const [ix, , iz] = key.split(':').map(Number);
+        if (!Number.isFinite(ix) || !Number.isFinite(iz)) continue;
+        const centerX = (ix + 0.5) * this.chunkSize;
+        const centerZ = (iz + 0.5) * this.chunkSize;
+        if (
+          naturalCaveFeatureDistance2D(feature, centerX, centerZ)
+            <= horizontalChunkReach
+        ) renderKeys.push(key);
       }
+      this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys));
     }
     return this.naturalCaveNetwork;
   }
 
-  #activateNaturalFeature(feature) {
-    if (!feature || this.activatedNaturalFeatureIds.has(feature.id)) return 0;
-    const bounds = naturalCaveFeatureBounds(feature, this.config);
-    const keys = this.#chunkKeysForBounds(bounds);
-    const horizontalChunkReach =
-      this.chunkSize * Math.SQRT1_2 + this.config.cellSize * 1.5;
+  #activateNaturalFeature(feature, playerPosition) {
+    if (!feature) return 0;
+    const keys = this.naturalFeatureChunkKeys.get(feature.id) ?? [];
+    const px = Number(playerPosition?.x);
+    const py = Number(playerPosition?.y);
+    const pz = Number(playerPosition?.z);
+    if (![px, pz].every(Number.isFinite)) return 0;
+
+    const horizontalRadius = Math.max(
+      this.chunkSize,
+      Number(this.config.naturalRenderPrewarmRadius) || 0
+    );
+    const verticalRadius = Math.max(
+      this.chunkSize * 0.5,
+      Number(this.config.naturalRenderPrewarmVerticalRadius) || 0
+    );
+    const horizontalPadding = this.chunkSize * Math.SQRT1_2;
+    const verticalPadding = this.chunkSize * 0.5;
+    const horizontalLimitSq = (horizontalRadius + horizontalPadding) ** 2;
     let queuedChunks = 0;
+    let touchedFeature = false;
 
     for (const key of keys) {
-      const [ix, , iz] = key.split(':').map(Number);
-      if (!Number.isFinite(ix) || !Number.isFinite(iz)) continue;
+      const [ix, iy, iz] = key.split(':').map(Number);
+      if (![ix, iy, iz].every(Number.isFinite)) continue;
       const centerX = (ix + 0.5) * this.chunkSize;
+      const centerY = (iy + 0.5) * this.chunkSize;
       const centerZ = (iz + 0.5) * this.chunkSize;
+      const dx = centerX - px;
+      const dz = centerZ - pz;
+      if (dx * dx + dz * dz > horizontalLimitSq) continue;
       if (
-        naturalCaveFeatureDistance2D(feature, centerX, centerZ)
-          > horizontalChunkReach
+        Number.isFinite(py)
+        && Math.abs(centerY - py) > verticalRadius + verticalPadding
       ) continue;
 
+      touchedFeature = true;
       this.#activateChunkColumn(key);
       if (this.#queueNaturalChunkRebuild(key)) queuedChunks += 1;
     }
-    this.activatedNaturalFeatureIds.add(feature.id);
+    if (touchedFeature) this.activatedNaturalFeatureIds.add(feature.id);
     return queuedChunks;
   }
 
@@ -1447,6 +1481,57 @@ export class UndergroundTunnelingSystem {
       z: (iz + 0.5) * this.chunkSize
     });
     return true;
+  }
+
+  #pruneNaturalChunkRebuildQueue(playerPosition) {
+    const px = Number(playerPosition?.x);
+    const py = Number(playerPosition?.y);
+    const pz = Number(playerPosition?.z);
+    if (![px, pz].every(Number.isFinite)) return 0;
+
+    const horizontalRadius = Math.max(
+      Number(this.config.naturalRenderPrewarmRadius) || 0,
+      Number(this.config.naturalQueueRetentionRadius) || 0
+    );
+    const verticalRadius = Math.max(
+      Number(this.config.naturalRenderPrewarmVerticalRadius) || 0,
+      Number(this.config.naturalQueueRetentionVerticalRadius) || 0
+    );
+    const horizontalPadding = this.chunkSize * Math.SQRT1_2;
+    const verticalPadding = this.chunkSize * 0.5;
+    const horizontalLimitSq = (horizontalRadius + horizontalPadding) ** 2;
+
+    const withinRetention = key => {
+      const [ix, iy, iz] = key.split(':').map(Number);
+      if (![ix, iy, iz].every(Number.isFinite)) return false;
+      const dx = (ix + 0.5) * this.chunkSize - px;
+      const dz = (iz + 0.5) * this.chunkSize - pz;
+      if (dx * dx + dz * dz > horizontalLimitSq) return false;
+      if (!Number.isFinite(py)) return true;
+      const dy = (iy + 0.5) * this.chunkSize - py;
+      return Math.abs(dy) <= verticalRadius + verticalPadding;
+    };
+
+    let pruned = 0;
+    if (this.pendingNaturalChunkRebuilds.length) {
+      const retained = [];
+      for (const entry of this.pendingNaturalChunkRebuilds) {
+        if (withinRetention(entry.key)) {
+          retained.push(entry);
+          continue;
+        }
+        this.pendingNaturalChunkRebuildKeys.delete(entry.key);
+        pruned += 1;
+      }
+      this.pendingNaturalChunkRebuilds = retained;
+    }
+
+    if (this.naturalChunkBuild && !withinRetention(this.naturalChunkBuild.key)) {
+      this.pendingNaturalChunkRebuildKeys.delete(this.naturalChunkBuild.key);
+      this.naturalChunkBuild = null;
+      pruned += 1;
+    }
+    return pruned;
   }
 
   #processNaturalChunkRebuildQueue(playerPosition) {
