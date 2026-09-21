@@ -1,58 +1,35 @@
-# Sprout autonomy and idle animation
+# Sprout command autonomy
 
-Status: **active companion-behaviour layer**.
+Status: **command-driven companion behavior**.
 
-Sprout should read as an independent companion rather than a transform mechanically attached to the Ranger. This layer extends the existing `SproutCompanionController` without changing harvesting, inventory, collision, story, save or world authority.
+Sprout no longer runs permanent follow, catch-up, idle roaming or constructed-door pathfinding. Those responsibilities made Sprout a second traversal problem across deformable caves, terrain edits and future player construction.
 
-## Follow behaviour
+The active boundary is deliberately smaller: the Ranger selects a task, Sprout deploys beside the Ranger, performs that task through an existing world authority, and returns to storage.
 
-Sprout does not receive perfect future knowledge of the Ranger's movement. The companion samples the Ranger's position/facing on a short irregular cadence, applies a small reaction delay when the Ranger starts moving, and follows a drifting formation target rather than recomputing the exact same offset every rendered frame.
+## Deployment
 
-Those discrete samples are **intent goals**, not direct transform assignments. Once a new Ranger sample or formation-drift sample is available, Sprout eases its perceived position, facing and drift toward the new goal before navigation consumes it. This preserves the intended delayed companion personality without producing stair-step target jumps while Hero M walks or turns.
+Sprout is stowed while unused. Deployment is a short-range presentation anchored beside the Ranger, not world navigation. Cave layers, doors, cliffs and terrain deformation therefore do not need Sprout-specific routing merely to keep the companion near the player.
 
-The intended visual result is mild independent judgement: Sprout can hesitate for a fraction of a second, take a slightly different line, accelerate into a catch-up and settle into a nearby formation instead of matching every Ranger turn immediately. The shared collision service remains authoritative, and the existing catch-up and hard-recovery rules remain in place so personality never strands the companion.
+The production model and scanner remain presentation-only. Ranger movement, world collision and resource ownership are unchanged.
 
-Ordinary Ranger/Sprout overlap is also resolved as bounded collision-aware separation rather than a one-frame positional snap. The hard recovery teleport remains reserved for the existing long-distance `hardCatchUpDistance` safeguard; it is not used as normal close-range movement.
+## Command behavior
 
-Constructed semantic doors are now an explicit traversal boundary for companion egress. `PanelTraversalQuery` exposes read-only world-space snapshots of active Door panels, while `SproutDoorRoutePlanner` only chooses an approach/door-centre/exit waypoint sequence. Sprout still executes every waypoint through the shared `WorldCollisionSystem`; the traversal query and planner do not move the companion or create a second collision authority. When follow movement is repeatedly blocked near a ground-floor constructed door, Sprout routes through that opening before resuming the normal formation target. While a nearby semantic door can provide this egress path, the long-distance hard catch-up teleport is suppressed so Sprout cannot visibly jump through a cabin wall. Outside that constructed-door context, the established hard-recovery safeguard remains available.
+Find-resource commands query `GatherableSystem` for the nearest matching signal within the configured scan radius and point the scanner at it. The underground command queries the existing hidden-pocket detector.
 
-The sampled follow target is presentation/intent state only. The Ranger remains the player authority, and Sprout does not predict input or modify Ranger movement.
+Collect Logs reserves legitimate loose Logs through `GatherableSystem` and commits them only after the compression presentation finishes.
 
-Automatic loose-resource retrieval remains centered on the Ranger rather than becoming a free-roaming search system. The current `SPROUT_COMPANION.collectionRadius` is **18 m**, doubled from the previous 9 m tuning. The existing collection approach timeout, catch-up thresholds, collision service and reservation/commit boundary remain unchanged, so the larger sensing radius does not grant Sprout a second navigation or harvesting authority.
+Laser tree harvesting queries `TreeHarvestSystem` for a nearby active tree and invokes the same shared tree-harvest action used by Ranger harvesting. The laser does not directly add Logs. The tree falls, authoritative world drops appear, and Sprout collects those drops afterward if energy and inventory capacity permit.
 
-## Idle autonomy
+## Energy behavior
 
-After the Ranger has been stationary for a short period, Sprout stops treating the follow offset as a fixed parking spot. If no legitimate collection target needs attention, Sprout chooses collision-safe points around the Ranger, drifts between them at a slower idle speed, pauses and visibly scans the surrounding area.
+Energy slowly recharges only while Sprout is not executing a command or compressing a resource. Energy provenance is independent from monetization. One grant boundary allows future gameplay rewards, rewarded ads or purchases to add charge without embedding commercial logic into harvesting or scanning.
 
-Loose-resource retrieval still has priority over decorative roaming. When Sprout reaches an eligible loose pickup while the Ranger is idle, the existing reservation/commit transaction is preserved, but the presentation may include an inspection beat before compression: the reserved pickup is represented by a temporary clone, lifted near Sprout's scanner, rotated briefly, then compressed and committed through the same authoritative `GatherableSystem` boundary. The real pickup is never awarded merely because inspection began.
+## Retired follower responsibilities
 
-Sprout still does not harvest intact trees, rocks or other tool-gated nodes. Passive harvestable Grass patches are the deliberate exception: they are already `GatherableSystem` inventory resources, so allied Sprout may reserve and compress them through the same collection transaction as loose pickups. Idle curiosity is not a second harvesting system.
+The active Sprout controller no longer owns continuous Ranger-follow perception, catch-up teleport behavior, semantic-door route planning, idle roaming, automatic loose-resource vacuuming, or cave-follow layer selection.
 
-## Automatic extended-idle flourish
-
-Sprout's longer idle animation is ambient companion personality, not a player command. After the Ranger has remained inactive for an extended period, Sprout automatically performs a short visual flourish when no collection target or compression transaction has priority and Sprout is still nearby.
-
-There is **no context-action button** for this behavior. PET/COUNT actions are not exposed, and the automatic flourish does not call the Ranger cinematic boundary, play a Ranger interaction clip, change inventory, write status feedback or require input. Ranger control remains available throughout.
-
-The flourish alternates between two lightweight Sprout-only presentation beats: a playful close hover/tilt and a scanner-focused curiosity pose. Both remain outside the Ranger personal-space radius. A cooldown keeps the behavior occasional rather than repetitive.
-
-Ranger movement immediately cancels an active flourish and resets the extended-idle timer. Normal follow, catch-up, collection and collision behavior then resumes through the existing companion controller.
-
-## Presentation states
-
-`SproutCompanionController.getPresentationState()` exposes only presentation hints such as `scanning` and `affectionate`. `SproutVisualRuntimeController` consumes those hints while the companion controller continues to own movement/behaviour intent. The rendering asset remains swappable and does not gain inventory, collision or story authority.
-
-## Architecture boundaries
-
-- `SproutCompanionController`: sampled/eased follow intent, reaction delay, formation drift, bounded personal-space separation, semantic-door route execution, idle roam/scan, automatic extended-idle flourish, collection approach and inspection/compression presentation.
-- `PanelTraversalQuery`: read-only active semantic Door portal snapshots in world space; no movement or collision authority.
-- `SproutDoorRoutePlanner`: pure ground-floor door waypoint selection; no world mutation.
-- `GatherableSystem`: loose-resource identity, reservation/release, capacity re-check and committed removal.
-- `InventorySystem`: the single Ranger/Sprout item-count authority.
-- `RangerController`: Ranger locomotion and existing cinematics remain independent; Sprout's ambient idle flourish does not seize this boundary.
-- `MobileHud` / `ContextActionPolicy`: unchanged; Sprout's idle flourish does not register an external action.
-- `SproutVisualRuntimeController` / `SproutVisualAsset`: visual state only.
+Shared traversal and world systems remain available for Ranger, villagers and future NPCs; Sprout simply does not need them to remain present beside the Ranger.
 
 ## Verification target
 
-Device testing should specifically check that Sprout no longer looks synchronized to the Ranger's exact turns **or jerks between sampled follow targets**, the 18 m retrieval radius feels useful without making Sprout disappear too far from the Ranger, ordinary close contact separates smoothly rather than popping, a Sprout left inside a completed cabin follows the Ranger out through the actual Door opening instead of waiting and then clipping through a wall, idle roaming remains close enough to feel companion-like, inspection does not feel slow during normal gathering, the extended-idle flourish appears automatically without a button, Ranger movement cancels it immediately, Ranger controls remain responsive throughout, and none of the autonomy motion causes obstacle clipping or delayed hard catch-up.
+Device testing should confirm that the Sprout button does not obstruct action/jump controls, the command tray remains readable in portrait and landscape, energy changes are clear at a glance, Sprout stays hidden while unused, scans visibly point toward targets, laser harvesting preserves the normal falling-tree sequence, and Logs remain in the world whenever energy or capacity prevents collection.
