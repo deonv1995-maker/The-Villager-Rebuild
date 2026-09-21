@@ -41,26 +41,26 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // authority as player mining. Surface mouths are always known to the terrain,
   // while 3D passage/chamber meshes are activated only near the Ranger.
   naturalNetworkCount: 6,
-  naturalActivationRadius: 52,
+  naturalActivationRadius: 68,
   // Marching-tetrahedra cave geometry is deliberately time-sliced. Registering
-  // nearby density/collision columns stays immediate, but only this many new
-  // natural-cave render chunks may be meshed in one frame.
-  naturalChunkBuildsPerUpdate: 1,
+  // nearby density/collision columns stays immediate. Optimized chunks may finish
+  // two-at-a-time, but the millisecond deadline remains the primary frame guard.
+  naturalChunkBuildsPerUpdate: 2,
   naturalMeshBudgetMs: 2,
   // World-space coherent noise: broad erosion plus resolved rock-scale detail.
   naturalNoiseFrequency: 0.19,
   naturalNoiseDetailFrequency: 0.61,
   naturalNoiseAmplitude: 0.95,
   naturalNoiseDetailAmplitude: 0.25,
-  // Primary passages cache low-frequency static-noise bends at world creation.
-  // Density sampling then evaluates only the cheap cached cubic route.
+  // Primary passages cache low-frequency static-noise bends and two local width
+  // pockets at world creation. Density sampling then uses only cached arithmetic.
   naturalRouteNoiseFrequency: 0.055,
   naturalRouteWarpMinLength: 8,
-  naturalRouteLateralWarpFraction: 0.11,
-  naturalRouteMaxLateralWarp: 2.6,
+  naturalRouteLateralWarpFraction: 0.18,
+  naturalRouteMaxLateralWarp: 4.2,
   naturalRouteVerticalDipFraction: 0.035,
   naturalRouteMaxVerticalDip: 0.9,
-  naturalRouteRadiusBulge: 0.42,
+  naturalRouteRadiusBulge: 1.35,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
   naturalEntranceRadiusFractionMin: 0.5,

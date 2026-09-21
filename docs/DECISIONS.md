@@ -253,3 +253,18 @@ or sculpting upgrades. Canonical boundaries remove that seam without raising the
 island to tunnel resolution or changing collision, cave density, surface editing or
 world-chunk culling authority. The CI terrain-seam regression covers both 18↔36 and
 18↔72 boundaries.
+
+
+## 2026-09-21 — Cave galleries and bounded prewarming
+
+Android device feedback after the first meander pass still showed corridor-like cave runs
+and visibly late geometry. Natural passages may therefore use two deterministic local
+width pockets plus stronger cached lateral bends, while keeping the existing route graph,
+surface mouths, density/collision authority, mining and save schema unchanged.
+
+Streaming should improve total useful work rather than hiding stalls behind a larger frame
+budget. Conservative feature AABBs are filtered against the passage footprint before
+chunks are queued, marching-tetrahedra scratch is reused, and flat face normals are written
+during polygonization instead of recomputed in a second geometry pass. The 2 ms soft mesh
+deadline remains the primary mobile frame guard; earlier activation and a two-chunk
+completion cap are allowed only with that deadline and queue pruning still in place.

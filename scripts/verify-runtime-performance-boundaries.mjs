@@ -207,6 +207,29 @@ assert.ok(
     && naturalActivationSource.includes('#processNaturalChunkRebuildQueue(playerPosition)'),
   'natural cave activation must queue render geometry and drain it through the bounded update path'
 );
+assert.ok(
+  naturalActivationSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
+    && naturalActivationSource.includes('Math.SQRT1_2'),
+  'natural cave activation must prune empty horizontal corners from conservative feature AABBs'
+);
+
+const naturalMesherStart = tunnelingSource.indexOf('  *#buildChunkGeometry(key) {');
+const naturalMesherEnd = tunnelingSource.indexOf('  #colorAt(point) {', naturalMesherStart);
+assert.ok(
+  naturalMesherStart >= 0 && naturalMesherEnd > naturalMesherStart,
+  'natural cave mesher implementation must remain inspectable'
+);
+const naturalMesherSource = tunnelingSource.slice(naturalMesherStart, naturalMesherEnd);
+assert.ok(
+  naturalMesherSource.includes("geometry.setAttribute('normal'")
+    && naturalMesherSource.includes('this.tetraPoints'),
+  'natural cave meshing must reuse tetra scratch and write flat face normals directly'
+);
+assert.equal(
+  naturalMesherSource.includes('geometry.computeVertexNormals()'),
+  false,
+  'streamed cave chunks must not pay a second full geometry pass to recompute flat normals'
+);
 
 const packageJson = JSON.parse(packageSource);
 assert.ok(

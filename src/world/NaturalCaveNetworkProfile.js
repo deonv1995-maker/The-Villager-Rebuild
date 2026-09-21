@@ -94,12 +94,48 @@ export const naturalCaveSegmentCenterAt = (segment, t) => {
   };
 };
 
-const naturalCaveSegmentRadiusAt = (segment, t) => {
+const naturalCaveRadiusPulseWeight = (t, bulge) => {
+  const center = clamp01(Number(bulge?.t) || 0);
+  const span = Math.max(0.01, Number(bulge?.span) || 0.01);
+  const distance = Math.abs(t - center);
+  if (distance >= span) return 0;
+  return smooth(1 - distance / span);
+};
+
+export const naturalCaveSegmentRadiusAt = (segment, t) => {
   const resolvedT = clamp01(t);
   const baseRadius = lerp(segment.radiusA, segment.radiusB, resolvedT);
+  const radiusBulges = Array.isArray(segment.curve?.radiusBulges)
+    ? segment.curve.radiusBulges
+    : null;
+
+  if (radiusBulges?.length) {
+    let extraRadius = 0;
+    for (const bulge of radiusBulges) {
+      const radius = Math.max(0, Number(bulge?.radius) || 0);
+      extraRadius = Math.max(
+        extraRadius,
+        radius * naturalCaveRadiusPulseWeight(resolvedT, bulge)
+      );
+    }
+    return baseRadius + extraRadius;
+  }
+
+  // Legacy single-bulge support keeps hand-authored/test segments compatible.
   const bulge = Math.max(0, Number(segment.curve?.radiusBulge) || 0);
   const middleWeight = Math.sin(Math.PI * resolvedT) ** 2;
   return baseRadius + bulge * middleWeight;
+};
+
+const naturalCaveSegmentMaxBulge = segment => {
+  let maximum = Math.max(0, Number(segment.curve?.radiusBulge) || 0);
+  const radiusBulges = Array.isArray(segment.curve?.radiusBulges)
+    ? segment.curve.radiusBulges
+    : [];
+  for (const entry of radiusBulges) {
+    maximum = Math.max(maximum, Math.max(0, Number(entry?.radius) || 0));
+  }
+  return maximum;
 };
 
 const segmentProjectionT = (segment, x, z) => {
@@ -130,8 +166,9 @@ export const naturalCaveSegmentFieldAt = (x, y, z, segment, config) => {
 };
 
 export const naturalCaveSegmentBounds = (segment, config) => {
-  const bulge = Math.max(0, Number(segment.curve?.radiusBulge) || 0);
-  const radius = Math.max(segment.radiusA, segment.radiusB) + bulge;
+  const radius =
+    Math.max(segment.radiusA, segment.radiusB)
+    + naturalCaveSegmentMaxBulge(segment);
   const extent = tunnelingExcavationExtent(radius, config) + erosionExtent(config);
   const controlPoints = [
     segment.a,
@@ -152,16 +189,42 @@ export const naturalCaveSegmentBounds = (segment, config) => {
   });
 };
 
+const horizontalDistanceToLineSegment = (a, b, x, z) => {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const lengthSq = dx * dx + dz * dz;
+  const t = lengthSq > 0.000001
+    ? clamp01(((x - a.x) * dx + (z - a.z) * dz) / lengthSq)
+    : 0;
+  return Math.hypot(
+    x - lerp(a.x, b.x, t),
+    z - lerp(a.z, b.z, t)
+  );
+};
+
 const horizontalDistanceToSegment = (segment, x, z) => {
-  // Five cheap curve samples are enough for the generous activation radius and
-  // avoid running noise or an iterative closest-point solver every frame.
+  // Approximate the cached cubic by short line intervals. Use the passage's
+  // maximum possible radius for every interval so pruning stays conservative:
+  // it can queue a little extra work but cannot cut off a gallery bulge.
+  const intervalCount = 8;
+  const conservativeRadius =
+    Math.max(segment.radiusA, segment.radiusB)
+    + naturalCaveSegmentMaxBulge(segment);
+  let previousPoint = naturalCaveSegmentCenterAt(segment, 0);
   let distance = Number.POSITIVE_INFINITY;
-  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+
+  for (let index = 1; index <= intervalCount; index += 1) {
+    const t = index / intervalCount;
     const point = naturalCaveSegmentCenterAt(segment, t);
     distance = Math.min(
       distance,
-      Math.max(0, Math.hypot(x - point.x, z - point.z) - naturalCaveSegmentRadiusAt(segment, t))
+      Math.max(
+        0,
+        horizontalDistanceToLineSegment(previousPoint, point, x, z)
+          - conservativeRadius
+      )
     );
+    previousPoint = point;
   }
   return distance;
 };
@@ -403,17 +466,30 @@ const makeSegment = ({
       lerp(start.y, end.y, 2 / 3) - dipB,
       twoThirdZ + perpendicularZ * offsetB
     );
+    const widthNoise = naturalCaveNoiseAt(
+      (start.x + end.x) * 0.5 * frequency + 31,
+      networkIndex * 0.29,
+      (start.z + end.z) * 0.5 * frequency - 23
+    );
+    const bulgeScale = config.naturalRouteRadiusBulge * curveWeight;
+    const radiusBulges = Object.freeze([
+      Object.freeze({
+        t: lerp(0.24, 0.34, noiseA),
+        span: lerp(0.14, 0.2, noiseB),
+        radius: bulgeScale * lerp(0.76, 1.08, widthNoise)
+      }),
+      Object.freeze({
+        t: lerp(0.64, 0.78, noiseB),
+        span: lerp(0.14, 0.2, noiseA),
+        radius: bulgeScale * lerp(0.72, 1.04, 1 - widthNoise)
+      })
+    ]);
     curve = Object.freeze({
       controlA,
       controlB,
-      radiusBulge:
-        config.naturalRouteRadiusBulge
-        * curveWeight
-        * (0.65 + naturalCaveNoiseAt(
-          (start.x + end.x) * 0.5 * frequency + 31,
-          networkIndex * 0.29,
-          (start.z + end.z) * 0.5 * frequency - 23
-        ) * 0.35)
+      radiusBulges,
+      // Retain the conservative maximum for older tooling and broad-phase code.
+      radiusBulge: Math.max(...radiusBulges.map(entry => entry.radius))
     });
   }
 
