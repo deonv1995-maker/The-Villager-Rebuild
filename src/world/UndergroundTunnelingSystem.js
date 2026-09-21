@@ -587,6 +587,42 @@ export class UndergroundTunnelingSystem {
       .filter(Boolean);
   }
 
+  getUndiscoveredPocketSignal(position, maxDistance = 20) {
+    const x = Number(position?.x);
+    const y = Number(position?.y);
+    const z = Number(position?.z);
+    const range = Number(maxDistance);
+    if (![x, y, z, range].every(Number.isFinite) || range <= 0) return null;
+
+    const naturalSurfaceY = this.#naturalSurfaceHeightAt(x, z);
+    const minimumUndergroundDepth = Math.max(1.2, this.config.cellSize * 1.5);
+    if (naturalSurfaceY - y < minimumUndergroundDepth || !this.#columnHasActivity(x, z)) {
+      return null;
+    }
+
+    let nearest = null;
+    let nearestDistance = range;
+    for (const pocket of this.#candidatePocketsAround(x, z, range)) {
+      if (this.discoveredPocketIds.has(pocket.id)) continue;
+      const distance = Math.hypot(x - pocket.x, y - pocket.y, z - pocket.z);
+      if (distance > nearestDistance) continue;
+      nearest = pocket;
+      nearestDistance = distance;
+    }
+
+    if (!nearest) return null;
+    return {
+      pocketId: nearest.id,
+      distance: nearestDistance,
+      strength: THREE.MathUtils.clamp(1 - nearestDistance / range, 0, 1),
+      position: {
+        x: nearest.x,
+        y: nearest.y,
+        z: nearest.z
+      }
+    };
+  }
+
   #naturalSurfaceHeightAt(x, z) {
     return typeof this.terrain.naturalHeightAt === 'function'
       ? this.terrain.naturalHeightAt(x, z)
