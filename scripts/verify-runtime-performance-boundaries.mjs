@@ -252,9 +252,10 @@ assert.ok(
   'visible nearby cave gaps must use only the explicit bounded critical streaming budget'
 );
 assert.ok(
-  naturalActivationSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
-    && naturalActivationSource.includes('Math.SQRT1_2'),
-  'natural cave activation must prune empty horizontal corners from conservative feature AABBs'
+  tunnelingSource.includes('naturalCaveFeatureDistance2D(feature, centerX, centerZ)')
+    && tunnelingSource.includes('this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys))')
+    && tunnelingSource.includes('Math.SQRT1_2'),
+  'natural cave initialization must prune empty AABB corners once and cache each feature render footprint'
 );
 assert.ok(
   tunnelingSource.includes('this.naturalFeatureChunkKeys = new Map()')
