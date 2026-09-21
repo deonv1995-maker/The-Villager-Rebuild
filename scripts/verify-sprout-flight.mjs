@@ -86,7 +86,7 @@ assert.ok(
   controller.getCommandState().commands.every(command => !command.enabled),
   'normal Sprout commands should stay disabled while Sprout is the rocket shoes'
 );
-controller.update(0.5);
+for (let frame = 0; frame < 10; frame += 1) controller.update(0.05);
 assert.equal(
   controller.getEnergyState().energy,
   startingEnergy - SPROUT_COMPANION.flightEnergyPerSecond * 0.5,
@@ -100,7 +100,7 @@ assert.equal(controllerRightFoot.children.length, 0, 'right rocket shoe should b
 
 controller.restoreState({ energy: SPROUT_COMPANION.flightMinimumEnergy });
 assert.equal(controller.beginFlight(), true, 'minimum usable energy should still allow a final flight burst');
-controller.update(0.25);
+for (let frame = 0; frame < 3; frame += 1) controller.update(0.05);
 assert.equal(controller.getEnergyState().energy, 0, 'flight drain should clamp energy at zero');
 assert.equal(controller.isFlightActive(), false, 'flight should force itself off when Sprout energy is exhausted');
 assert.ok(
