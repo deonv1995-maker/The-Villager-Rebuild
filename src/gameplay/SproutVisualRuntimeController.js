@@ -95,13 +95,16 @@ export class SproutVisualRuntimeController {
         ?? companion?.compression
       );
       const scanTarget = presentation.scanTarget ?? null;
+      const scanTerrainProjection = presentation.scanTerrainProjection !== false;
+      const scanIntensity = Number(presentation.scanIntensity) || 0;
       const affectionate = Boolean(presentation.affectionate);
       updateSproutVisual(this.visual, this.elapsed, { powered, scanning, affectionate });
       updateSproutScannerVisual(this.visual, this.elapsed, {
         powered,
         scanning,
         target: scanTarget,
-        terrainHeightAt: this.terrainHeightAt
+        terrainHeightAt: scanTerrainProjection ? this.terrainHeightAt : null,
+        signalStrength: scanIntensity
       });
     }
 
