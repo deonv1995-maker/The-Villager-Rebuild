@@ -216,3 +216,14 @@ The following are intentionally not locked yet:
 ## Sprout visual and companion refinement
 
 Refine the existing game-native production Sprout model rather than replacing its format or actor lifecycle. Keep visual geometry separate from movement. Companion-local Ranger personal-space steering supplements shared world collision without changing Ranger controls. Expand eligible loose-resource search to 9 metres, preserve selected approaches for a bounded eight seconds, and finish reserved compression before catch-up. Shared inventory, capacity, reservation/commit, autosave semantics and Ranger-only intact-node harvesting remain authoritative. See SPROUT_FOLLOW_COMPRESSION.md and SPROUT_VISUAL_ASSET.md.
+
+
+## 2026-09-21 — Natural cave erosion and resumable geometry
+
+Use deterministic coherent noise only in the existing natural-cave density field
+to break uniform side-wall/ceiling shapes. Preserve established passage voids,
+floors, mouths, excavation semantics and saves. Use one shared chunk mesher for
+immediate player edits and resumable natural streaming; cache shared lattice
+samples and restart suspended work when density changes. A chunk-count cap alone
+is not a frame-time budget. See `UNDERGROUND_CAVE_PRESENTATION.md` for research,
+benchmark scope, regression coverage and outstanding device acceptance.

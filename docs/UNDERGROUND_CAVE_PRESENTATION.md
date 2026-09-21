@@ -49,3 +49,62 @@ The 3D natural cave mesh remains lazy. Only nearby network features are material
 ## Future expansion
 
 Future cave biomes may vary materials, crystal palettes, fungal dressing, water, ruins or resource themes through data-driven presentation profiles. Those variants should continue to reuse the same tunneling density and pocket-discovery systems rather than creating biome-specific cave physics.
+
+## Noise erosion and bounded meshing — 2026-09-21
+
+The natural network previously swept the player-mining arch profile along straight
+segments. It therefore retained uniform walls and ceilings even where the topology
+connected chambers. Natural segments and chambers now apply deterministic,
+world-space, two-scale coherent value noise to erode the side walls and ceiling.
+The broad layer creates asymmetric recesses; the finer layer breaks up the rock
+silhouette at the existing mesh resolution. This is geometric density variation,
+not a random texture or a second decorative/collision shell.
+
+The existing route graph, walkable floors, entrance cuts, minimum clearance,
+hidden-pocket reward placement, player excavation profile and save schema remain
+unchanged. Noise only enlarges natural voids; it cannot seal an old route or raise
+rock through a saved player position. Surface entrance segments retain their
+original density to match the terrain's existing mouth openings. Feature bounds
+include erosion so adjoining chunk samples agree. This pass does not replace the
+network with a full-island random voxel volume or promise winding new routes.
+
+Research references:
+- [Minecraft's noise caves](https://www.minecraft.net/en-us/article/minecraft-snapshot-21w06a)
+  combine cavern-scale spaces and winding passages with existing cave carvers.
+- [GPU Gems: procedural terrain density](https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-1-generating-complex-procedural-terrains-using-gpu)
+  describes density-field noise at multiple scales. We adapt the principle to the
+  existing CPU mesher; we do not introduce a GPU terrain pipeline.
+
+### Performance boundary
+
+A one-chunk-per-frame limit was insufficient: a chunk still completed all work in
+one frame. Natural streaming now resumes the same mesher across updates, checking
+a 2 ms target between density columns and occupied mesh cells. This is a soft
+budget: a cell, geometry finalization or garbage collection can exceed it. Only a
+complete geometry is attached. Terrain edits invalidate in-progress sampling;
+reset/load discards it. Local player edits still rebuild synchronously through the
+same generator, preserving immediate mining and sculpting behavior.
+
+Each chunk samples its 13×13×13 lattice once (2,197 queries rather than 13,824),
+reuses terrain height within each vertical sampling column, and skips tetrahedron
+work in wholly solid/empty cells. This is about 84% fewer lattice density queries,
+not an 84% overall frame-rate claim. Priority sorting happens between chunk jobs.
+Existing world-chunk distance/frustum rendering remains responsible for visibility.
+
+Validation: `npm run verify:cave-network` includes deterministic noise, changing
+wall widths, preserved floors, conservative bounds, scheduler suspension,
+completed-geometry equivalence, edit invalidation and save/reset checks. The full
+`npm run check` remains the release gate.
+
+`node scripts/benchmark-cave-streaming.mjs [checkout-path]` measures CPU updates
+until 30 chunks finish near the first entrance. On the development runtime,
+sequential runs compared main `e3190a5` to this pass: update median ~180 → 2.46 ms,
+p95 ~442 → 3.83 ms, max ~489 → 8.08 ms, total CPU ~5.81 → 2.79 s. The new run spans
+more updates and samples modified geometry; these are illustrative CPU results,
+not identical-work throughput or mobile FPS guarantees. Approach a cave before
+judging pop-in: streaming deliberately spreads work over more frames.
+
+Device acceptance remains required: walk into/out of mouths, inspect walls and
+ceilings, mine and sculpt during streaming, save/reload underground, and watch for
+visible late chunks and sustained lag. This environment's browser cannot create a
+WebGL context even on the prior live build, so it cannot certify visual acceptance.

@@ -46,6 +46,12 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // nearby density/collision columns stays immediate, but only this many new
   // natural-cave render chunks may be meshed in one frame.
   naturalChunkBuildsPerUpdate: 1,
+  naturalMeshBudgetMs: 2,
+  // World-space coherent noise: broad erosion plus resolved rock-scale detail.
+  naturalNoiseFrequency: 0.19,
+  naturalNoiseDetailFrequency: 0.61,
+  naturalNoiseAmplitude: 0.95,
+  naturalNoiseDetailAmplitude: 0.25,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
   naturalEntranceRadiusFractionMin: 0.5,
