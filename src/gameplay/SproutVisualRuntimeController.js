@@ -7,6 +7,11 @@ import {
   ensureSproutScannerVisual,
   updateSproutScannerVisual
 } from '../rendering/SproutScannerVisual.js';
+import {
+  createSproutPocketSignalVisual,
+  disposeSproutPocketSignalVisual,
+  updateSproutPocketSignalVisual
+} from '../rendering/SproutPocketSignalVisual.js';
 
 const SPROUT_RELATIVE_PLAYER_SCALE = 0.88;
 
@@ -48,6 +53,7 @@ export class SproutVisualRuntimeController {
     this.frameId = null;
     this.lastTimestamp = null;
     this.originalClaim = null;
+    this.pocketSignalVisual = createSproutPocketSignalVisual(game.sceneSystem?.scene);
     this.terrainHeightAt = typeof game.island?.heightAt === 'function'
       ? (x, z) => game.island.heightAt(x, z)
       : null;
@@ -70,6 +76,8 @@ export class SproutVisualRuntimeController {
     this.frameId = null;
     this.#restoreCompanionClaim();
     updateSproutScannerVisual(this.visual, this.elapsed, { powered: false, scanning: false });
+    disposeSproutPocketSignalVisual(this.pocketSignalVisual);
+    this.pocketSignalVisual = null;
     this.visual = null;
   }
 
@@ -106,6 +114,11 @@ export class SproutVisualRuntimeController {
         terrainHeightAt: scanTerrainProjection ? this.terrainHeightAt : null,
         signalStrength: scanIntensity
       });
+      updateSproutPocketSignalVisual(
+        this.pocketSignalVisual,
+        this.elapsed,
+        presentation.pocketSignalCue ?? null
+      );
     }
 
     this.frameId = globalThis.requestAnimationFrame?.(this.#frame) ?? null;
