@@ -129,9 +129,13 @@ function fixture() {
   f.add('log', 2, -3);
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('collect-logs'), true);
-  f.tick(40);
+  for (let frame = 0; frame < 40 && f.inventory.get('log') < 1; frame += 1) f.tick();
   assert.equal(f.inventory.get('log'), 1, 'Collect Logs compresses a legitimate world log into shared inventory');
-  assert.ok(f.controller.getEnergyState().energy <= before - tuning.collectionEnergyPerPickup);
+  assert.equal(
+    f.controller.getEnergyState().energy,
+    before - tuning.collectionEnergyPerPickup,
+    'Log compression spends energy before idle recharge resumes'
+  );
   assert.equal(f.gatherables.items.some(item => item.resourceId === 'log' && item.active), false);
 }
 
@@ -139,13 +143,15 @@ function fixture() {
   const f = fixture();
   const before = f.controller.getEnergyState().energy;
   assert.equal(f.controller.issueCommand('harvest-tree'), true);
-  f.tick(180);
+  for (let frame = 0; frame < 180 && f.inventory.get('log') < 3; frame += 1) f.tick();
   assert.equal(f.harvestCalls, 3, 'Sprout laser uses the shared tree harvest authority for all three cuts');
   assert.equal(f.inventory.get('log'), 3, 'Laser tree command collects the resulting authoritative log drops');
-  assert.ok(
-    f.controller.getEnergyState().energy <= before - tuning.laserEnergyPerPulse * 3 - tuning.collectionEnergyPerPickup * 3,
-    'Laser passes and log compression both consume Sprout energy'
+  assert.equal(
+    f.controller.getEnergyState().energy,
+    before - tuning.laserEnergyPerPulse * 3 - tuning.collectionEnergyPerPickup * 3,
+    'Laser passes and log compression both consume Sprout energy before recharge resumes'
   );
+  f.tick(2);
   assert.equal(f.root.visible, false, 'Sprout is stowed again after harvest completion');
 }
 
