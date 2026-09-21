@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { CELESTIAL_PRESENTATION } from '../data/CelestialDefinitions.js';
 import { WORLD_DAY_MINUTES } from '../data/WorldTimeDefinitions.js';
+import {
+  UNDERGROUND_LIGHTING,
+  undergroundDarknessAtDepth
+} from '../data/UndergroundLightingDefinitions.js';
 import { dominantCelestialDirectionAt } from './CelestialOrbit.js';
 
 const KEYFRAMES = Object.freeze([
@@ -32,7 +36,11 @@ function keyframePair(minuteOfDay) {
 }
 
 export class DayNightLightingSystem {
-  constructor({ sceneSystem, focusProvider = null } = {}) {
+  constructor({
+    sceneSystem,
+    focusProvider = null,
+    undergroundDepthProvider = null
+  } = {}) {
     if (!sceneSystem?.scene || !sceneSystem?.lighting || !sceneSystem?.renderer) {
       throw new Error('DayNightLightingSystem requires a SceneSystem with named lighting');
     }
@@ -40,6 +48,10 @@ export class DayNightLightingSystem {
     this.renderer = sceneSystem.renderer;
     this.lighting = sceneSystem.lighting;
     this.focusProvider = typeof focusProvider === 'function' ? focusProvider : null;
+    this.undergroundDepthProvider =
+      typeof undergroundDepthProvider === 'function'
+        ? undergroundDepthProvider
+        : null;
     this.colorScratch = new THREE.Color();
     this.keyDirection = new THREE.Vector3();
     this.lightFocus = new THREE.Vector3();
@@ -50,24 +62,40 @@ export class DayNightLightingSystem {
   apply(snapshot) {
     const minuteOfDay = Number(snapshot?.minuteOfDay) || 0;
     const { from, to, t } = keyframePair(minuteOfDay);
+    this.#positionCelestialKey(minuteOfDay);
+
+    const undergroundDepth = Math.max(
+      0,
+      Number(this.undergroundDepthProvider?.(this.lightFocus)) || 0
+    );
+    const darkness = undergroundDarknessAtDepth(undergroundDepth);
 
     this.#lerpColor(this.scene.background, from.sky, to.sky, t);
     if (this.scene.fog?.color) this.#lerpColor(this.scene.fog.color, from.fog, to.fog, t);
 
     this.#lerpColor(this.lighting.hemi.color, from.hemiSky, to.hemiSky, t);
     this.#lerpColor(this.lighting.hemi.groundColor, from.hemiGround, to.hemiGround, t);
-    this.lighting.hemi.intensity = lerp(from.hemiIntensity, to.hemiIntensity, t);
+    this.lighting.hemi.intensity =
+      lerp(from.hemiIntensity, to.hemiIntensity, t)
+      * lerp(1, UNDERGROUND_LIGHTING.hemiIntensityMultiplier, darkness);
 
     this.#lerpColor(this.lighting.sun.color, from.sunColor, to.sunColor, t);
-    this.lighting.sun.intensity = lerp(from.sunIntensity, to.sunIntensity, t);
-    this.#positionCelestialKey(minuteOfDay);
+    this.lighting.sun.intensity =
+      lerp(from.sunIntensity, to.sunIntensity, t)
+      * lerp(1, UNDERGROUND_LIGHTING.sunIntensityMultiplier, darkness);
 
     this.#lerpColor(this.lighting.skyFill.color, from.fillColor, to.fillColor, t);
-    this.lighting.skyFill.intensity = lerp(from.fillIntensity, to.fillIntensity, t);
+    this.lighting.skyFill.intensity =
+      lerp(from.fillIntensity, to.fillIntensity, t)
+      * lerp(1, UNDERGROUND_LIGHTING.skyFillIntensityMultiplier, darkness);
 
     this.#lerpColor(this.lighting.ambient.color, from.ambientColor, to.ambientColor, t);
-    this.lighting.ambient.intensity = lerp(from.ambientIntensity, to.ambientIntensity, t);
-    this.renderer.toneMappingExposure = lerp(from.exposure, to.exposure, t);
+    this.lighting.ambient.intensity =
+      lerp(from.ambientIntensity, to.ambientIntensity, t)
+      * lerp(1, UNDERGROUND_LIGHTING.ambientIntensityMultiplier, darkness);
+    this.renderer.toneMappingExposure =
+      lerp(from.exposure, to.exposure, t)
+      * lerp(1, UNDERGROUND_LIGHTING.exposureMultiplier, darkness);
   }
 
   #lerpColor(target, fromHex, toHex, amount) {
