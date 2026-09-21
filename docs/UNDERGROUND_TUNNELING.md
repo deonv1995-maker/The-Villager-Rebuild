@@ -4,11 +4,11 @@
 
 The authored northern cave and all cave-specific terrain/presentation code are removed.
 
-Pickaxe excavation is now a **world system**. In first person, the Ranger can begin tunneling into ordinary playable ground anywhere on the map, then continue excavating in the white-dot direction through the same underground density field.
+Pickaxe excavation is a **world system**. In first person, the Ranger can begin tunneling into ordinary playable ground anywhere on the map, then continue excavating in the white-dot direction through the same underground density field.
 
-There is no prebuilt cave entrance, cave POI, cave mesh, cave terrain trench, or cave-specific collision volume.
+The island also owns a deterministic **natural cave underworld**. Six distributed surface mouths descend into arched passages, tight connectors, wider galleries and larger chambers; those branches continue into deeper connectors and meet at a shared hub. These are not authored POIs or separate cave meshes: they are deterministic empty-volume features in the same density authority used by player excavation.
 
-`ExplorationPoiSystem` remains as the existing world/save façade so current boot and persistence boundaries stay stable, but underground excavation is owned by `UndergroundTunnelingSystem`.
+`ExplorationPoiSystem` remains as the existing world/save façade so current boot and persistence boundaries stay stable, while `UndergroundTunnelingSystem` owns natural caves, player excavation, support and collision.
 
 ## Lazy world-space density
 
@@ -17,10 +17,11 @@ The island is not voxelized globally.
 `UndergroundTunnelingSystem` evaluates one deterministic world-space scalar-density function:
 
 - natural terrain below `terrain.heightAt(x, z)` is solid;
-- player excavation spheres subtract empty volume;
-- deterministic underground pockets subtract larger empty chambers.
+- deterministic natural-cave passages and chambers subtract a connected underworld;
+- player excavation profiles subtract additional empty volume;
+- deterministic hidden pockets subtract optional discoverable chambers.
 
-Only 3D tunneling chunks touched by excavation or a discovered pocket are materialized as marching-tetrahedra meshes.
+Natural cave topology and surface mouths are known deterministically at boot, but the complete underground mesh is never generated globally. Passage/chamber chunks materialize only as the Ranger approaches them; player excavation and discovered pockets use the same lazy marching-tetrahedra chunk path.
 
 Current tuning:
 
@@ -31,6 +32,26 @@ Current tuning:
 - current protected mining depth is 18 m below the local natural surface.
 
 The 18 m depth is an explicit first-milestone mobile/performance boundary, not a permanent world-design limit.
+
+## Natural cave underworld
+
+The natural network is generated once from stable world coordinates and the current terrain coastline.
+
+Each of the six branches contains:
+
+- an elliptical surface mouth large enough to enter on foot without digging;
+- a descending entrance tunnel;
+- at least one deliberately tighter neck;
+- a wider gallery;
+- a larger multi-lobe flat-floor chamber;
+- a side chamber/branch;
+- a deeper segmented connector.
+
+All deep branches connect into one larger central chamber, so caves read as a continuous explorable underworld rather than isolated round pockets. Passage radii deliberately vary while retaining Ranger body clearance.
+
+Surface mouths are always published to the terrain so their openings exist before the Ranger arrives. The corresponding 3D cave chunks remain lazy: approaching within the bounded activation radius materializes only nearby segments/chambers and registers those columns with the existing volume collision query.
+
+The natural network adds no second reward, collision, save or terrain authority. Existing hidden pockets remain separate deterministic discoveries that can intersect or extend the underworld, and player tunneling can create new shortcuts between any of these spaces.
 
 ## Starting a tunnel anywhere
 
@@ -49,24 +70,24 @@ A valid Pickaxe action:
 7. publishes `mineable-ground` to the unified mobile Action button;
 8. commits the excavation only when MINE is tapped.
 
-The HUD never needs an authored cave trigger or entrance.
+The HUD never needs an authored cave trigger. Natural mouths are ordinary traversable terrain openings, while the Pickaxe can still start a new tunnel anywhere else.
 
 Target acquisition remains active while the Pickaxe swing animation is busy. The interaction handler still prevents a second strike until the current swing finishes, but the MINE control no longer disappears between valid cuts.
 
 ## Dynamic surface openings
 
-The normal island heightfield remains the surface authority until an excavation sphere actually intersects it.
+The normal island heightfield remains the surface authority. Natural cave mouths publish deterministic elliptical openings at boot, while player excavation publishes a circular opening only when a strike actually intersects the surface.
 
-When a strike breaks through the surface:
+For either kind of opening:
 
-- the excavation publishes a circular surface opening derived from the real sphere/surface intersection;
+- the terrain receives the opening's shared broad-phase radius plus its circular or elliptical cut profile;
 - only terrain chunks touched by a changed opening are rebuilt;
 - those chunks temporarily refine from the ordinary 18×18 terrain grid to a 72×72 grid;
 - heightfield triangles intersecting the opening are removed;
 - the tunneling density mesh supplies the matching ground around and below the opening;
 - affected terrain renders double-sided so underground viewing does not expose culled surface backfaces.
 
-This replaces the old fixed cave-mouth cut. There is no permanent special location on the island.
+This replaces the old single fixed cave-mouth approach with multiple deterministic entrances distributed around the enlarged island, while preserving fully freeform player-made openings elsewhere.
 
 `ConstructionTerrainAdaptationSystem` listens for terrain-geometry replacement. When tunneling rebuilds one terrain chunk, the construction system refreshes only that tracked mesh and reapplies any existing floor adaptation so building and tunneling do not hold stale competing geometry.
 
@@ -175,8 +196,10 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 
 `scripts/verify-underground-tunneling.mjs` protects:
 
-- zero authored cave POIs and no cave scene root;
-- first-person mining of ordinary ground without a prebuilt entrance;
+- zero authored cave POIs and no competing cave scene/collision authority;
+- deterministic connected natural cave entrances, passage classes and shared deep hub through `scripts/verify-natural-cave-network.mjs`;
+- lazy natural-cave chunk activation rather than world-sized voxelization;
+- first-person mining of ordinary ground independently of natural entrances;
 - Ranger-clear surface excavation;
 - local terrain refinement and triangle removal only after surface breakthrough;
 - construction-terrain tracking after dynamic terrain geometry replacement;
@@ -203,7 +226,10 @@ Tunneling restores before shared Ranger placement so a saved underground player 
 
 After CI and Pages deployment, verify on Android/PWA:
 
-- there is no northern cave entrance or cave-specific terrain scar;
+- locate multiple natural cave mouths around the expanded island and confirm each reads as an irregular cave entrance rather than a round shaft;
+- walk into at least one cave without using the Pickaxe and confirm the floor, walls and roof are physically traversable;
+- follow a branch through a tight neck, a wider gallery and a larger chamber, then continue toward the deeper connected network;
+- confirm cave geometry streams in before the Ranger reaches it without a visible pop-in or a large frame hitch;
 - equip Pickaxe and enter first person on several unrelated land locations;
 - aim the white dot at the ground and confirm MINE appears;
 - one downward strike creates a visible opening without floating grass/ground;

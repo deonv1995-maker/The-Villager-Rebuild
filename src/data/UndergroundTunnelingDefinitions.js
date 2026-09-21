@@ -37,6 +37,37 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   surfaceOpeningPadding: 0.6,
   presentationPadding: 0.9,
 
+  // The natural underworld is deterministic topology inside the same density
+  // authority as player mining. Surface mouths are always known to the terrain,
+  // while 3D passage/chamber meshes are activated only near the Ranger.
+  naturalNetworkCount: 6,
+  naturalActivationRadius: 52,
+  naturalEntranceAngleOffset: 0.22,
+  naturalEntranceAngleJitter: 0.24,
+  naturalEntranceRadiusFractionMin: 0.5,
+  naturalEntranceRadiusFractionMax: 0.66,
+  naturalEntranceRadiusMin: 2.35,
+  naturalEntranceRadiusMax: 2.9,
+  naturalEntranceLongScale: 1.55,
+  naturalEntranceShortScale: 0.9,
+  naturalPassageRadiusMin: 1.75,
+  naturalPassageRadiusMax: 2.2,
+  naturalTightPassageRadius: 1.48,
+  naturalGalleryPassageRadius: 2.55,
+  naturalChamberRadiusMin: 4.8,
+  naturalChamberRadiusMax: 6.2,
+  naturalChamberFloorDepthScale: 0.5,
+  naturalChamberFloorRadiusScale: 0.62,
+  naturalChamberCeilingRiseScale: 0.82,
+  naturalChamberOverburden: 1.6,
+  naturalTightMinimumClearance: PLAYER_TRAVERSAL_TUNING.body.height + 0.4,
+  naturalCentralChamberRadius: 6.6,
+  naturalCentralChamberDepth: 12,
+  naturalConnectorSegmentLength: 30,
+  naturalConnectorBend: 7,
+  naturalConnectorDepthMin: 11.2,
+  naturalConnectorDepthMax: 13,
+
   // Underground pockets are deterministic empty chambers. Resources and treasure
   // will be layered into these spaces only after tunneling is device-verified.
   pocketCellSize: 28,

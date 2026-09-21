@@ -13,6 +13,12 @@ import {
   tunnelingExcavationHorizontalRadius
 } from './TunnelingTerrainProfile.js';
 import { undergroundPocketFieldAt } from './UndergroundPocketProfile.js';
+import {
+  buildNaturalCaveNetwork,
+  naturalCaveFeatureBounds,
+  naturalCaveFeatureDistance2D,
+  naturalCaveFeatureFieldAt
+} from './NaturalCaveNetworkProfile.js';
 
 const ISO_LEVEL = 0;
 const STATE_KIND = 'global-tunneling-v1';
@@ -104,6 +110,9 @@ export class UndergroundTunnelingSystem {
     this.activeChunks = new Map();
     this.activeColumns = new Set();
     this.surfaceOpenings = [];
+    this.naturalCaveNetwork = null;
+    this.naturalFeatureBuckets = new Map();
+    this.activatedNaturalFeatureIds = new Set();
 
     this.tempA = new THREE.Vector3();
     this.tempB = new THREE.Vector3();
@@ -131,8 +140,32 @@ export class UndergroundTunnelingSystem {
   }
 
   create() {
+    this.#initializeNaturalCaveNetwork();
     this.#syncSurfaceState();
     return 0;
+  }
+
+  update(playerPosition) {
+    this.#initializeNaturalCaveNetwork();
+    const x = Number(playerPosition?.x);
+    const z = Number(playerPosition?.z);
+    if (![x, z].every(Number.isFinite)) return 0;
+
+    let activated = 0;
+    for (const feature of this.naturalCaveNetwork.features) {
+      if (this.activatedNaturalFeatureIds.has(feature.id)) continue;
+      if (
+        naturalCaveFeatureDistance2D(feature, x, z)
+          > this.config.naturalActivationRadius
+      ) continue;
+      activated += this.#activateNaturalFeature(feature);
+    }
+    return activated;
+  }
+
+  getNaturalCaveNetwork() {
+    this.#initializeNaturalCaveNetwork();
+    return this.naturalCaveNetwork;
   }
 
   hasActivityAt(x, z) {
@@ -499,6 +532,7 @@ export class UndergroundTunnelingSystem {
   }
 
   restoreState(state) {
+    this.#initializeNaturalCaveNetwork();
     this.#resetRuntimeState();
     if (
       state?.kind !== STATE_KIND ||
@@ -565,6 +599,10 @@ export class UndergroundTunnelingSystem {
       activeChunkCount: this.activeChunks.size,
       activeColumnCount: this.activeColumns.size,
       surfaceOpeningCount: this.surfaceOpenings.length,
+      naturalEntranceCount: this.naturalCaveNetwork?.entrances.length ?? 0,
+      naturalSegmentCount: this.naturalCaveNetwork?.segments.length ?? 0,
+      naturalChamberCount: this.naturalCaveNetwork?.chambers.length ?? 0,
+      activatedNaturalFeatureCount: this.activatedNaturalFeatureIds.size,
       discoveredPocketIds: [...this.discoveredPocketIds].sort(),
       chunkSize: this.chunkSize,
       maxDepth: this.config.maxDepth
@@ -808,7 +846,8 @@ export class UndergroundTunnelingSystem {
     const surfaceY = this.terrain.heightAt(x, z);
     let density = surfaceY - y;
 
-    const bucket = this.excavationBuckets.get(this.#chunkKeyForPoint(x, y, z));
+    const chunkKey = this.#chunkKeyForPoint(x, y, z);
+    const bucket = this.excavationBuckets.get(chunkKey);
     if (bucket) {
       for (const excavation of bucket) {
         density = Math.min(
@@ -820,6 +859,16 @@ export class UndergroundTunnelingSystem {
             excavation,
             this.config
           )
+        );
+      }
+    }
+
+    const naturalFeatures = this.naturalFeatureBuckets.get(chunkKey);
+    if (naturalFeatures) {
+      for (const feature of naturalFeatures) {
+        density = Math.min(
+          density,
+          naturalCaveFeatureFieldAt(x, y, z, feature, this.config)
         );
       }
     }
@@ -1245,6 +1294,55 @@ export class UndergroundTunnelingSystem {
     return keys;
   }
 
+  #chunkKeysForBounds(bounds) {
+    if (!bounds) return [];
+    const minX = Math.floor(bounds.minX / this.chunkSize);
+    const maxX = Math.floor(bounds.maxX / this.chunkSize);
+    const minY = Math.floor(bounds.minY / this.chunkSize);
+    const maxY = Math.floor(bounds.maxY / this.chunkSize);
+    const minZ = Math.floor(bounds.minZ / this.chunkSize);
+    const maxZ = Math.floor(bounds.maxZ / this.chunkSize);
+    const keys = [];
+    for (let ix = minX; ix <= maxX; ix += 1) {
+      for (let iy = minY; iy <= maxY; iy += 1) {
+        for (let iz = minZ; iz <= maxZ; iz += 1) {
+          keys.push(this.#chunkKey(ix, iy, iz));
+        }
+      }
+    }
+    return keys;
+  }
+
+  #initializeNaturalCaveNetwork() {
+    if (this.naturalCaveNetwork) return this.naturalCaveNetwork;
+    this.naturalCaveNetwork = buildNaturalCaveNetwork(this.terrain, this.config);
+    this.naturalFeatureBuckets.clear();
+
+    for (const feature of this.naturalCaveNetwork.features) {
+      const bounds = naturalCaveFeatureBounds(feature, this.config);
+      for (const key of this.#chunkKeysForBounds(bounds)) {
+        const bucket = this.naturalFeatureBuckets.get(key) ?? [];
+        bucket.push(feature);
+        this.naturalFeatureBuckets.set(key, bucket);
+      }
+    }
+    return this.naturalCaveNetwork;
+  }
+
+  #activateNaturalFeature(feature) {
+    if (!feature || this.activatedNaturalFeatureIds.has(feature.id)) return 0;
+    const bounds = naturalCaveFeatureBounds(feature, this.config);
+    const keys = this.#chunkKeysForBounds(bounds);
+    let activatedChunks = 0;
+    for (const key of keys) {
+      if (!this.activeChunks.has(key)) activatedChunks += 1;
+      this.#ensureChunk(key);
+    }
+    for (const key of keys) this.#rebuildChunk(key);
+    this.activatedNaturalFeatureIds.add(feature.id);
+    return activatedChunks;
+  }
+
   #ensureChunksForSphere(center, radius) {
     const keys = this.#chunkKeysForSphere(center, radius);
     for (const key of keys) this.#ensureChunk(key);
@@ -1499,9 +1597,14 @@ export class UndergroundTunnelingSystem {
     };
   }
   #syncSurfaceState() {
-    this.surfaceOpenings = this.excavations
+    this.#initializeNaturalCaveNetwork();
+    const excavationOpenings = this.excavations
       .map(excavation => this.#surfaceOpeningFor(excavation))
       .filter(Boolean);
+    this.surfaceOpenings = [
+      ...this.naturalCaveNetwork.entrances,
+      ...excavationOpenings
+    ];
     this.terrain.setTunnelingOpenings?.(this.surfaceOpenings);
     this.onPresentationExclusionsChanged?.(this.getPresentationExclusions());
   }
@@ -1519,6 +1622,7 @@ export class UndergroundTunnelingSystem {
     this.discoveredPocketIds.clear();
     this.activeChunks.clear();
     this.activeColumns.clear();
+    this.activatedNaturalFeatureIds.clear();
     this.surfaceOpenings.length = 0;
   }
 }

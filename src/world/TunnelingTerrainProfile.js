@@ -28,22 +28,50 @@ const triangleContainsPoint = (px, pz, a, b, c) => {
   return !(hasNegative && hasPositive);
 };
 
+const positiveOpeningAxis = (value, fallback) => {
+  const axis = Number(value);
+  return Number.isFinite(axis) && axis > 0 ? axis : fallback;
+};
+
+export const tunnelingOpeningBroadRadius = opening => Math.max(
+  0,
+  Number(opening?.radius) || 0,
+  Number(opening?.radiusX) || 0,
+  Number(opening?.radiusZ) || 0
+);
+
 export const normalizeTunnelingOpenings = openings => (openings ?? [])
-  .map(opening => ({
-    x: Number(opening?.x),
-    z: Number(opening?.z),
-    radius: Number(opening?.radius)
-  }))
+  .map(opening => {
+    const radius = Number(opening?.radius);
+    const radiusX = positiveOpeningAxis(opening?.radiusX, radius);
+    const radiusZ = positiveOpeningAxis(opening?.radiusZ, radius);
+    const rotation = Number(opening?.rotation);
+    return {
+      x: Number(opening?.x),
+      z: Number(opening?.z),
+      radius: Math.max(radius, radiusX, radiusZ),
+      radiusX,
+      radiusZ,
+      rotation: Number.isFinite(rotation) ? rotation : 0
+    };
+  })
   .filter(opening => (
     Number.isFinite(opening.x) &&
     Number.isFinite(opening.z) &&
     Number.isFinite(opening.radius) &&
-    opening.radius > 0
+    opening.radius > 0 &&
+    Number.isFinite(opening.radiusX) &&
+    opening.radiusX > 0 &&
+    Number.isFinite(opening.radiusZ) &&
+    opening.radiusZ > 0
   ))
   .sort((left, right) => (
     left.x - right.x ||
     left.z - right.z ||
-    left.radius - right.radius
+    left.radius - right.radius ||
+    left.radiusX - right.radiusX ||
+    left.radiusZ - right.radiusZ ||
+    left.rotation - right.rotation
   ));
 
 export const sameTunnelingOpenings = (left, right) => {
@@ -53,7 +81,10 @@ export const sameTunnelingOpenings = (left, right) => {
     return (
       Math.abs(opening.x - other.x) <= 0.000001 &&
       Math.abs(opening.z - other.z) <= 0.000001 &&
-      Math.abs(opening.radius - other.radius) <= 0.000001
+      Math.abs(opening.radius - other.radius) <= 0.000001 &&
+      Math.abs(opening.radiusX - other.radiusX) <= 0.000001 &&
+      Math.abs(opening.radiusZ - other.radiusZ) <= 0.000001 &&
+      Math.abs(opening.rotation - other.rotation) <= 0.000001
     );
   });
 };
@@ -66,45 +97,49 @@ export const tunnelingOpeningIntersectsChunk = (
   padding = 0
 ) => {
   const half = chunkSize * 0.5;
-  const radius = opening.radius + Math.max(0, padding);
+  const radius = tunnelingOpeningBroadRadius(opening) + Math.max(0, padding);
   const dx = Math.max(Math.abs(opening.x - centerX) - half, 0);
   const dz = Math.max(Math.abs(opening.z - centerZ) - half, 0);
   return dx * dx + dz * dz <= radius * radius;
 };
 
+const openingLocalPoint = (opening, point) => {
+  const radiusX = positiveOpeningAxis(opening?.radiusX, opening?.radius);
+  const radiusZ = positiveOpeningAxis(opening?.radiusZ, opening?.radius);
+  if (!(radiusX > 0 && radiusZ > 0)) return null;
+  const rotation = Number.isFinite(opening?.rotation) ? opening.rotation : 0;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const dx = point.x - opening.x;
+  const dz = point.z - opening.z;
+  return {
+    x: (dx * cos + dz * sin) / radiusX,
+    z: (-dx * sin + dz * cos) / radiusZ
+  };
+};
+
 export const tunnelingOpeningIntersectsTriangle = (opening, points) => {
   if (!opening || !Array.isArray(points) || points.length !== 3) return false;
-  const radiusSq = opening.radius * opening.radius;
+  const localPoints = points.map(point => openingLocalPoint(opening, point));
+  if (localPoints.some(point => !point)) return false;
 
-  if (points.some(point => {
-    const dx = point.x - opening.x;
-    const dz = point.z - opening.z;
-    return dx * dx + dz * dz <= radiusSq;
-  })) return true;
+  if (localPoints.some(point => point.x * point.x + point.z * point.z <= 1)) {
+    return true;
+  }
 
-  if (
-    triangleContainsPoint(
-      opening.x,
-      opening.z,
-      points[0],
-      points[1],
-      points[2]
-    )
-  ) return true;
+  const origin = { x: 0, z: 0 };
+  if (triangleContainsPoint(
+    origin.x,
+    origin.z,
+    localPoints[0],
+    localPoints[1],
+    localPoints[2]
+  )) return true;
 
   for (let index = 0; index < 3; index += 1) {
-    const a = points[index];
-    const b = points[(index + 1) % 3];
-    if (
-      distanceSqToSegment(
-        opening.x,
-        opening.z,
-        a.x,
-        a.z,
-        b.x,
-        b.z
-      ) <= radiusSq
-    ) return true;
+    const a = localPoints[index];
+    const b = localPoints[(index + 1) % 3];
+    if (distanceSqToSegment(0, 0, a.x, a.z, b.x, b.z) <= 1) return true;
   }
   return false;
 };

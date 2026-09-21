@@ -1,5 +1,5 @@
 export const EXPLORATION_WORLD = Object.freeze({
-  mainlandScale: 2.25,
+  mainlandScale: 2.7,
   regionActivationWeight: 0.18,
   regions: Object.freeze([
     Object.freeze({

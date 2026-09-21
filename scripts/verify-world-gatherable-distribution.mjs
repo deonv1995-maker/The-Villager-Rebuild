@@ -19,7 +19,7 @@ const grassField = new GrassFieldSystem({
   group: worldGroup,
   terrain: ecology,
   scatter,
-  maxInstances: 1400
+  maxInstances: 2016
 });
 grassField.populate();
 const islandFacade = {
