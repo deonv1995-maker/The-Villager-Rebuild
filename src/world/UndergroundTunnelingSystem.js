@@ -824,10 +824,7 @@ export class UndergroundTunnelingSystem {
     }
 
     for (const pocket of this.#candidatePocketsAround(x, z)) {
-      density = Math.min(
-        density,
-        Math.hypot(x - pocket.x, y - pocket.y, z - pocket.z) - pocket.radius
-      );
+      density = Math.min(density, this.#pocketFieldAt(x, y, z, pocket));
     }
 
     const floorBucket = this.floorEditBuckets.get(this.#chunkKeyForPoint(x, y, z));
@@ -977,13 +974,7 @@ export class UndergroundTunnelingSystem {
       radius + this.config.pocketMaxRadius
     )) {
       if (this.discoveredPocketIds.has(pocket.id)) continue;
-      if (
-        Math.hypot(
-          center.x - pocket.x,
-          center.y - pocket.y,
-          center.z - pocket.z
-        ) > radius + pocket.radius
-      ) continue;
+      if (!this.#sphereIntersectsPocket(center, radius, pocket)) continue;
       this.discoveredPocketIds.add(pocket.id);
       discovered.push(pocket);
     }
@@ -1065,21 +1056,108 @@ export class UndergroundTunnelingSystem {
 
     const depth = lerp(minDepth, maxDepth, hash01(ix, iz, 151));
     const candidateY = centerSurfaceY - depth;
+    const y = THREE.MathUtils.clamp(
+      candidateY,
+      protectedCenterFloor,
+      hiddenCenterCeiling
+    );
+    const floorRadius = radius * this.config.pocketFloorLobeScale;
+    const lobes = [];
+    const addLobe = (offsetX, offsetY, offsetZ, desiredRadius) => {
+      const offsetDistance = Math.hypot(offsetX, offsetY, offsetZ);
+      const boundedRadius = Math.min(
+        desiredRadius,
+        Math.max(radius * 0.34, radius * 0.98 - offsetDistance)
+      );
+      lobes.push(Object.freeze({
+        x: x + offsetX,
+        y: y + offsetY,
+        z: z + offsetZ,
+        radius: boundedRadius
+      }));
+    };
+
+    // The first lobe anchors a dependable floor at the pocket's legacy outer
+    // bottom while leaving the walls free to become asymmetric.
+    addLobe(0, -(radius - floorRadius), 0, floorRadius);
+
+    const topAngle = hash01(ix, iz, 157) * Math.PI * 2;
+    const topHorizontalOffset = radius * lerp(0.04, 0.11, hash01(ix, iz, 163));
+    addLobe(
+      Math.cos(topAngle) * topHorizontalOffset,
+      radius * lerp(0.12, 0.2, hash01(ix, iz, 167)),
+      Math.sin(topAngle) * topHorizontalOffset,
+      radius * lerp(
+        this.config.pocketTopLobeScale - 0.04,
+        this.config.pocketTopLobeScale + 0.04,
+        hash01(ix, iz, 173)
+      )
+    );
+
+    const sideAngleOffset = hash01(ix, iz, 179) * Math.PI * 2;
+    for (let index = 0; index < this.config.pocketSideLobeCount; index += 1) {
+      const angle =
+        sideAngleOffset
+        + index * Math.PI * 2 / this.config.pocketSideLobeCount
+        + (hash01(ix + index * 11, iz - index * 7, 181) - 0.5) * 0.72;
+      const horizontalOffset = radius * lerp(
+        0.23,
+        0.37,
+        hash01(ix - index * 5, iz + index * 13, 191)
+      );
+      addLobe(
+        Math.cos(angle) * horizontalOffset,
+        radius * lerp(-0.06, 0.16, hash01(ix + index * 17, iz, 193)),
+        Math.sin(angle) * horizontalOffset,
+        radius * lerp(
+          this.config.pocketSideLobeMinScale,
+          this.config.pocketSideLobeMaxScale,
+          hash01(ix, iz - index * 19, 197)
+        )
+      );
+    }
+
     const pocket = Object.freeze({
       id: `pocket:${ix}:${iz}`,
       ix,
       iz,
       x,
-      y: THREE.MathUtils.clamp(
-        candidateY,
-        protectedCenterFloor,
-        hiddenCenterCeiling
-      ),
+      y,
       z,
-      radius
+      radius,
+      floorRadius,
+      contentRadius: radius * this.config.pocketContentRadiusScale,
+      lobes: Object.freeze(lobes)
     });
     this.pocketCache.set(key, pocket);
     return pocket;
+  }
+
+  #pocketFieldAt(x, y, z, pocket) {
+    let field = Infinity;
+    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
+      ? pocket.lobes
+      : [pocket];
+    for (const lobe of lobes) {
+      field = Math.min(
+        field,
+        Math.hypot(x - lobe.x, y - lobe.y, z - lobe.z) - lobe.radius
+      );
+    }
+    return field;
+  }
+
+  #sphereIntersectsPocket(center, radius, pocket) {
+    const lobes = Array.isArray(pocket?.lobes) && pocket.lobes.length
+      ? pocket.lobes
+      : [pocket];
+    return lobes.some(lobe =>
+      Math.hypot(
+        center.x - lobe.x,
+        center.y - lobe.y,
+        center.z - lobe.z
+      ) <= radius + lobe.radius
+    );
   }
 
   #pocketFromId(id) {
