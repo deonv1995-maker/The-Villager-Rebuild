@@ -16,6 +16,8 @@ The scan-lock duration is gameplay/presentation timing in `SproutCompanionDefini
 
 The same scanner now also presents Sprout's underground hidden-pocket sense after allegiance. Pocket sensing never replaces the collection sequence: a live pickup target has priority, and the hidden-pocket scanner is suppressed throughout matter compression. For a hidden pocket, the controller supplies only a short directional endpoint plus a normalized proximity strength. It deliberately disables the terrain-grid/item-marker projection so the scanner suggests a direction without revealing the chamber's exact world coordinate.
 
+The tree-cutting beam is intentionally separate from this cyan scanner presentation. Tree harvesting publishes a dedicated cutting state and trunk target to `SproutTreeLaserVisual`, which renders a narrow red lens-to-trunk beam and impact glow. The scanner cone, grid, contours and target marker remain hidden during tree cutting so scanning and cutting read as different tools.
+
 ## Lens-origin presentation contract
 
 `SproutVisualRuntimeController` reads `scanning` and `scanTarget` and forwards them to `src/rendering/SproutScannerVisual.js`. It also exposes the island's existing `heightAt(x, z)` sampler to the scanner as a presentation-only terrain surface query. That query is not a second terrain authority and does not affect collision or movement.
