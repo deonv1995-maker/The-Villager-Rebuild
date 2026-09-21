@@ -17,7 +17,8 @@ import {
   buildNaturalCaveNetwork,
   naturalCaveFeatureBounds,
   naturalCaveFeatureDistance2D,
-  naturalCaveFeatureFieldAt
+  naturalCaveFeatureFieldAt,
+  naturalCaveFeatureVerticalDistance
 } from './NaturalCaveNetworkProfile.js';
 
 const ISO_LEVEL = 0;
@@ -152,6 +153,7 @@ export class UndergroundTunnelingSystem {
   update(playerPosition) {
     this.#initializeNaturalCaveNetwork();
     const x = Number(playerPosition?.x);
+    const y = Number(playerPosition?.y);
     const z = Number(playerPosition?.z);
     if (![x, z].every(Number.isFinite)) return 0;
 
@@ -162,6 +164,11 @@ export class UndergroundTunnelingSystem {
         naturalCaveFeatureDistance2D(feature, x, z)
           > this.config.naturalActivationRadius
       ) continue;
+      if (
+        Number.isFinite(y)
+        && naturalCaveFeatureVerticalDistance(feature, y)
+          > this.config.naturalActivationVerticalRadius
+      ) continue;
       activated += this.#activateNaturalFeature(feature);
     }
     this.#processNaturalChunkRebuildQueue(playerPosition);
@@ -171,6 +178,61 @@ export class UndergroundTunnelingSystem {
   getNaturalCaveNetwork() {
     this.#initializeNaturalCaveNetwork();
     return this.naturalCaveNetwork;
+  }
+
+  getUndergroundDepth(position) {
+    const x = Number(position?.x);
+    const y = Number(position?.y);
+    const z = Number(position?.z);
+    if (![x, y, z].every(Number.isFinite) || !this.#columnHasActivity(x, z)) return 0;
+
+    const naturalSurfaceY = this.#naturalSurfaceHeightAt(x, z);
+    const depth = naturalSurfaceY - y;
+    if (depth <= 0) return 0;
+
+    // Sample above the feet so the floor boundary itself does not count as being
+    // inside rock. Darkness is active only when the Ranger actually occupies cave air.
+    const airSampleY = y + Math.max(0.72, this.config.cellSize);
+    if (this.#densityAt(x, airSampleY, z) >= ISO_LEVEL) return 0;
+    return depth;
+  }
+
+  getTorchPlacementTarget({
+    aim,
+    playerPosition = null,
+    maxDistance = 3.4
+  } = {}) {
+    if (!aim?.origin || !aim?.direction) return null;
+    const reach = Math.max(0.5, Number(maxDistance) || 3.4);
+    const direction = this.tempA.copy(aim.direction);
+    if (direction.lengthSq() < 0.000001) return null;
+    direction.normalize();
+
+    const hitPoint = this.#findDensitySurfaceHit(aim.origin, direction, reach);
+    if (!hitPoint || !this.#columnHasActivity(hitPoint.x, hitPoint.z)) return null;
+    if (
+      playerPosition
+      && hitPoint.distanceTo(playerPosition) > reach + 0.8
+    ) return null;
+
+    const surfaceY = this.#naturalSurfaceHeightAt(hitPoint.x, hitPoint.z);
+    if (surfaceY - hitPoint.y < 0.45) return null;
+
+    const normal = this.#densitySurfaceNormalAt(hitPoint, this.tempB).clone();
+    // Ceiling torches are intentionally excluded. Floors stand upright; walls use
+    // the normal for a readable outward lean.
+    if (normal.y < -0.42) return null;
+    const kind = normal.y >= 0.5 ? 'cave-ground' : 'cave-wall';
+    const position = hitPoint.clone().addScaledVector(normal, 0.035);
+    const quantize = value => Math.round(value / 0.55);
+    return {
+      kind,
+      id: `${kind}:${quantize(position.x)}:${quantize(position.y)}:${quantize(position.z)}`,
+      label: kind === 'cave-ground' ? 'cave floor' : 'cave wall',
+      position,
+      normal,
+      yaw: Math.atan2(normal.x, normal.z)
+    };
   }
 
   hasActivityAt(x, z) {
@@ -1392,7 +1454,8 @@ export class UndergroundTunnelingSystem {
     const px = Number(playerPosition?.x);
     const py = Number(playerPosition?.y);
     const pz = Number(playerPosition?.z);
-    if (!this.naturalChunkBuild && [px, py, pz].every(Number.isFinite)) {
+    const hasPlayerPosition = [px, py, pz].every(Number.isFinite);
+    if (!this.naturalChunkBuild && hasPlayerPosition) {
       this.pendingNaturalChunkRebuilds.sort((a, b) => {
         const adx = a.x - px;
         const ady = a.y - py;
@@ -1405,11 +1468,41 @@ export class UndergroundTunnelingSystem {
       });
     }
 
+    const nearestKey = this.naturalChunkBuild?.key
+      ?? this.pendingNaturalChunkRebuilds[0]?.key
+      ?? null;
+    let critical = false;
+    if (nearestKey && hasPlayerPosition) {
+      const [ix, iy, iz] = nearestKey.split(':').map(Number);
+      if ([ix, iy, iz].every(Number.isFinite)) {
+        const dx = (ix + 0.5) * this.chunkSize - px;
+        const dy = (iy + 0.5) * this.chunkSize - py;
+        const dz = (iz + 0.5) * this.chunkSize - pz;
+        const criticalRadius = Math.max(
+          this.chunkSize,
+          Number(this.config.naturalCriticalRenderRadius) || 0
+        );
+        critical = dx * dx + dy * dy + dz * dz <= criticalRadius * criticalRadius;
+      }
+    }
+
     const budget = Math.max(
       1,
-      Math.floor(this.config.naturalChunkBuildsPerUpdate ?? 1)
+      Math.floor(
+        critical
+          ? this.config.naturalCriticalChunkBuildsPerUpdate
+          : this.config.naturalChunkBuildsPerUpdate
+      )
     );
-    const deadline = performance.now() + this.config.naturalMeshBudgetMs;
+    const meshBudgetMs = Math.max(
+      0.5,
+      Number(
+        critical
+          ? this.config.naturalCriticalMeshBudgetMs
+          : this.config.naturalMeshBudgetMs
+      ) || 0
+    );
+    const deadline = performance.now() + meshBudgetMs;
     let rebuilt = 0;
     while (rebuilt < budget && (this.naturalChunkBuild || this.pendingNaturalChunkRebuilds.length)) {
       if (!this.naturalChunkBuild) {
@@ -1431,7 +1524,8 @@ export class UndergroundTunnelingSystem {
         this.naturalChunkBuild = null;
         rebuilt += 1;
       }
-      // Yield between sample columns / mesh cells, even within one chunk.
+      // Yield between sample columns / mesh cells. Nearby missing geometry gets a
+      // small bounded visual-safety budget; distant prewarming keeps the 2 ms path.
       if (performance.now() >= deadline) break;
     }
     return rebuilt;

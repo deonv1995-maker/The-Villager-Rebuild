@@ -6,6 +6,10 @@ import { WorldTimeRuntime } from '../src/core/WorldTimeRuntime.js';
 import { WorldTimeSystem, worldTimePhaseAt } from '../src/core/WorldTimeSystem.js';
 import { CELESTIAL_PRESENTATION } from '../src/data/CelestialDefinitions.js';
 import { WORLD_TIME } from '../src/data/WorldTimeDefinitions.js';
+import {
+  UNDERGROUND_LIGHTING,
+  undergroundDarknessAtDepth
+} from '../src/data/UndergroundLightingDefinitions.js';
 import { CelestialBodySystem } from '../src/rendering/CelestialBodySystem.js';
 import { celestialDirectionAt } from '../src/rendering/CelestialOrbit.js';
 import { DayNightLightingSystem } from '../src/rendering/DayNightLightingSystem.js';
@@ -104,6 +108,32 @@ assert.ok(daylightSun > midnightSun * 10, 'Sun contribution must fall substantia
 assert.ok(daylightSky > midnightSky, 'Sky presentation must become visibly darker at night');
 assert.ok(sceneSystem.lighting.hemi.intensity > 0, 'Night must retain playable fill lighting');
 assert.ok(sceneSystem.lighting.skyFill.intensity > 0, 'Night must retain cool sky fill rather than becoming pitch black');
+
+assert.equal(undergroundDarknessAtDepth(0), 0, 'surface lighting must remain unchanged');
+assert.equal(
+  undergroundDarknessAtDepth(UNDERGROUND_LIGHTING.fullDarknessDepth),
+  1,
+  'deep cave lighting must reach the configured darkness floor'
+);
+const caveSceneSystem = makeSceneSystem();
+const caveLighting = new DayNightLightingSystem({
+  sceneSystem: caveSceneSystem,
+  focusProvider: target => target.set(0, -12, 0),
+  undergroundDepthProvider: () => UNDERGROUND_LIGHTING.fullDarknessDepth + 4
+});
+caveLighting.apply({ minuteOfDay: 12 * 60 });
+assert.ok(
+  caveSceneSystem.lighting.sun.intensity < daylightSun * 0.03,
+  'direct daylight must be almost absent in deep cave air'
+);
+assert.ok(
+  caveSceneSystem.lighting.hemi.intensity < 0.2,
+  'hemisphere daylight must not keep deep caves evenly lit'
+);
+assert.ok(
+  caveSceneSystem.lighting.ambient.intensity < 0.02,
+  'deep caves must depend on local light sources rather than global ambient fill'
+);
 
 lighting.apply({ minuteOfDay: 9 * 60 });
 const expectedLightDirection = celestialDirectionAt(9 * 60);
@@ -210,6 +240,7 @@ const packageJson = JSON.parse(read('package.json'));
 const checks = [
   ['gameplay boot creates one shared world-time system', main.includes('const worldTime = new WorldTimeSystem()')],
   ['day/night presentation reuses SceneSystem lighting', main.includes('new DayNightLightingSystem({') && main.includes('sceneSystem: game.sceneSystem')],
+  ['day/night presentation reads the shared underground depth authority', main.includes('undergroundDepthProvider: undergroundDepth') && main.includes('getUndergroundDepth?.(position)')],
   ['gameplay boot creates one clock-driven celestial presentation system', main.includes('new CelestialBodySystem({ sceneSystem: game.sceneSystem })')],
   ['world time runtime fans one snapshot into lighting, celestial bodies, and shadows', main.includes('presentations: [dayNightLighting, celestialBodies, celestialShadows]')],
   ['gameplay pause authority controls the shared world-time runtime', main.includes('game.onPauseChange(paused => worldTimeRuntime.setPaused(paused))')],

@@ -135,3 +135,18 @@ The opening pre-dawn period is intentionally the end of the existing night rathe
 - boot wiring and inclusion in the full repository check suite.
 
 `scripts/verify-torch-system.mjs` separately protects the active-torch exception: omnidirectional flame-anchored point lighting, bounded fire flicker, the 256px/10 Hz local shadow budget, temporary Ranger caster promotion/restoration, and continued use of centralized forest-tree caster enrollment.
+
+## Underground light attenuation — 2026-09-21
+
+The day/night keyframes remain the single surface lighting curve. Because the lightweight
+global hemisphere/directional lights do not physically occlude against cave ceilings,
+`DayNightLightingSystem` now receives the authoritative Ranger underground depth and
+attenuates only the global light intensities/exposure as cave depth increases. Sky/background
+colour is not replaced, so a cave mouth can remain visibly bright while nearby underground
+rock is dark.
+
+The depth-to-darkness curve and global multipliers live in
+`UndergroundLightingDefinitions.js`. This is presentation state only: cave density and
+collision remain owned by `UndergroundTunnelingSystem`. Local Sprout and placed-torch point
+lights are intentionally not attenuated by the global cave multiplier.
+

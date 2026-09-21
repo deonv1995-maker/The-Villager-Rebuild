@@ -268,3 +268,24 @@ chunks are queued, marching-tetrahedra scratch is reused, and flat face normals 
 during polygonization instead of recomputed in a second geometry pass. The 2 ms soft mesh
 deadline remains the primary mobile frame guard; earlier activation and a two-chunk
 completion cap are allowed only with that deadline and queue pruning still in place.
+
+## 2026-09-21 — Natural caves use vertical strata, local darkness and shared placement
+
+Decision: natural caves are no longer constrained to a shallow common depth band. The
+existing deterministic cave graph may place large rooms across several vertical strata and
+connect them through steep drops, inclines, gentler slopes and signed route meanders. Each
+branch may also expose a sealed chamber through a sub-Ranger fissure that must be enlarged
+with the existing mining system. All of this remains inside `UndergroundTunnelingSystem`'s
+single density/collision/meshing authority and existing save schema.
+
+Global celestial/ambient lighting is explicitly attenuated from the authoritative
+underground-depth query because the mobile lighting rig does not geometrically occlude
+directional/hemisphere light against cave ceilings. Sprout contributes one bounded
+non-shadow local navigation light in dark cave air. Crafted torches continue through one
+persistent torch authority and may now be placed on terrain, cave floors and cave walls as
+well as construction mounts.
+
+Streaming activation must be vertical-aware as cave depth expands. Distant strata keep the
+normal 2 ms/2-chunk mesh budget; only genuinely near missing geometry may use the bounded
+4 ms/3-chunk recovery budget. Do not solve cave pop-in by synchronous full-network meshing.
+

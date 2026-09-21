@@ -30,9 +30,9 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   floorSculptVerticalBand: 0.82,
   floorSculptMinClearance: PLAYER_TRAVERSAL_TUNING.body.height + 0.45,
 
-  // The first tunneling milestone is intentionally bounded vertically while
-  // remaining available anywhere on playable land.
-  maxDepth: 18,
+  // Natural caves now use several vertical strata. The density authority remains
+  // lazy/chunked, so increasing depth does not voxelize the full island.
+  maxDepth: 42,
   bottomPadding: 1.05,
   surfaceOpeningPadding: 0.6,
   presentationPadding: 0.9,
@@ -42,6 +42,14 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // while 3D passage/chamber meshes are activated only near the Ranger.
   naturalNetworkCount: 6,
   naturalActivationRadius: 68,
+  // Horizontal prewarming can start early, but unrelated deep strata must not
+  // flood the mesh queue while the Ranger is still near the surface.
+  naturalActivationVerticalRadius: 18,
+  // When an unbuilt chunk is close enough to become visible, allow a small bounded
+  // emergency budget rather than exposing the empty sky/background through the cave.
+  naturalCriticalRenderRadius: 13,
+  naturalCriticalChunkBuildsPerUpdate: 3,
+  naturalCriticalMeshBudgetMs: 4,
   // Marching-tetrahedra cave geometry is deliberately time-sliced. Registering
   // nearby density/collision columns stays immediate. Optimized chunks may finish
   // two-at-a-time, but the millisecond deadline remains the primary frame guard.
@@ -58,9 +66,9 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalRouteWarpMinLength: 8,
   naturalRouteLateralWarpFraction: 0.18,
   naturalRouteMaxLateralWarp: 4.2,
-  naturalRouteVerticalDipFraction: 0.035,
-  naturalRouteMaxVerticalDip: 0.9,
-  naturalRouteRadiusBulge: 1.35,
+  naturalRouteVerticalWarpFraction: 0.1,
+  naturalRouteMaxVerticalWarp: 3.8,
+  naturalRouteRadiusBulge: 1.5,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
   naturalEntranceRadiusFractionMin: 0.5,
@@ -72,20 +80,44 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalPassageRadiusMin: 1.75,
   naturalPassageRadiusMax: 2.2,
   naturalTightPassageRadius: 1.48,
-  naturalGalleryPassageRadius: 2.55,
-  naturalChamberRadiusMin: 4.8,
-  naturalChamberRadiusMax: 6.2,
+  naturalGalleryPassageRadius: 2.65,
+  // A sub-Ranger fissure can visually reveal a sealed chamber but cannot be
+  // traversed until the player mines the opening wider.
+  naturalFissurePassageRadius: 0.44,
+  naturalChamberRadiusMin: 5.2,
+  naturalChamberRadiusMax: 7.4,
+  naturalDropChamberRadiusMin: 7.5,
+  naturalDropChamberRadiusMax: 10,
+  naturalSealedChamberRadiusMin: 5.2,
+  naturalSealedChamberRadiusMax: 7.2,
   naturalChamberFloorDepthScale: 0.5,
   naturalChamberFloorRadiusScale: 0.62,
   naturalChamberCeilingRiseScale: 0.82,
   naturalChamberOverburden: 1.6,
   naturalTightMinimumClearance: PLAYER_TRAVERSAL_TUNING.body.height + 0.4,
-  naturalCentralChamberRadius: 6.6,
-  naturalCentralChamberDepth: 12,
-  naturalConnectorSegmentLength: 30,
-  naturalConnectorBend: 7,
-  naturalConnectorDepthMin: 11.2,
-  naturalConnectorDepthMax: 13,
+  naturalCentralChamberRadius: 10.5,
+  naturalCentralChamberDepth: 31,
+  naturalFirstChamberDepthMin: 8.5,
+  naturalFirstChamberDepthMax: 11.5,
+  naturalSideChamberDepthMin: 13,
+  naturalSideChamberDepthMax: 18,
+  naturalDropChamberDepthMin: 26,
+  naturalDropChamberDepthMax: 33,
+  naturalDeepChamberDepthMin: 20,
+  naturalDeepChamberDepthMax: 27,
+  naturalSealedChamberDepthMin: 16,
+  naturalSealedChamberDepthMax: 26,
+  naturalFirstChamberDistance: 34,
+  naturalSideChamberDistanceMin: 18,
+  naturalSideChamberDistanceMax: 28,
+  naturalDropChamberDistanceMin: 11,
+  naturalDropChamberDistanceMax: 17,
+  naturalDeepChamberDistance: 66,
+  naturalSealedChamberDistanceMin: 15,
+  naturalSealedChamberDistanceMax: 22,
+  naturalConnectorSegmentLength: 26,
+  naturalConnectorBend: 8.5,
+  naturalConnectorVerticalWave: 5.5,
 
   // Underground pockets are deterministic empty chambers. Resources and treasure
   // will be layered into these spaces only after tunneling is device-verified.

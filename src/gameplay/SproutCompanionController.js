@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SPROUT_COMPANION } from '../data/SproutCompanionDefinitions.js';
+import { undergroundDarknessAtDepth } from '../data/UndergroundLightingDefinitions.js';
 import { SproutRocketShoesPresentation } from './SproutRocketShoesPresentation.js';
 
 const BLUE = 0x62cfff;
@@ -76,6 +77,18 @@ export class SproutCompanionController {
     this.miniScale = new THREE.Vector3(1, 1, 1);
     this.tempQuaternion = new THREE.Quaternion();
     this.tempScale = new THREE.Vector3();
+
+    const navigationLight = SPROUT_COMPANION.navigationLight;
+    this.navigationLight = new THREE.PointLight(
+      navigationLight.color,
+      navigationLight.intensity,
+      navigationLight.distance,
+      navigationLight.decay
+    );
+    this.navigationLight.name = 'sprout-underground-navigation-light';
+    this.navigationLight.castShadow = false;
+    this.navigationLight.visible = false;
+    this.game.sceneSystem?.scene?.add(this.navigationLight);
   }
 
   start() {
@@ -95,6 +108,8 @@ export class SproutCompanionController {
     this.#destroySignalGlow();
     this.#destroyGroundScanPulse();
     this.#hardResetCommand();
+    this.navigationLight.visible = false;
+    this.navigationLight.parent?.remove(this.navigationLight);
   }
 
   captureState() {
@@ -291,6 +306,8 @@ export class SproutCompanionController {
     dt = clampDt(dt);
     this.elapsed += dt;
     this.#updateSignalGlow(dt);
+    this.player.getPosition(this.playerPosition);
+    this.#syncNavigationLight();
 
     if (!this.arrival.isAllied?.()) {
       this.endFlight('alliance-lost');
@@ -303,7 +320,6 @@ export class SproutCompanionController {
     }
     if (!this.root && !this.#activate()) return;
 
-    this.player.getPosition(this.playerPosition);
     this.player.getFacingDirection(this.playerFacing);
     this.playerFacing.y = 0;
     if (this.playerFacing.lengthSq() < 0.0001) this.playerFacing.set(0, 0, 1);
@@ -659,7 +675,28 @@ export class SproutCompanionController {
     }
   }
 
+  #syncNavigationLight() {
+    const allied = Boolean(this.arrival.isAllied?.());
+    const depth = allied
+      ? this.island.explorationPois?.getUndergroundDepth?.(this.playerPosition) ?? 0
+      : 0;
+    const darkness = undergroundDarknessAtDepth(depth);
+    const definition = SPROUT_COMPANION.navigationLight;
+    this.navigationLight.position.set(
+      this.playerPosition.x,
+      this.playerPosition.y + definition.height,
+      this.playerPosition.z
+    );
+    this.navigationLight.visible = allied && darkness > 0.02;
+    this.navigationLight.intensity = definition.intensity * darkness;
+    this.navigationLight.distance = definition.distance * (0.72 + darkness * 0.28);
+  }
+
   #isRangerUnderground() {
+    const authoritativeDepth =
+      this.island.explorationPois?.getUndergroundDepth?.(this.playerPosition);
+    if (Number.isFinite(authoritativeDepth)) return authoritativeDepth >= 1.2;
+
     const surfaceHeightAt = typeof this.island.naturalHeightAt === 'function'
       ? this.island.naturalHeightAt.bind(this.island)
       : typeof this.island.heightAt === 'function'

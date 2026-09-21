@@ -83,11 +83,18 @@ const system = makeWorld();
 const network = system.getNaturalCaveNetwork();
 const curvedNetworkSegments = network.segments.filter(segment => segment.kind !== 'entrance' && segment.curve);
 assert.ok(curvedNetworkSegments.length >= network.segments.length * 0.6, 'most underground route sections must use cached natural meanders');
+const galleryNetworkSegments = curvedNetworkSegments.filter(segment => segment.kind !== 'fissure');
 assert.ok(
-  curvedNetworkSegments.every(segment => segment.curve.radiusBulges?.length === 2),
-  'every cached natural meander must carry two separated gallery-width pulses'
+  galleryNetworkSegments.every(segment => segment.curve.radiusBulges?.length === 2),
+  'traversable cached meanders must carry two separated gallery-width pulses'
 );
-const galleryPulseSegment = curvedNetworkSegments
+assert.ok(
+  curvedNetworkSegments
+    .filter(segment => segment.kind === 'fissure')
+    .every(segment => segment.curve.radiusBulges?.length === 0),
+  'sealed-room fissures must never inherit gallery bulges that make them traversable'
+);
+const galleryPulseSegment = galleryNetworkSegments
   .slice()
   .sort((a, b) =>
     Math.max(...b.curve.radiusBulges.map(entry => entry.radius))
@@ -105,6 +112,26 @@ assert.ok(
   'long natural passages must open into materially wider gallery pockets'
 );
 assert.ok(network.segments.filter(segment => segment.kind === 'entrance').every(segment => segment.curve === null), 'surface mouth cuts must keep their established exact alignment');
+assert.ok(
+  network.segments.some(segment => Math.abs(segment.b.y - segment.a.y) > 9),
+  'natural topology must contain major vertical transitions between route endpoints'
+);
+assert.ok(
+  curvedNetworkSegments.some(segment => {
+    const quarter = naturalCaveSegmentCenterAt(segment, 0.25);
+    const linearY = segment.a.y + (segment.b.y - segment.a.y) * 0.25;
+    return quarter.y > linearY + 0.35;
+  }),
+  'cached natural route controls must be able to rise above their linear slope'
+);
+assert.ok(
+  curvedNetworkSegments.some(segment => {
+    const quarter = naturalCaveSegmentCenterAt(segment, 0.25);
+    const linearY = segment.a.y + (segment.b.y - segment.a.y) * 0.25;
+    return quarter.y < linearY - 0.35;
+  }),
+  'cached natural route controls must also dip below their linear slope'
+);
 assert.ok(curvedNetworkSegments.some(segment => {
   const oneThird = naturalCaveSegmentCenterAt(segment, 1 / 3);
   const straightX = segment.a.x + (segment.b.x - segment.a.x) / 3;
@@ -136,7 +163,11 @@ try {
   const first = [...system.activeChunks.values()][0];
   assert.ok(first.mesh.geometry.getAttribute('position').array.every(Number.isFinite));
   const reference = makeWorld();
-  reference.config = {...config, naturalMeshBudgetMs: 1e9};
+  reference.config = {
+    ...config,
+    naturalMeshBudgetMs: 1e9,
+    naturalCriticalMeshBudgetMs: 1e9
+  };
   reference.update(player);
   const referenceChunk = reference.activeChunks.get(first.key);
   assert.ok(referenceChunk, 'distance ordering must remain stable across time slices');

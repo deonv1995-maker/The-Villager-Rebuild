@@ -18,7 +18,9 @@ export class TorchPlacementTargetResolver {
     this.game = game;
     this.definition = definition;
     this.playerPosition = new THREE.Vector3();
+    this.aimOrigin = new THREE.Vector3();
     this.aimDirection = new THREE.Vector3();
+    this.environmentAimDirection = new THREE.Vector3();
     this.surfaceNormal = new THREE.Vector3();
   }
 
@@ -45,11 +47,23 @@ export class TorchPlacementTargetResolver {
 
   #resolveAimDirection() {
     const camera = this.game.sceneSystem?.camera;
-    if (this.game.player.isFirstPerson?.() && camera?.getWorldDirection) {
-      camera.getWorldDirection(this.aimDirection);
+    const firstPerson = Boolean(this.game.player.isFirstPerson?.());
+    if (firstPerson && camera?.getWorldDirection) {
+      this.aimOrigin.copy(camera.position);
+      camera.getWorldDirection(this.environmentAimDirection);
     } else {
-      this.game.player.getFacingDirection(this.aimDirection);
+      this.aimOrigin.copy(this.playerPosition);
+      this.aimOrigin.y += 1.18;
+      this.game.player.getFacingDirection(this.environmentAimDirection);
     }
+
+    if (this.environmentAimDirection.lengthSq() <= EPSILON) {
+      this.environmentAimDirection.set(0, 0, 1);
+    } else {
+      this.environmentAimDirection.normalize();
+    }
+
+    this.aimDirection.copy(this.environmentAimDirection);
     this.aimDirection.y = 0;
     if (this.aimDirection.lengthSq() <= EPSILON) this.aimDirection.set(0, 0, 1);
     else this.aimDirection.normalize();
@@ -57,9 +71,96 @@ export class TorchPlacementTargetResolver {
 
   #collectTargets() {
     return [
+      ...this.#environmentTargets(),
       ...this.#panelWallTargets(),
       ...this.#physicalConstructionTargets()
     ];
+  }
+
+  #environmentTargets() {
+    const targets = [];
+    const explorationPois = this.game.island?.explorationPois;
+    const maxDistance = this.definition.placement.maxDistance;
+    const caveTarget = explorationPois?.getTorchPlacementTarget?.({
+      aim: {
+        origin: this.aimOrigin,
+        direction: this.environmentAimDirection
+      },
+      playerPosition: this.playerPosition,
+      maxDistance
+    }) ?? null;
+    if (caveTarget) targets.push(caveTarget);
+
+    // First person uses the actual reticle ray. Third person has no vertical
+    // reticle, so ground placement resolves a stable point just ahead of Ranger.
+    const firstPerson = Boolean(this.game.player.isFirstPerson?.());
+    if (firstPerson) {
+      if (!caveTarget || caveTarget.kind !== 'cave-ground') {
+        const surfaceTarget = this.game.island?.terrainSculpting?.getSurfaceTarget?.({
+          aim: {
+            origin: this.aimOrigin,
+            direction: this.environmentAimDirection
+          },
+          playerPosition: this.playerPosition
+        });
+        const target = this.#worldGroundTargetFromSurface(surfaceTarget?.point);
+        if (target) targets.push(target);
+      }
+      return targets;
+    }
+
+    const forwardDistance = Math.min(1.8, maxDistance * 0.62);
+    const x = this.playerPosition.x + this.aimDirection.x * forwardDistance;
+    const z = this.playerPosition.z + this.aimDirection.z * forwardDistance;
+    const undergroundDepth =
+      explorationPois?.getUndergroundDepth?.(this.playerPosition) ?? 0;
+    if (undergroundDepth > 0.45) {
+      const supportY = explorationPois?.supportHeightAt?.(x, z, {
+        referenceY: this.playerPosition.y + 0.7,
+        maxStepUp: 1.25,
+        airborne: false
+      });
+      if (Number.isFinite(supportY)) {
+        targets.push(this.#makeGroundTarget('cave-ground', 'cave floor', x, supportY, z));
+      }
+      return targets;
+    }
+
+    const surfaceY = this.game.island?.heightAt?.(x, z);
+    if (
+      Number.isFinite(surfaceY)
+      && (this.game.island?.isPlayable?.(x, z, 0.2) ?? true)
+    ) {
+      targets.push(this.#makeGroundTarget('world-ground', 'ground', x, surfaceY, z));
+    }
+    return targets;
+  }
+
+  #worldGroundTargetFromSurface(point) {
+    if (!finitePosition(point)) return null;
+    const surfaceY = this.game.island?.heightAt?.(point.x, point.z);
+    if (!Number.isFinite(surfaceY)) return null;
+    return this.#makeGroundTarget(
+      'world-ground',
+      'ground',
+      point.x,
+      surfaceY,
+      point.z
+    );
+  }
+
+  #makeGroundTarget(kind, label, x, y, z) {
+    const quantize = value => Math.round(value / 0.65);
+    return {
+      kind,
+      id: `${kind}:${quantize(x)}:${quantize(y)}:${quantize(z)}`,
+      label,
+      position: { x, y: y + 0.025, z },
+      yaw: Math.atan2(this.aimDirection.x, this.aimDirection.z),
+      // Ground is the fallback "place anywhere" surface. Explicit wall/post/cave
+      // wall targets should win when the player is actually aiming at one.
+      scoreBias: 0.8
+    };
   }
 
   #panelWallTargets() {
@@ -200,6 +301,9 @@ export class TorchPlacementTargetResolver {
       : (dx * this.aimDirection.x + dz * this.aimDirection.z) / horizontalDistance;
     if (forwardDot < this.definition.placement.minFacingDot) return null;
 
-    return distance + (1 - forwardDot) * this.definition.placement.aimPenalty;
+    const scoreBias = Math.max(0, Number(target.scoreBias) || 0);
+    return distance
+      + (1 - forwardDot) * this.definition.placement.aimPenalty
+      + scoreBias;
   }
 }
