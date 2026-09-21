@@ -538,7 +538,7 @@ export class SproutCompanionController {
       const signal = this.island.explorationPois?.getUndiscoveredPocketSignal?.(
         this.playerPosition,
         SPROUT_COMPANION.undergroundScanRange,
-        { allowSurface: true }
+        { allowSurface: true, includeDiscovered: true }
       ) ?? null;
 
       command.taskPhase = 'scan';
@@ -980,17 +980,17 @@ export class SproutCompanionController {
     const state = this.signalGlow;
     if (!state) return;
     state.elapsed += dt;
-    const total = SPROUT_COMPANION.undergroundSignalSeconds;
-    const fade = Math.min(total, SPROUT_COMPANION.undergroundSignalFadeSeconds);
+    const hold = Math.max(0, SPROUT_COMPANION.undergroundSignalHoldSeconds);
+    const fade = Math.max(0.001, SPROUT_COMPANION.undergroundSignalFadeSeconds);
+    const total = hold + fade;
     if (state.elapsed >= total) {
       this.#destroySignalGlow();
       return;
     }
 
-    const fadeStart = total - fade;
-    const fadeFactor = state.elapsed <= fadeStart
+    const fadeFactor = state.elapsed <= hold
       ? 1
-      : THREE.MathUtils.clamp(1 - ((state.elapsed - fadeStart) / Math.max(0.001, fade)), 0, 1);
+      : THREE.MathUtils.clamp(1 - ((state.elapsed - hold) / fade), 0, 1);
     const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * 4.2);
     state.glowMaterial.opacity = (0.1 + pulse * 0.08) * fadeFactor;
     state.ringMaterial.opacity = (0.16 + pulse * 0.1) * fadeFactor;

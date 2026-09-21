@@ -43,9 +43,9 @@ No tree, stump, regrowth or Log-drop rules are duplicated in Sprout code.
 
 Underground scanning intentionally uses a different presentation. The Ranger raises **Mini Sprout** and keeps him in hand while Sprout performs the full scan. Sprout does not grow or leave the Ranger for this command.
 
-The existing underground geology service remains authoritative for the nearest undiscovered pocket. Sprout's explicit scan uses a **56 m** search radius and is allowed from the surface as well as from an existing tunnel. This surface allowance is opt-in at the geology query boundary; other detector callers keep the established underground-only default.
+The existing underground geology service remains authoritative for pocket generation and proximity. Sprout's explicit scan uses a **56 m** search radius and performs a fresh closest-pocket query from the Ranger's current position every time the command is used. That manual query may include an already discovered pocket, while other detector callers keep the established undiscovered-pocket default. The scan is allowed from the surface as well as from an existing tunnel.
 
-When a surface signal exists, the controller projects one faint blue world-space glow onto the terrain directly above the hidden chamber. This is a digging cue, not a prebuilt cave entrance. When the Ranger is already underground, the cue remains at the hidden pocket's underground position. The signal lasts about **5 seconds**, fades away completely, and does not reappear until another explicit scan.
+When a surface signal exists, the controller projects one faint blue world-space glow onto the terrain directly above the chamber. This is a digging cue, not a prebuilt cave entrance. When the Ranger is already underground, the cue remains at the pocket's underground position. A new scan replaces/restarts any existing cue. The signal remains fully readable for **10 seconds**, then fades very slowly for another **8 seconds** before disappearing.
 
 The glow is a temporary presentation only. It does not alter pocket discovery, terrain density, mining, rewards or save state.
 
@@ -63,4 +63,4 @@ The active responsibility is narrower: execute an explicit temporary mission, us
 
 ## Verification target
 
-Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, upright world orientation after detaching from the tilted hand bone, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, hand-held scan from both surface and tunnel, usable surface cue above the nearest hidden pocket, five-second faint blue pocket glow, and clean stow afterward.
+Device testing should confirm the Mini Sprout hand pose, gentle grow/launch, upright world orientation after detaching from the tilted hand bone, physical travel to world items, 2–5 gather cap, multi-tree area clearing, physical Log collection, return/shrink/catch sequence, hand-held scan from both surface and tunnel, usable surface cue above the closest pocket on every manual scan, repeat-scan restart behavior, a 10-second readable hold followed by an 8-second slow fade, and clean stow afterward.
