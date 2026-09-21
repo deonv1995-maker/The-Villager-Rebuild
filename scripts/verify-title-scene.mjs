@@ -78,7 +78,7 @@ const checks = [
   ['profile setup eases the title camera toward the Ranger before confirmation', titleScene.includes('#updateProfileCamera(dt)') && titleScene.includes('PROFILE_CAMERA_DISTANCE') && titleScene.includes('PROFILE_CAMERA_FOV')],
   ['play starts an intro sequence', titleScene.includes("this.state = 'intro'") && titleScene.includes('TITLE_SCENE.introDuration')],
   ['intro hands off through callback', titleScene.includes('void this.onPlay?.()')],
-  ['Ranger exposes an exclusive cinematic-control boundary', rangerController.includes('beginCinematic(driver)') && rangerController.includes('endCinematic(driver)') && rangerController.includes('setCinematicPose') && rangerController.includes('playCinematicAnimation')],
+  ['Ranger exposes an exclusive cinematic-control boundary', rangerController.includes('beginCinematic(driver, { preserveCameraMode = false } = {})') && rangerController.includes('endCinematic(driver)') && rangerController.includes('setCinematicPose') && rangerController.includes('playCinematicAnimation')],
   ['arrival intro owns prone crawl rise dust and settle phases', arrivalIntro.includes("PRONE: 'prone'") && arrivalIntro.includes("CRAWL: 'crawl'") && arrivalIntro.includes("RISE: 'rise'") && arrivalIntro.includes("DUST: 'dust'") && arrivalIntro.includes("SETTLE: 'settle'")],
   ['arrival intro begins and releases Ranger cinematic ownership', arrivalIntro.includes('this.player.beginCinematic(this)') && arrivalIntro.includes('this.player.endCinematic(this)')],
   ['arrival resolves the seaward direction from the authoritative island and spawn', arrivalIntro.includes('#resolveSeawardDirection') && arrivalIntro.includes('this.island?.terrain?.centerZ') && arrivalIntro.includes('seawardDirection')],
