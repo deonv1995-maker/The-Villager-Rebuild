@@ -75,12 +75,19 @@ assert(spawnDropIndex > completeMethodIndex, 'Configured Logs must be created by
 assert(!treeSource.slice(finalHitIndex, completeMethodIndex).includes('this.#spawnDrops(tree)'), 'Final axe hit must not spawn collectible Logs before tree impact');
 
 assert(companionSource.includes("reserved.resourceId === 'log'"), 'Sprout must retain the longer Log compression presentation');
-assert(companionSource.includes('this.allowedResources.has(resourceId)'), 'Sprout collection must stay data-gated rather than harvesting trees directly');
 assert(
-  docs.includes('fall settles') && docs.includes('configured Log results become collectible'),
+  companionSource.includes('this.treeHarvest.harvestTree?.(command.treeId') &&
+  !companionSource.includes("inventory.add('log'"),
+  'Sprout laser harvesting must use TreeHarvestSystem and must not mint Logs directly'
+);
+assert(
+  docs.includes('normal authored fall') && docs.includes('world Log drops'),
   'Companion documentation must preserve the visible tree-to-timber handoff'
 );
-assert(docs.includes('without spawning replacement Logs'), 'Save/Continue documentation must preserve no-duplicate timber authority');
+assert(
+  docs.includes('never creates replacement Logs'),
+  'Interrupted Sprout harvesting must preserve world Log authority without replacement drops'
+);
 
 geometry.dispose();
 material.dispose();
