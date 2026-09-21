@@ -236,3 +236,20 @@ their endpoints, surface mouths, density/collision authority and streaming archi
 remain shared with UndergroundTunnelingSystem. Sample coherent noise once when building
 the route graph and cache cubic controls; do not add per-density-query path noise that
 would trade visual variety for renewed mobile CPU spikes.
+
+
+## 2026-09-21 — Mixed-detail terrain chunks share canonical seams
+
+Decision: the base 18-segment terrain edge is the canonical boundary for every
+heightfield chunk LOD. Surface-sculpt chunks (36 segments) and tunnel-opening chunks
+(72 segments) keep their higher interior detail, but boundary height, vertex colour and
+boundary normals are interpolated from the same base-edge samples used by an ordinary
+neighbor.
+
+Reason: independently sampling a refined edge creates T-junction geometry and different
+lighting/colour interpolation where it meets a coarse chunk. On device this can appear
+as a bright or open line across otherwise continuous ground, especially near cave-mouth
+or sculpting upgrades. Canonical boundaries remove that seam without raising the whole
+island to tunnel resolution or changing collision, cave density, surface editing or
+world-chunk culling authority. The CI terrain-seam regression covers both 18↔36 and
+18↔72 boundaries.
