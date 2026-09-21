@@ -46,14 +46,22 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   pocketMinRadius: 2.7,
   pocketMaxRadius: 4.4,
 
-  // Hidden chambers use a deterministic cluster of overlapping lobes rather than
-  // a single sphere. The outer radius remains the stable broad-phase boundary.
-  pocketFloorLobeScale: 0.82,
-  pocketTopLobeScale: 0.66,
+  // Hidden chambers use a deterministic flat-floor chamber profile with
+  // overlapping rotated elliptical alcoves. The outer radius remains the stable
+  // broad-phase/chunk boundary; it is not the visible cave wall.
+  pocketFloorDepthScale: 0.68,
+  pocketFloorRadiusScale: 0.58,
+  pocketMainLobeLongScale: 0.8,
+  pocketMainLobeShortScale: 0.6,
+  pocketTopLobeLongScale: 0.62,
+  pocketTopLobeShortScale: 0.46,
   pocketSideLobeCount: 3,
-  pocketSideLobeMinScale: 0.42,
-  pocketSideLobeMaxScale: 0.56,
-  pocketContentRadiusScale: 0.72
+  pocketSideLobeMinScale: 0.34,
+  pocketSideLobeMaxScale: 0.48,
+  pocketCeilingBaseScale: 0.46,
+  pocketCeilingCrownScale: 0.84,
+  pocketCeilingShoulderDropScale: 0.18,
+  pocketContentRadiusScale: 0.54
 });
 
 export const undergroundTunnelChunkSize = () =>
