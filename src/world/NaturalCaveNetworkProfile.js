@@ -989,11 +989,34 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
     }
   }
 
+  const lavaEligibleRoles = new Set(['central', 'drop-room', 'deep-room', 'sealed-room']);
+  const lavaPools = chambers
+    .filter(chamber => lavaEligibleRoles.has(chamber.role))
+    .map(chamber => {
+      const floorDepth =
+        surfaceHeightAt(terrain, chamber.x, chamber.z) - chamber.floorY;
+      if (floorDepth < config.naturalLavaMinimumFloorDepth) return null;
+      return Object.freeze({
+        id: `${chamber.id}:lava`,
+        chamberId: chamber.id,
+        x: chamber.x,
+        y: chamber.floorY + config.naturalLavaSurfaceOffset,
+        z: chamber.z,
+        radius: Math.max(
+          config.cellSize * 1.8,
+          chamber.floorRadius * config.naturalLavaRadiusScale
+        ),
+        floorDepth
+      });
+    })
+    .filter(Boolean);
+
   const features = Object.freeze([...segments, ...chambers]);
   return Object.freeze({
     segments: Object.freeze(segments),
     chambers: Object.freeze(chambers),
     entrances: Object.freeze(entrances),
+    lavaPools: Object.freeze(lavaPools),
     features,
     centralChamberId: centralChamber.id,
     sealedChamberIds: Object.freeze(sealedChambers.map(chamber => chamber.id))
