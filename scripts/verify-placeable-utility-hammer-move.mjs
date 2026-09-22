@@ -179,6 +179,15 @@ assert(!runtime.bedSystem.describe(bed.id), 'Picking up a Bed must remove its ol
 assert(inventory.get('bed') === 1, 'Picking up a Bed must return exactly one Bed to inventory');
 assert(!externalActions.has('utility-place'), 'Bed pickup must leave placement under inventory control');
 
+assert(
+  inventory.consume([
+    { itemId: 'chest', quantity: 1 },
+    { itemId: 'crafting-bench', quantity: 1 },
+    { itemId: 'bed', quantity: 1 }
+  ]),
+  'Torch pickup fixture must temporarily free Ranger pack capacity'
+);
+
 const torchRoot = new THREE.Group();
 torchRoot.position.set(0, 1.2, 1.5);
 torchRoot.add(new THREE.Mesh(
@@ -235,6 +244,10 @@ assert(!torchRoot.parent, 'Picking up a Torch must remove its mounted world visu
 assert(inventory.get('torch') === 1, 'Picking up a Torch must return exactly one Torch to inventory');
 assert(!externalActions.has('utility-place'), 'Torch pickup must not force immediate placement mode');
 assert(saves.at(-1) === 'reclaim-placeable-utility', 'Torch pickup must use the shared reclaim checkpoint');
+assert(inventory.consume([{ itemId: 'torch', quantity: 1 }]), 'Torch pickup fixture cleanup must remove its temporary packed Torch');
+inventory.add('chest', 1);
+inventory.add('crafting-bench', 1);
+inventory.add('bed', 1);
 firstPerson = false;
 game.currentInteractionTarget = null;
 
