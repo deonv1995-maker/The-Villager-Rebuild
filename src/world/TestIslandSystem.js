@@ -292,7 +292,7 @@ export class TestIslandSystem {
 
   update(dt, playerPosition, camera = null) {
     this.chunks.update(camera, playerPosition);
-    this.explorationPois.update(playerPosition);
+    this.explorationPois.update(playerPosition, dt);
     this.groundCover.update();
     this.jungleFloor.update();
     this.grass.update(dt, playerPosition);
