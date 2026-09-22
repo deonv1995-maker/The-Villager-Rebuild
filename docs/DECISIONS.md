@@ -390,3 +390,16 @@ Reason: device feedback showed that a fast surface approach can still outrun the
 geometry even when deep/near-player streaming is otherwise improved. Prioritizing only the
 small established entry corridor spends the existing bounded CPU budget where the player can
 see it first without globally increasing cave-generation work.
+
+
+## 2026-09-22 — Inventory, mining and upgrade progression
+
+Decision: the suitcase becomes a paused multi-function player menu with **Inventory**, **Crafting** and **Upgrades**. Inventory is organized into **Materials**, **Food**, **Equipment & Placeables** and **Relics**. Shards are a universal persistent upgrade currency shown in the menu header rather than an inventory stack. Relics are zero-capacity Sprout upgrade schematics: discovery reveals a specific upgrade and opens its first-discovery card; Shards pay the activation cost.
+
+Sprout/shared-inventory capacity is slot-based at **14 -> 28 -> 56**. Compact materials use stacks of 14 per slot, Logs use one slot each, and Relics/Shards use no storage capacity. Existing shared inventory ownership remains authoritative.
+
+Tool and weapon production upgrades are permanent and independent per equipment item. The initial material progression is **Stone -> Copper -> Iron -> Diamond**; Gold is reserved for later trade/decorative/refined uses. Copper applies +20% primary effectiveness and durability, Iron +40%/+40%, and Diamond +200%/+200%. For tools the primary effectiveness stat is harvest speed; for weapons it is damage. Attack speed is not part of the base material tier. Upgrading an owned item immediately applies the new properties and restores its durability to full; future copies are produced at that item's saved tier.
+
+Stone and Copper Pickaxes can mine Copper and Iron. Iron unlocks Diamond mining; Diamond can mine all initial materials. Copper/Iron/Diamond may appear at any cave depth but use depth-weighted probabilities. Full deposits require mining and produce loose pieces; loose ore may be picked up by the Ranger or collected by Sprout. Sprout never mines intact nodes. Node size must drive hit count and yield; the initial Stone correction is Small 2 hits -> 2 Stone, Medium 4 -> 4, Large 6 -> 7.
+
+Reason: inventory, mining, equipment progression and Sprout upgrades need one scalable data-driven progression model that can later accept refined metals, merchants, engravings and additional fantasy materials without introducing competing inventories, mining authorities or per-tool bespoke logic. See INVENTORY_MINING_UPGRADE_PROGRESSION.md.
