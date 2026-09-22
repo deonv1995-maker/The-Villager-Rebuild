@@ -336,11 +336,13 @@ export class GameApp {
     const undergroundTarget = panelHammerOwned
       ? null
       : this.island?.explorationPois?.getInteractionTarget?.(this.playerPosition) ?? null;
-    if (undergroundTarget) {
+    if (undergroundTarget?.type === 'underground-collectible') {
       undergroundTarget.available = this.inventory?.canAdd?.(
         undergroundTarget.resourceId,
         undergroundTarget.quantity
       ) ?? true;
+    } else if (undergroundTarget?.type === 'underground-ore-node') {
+      undergroundTarget.available = pickaxeEquipped;
     }
     const resourceTarget = panelHammerOwned
       ? (this.gatherables?.update(this.playerPosition, () => false), null)
@@ -443,6 +445,33 @@ export class GameApp {
     }
 
     const toolId = this.toolbelt?.getEquippedToolId();
+    if (target.type === 'underground-ore-node' && toolId === 'pickaxe') {
+      if (this.toolPresentation?.isBusy()) return;
+      this.player.faceWorldPoint(target.position);
+      if (!this.toolPresentation?.playSwing('pickaxe')) return;
+      const pickaxeTier = this.equipmentRuntime?.getMaterialTier?.('pickaxe') ?? 'stone';
+      const hit = this.island?.explorationPois?.mineOreTarget?.(target, {
+        pickaxeTier,
+        playerPosition: this.playerPosition
+      });
+      if (!hit) return;
+      if (!hit.mined && hit.reason === 'pickaxe-tier') {
+        this.setStatus(
+          `${hit.label.toUpperCase()} · REQUIRES ${hit.requiredPickaxeTier.toUpperCase()} PICKAXE`
+        );
+        return;
+      }
+      this.equipmentRuntime?.recordUse?.('pickaxe');
+      this.#refreshTargets(0);
+      this.#syncProgress();
+      this.setStatus(
+        hit.broken
+          ? `${hit.label.toUpperCase()} DEPOSIT BROKEN · ${hit.yield} LOOSE ORE`
+          : `${hit.label.toUpperCase()} · ${hit.remainingHits} SWING${hit.remainingHits === 1 ? '' : 'S'} LEFT`
+      );
+      return;
+    }
+
     if (target.type === 'tree' && toolId === 'axe') {
       if (this.toolPresentation?.isBusy()) return;
       this.player.faceWorldPoint(target.position);

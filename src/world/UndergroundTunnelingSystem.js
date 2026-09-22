@@ -814,7 +814,12 @@ export class UndergroundTunnelingSystem {
   getPocket(id) {
     if (typeof id !== 'string') return null;
     const pocket = this.#pocketFromId(id);
-    return pocket ? { ...pocket } : null;
+    if (!pocket) return null;
+    const surfaceY = this.#naturalSurfaceHeightAt(pocket.x, pocket.z);
+    return {
+      ...pocket,
+      depth: Math.max(0, surfaceY - pocket.y)
+    };
   }
 
   getDiscoveredPockets() {

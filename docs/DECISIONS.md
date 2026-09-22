@@ -403,3 +403,16 @@ Tool and weapon production upgrades are permanent and independent per equipment 
 Stone and Copper Pickaxes can mine Copper and Iron. Iron unlocks Diamond mining; Diamond can mine all initial materials. Copper/Iron/Diamond may appear at any cave depth but use depth-weighted probabilities. Full deposits require mining and produce loose pieces; loose ore may be picked up by the Ranger or collected by Sprout. Sprout never mines intact nodes. Node size must drive hit count and yield; the initial Stone correction is Small 2 hits -> 2 Stone, Medium 4 -> 4, Large 6 -> 7.
 
 Reason: inventory, mining, equipment progression and Sprout upgrades need one scalable data-driven progression model that can later accept refined metals, merchants, engravings and additional fantasy materials without introducing competing inventories, mining authorities or per-tool bespoke logic. See INVENTORY_MINING_UPGRADE_PROGRESSION.md.
+
+
+## 2026-09-22 — Ore mining extends discovered caves without changing cave authority
+
+Decision: implement the first Copper/Iron/Diamond slice as a deterministic **resource layer** on top of discovered underground pockets. `UndergroundTunnelingSystem` remains the sole cave density, excavation, collision and streaming authority. `UndergroundOreSystem` owns ore identity, depth-weighted occurrence, node size, hit progress, loose-drop activation and ore persistence.
+
+All three ores retain a non-zero chance at every depth. Copper is biased shallower, Iron deeper, and Diamond strongly toward deeper caves. Stone and Copper Pickaxes may mine Copper and Iron; Diamond requires at least Iron. Full deposits break into loose ore pieces, while naturally loose pieces can be collected directly. Sprout may compress only loose ore through the existing shared-inventory transaction path and never mines intact deposits.
+
+Overworld Stone mining now derives work and yield from the existing rock collider footprint rather than one global constant: Small = **2 hits -> 2 Stone**, Medium = **4 -> 4**, Large = **6 -> 7**. Rock generation, collision and presentation remain unchanged.
+
+The existing bulk-capacity model remains temporarily in force for the new ore item ids during this isolated mining slice. It is not a replacement for the separately locked 14-item stack and 14 -> 28 -> 56 slot-storage design; that inventory migration remains a later dedicated pass.
+
+Reason: this adds the requested resource/mining progression without destabilizing working stairs, construction, cave geometry, controls or the current inventory authority, while keeping later production tiers and slot storage data-driven.
