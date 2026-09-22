@@ -423,6 +423,15 @@ body.log-carrying #boot-status {
 @media (min-width: 900px) {
   .joystick { opacity: .65; }
 }
+
+@media (orientation: landscape) and (max-height: 560px) {
+  body:not(.title-scene-active) #boot-status {
+    max-width: min(360px, calc(50vw - 128px));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
 @media (max-width: 700px) and (orientation: portrait) {
   .toolbelt { bottom: max(150px, calc(env(safe-area-inset-bottom) + 146px)); }
   .log-build-tray {
