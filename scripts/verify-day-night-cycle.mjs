@@ -134,6 +134,24 @@ assert.ok(
   caveSceneSystem.lighting.ambient.intensity < 0.02,
   'deep caves must depend on local light sources rather than global ambient fill'
 );
+assert.ok(
+  caveSceneSystem.scene.background.r
+    + caveSceneSystem.scene.background.g
+    + caveSceneSystem.scene.background.b
+    < 0.0001,
+  'deep cave background must become black so streamed geometry gaps do not reveal the sky'
+);
+assert.ok(
+  caveSceneSystem.scene.fog.color.r
+    + caveSceneSystem.scene.fog.color.g
+    + caveSceneSystem.scene.fog.color.b
+    < 0.0001,
+  'deep cave distance fog must fade geometry into black'
+);
+assert.ok(
+  nearlyEqual(caveSceneSystem.scene.fog.density, UNDERGROUND_LIGHTING.distanceFogDensity),
+  'deep cave fog density must use the shared underground presentation tuning'
+);
 
 lighting.apply({ minuteOfDay: 9 * 60 });
 const expectedLightDirection = celestialDirectionAt(9 * 60);
