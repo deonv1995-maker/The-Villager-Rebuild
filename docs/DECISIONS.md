@@ -342,3 +342,18 @@ semantic construction panel directly behind it. Third-person keeps semantic pane
 demolition priority so nearby furniture does not unexpectedly steal structural Remove
 targets.
 
+
+## 2026-09-22 — Deep cave distance is masked to black and lava uses cave-depth authority
+
+Decision: keep the proven bounded natural-cave streaming budgets rather than increasing
+generation work to hide every distant transition. While the Ranger is actually in deep cave
+air, the shared underground-lighting system blends the scene background and exponential fog
+to black. This masks still-streaming distance while preserving the existing local prewarm,
+queue pruning and critical recovery limits.
+
+Deep lava is derived from the deterministic natural-cave chamber graph using actual chamber
+floor depth. Lava presentation must not become a second terrain, support or collision
+authority: pools sit above the existing cave floor, share one emissive material, and use at
+most one nearby non-shadow dynamic light. Lava contact crosses the existing
+`ExplorationPoiSystem` boundary and applies data-driven player damage through the existing
+survival authority. The cave density, mining behavior and save schema remain unchanged.
