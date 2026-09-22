@@ -138,6 +138,11 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalLavaLightActivationRadius: 24,
   naturalLavaLightDistance: 16,
   naturalLavaLightIntensity: 3.2,
+  naturalLavaEdgeSegments: 30,
+  naturalLavaEdgeVariation: 0.34,
+  naturalLavaFlowSpeed: 0.72,
+  naturalLavaPulseSpeed: 1.6,
+  naturalLavaPulseStrength: 0.1,
 
   // Underground pockets are deterministic empty chambers. Resources and treasure
   // will be layered into these spaces only after tunneling is device-verified.

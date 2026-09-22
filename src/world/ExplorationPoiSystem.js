@@ -37,8 +37,8 @@ export class ExplorationPoiSystem {
     return EXPLORATION_POIS.map(definition => ({ ...definition }));
   }
 
-  update(playerPosition) {
-    return this.tunneling.update(playerPosition);
+  update(playerPosition, dt = 0) {
+    return this.tunneling.update(playerPosition, dt);
   }
 
   getNaturalCaveNetwork() {

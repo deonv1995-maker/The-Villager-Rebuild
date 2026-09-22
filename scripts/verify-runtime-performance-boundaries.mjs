@@ -212,7 +212,7 @@ assert.ok(
       < UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
   'critical recovery must cover at least two cave chunks while staying inside local prewarming'
 );
-const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition) {');
+const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition, dt = 0) {');
 const naturalUpdateEnd = tunnelingSource.indexOf('  getNaturalCaveNetwork()', naturalUpdateStart);
 const naturalUpdateSource = tunnelingSource.slice(naturalUpdateStart, naturalUpdateEnd);
 assert.ok(
