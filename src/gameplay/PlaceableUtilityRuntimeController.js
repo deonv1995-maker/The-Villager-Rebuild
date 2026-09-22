@@ -299,21 +299,23 @@ export class PlaceableUtilityRuntimeController {
       return;
     }
 
-    // Semantic building panels keep first ownership of REMOVE-mode hammer interaction.
-    // A placeable utility can use the shared Action button only when no panel is targeted.
-    if (this.game.currentInteractionTarget) {
+    const target = this.#selectHammerUtilityTarget();
+
+    // Third-person keeps semantic panel demolition priority. In first-person, an
+    // explicitly aimed utility may sit directly in front of a floor/wall panel, so
+    // the reticle-selected utility is allowed to override the panel underneath it.
+    if (this.game.currentInteractionTarget && !(target && this.game.player?.isFirstPerson?.())) {
       hud.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
       return;
     }
 
-    const target = this.#selectHammerUtilityTarget();
     hud.setExternalAction(HAMMER_MOVE_ACTION_ID, target ? {
       available: true,
       priority: 260,
       icon: 'hammer',
-      caption: 'MOVE',
-      label: `Move ${target.label}`,
-      onTrigger: () => this.#movePlacedUtility(target)
+      caption: 'PICK UP',
+      label: `Pick up ${target.label}`,
+      onTrigger: () => this.#reclaimPlacedUtility(target)
     } : null);
   }
 
@@ -335,6 +337,7 @@ export class PlaceableUtilityRuntimeController {
         bedSystem: this.bedSystem,
         benchSystem: this.benchSystem,
         storageSystem,
+        torchRuntime: this.game.torchRuntime,
         playerPosition: this.position,
         camera: this.game.sceneSystem?.camera
       }));
@@ -352,10 +355,17 @@ export class PlaceableUtilityRuntimeController {
       this.position,
       PLACEABLE_UTILITY_INTERACTION_RADIUS
     );
+    const torchTargets = (this.game.torchRuntime?.getInteractionTargets?.(
+      this.position,
+      PLACEABLE_UTILITY_INTERACTION_RADIUS
+    ) ?? [])
+      .map(target => this.#describeHammerUtilityTarget(target))
+      .filter(Boolean);
     const targets = [
       bed ? this.#describeHammerUtilityTarget({ kind: 'bed', id: bed.id }) : null,
       bench ? this.#describeHammerUtilityTarget({ kind: 'crafting-bench', id: bench.id }) : null,
-      container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null
+      container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null,
+      ...torchTargets
     ].filter(Boolean);
     return targets.reduce((nearest, target) => {
       if (!nearest) return target;
@@ -390,10 +400,18 @@ export class PlaceableUtilityRuntimeController {
         itemId: container.type
       } : null;
     }
+    if (target?.kind === 'torch') {
+      const torch = this.game.torchRuntime?.describePlacedTorch?.(target.id);
+      return torch ? {
+        ...torch,
+        utilityKind: 'torch',
+        itemId: 'torch'
+      } : null;
+    }
     return null;
   }
 
-  #movePlacedUtility(target) {
+  #reclaimPlacedUtility(target) {
     if (!target || this.game.toolPresentation?.isBusy()) return false;
     if (target.utilityKind === 'storage') {
       const current = this.game.storageRuntime.system.describe(target.id);
@@ -401,17 +419,21 @@ export class PlaceableUtilityRuntimeController {
       const storedQuantity = Object.values(current.contents ?? {})
         .reduce((total, quantity) => total + (Number.isInteger(quantity) ? quantity : 0), 0);
       if (storedQuantity > 0) {
-        this.game.setStatus?.(`${current.label.toUpperCase()} · EMPTY IT BEFORE MOVING`);
+        this.game.setStatus?.(`${current.label.toUpperCase()} · EMPTY IT BEFORE PICKING UP`);
         return false;
       }
     } else if (target.utilityKind === 'bed') {
       if (!this.bedSystem.describe(target.id)) return false;
-    } else if (!this.benchSystem.describe(target.id)) {
+    } else if (target.utilityKind === 'crafting-bench') {
+      if (!this.benchSystem.describe(target.id)) return false;
+    } else if (target.utilityKind === 'torch') {
+      if (!this.game.torchRuntime?.describePlacedTorch?.(target.id)) return false;
+    } else {
       return false;
     }
 
     if (!this.game.inventory.canAdd(target.itemId, 1)) {
-      this.game.setStatus?.(`${target.label.toUpperCase()} · PACK FULL · FREE SPACE BEFORE MOVING`);
+      this.game.setStatus?.(`${target.label.toUpperCase()} · PACK FULL · FREE SPACE BEFORE PICKING UP`);
       return false;
     }
 
@@ -422,19 +444,16 @@ export class PlaceableUtilityRuntimeController {
       ? this.game.storageRuntime.system.removeContainer(target.id)
       : target.utilityKind === 'bed'
         ? Boolean(this.bedSystem.removeBed(target.id))
-        : Boolean(this.benchSystem.removeBench(target.id));
+        : target.utilityKind === 'crafting-bench'
+          ? Boolean(this.benchSystem.removeBench(target.id))
+          : Boolean(this.game.torchRuntime?.removePlacedTorch?.(target.id));
     if (!removed) return false;
 
     this.game.inventory.add(target.itemId, 1);
     this.game.equipmentRuntime?.recordUse?.('hammer');
     this.game.equipmentRuntime?.syncHud?.();
-    this.game.saveController?.saveNow?.('move-placeable-utility');
-    const replacing = this.selectInventoryItem(target.itemId);
-    this.game.setStatus?.(
-      replacing
-        ? `${target.label.toUpperCase()} DISASSEMBLED · CHOOSE NEW PLACEMENT`
-        : `${target.label.toUpperCase()} DISASSEMBLED · RETURNED TO INVENTORY`
-    );
+    this.game.saveController?.saveNow?.('reclaim-placeable-utility');
+    this.game.setStatus?.(`${target.label.toUpperCase()} · RETURNED TO INVENTORY`);
     return true;
   }
 
@@ -469,6 +488,7 @@ export class PlaceableUtilityRuntimeController {
       bedSystem: this.bedSystem,
       benchSystem: this.benchSystem,
       storageSystem: this.game.storageRuntime?.system,
+      torchRuntime: this.game.torchRuntime,
       playerPosition: this.position,
       camera: this.game.sceneSystem?.camera
     });
