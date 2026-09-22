@@ -34,6 +34,7 @@ const config = read('src/startup/TitleSceneConfig.js');
 const main = read('src/main.js');
 const index = read('index.html');
 const css = read('src/title.css');
+const titlePlayCss = css.match(/\.title-play\s*\{([\s\S]*?)\}/)?.[1] ?? '';
 const movementAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const generalAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_General.glb');
 const nativeCrawlAnimations = movementAnimations.filter(name => /crawl/i.test(name));
@@ -95,6 +96,7 @@ const checks = [
   ['main starts beach arrival after existing gameplay systems load', main.includes('new BeachArrivalIntroController') && main.includes('arrivalIntro.start()') && main.includes('window.__villager = game')],
   ['gameplay still uses existing GameApp', main.includes("import { GameApp } from './core/GameApp.js';")],
   ['title stylesheet is linked', index.includes('./src/title.css')],
+  ['title primary menu buttons stay compact and single-line', titlePlayCss.includes('width: min(80vw, 320px)') && titlePlayCss.includes('min-height: 54px') && titlePlayCss.includes('font-size: clamp(19px, 5vw, 28px)') && titlePlayCss.includes('white-space: nowrap')],
   ['title UI includes profile selection, deletion and naming presentation', css.includes('.title-profile-list') && css.includes('.title-profile-delete') && css.includes('.title-profile-prompt') && css.includes('.title-profile-name')],
   ['title UI is mobile safe-area aware', css.includes('safe-area-inset-top') && css.includes('@media (orientation: landscape)')],
   ['game HUD remains hidden through the arrival cinematic', css.includes('body.title-scene-active .mobile-hud') && css.includes('body.arrival-intro-active .mobile-hud')],

@@ -86,14 +86,15 @@ body.arrival-intro-revealing .mobile-hud {
 }
 
 .title-play {
-  width: min(86vw, 360px);
-  min-height: 68px;
+  width: min(80vw, 320px);
+  min-height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
+  padding: 9px 18px 10px;
   border: 2px solid #e5c16e;
-  border-radius: 18px;
+  border-radius: 14px;
   background: linear-gradient(180deg, rgba(54, 113, 148, .98), rgba(35, 76, 105, .98));
   box-shadow:
     0 6px 0 rgba(51, 37, 27, .86),
@@ -101,9 +102,10 @@ body.arrival-intro-revealing .mobile-hud {
     inset 0 0 0 2px rgba(255, 244, 210, .12);
   color: #fff4d4;
   font: inherit;
-  font-size: clamp(28px, 6vw, 42px);
+  font-size: clamp(19px, 5vw, 28px);
   font-weight: 950;
-  letter-spacing: .08em;
+  letter-spacing: .07em;
+  white-space: nowrap;
   text-shadow: 0 2px 3px rgba(17, 35, 45, .5);
   touch-action: manipulation;
 }
@@ -235,7 +237,7 @@ body.arrival-intro-revealing .mobile-hud {
   .title-logo strong { font-size: clamp(34px, 7vw, 60px); }
   .title-logo .title-rebuild { margin-left: 8px; }
   .title-menu-actions { align-items: flex-end; width: min(47vw, 360px); }
-  .title-play { width: min(44vw, 330px); min-height: 60px; }
+  .title-play { width: min(38vw, 285px); min-height: 50px; }
 
   .title-transition::before {
     width: min(58vw, 390px);
