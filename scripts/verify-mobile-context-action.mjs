@@ -251,9 +251,9 @@ assert.ok(
   'Sprout compact access must sit below the short-landscape tool dock rather than touching it'
 );
 assert.ok(
-  hammerMenuStyles.includes('min-height: 40px;') &&
+  hammerMenuStyles.includes('min-height: 44px;') &&
   hammerMenuStyles.includes('grid-template-columns: repeat(2, minmax(0, 1fr));'),
-  'Short-landscape tool drawers must retain compact shared two-column rows clear of bottom actions'
+  'Short-landscape tool drawers must retain deliberate touch targets in the compact shared two-column layout'
 );
 
 assert.doesNotMatch(mobileHudSource, /data-role="joystick"/, 'The visible fixed walking thumb grip must be removed');
