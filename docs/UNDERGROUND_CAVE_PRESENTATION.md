@@ -273,3 +273,26 @@ streaming. Device acceptance should verify that distant unbuilt cave geometry re
 rather than sky-coloured, lava appears only in genuinely deep rooms, the nearest pool provides
 a restrained orange glow, and stepping onto lava drains health and recovers the Ranger at the
 shore on defeat.
+
+## Surface-entry streaming priority — 2026-09-22
+
+Android/PWA feedback still showed occasional late cave-mouth geometry even after local
+prewarming and visible-first preemption. The remaining case is approach speed: the generic
+nearest-chunk queue can spend its first bounded slices on nearby non-entry chunks while the
+Ranger is rapidly closing the final distance to the surface opening.
+
+The existing cave density, collision, mining and meshing authority is unchanged. During
+network initialization, render chunks touched by the established **entrance** and immediate
+**descent** segments are tagged in one cached set. Queued work from that set sorts ahead of
+ordinary prewarm work, and its critical recovery distance begins at 30 m instead of 18 m.
+Both lanes still use the same resumable generator, the same local prewarm/retention windows,
+and the same 4 ms / three-completion hard critical caps. No synchronous entrance build or
+second geometry representation is introduced.
+
+The intent is specifically to have the mouth and first descent already materializing during
+a fast surface approach. Once underground and away from the entry corridor, the normal
+visible-first distance policy continues to control streaming. Device acceptance should test
+walking, sprinting and Sprout-assisted fast approaches from several angles and confirm that
+the surface opening and first descent no longer appear several beats late while sustained
+frame pacing remains acceptable.
+
