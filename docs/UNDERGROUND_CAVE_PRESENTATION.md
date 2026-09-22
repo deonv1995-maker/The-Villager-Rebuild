@@ -249,3 +249,27 @@ specifically test walking and fast vertical descent through an entrance branch w
 for missing cave walls/floors, then verify sustained frame pacing after nearby geometry has
 finished streaming.
 
+
+## Deep distance blackout and lava floors — 2026-09-22
+
+Visible cave streaming remains bounded by the existing local prewarm, 2 ms normal mesh budget
+and 4 ms near-player recovery budget. Deep cave presentation now hides any remaining distant
+streaming gaps instead of spending more CPU on remote geometry. The authoritative
+underground-depth value blends both the scene background and exponential fog toward black;
+at full cave darkness the fog uses `UNDERGROUND_LIGHTING.distanceFogDensity`. Surface and
+shallow-cave day/night colours remain unchanged because the transition is depth weighted.
+
+Lava is deterministic natural-cave data, not a second terrain or collision system.
+`buildNaturalCaveNetwork` derives lava pools from actual chamber floor depth and only allows
+deep chamber roles. Pools sit slightly above the existing flat cave floor, so the density
+mesh remains the support/collision authority. `UndergroundTunnelingSystem` renders the pools
+with one shared emissive material and uses a single non-shadow point light that moves to the
+nearest qualifying pool inside a bounded activation radius. This avoids one dynamic light per
+chamber on mobile.
+
+Lava contact is exposed through the exploration-POI boundary and applies data-driven survival
+damage in `GameApp`; it does not alter mining, cave density, support scans, save schema or
+streaming. Device acceptance should verify that distant unbuilt cave geometry reads as black
+rather than sky-coloured, lava appears only in genuinely deep rooms, the nearest pool provides
+a restrained orange glow, and stepping onto lava drains health and recovers the Ranger at the
+shore on defeat.
