@@ -136,14 +136,89 @@ export class UndergroundTunnelingSystem {
     this.group.add(this.root);
 
     this.lavaMeshes = [];
-    this.lavaGeometry = new THREE.CircleGeometry(1, 32);
-    this.lavaMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff5a12,
-      emissive: 0xff2100,
-      emissiveIntensity: 3.1,
-      roughness: 0.58,
-      metalness: 0,
-      side: THREE.DoubleSide
+    this.lavaTime = 0;
+    this.lavaGeometry = this.#createIrregularLavaGeometry();
+    this.lavaMaterial = new THREE.ShaderMaterial({
+      name: 'deep-cave-lava-material',
+      fog: true,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uTime: { value: 0 },
+        uPulseStrength: {
+          value: THREE.MathUtils.clamp(
+            Number(this.config.naturalLavaPulseStrength) || 0,
+            0,
+            0.35
+          )
+        }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        varying vec2 vLavaPosition;
+        #include <fog_pars_vertex>
+
+        void main() {
+          vLavaPosition = position.xz;
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          vec4 mvPosition = viewMatrix * worldPosition;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform float uPulseStrength;
+        varying vec3 vWorldPosition;
+        varying vec2 vLavaPosition;
+        #include <common>
+        #include <fog_pars_fragment>
+
+        void main() {
+          vec2 flowPosition = vWorldPosition.xz;
+          float flowA = sin(
+            flowPosition.x * 0.66
+            + flowPosition.y * 0.23
+            + uTime * 1.18
+          );
+          float flowB = sin(
+            flowPosition.x * -0.31
+            + flowPosition.y * 0.82
+            - uTime * 0.83
+          );
+          float flowC = cos(
+            (flowPosition.x + flowPosition.y) * 1.08
+            + uTime * 0.47
+          );
+          float flow = (flowA + flowB + flowC) / 3.0;
+          float hotVeins = smoothstep(0.12, 0.74, flow);
+          float warmBody = smoothstep(-0.72, 0.2, flow);
+
+          vec3 cooled = vec3(0.28, 0.018, 0.004);
+          vec3 molten = vec3(1.42, 0.16, 0.008);
+          vec3 hottest = vec3(2.9, 0.88, 0.09);
+          vec3 lavaColor = mix(cooled, molten, warmBody);
+          lavaColor = mix(lavaColor, hottest, hotVeins);
+
+          // The visual pool extends beyond the hazard radius. Cooling the outer
+          // band makes the irregular silhouette read as a natural crust edge.
+          float edgeDistance = length(vLavaPosition);
+          float edgeCrust = smoothstep(1.03, 1.3, edgeDistance);
+          lavaColor *= mix(1.0, 0.5, edgeCrust * 0.72);
+
+          float pulse =
+            1.0
+            + sin(
+              uTime * 1.37
+              + flowPosition.x * 0.1
+              + flowPosition.y * 0.08
+            ) * uPulseStrength;
+          gl_FragColor = vec4(lavaColor * pulse, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }
+      `
     });
     this.lavaLight = new THREE.PointLight(
       0xff4a12,
@@ -174,7 +249,7 @@ export class UndergroundTunnelingSystem {
     return 0;
   }
 
-  update(playerPosition) {
+  update(playerPosition, dt = 0) {
     this.#initializeNaturalCaveNetwork();
     const x = Number(playerPosition?.x);
     const y = Number(playerPosition?.y);
@@ -183,7 +258,7 @@ export class UndergroundTunnelingSystem {
       this.lavaLight.visible = false;
       return 0;
     }
-    this.#updateLavaPresentation(playerPosition);
+    this.#updateLavaPresentation(playerPosition, dt);
 
     let activated = 0;
     for (const feature of this.naturalCaveNetwork.features) {
@@ -1456,18 +1531,64 @@ export class UndergroundTunnelingSystem {
     return keys;
   }
 
+  #createIrregularLavaGeometry() {
+    const segments = Math.max(
+      18,
+      Math.round(Number(this.config.naturalLavaEdgeSegments) || 30)
+    );
+    const variation = THREE.MathUtils.clamp(
+      Number(this.config.naturalLavaEdgeVariation) || 0,
+      0,
+      0.5
+    );
+    const shape = new THREE.Shape();
+
+    for (let index = 0; index < segments; index += 1) {
+      const angle = index / segments * Math.PI * 2;
+      // Low-frequency harmonics avoid a noisy saw-tooth shoreline while still
+      // removing the obvious circular-disc silhouette. The radius never shrinks
+      // inside 1.0, so the existing circular hazard contact remains visually covered.
+      const irregularity =
+        0.55
+        + Math.sin(angle * 3 + 0.72) * 0.23
+        + Math.sin(angle * 5 - 1.1) * 0.14
+        + Math.sin(angle * 7 + 2.2) * 0.08;
+      const radius = 1 + variation * irregularity;
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      if (index === 0) shape.moveTo(x, z);
+      else shape.lineTo(x, z);
+    }
+    shape.closePath();
+
+    const geometry = new THREE.ShapeGeometry(shape);
+    geometry.rotateX(-Math.PI * 0.5);
+    geometry.computeVertexNormals();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+
   #createLavaPresentation() {
     if (this.lavaMeshes.length > 0) return this.lavaMeshes.length;
     this.#initializeNaturalCaveNetwork();
 
     for (const pool of this.naturalCaveNetwork.lavaPools ?? []) {
       const mesh = new THREE.Mesh(this.lavaGeometry, this.lavaMaterial);
+      const seedX = Math.round(pool.x * 10);
+      const seedZ = Math.round(pool.z * 10);
+      const rotationSeed = hash01(seedX, seedZ, 911);
+      const stretchX = 1 + hash01(seedX, seedZ, 277) * 0.08;
+      const stretchZ = 1 + hash01(seedX, seedZ, 613) * 0.11;
       mesh.name = `deep-cave-lava-${pool.id}`;
       mesh.userData.undergroundLava = true;
       mesh.userData.lavaPoolId = pool.id;
       mesh.position.set(pool.x, pool.y, pool.z);
-      mesh.rotation.x = -Math.PI * 0.5;
-      mesh.scale.setScalar(pool.radius);
+      mesh.rotation.y = rotationSeed * Math.PI * 2;
+      mesh.scale.set(
+        pool.radius * stretchX,
+        1,
+        pool.radius * stretchZ
+      );
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       this.root.add(mesh);
@@ -1476,8 +1597,19 @@ export class UndergroundTunnelingSystem {
     return this.lavaMeshes.length;
   }
 
-  #updateLavaPresentation(playerPosition) {
+  #updateLavaPresentation(playerPosition, dt = 0) {
     if (!this.lavaMeshes.length) this.#createLavaPresentation();
+
+    const frameDelta = THREE.MathUtils.clamp(Number(dt) || 0, 0, 0.1);
+    this.lavaTime += frameDelta;
+    if (this.lavaMaterial?.uniforms?.uTime) {
+      const flowSpeed = Math.max(
+        0,
+        Number(this.config.naturalLavaFlowSpeed) || 0
+      );
+      this.lavaMaterial.uniforms.uTime.value = this.lavaTime * flowSpeed;
+    }
+
     const x = Number(playerPosition?.x);
     const y = Number(playerPosition?.y);
     const z = Number(playerPosition?.z);
@@ -1510,13 +1642,26 @@ export class UndergroundTunnelingSystem {
       0,
       1
     );
+    const pulseStrength = THREE.MathUtils.clamp(
+      Number(this.config.naturalLavaPulseStrength) || 0,
+      0,
+      0.35
+    );
+    const pulseSpeed = Math.max(
+      0,
+      Number(this.config.naturalLavaPulseSpeed) || 0
+    );
+    const glowPulse =
+      1 + Math.sin(this.lavaTime * pulseSpeed) * pulseStrength;
     this.lavaLight.position.set(
       nearestPool.x,
-      nearestPool.y + 1.45,
+      nearestPool.y + 1.45 + Math.sin(this.lavaTime * 0.8) * 0.06,
       nearestPool.z
     );
     this.lavaLight.intensity =
-      this.config.naturalLavaLightIntensity * (0.62 + proximity * 0.38);
+      this.config.naturalLavaLightIntensity
+      * (0.62 + proximity * 0.38)
+      * glowPulse;
     this.lavaLight.distance = this.config.naturalLavaLightDistance;
     this.lavaLight.visible = true;
     return true;
