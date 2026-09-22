@@ -1,9 +1,8 @@
 import * as THREE from 'three';
+import { classifyStoneNode } from '../data/MiningResourceDefinitions.js';
 import { HarvestHitFeedback } from './HarvestHitFeedback.js';
 
 const INTERACTION_RADIUS = 2.85;
-const HITS_REQUIRED = 3;
-const STONE_YIELD = 4;
 
 export class RockHarvestSystem {
   constructor({ group, terrain, collision, gatherables }) {
@@ -17,6 +16,7 @@ export class RockHarvestSystem {
     this.rocks = this.collision.getObstaclesByType('rock').map((obstacle, id) => ({
       id,
       obstacle,
+      profile: classifyStoneNode(obstacle.radius),
       hits: 0,
       active: true
     }));
@@ -62,9 +62,9 @@ export class RockHarvestSystem {
     return {
       type: 'rock',
       id: this.target.id,
-      label: 'Large rock',
+      label: this.target.profile.label,
       icon: 'pickaxe',
-      actionLabel: 'Mine rock',
+      actionLabel: `Mine ${this.target.profile.label.toLowerCase()}`,
       position: new THREE.Vector3(
         this.target.obstacle.x,
         this.terrain.heightAt(this.target.obstacle.x, this.target.obstacle.z),
@@ -79,22 +79,30 @@ export class RockHarvestSystem {
 
     const rock = this.target;
     rock.hits += 1;
-    const remainingHits = Math.max(0, HITS_REQUIRED - rock.hits);
+    const remainingHits = Math.max(0, rock.profile.hitsRequired - rock.hits);
     const position = new THREE.Vector3(
       rock.obstacle.x,
       this.terrain.heightAt(rock.obstacle.x, rock.obstacle.z),
       rock.obstacle.z
     );
     this.hitFeedback.emit(position, 'stone');
-    if (remainingHits > 0) return { broken: false, remainingHits, label: 'Large rock', position };
+    if (remainingHits > 0) {
+      return {
+        broken: false,
+        remainingHits,
+        label: rock.profile.label,
+        nodeSize: rock.profile.id,
+        position
+      };
+    }
 
     rock.active = false;
     this.collision.removeObstacle(rock.obstacle);
     const visual = this.group.getObjectByName(rock.obstacle.label ?? '');
     visual?.parent?.remove(visual);
 
-    for (let index = 0; index < STONE_YIELD; index += 1) {
-      const angle = (index / STONE_YIELD) * Math.PI * 2 + 0.3;
+    for (let index = 0; index < rock.profile.yield; index += 1) {
+      const angle = (index / rock.profile.yield) * Math.PI * 2 + 0.3;
       const distance = 0.6 + (index % 2) * 0.22;
       this.gatherables.spawn('stone', {
         x: rock.obstacle.x + Math.cos(angle) * distance,
@@ -105,7 +113,14 @@ export class RockHarvestSystem {
 
     this.target = null;
     this.indicator.visible = false;
-    return { broken: true, remainingHits: 0, label: 'Large rock', stoneYield: STONE_YIELD, position };
+    return {
+      broken: true,
+      remainingHits: 0,
+      label: rock.profile.label,
+      nodeSize: rock.profile.id,
+      stoneYield: rock.profile.yield,
+      position
+    };
   }
 
   #createIndicator() {
