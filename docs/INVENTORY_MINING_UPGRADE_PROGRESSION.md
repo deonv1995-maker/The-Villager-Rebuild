@@ -1,6 +1,6 @@
 # Inventory, Mining and Upgrade Progression
 
-Status: **design locked; implementation deferred until the current construction/device-acceptance gate is complete.**
+Status: **design locked; implementation active. The first runtime slice is the ore/mining layer and Stone node correction.**
 
 This document defines the next shared progression layer for inventory organization, Sprout storage, cave materials, equipment production upgrades, relic schematics and Shards. Implementation must extend the existing shared inventory, crafting, equipment, gathering, Sprout, cave/mining and save authorities rather than introduce parallel systems.
 
@@ -265,7 +265,9 @@ Any save-format extension must preserve compatible existing profiles where pract
 
 ## Implementation order
 
-After the current construction/device-acceptance gate is complete, implement in this order:
+Implementation is proceeding incrementally from the stable current runtime. The ore/mining slice may land before the slot-based inventory refactor because it can extend the existing shared inventory safely without changing its authority. Until the slot refactor lands, Copper, Iron and Diamond use the current inventory-capacity accounting only as a compatibility bridge; the locked 14-item stack / 14 -> 28 -> 56 slot model remains the target.
+
+Implement in this order:
 
 1. shared item/resource metadata needed for categories, stack size and slot cost;
 2. slot-based shared inventory capacity and Sprout 14/28/56 storage progression;
