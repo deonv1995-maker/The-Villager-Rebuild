@@ -17,9 +17,9 @@ This pass adds one new player-crafted **Bed** and refreshes the presentation of 
 
 `PlaceableUtilityDefinitions.js` remains the source of truth for Bed placement/collision dimensions. Indoor placement therefore inherits the existing constructed-floor support resolver used by Chest, Barrel and Crafting Bench rather than adding furniture-specific floor logic.
 
-`BedSystem` owns Bed world roots, collision handles, ids and persistence records. `PlaceableUtilityRuntimeController` only coordinates inventory-to-world placement and Hammer pickup, matching the existing ownership split for Crafting Benches, storage containers and mounted Torches. Successful pickup returns exactly one packed item to inventory; placing it again is an explicit later action from inventory.
+`BedSystem` owns Bed world roots, collision handles, ids and persistence records. `PlaceableUtilityRuntimeController` coordinates inventory-to-world placement and Hammer pickup for Beds, Crafting Benches and storage containers. Successful pickup returns exactly one packed item to inventory; placing it again is an explicit later action from inventory. Mounted Torches use the same coordinator for inventory transfer but are collected through their dedicated first-person reticle action rather than Hammer mode.
 
-First-person utility selection remains centralized in `UtilityInteractionTargetingRules.js`. Bed, Bench, Storage and mounted Torches participate in the same centre-reticle query so one utility cannot incorrectly publish an interaction through another utility in front of it. If a directly aimed utility sits in front of a semantic Floor/Wall panel, **PICK UP** owns the first-person Action button; otherwise the established structural **REMOVE** target keeps priority.
+First-person utility selection remains centralized in `UtilityInteractionTargetingRules.js`. Bed, Bench and Storage use the shared centre-reticle query only while Hammer pickup is active. Mounted Torches reuse that same selector through a separate tool-agnostic **COLLECT** action, so pointing the centre dot at a Torch can take the Action button regardless of the equipped tool.
 
 ## Indoor wall-snapping contract
 

@@ -16,6 +16,7 @@ const RETRIEVAL_ACTION_ID = 'spear-retrieve';
 const STUMP_ACTION_ID = 'shovel-stump';
 const TERRAIN_ACTION_ID = 'pickaxe-terrain';
 const UTILITY_RECLAIM_ACTION_ID = 'utility-hammer-move';
+const TORCH_PICKUP_ACTION_ID = 'torch-pickup';
 
 const iconForTool = toolId => toolId ?? 'hand';
 const resolveExternalAction = action => ({
@@ -44,6 +45,9 @@ export function resolveContextAction({
       caption: 'PLACE'
     };
   }
+
+  const torchPickup = externalActions.find(action => action?.id === TORCH_PICKUP_ACTION_ID);
+  if (torchPickup) return resolveExternalAction(torchPickup);
 
   if (toolId === 'sword') {
     return {
