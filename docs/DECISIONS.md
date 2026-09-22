@@ -358,6 +358,12 @@ most one nearby non-shadow dynamic light. Lava contact crosses the existing
 `ExplorationPoiSystem` boundary and applies data-driven player damage through the existing
 survival authority. The cave density, mining behavior and save schema remain unchanged.
 
+Lava visual refinement stays inside that same presentation boundary: pools use one shared
+irregular geometry and one shared fog-aware procedural shader, with deterministic per-pool
+rotation/stretch and frame-delta-driven molten flow. The existing single nearby non-shadow
+light may pulse subtly, but no per-pool lights, texture assets, collision meshes or additional
+cave streaming work are introduced.
+
 ## 2026-09-22 — Surface cave entries get a bounded streaming priority lane
 
 Decision: keep natural-cave rendering inside the existing resumable
