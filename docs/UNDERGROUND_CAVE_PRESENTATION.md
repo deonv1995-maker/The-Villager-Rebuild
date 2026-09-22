@@ -269,10 +269,19 @@ chamber on mobile.
 
 Lava contact is exposed through the exploration-POI boundary and applies data-driven survival
 damage in `GameApp`; it does not alter mining, cave density, support scans, save schema or
-streaming. Device acceptance should verify that distant unbuilt cave geometry reads as black
-rather than sky-coloured, lava appears only in genuinely deep rooms, the nearest pool provides
-a restrained orange glow, and stepping onto lava drains health and recovers the Ranger at the
-shore on defeat.
+streaming.
+
+The lava surface presentation is deliberately procedural and shared. A single irregular
+`ShapeGeometry` replaces the circular disc silhouette, then each pool applies deterministic
+rotation and mild outward stretching so repeated chambers do not read as stamped circles. One
+fog-aware shader material creates moving molten bands and a cooled outer crust without texture
+assets or per-pool materials. The existing single nearby point light receives only a subtle
+time-based pulse; the one-light mobile budget is unchanged.
+
+Device acceptance should verify that distant unbuilt cave geometry reads as black rather than
+sky-coloured, deep lava has an irregular rock-like shoreline, bright/dark molten bands visibly
+move without looking like a spinning texture, the cave glow pulses subtly rather than flashing,
+and stepping onto lava still drains health and recovers the Ranger at the shore on defeat.
 
 ## Surface-entry streaming priority — 2026-09-22
 
