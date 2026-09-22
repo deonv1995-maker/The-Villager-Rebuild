@@ -517,19 +517,20 @@ sleepRuntime.dispose();
 inventory.add('stick', 1000);
 storage.addContainer({ id: 'placed-barrel-3', type: 'barrel', x: 1, z: 0 });
 runFrame();
-assert(hammerMoveAction()?.label === 'Move Food Barrel', 'Hammer REMOVE mode must target a placed Food Barrel');
+assert(hammerMoveAction()?.label === 'Pick up Food Barrel', 'Hammer REMOVE mode must target a placed Food Barrel');
 hammerMoveAction().onTrigger();
 assert(storage.describe('placed-barrel-3'), 'Pack-full rejection must leave the Barrel world instance intact');
 assert(inventory.get('barrel') === 0, 'Pack-full rejection must not create a Barrel inventory item');
-assert(statuses.at(-1)?.includes('PACK FULL'), 'Pack-full rejection must explain why the Barrel cannot be moved');
+assert(statuses.at(-1)?.includes('PACK FULL'), 'Pack-full rejection must explain why the Barrel cannot be picked up');
 assert(hammerUses === 4, 'Hammer durability/use must be recorded only for successful utility disassembly');
 assert(saves.filter(reason => reason === 'reclaim-placeable-utility').length === 4, 'Only successful utility pickups may checkpoint the reclaim save reason');
 
 const runtimeSource = await readFile('src/gameplay/PlaceableUtilityRuntimeController.js', 'utf8');
 assert(runtimeSource.includes("import { BedSystem } from '../world/BedSystem.js';"), 'Placeable utility runtime must own Bed placement through a dedicated world system');
-assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility movement must reuse the shared first-person reticle selector');
+assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility pickup must reuse the shared first-person reticle selector');
+assert(runtimeSource.includes('torchRuntime: this.game.torchRuntime'), 'Shared utility targeting must include placed Torches without a second raycaster');
 assert(!runtimeSource.includes('new THREE.Raycaster()'), 'Placeable utility runtime must not introduce a competing first-person raycaster');
-assert(runtimeSource.includes('if (this.game.currentInteractionTarget)'), 'Semantic panel demolition must retain first ownership of REMOVE-mode hammer targets');
+assert(runtimeSource.includes('this.game.currentInteractionTarget && !(target && this.game.player?.isFirstPerson?.())'), 'Third-person panel priority must remain while direct first-person utility aim can override the underlying panel');
 assert(runtimeSource.includes('collision.supportHeightAt?.('), 'Utility placement must reuse the shared standable-surface resolver');
 assert(runtimeSource.includes('resolvePlaceableUtilityWallSnap({'), 'Utility placement must route wall alignment through the shared snap rule');
 assert(runtimeSource.includes('snapWallId: this.previewPlacement.snapWallId'), 'Placement confirmation must preserve snapped-wall clearance validation');
@@ -544,4 +545,4 @@ assert(storageSource.includes('lidProfile'), 'Storage Chest visual must retain i
 assert(storageSource.includes('flatShading: true'), 'Food Barrel visual must retain its low-poly segmented presentation');
 
 runtime.dispose();
-console.log('Bed/storage placement, semantic wall snapping, sleep and refreshed furniture presentation verified');
+console.log('Inventory-first Torch/Bed/Bench/Storage pickup, placement, sleep and furniture presentation verified');
