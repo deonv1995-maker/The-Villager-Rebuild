@@ -5,7 +5,7 @@
 This pass adds one new player-crafted **Bed** and refreshes the presentation of the existing **Storage Chest** and **Food Barrel** without changing the established storage economy.
 
 - Bed is a Crafting Bench recipe that produces one inventory placeable.
-- Bed placement uses the existing `PlaceableUtilityRuntimeController` preview, terrain/support-height resolution, collision checks, Action-button confirmation and Hammer REMOVE/replacement flow.
+- Bed placement uses the existing `PlaceableUtilityRuntimeController` preview, terrain/support-height resolution, collision checks and Action-button confirmation. Hammer REMOVE now exposes **PICK UP** for inventory-backed utilities and returns the Bed to inventory without automatically re-entering placement.
 - Bed instances are owned by `BedSystem` and persist inside the existing `placeableUtilities` save section alongside Crafting Benches.
 - A nearby Bed exposes the established nighttime **SLEEP** action and advances the authoritative `WorldTimeSystem` to 07:00 through the existing sleep runtime.
 - Bed does **not** establish a respawn point, settlement home marker, villager assignment, comfort stat or parallel time system in this milestone.
@@ -17,9 +17,9 @@ This pass adds one new player-crafted **Bed** and refreshes the presentation of 
 
 `PlaceableUtilityDefinitions.js` remains the source of truth for Bed placement/collision dimensions. Indoor placement therefore inherits the existing constructed-floor support resolver used by Chest, Barrel and Crafting Bench rather than adding furniture-specific floor logic.
 
-`BedSystem` owns Bed world roots, collision handles, ids and persistence records. `PlaceableUtilityRuntimeController` only coordinates inventory-to-world placement and hammer replacement, matching the existing ownership split for Crafting Benches and storage containers.
+`BedSystem` owns Bed world roots, collision handles, ids and persistence records. `PlaceableUtilityRuntimeController` only coordinates inventory-to-world placement and Hammer pickup, matching the existing ownership split for Crafting Benches, storage containers and mounted Torches. Successful pickup returns exactly one packed item to inventory; placing it again is an explicit later action from inventory.
 
-First-person utility selection remains centralized in `UtilityInteractionTargetingRules.js`. Bed, Bench and Storage participate in the same centre-reticle query so one utility cannot incorrectly publish an interaction through another utility in front of it.
+First-person utility selection remains centralized in `UtilityInteractionTargetingRules.js`. Bed, Bench, Storage and mounted Torches participate in the same centre-reticle query so one utility cannot incorrectly publish an interaction through another utility in front of it. If a directly aimed utility sits in front of a semantic Floor/Wall panel, **PICK UP** owns the first-person Action button; otherwise the established structural **REMOVE** target keeps priority.
 
 ## Indoor wall-snapping contract
 
@@ -61,7 +61,7 @@ The repository's existing asset policy requires verifiable source/licence proven
 The existing `verify-placeable-utility-hammer-move.mjs` regression path now additionally protects:
 
 - Bed inventory/placeable integration;
-- Bed Hammer REMOVE/replacement behavior;
+- Bed/Bench/Chest/Barrel Hammer REMOVE > **PICK UP** behavior, with the packed item left in inventory rather than forced into placement;
 - Bed placement and saved elevation on constructed floors;
 - active-storey placement for Bed, Chest, Barrel and Crafting Bench when an earlier preview candidate resolves to terrain/lower-storey support;
 - data-driven Bed/Chest/Barrel/Bench wall-snap footprints;
@@ -85,6 +85,6 @@ After deployment, verify on a physical phone in both first- and third-person:
 - confirm Door/Window openings do not attract furniture snapping and neighboring walls still prevent corner clipping;
 - confirm the tighter wall placement leaves noticeably more walking space without trapping the Ranger;
 - at night, approach the Bed and confirm **SLEEP** appears and wakes at 07:00;
-- Hammer > REMOVE can move the Bed and re-enter the established placement preview;
+- Hammer > REMOVE shows **PICK UP** for Bed, Crafting Bench, empty Chest and empty Barrel, returns the selected item to inventory, and does not open a placement preview until the item is selected from inventory again;
 - Chest and Barrel still open, transfer resources and restore after Save/Continue;
 - refreshed Chest lid/lock/feet and Barrel bulge/hoops read clearly at normal gameplay distance without obvious mobile frame-rate regression.
