@@ -75,6 +75,9 @@ for (const [id, fileName] of Object.entries(cosyResourceIcons)) {
 for (const [id, fileName] of Object.entries({
   mushroom: 'icon-resource-mushroom.svg',
   mushroom_stew: 'icon-resource-mushroom-stew.svg',
+  copper: 'icon-resource-copper.svg',
+  iron: 'icon-resource-iron.svg',
+  diamond: 'icon-resource-diamond.svg',
   ancient_relic: 'icon-resource-ancient-relic.svg',
   sprout_shard: 'icon-resource-sprout-shard.svg'
 })) {
