@@ -137,6 +137,25 @@ assert.equal(
   network.lavaPools.length,
   'lava presentation count must come from the shared natural-cave network'
 );
+assert.equal(
+  world.tunneling.lavaGeometry.type,
+  'ShapeGeometry',
+  'lava pools must use an irregular shoreline geometry rather than CircleGeometry'
+);
+assert.equal(
+  world.tunneling.lavaMaterial.type,
+  'ShaderMaterial',
+  'lava pools must share one procedural animated material'
+);
+assert.equal(
+  world.tunneling.lavaMaterial.fog,
+  true,
+  'lava must participate in deep-cave distance fog'
+);
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalLavaEdgeVariation >= 0.2,
+  'lava shoreline variation must remain visibly non-circular'
+);
 const firstLava = network.lavaPools[0];
 assert.equal(
   world.getLavaContact(new THREE.Vector3(firstLava.x, firstLava.y + 0.2, firstLava.z))?.id,
@@ -157,7 +176,12 @@ assert.equal(
 const entrance = network.entrances[0];
 const surfaceY = terrain.naturalHeightAt(entrance.x, entrance.z);
 const playerAtEntrance = new THREE.Vector3(entrance.x, surfaceY + 1, entrance.z);
-const activated = world.update(playerAtEntrance);
+const lavaTimeBeforeUpdate = world.tunneling.lavaMaterial.uniforms.uTime.value;
+const activated = world.update(playerAtEntrance, 0.05);
+assert.ok(
+  world.tunneling.lavaMaterial.uniforms.uTime.value > lavaTimeBeforeUpdate,
+  'lava procedural flow must advance from the shared frame delta'
+);
 assert.ok(activated > 0, 'approaching a natural cave must queue nearby 3D density chunks');
 const caveChunkSize = UNDERGROUND_TUNNELING.cellSize * UNDERGROUND_TUNNELING.chunkCells;
 const assertNaturalQueueWithin = (position, horizontalRadius, verticalRadius, label) => {
