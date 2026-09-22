@@ -219,7 +219,7 @@ assert.ok(
       <= UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
   'surface entry recovery may start earlier but must remain inside local prewarming'
 );
-const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition) {');
+const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition, dt = 0) {');
 const naturalUpdateEnd = tunnelingSource.indexOf('  getNaturalCaveNetwork()', naturalUpdateStart);
 const naturalUpdateSource = tunnelingSource.slice(naturalUpdateStart, naturalUpdateEnd);
 assert.ok(
