@@ -13,6 +13,27 @@ export const RESOURCE_DEFINITIONS = Object.freeze({
     storage: 'inventory',
     storageCategory: 'material'
   }),
+  copper: Object.freeze({
+    id: 'copper',
+    label: 'Copper Ore',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'material'
+  }),
+  iron: Object.freeze({
+    id: 'iron',
+    label: 'Iron Ore',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'material'
+  }),
+  diamond: Object.freeze({
+    id: 'diamond',
+    label: 'Diamond Ore',
+    pickupQuantity: 1,
+    storage: 'inventory',
+    storageCategory: 'material'
+  }),
   grass: Object.freeze({
     id: 'grass',
     label: 'Grass',
