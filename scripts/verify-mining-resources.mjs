@@ -32,13 +32,13 @@ assert.equal(classifyStoneNode(0.9).id, 'small');
 assert.equal(classifyStoneNode(1.7).id, 'medium');
 assert.equal(classifyStoneNode(2.8).id, 'large');
 
-assert.equal(canPickaxeTierMine('stone', 'copper'), true);
-assert.equal(canPickaxeTierMine('stone', 'iron'), true);
-assert.equal(canPickaxeTierMine('stone', 'diamond'), false);
-assert.equal(canPickaxeTierMine('copper', 'iron'), true);
-assert.equal(canPickaxeTierMine('copper', 'diamond'), false);
-assert.equal(canPickaxeTierMine('iron', 'diamond'), true);
-assert.equal(canPickaxeTierMine('diamond', 'diamond'), true);
+assert.equal(canPickaxeTierMine('stone', ORE_DEFINITIONS.copper.requiredPickaxeTier), true);
+assert.equal(canPickaxeTierMine('stone', ORE_DEFINITIONS.iron.requiredPickaxeTier), true);
+assert.equal(canPickaxeTierMine('stone', ORE_DEFINITIONS.diamond.requiredPickaxeTier), false);
+assert.equal(canPickaxeTierMine('copper', ORE_DEFINITIONS.iron.requiredPickaxeTier), true);
+assert.equal(canPickaxeTierMine('copper', ORE_DEFINITIONS.diamond.requiredPickaxeTier), false);
+assert.equal(canPickaxeTierMine('iron', ORE_DEFINITIONS.diamond.requiredPickaxeTier), true);
+assert.equal(canPickaxeTierMine('diamond', ORE_DEFINITIONS.diamond.requiredPickaxeTier), true);
 
 const shallow = Object.fromEntries(
   Object.keys(ORE_DEFINITIONS).map(id => [id, oreSpawnWeight(id, 0)])
