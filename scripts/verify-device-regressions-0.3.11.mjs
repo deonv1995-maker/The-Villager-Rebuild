@@ -257,10 +257,11 @@ assert.ok(
   'Short landscape Hammer menu must keep every construction action, including Remove, visible without shrinking the 44px action rows'
 );
 assert.ok(
-  cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
+  cameraStylesSource.includes('.hammer-construction-open') &&
+  cameraStylesSource.includes('.hammer-construction-expanded') &&
   cameraStylesSource.includes('max(208px, calc(env(safe-area-inset-right) + 204px))') &&
   cameraStylesSource.includes('max(196px, calc(env(safe-area-inset-right) + 193px))'),
-  'Camera view toggle must move clear of the narrower Hammer list in landscape and portrait so first-person targeting remains reachable'
+  'Camera view toggle must move clear of the Hammer list in landscape and portrait so first-person targeting remains reachable'
 );
 
 console.log('Android frame traversal, floor support, roof occupancy, tree-shake and compact Hammer list device regressions verified');
