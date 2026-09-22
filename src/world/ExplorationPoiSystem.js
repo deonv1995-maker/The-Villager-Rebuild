@@ -1,6 +1,7 @@
 import { EXPLORATION_POIS } from '../data/ExplorationPoiDefinitions.js';
 import { UndergroundTunnelingSystem } from './UndergroundTunnelingSystem.js';
 import { UndergroundPocketContentSystem } from './UndergroundPocketContentSystem.js';
+import { UndergroundOreSystem } from './UndergroundOreSystem.js';
 
 export class ExplorationPoiSystem {
   constructor({
@@ -21,6 +22,7 @@ export class ExplorationPoiSystem {
       onPresentationExclusionsChanged
     });
     this.pocketContents = new UndergroundPocketContentSystem({ group, chunks });
+    this.ores = new UndergroundOreSystem({ group, chunks });
 
     // Keep the existing exploration-POI registry boundary stable for diagnostics
     // and future authored POIs. Tunneling is a world system, not a POI.
@@ -30,6 +32,7 @@ export class ExplorationPoiSystem {
   create() {
     this.tunneling.create();
     this.pocketContents.create();
+    this.ores.create();
     return EXPLORATION_POIS.length;
   }
 
@@ -78,7 +81,18 @@ export class ExplorationPoiSystem {
   }
 
   getInteractionTarget(playerPosition) {
-    return this.pocketContents.getInteractionTarget(playerPosition);
+    const pocketTarget = this.pocketContents.getInteractionTarget(playerPosition);
+    const oreTarget = this.ores.getInteractionTarget(playerPosition);
+    if (!pocketTarget) return oreTarget;
+    if (!oreTarget) return pocketTarget;
+
+    const distanceSq = target => {
+      const dx = (target.position?.x ?? 0) - playerPosition.x;
+      const dy = (target.position?.y ?? 0) - playerPosition.y;
+      const dz = (target.position?.z ?? 0) - playerPosition.z;
+      return dx * dx + dy * dy + dz * dz;
+    };
+    return distanceSq(oreTarget) < distanceSq(pocketTarget) ? oreTarget : pocketTarget;
   }
 
   getUndiscoveredPocketSignal(playerPosition, maxDistance, options = {}) {
@@ -86,22 +100,48 @@ export class ExplorationPoiSystem {
   }
 
   collectUndergroundTarget(target, options = {}) {
+    if (target?.source === 'ore') return this.ores.collect(target, options);
     return this.pocketContents.collect(target, options);
+  }
+
+  mineOreTarget(target, options = {}) {
+    return this.ores.mine(target, options);
+  }
+
+  findNearestLooseOre(position, maxDistance, filter = null) {
+    return this.ores.findNearestLooseResource(position, maxDistance, filter);
+  }
+
+  reserveLooseOre(id, owner) {
+    return this.ores.reserveLooseResource(id, owner);
+  }
+
+  releaseLooseOre(id, owner) {
+    return this.ores.releaseLooseResource(id, owner);
+  }
+
+  takeReservedLooseOre(id, owner) {
+    return this.ores.takeReservedLooseResource(id, owner);
   }
 
   mine(target) {
     const result = this.tunneling.mine(target);
     if (!result?.discoveredPockets?.length) return result;
 
-    const discoveredPocketContents = result.discoveredPockets
+    const discoveredPockets = result.discoveredPockets
       .map(id => this.tunneling.getPocket(id))
-      .filter(Boolean)
+      .filter(Boolean);
+    const discoveredPocketContents = discoveredPockets
       .map(pocket => this.pocketContents.discoverPocket(pocket))
+      .filter(Boolean);
+    const discoveredOreContents = discoveredPockets
+      .map(pocket => this.ores.discoverPocket(pocket))
       .filter(Boolean);
 
     return {
       ...result,
-      discoveredPocketContents
+      discoveredPocketContents,
+      discoveredOreContents
     };
   }
 
@@ -120,15 +160,21 @@ export class ExplorationPoiSystem {
   captureState() {
     return {
       ...this.tunneling.captureState(),
-      content: this.pocketContents.captureState()
+      content: this.pocketContents.captureState(),
+      ore: this.ores.captureState()
     };
   }
 
   restoreState(state) {
     const restored = this.tunneling.restoreState(state);
+    const discoveredPockets = this.tunneling.getDiscoveredPockets();
     this.pocketContents.restoreState(
       state?.content,
-      this.tunneling.getDiscoveredPockets()
+      discoveredPockets
+    );
+    this.ores.restoreState(
+      state?.ore,
+      discoveredPockets
     );
     return restored;
   }
@@ -136,7 +182,8 @@ export class ExplorationPoiSystem {
   getDebugState() {
     return {
       ...this.tunneling.getDebugState(),
-      pocketContent: this.pocketContents.getDebugState()
+      pocketContent: this.pocketContents.getDebugState(),
+      ore: this.ores.getDebugState()
     };
   }
 }
