@@ -16,6 +16,9 @@ This pass keeps gameplay handlers authoritative while simplifying the mobile int
 - The right half of unobstructed gameplay canvas owns manual camera look.
 - Normal world interactions, combat and tool actions share one fixed-position Action button.
 - Crafted world placement is confirmed from the crafting control rather than borrowing the Action button.
+- The top HUD uses non-overlapping lanes: gameplay status stays in the left lane, survival vitals keep the centered lane, and the active Hammer/Pickaxe/Shovel drawer owns the right lane.
+- Camera View and Sprout remain independently reachable beside an expanded tool drawer instead of being layered beneath it; in short landscape viewports Sprout sits below the compact drawer and moves into the adjacent utility rail while a drawer is expanded.
+- Short-landscape tool drawers use the same compact two-column geometry so their bottom edge stays clear of the fixed Action/Jump controls.
 
 ## Movement and camera behavior
 
