@@ -269,21 +269,8 @@ body.hammer-construction-expanded #boot-status:not([data-error="true"]) {
   }
 
   .hammer-construction-header {
-    grid-template-columns: 26px 1fr 38px;
     gap: 5px;
     padding-bottom: 3px;
-  }
-
-  .hammer-construction-header > img {
-    width: 24px;
-    height: 24px;
-  }
-
-  .hammer-construction-close {
-    width: 38px;
-    height: 38px;
-    min-height: 38px;
-    font-size: 20px;
   }
 
   .construction-list {
@@ -292,16 +279,16 @@ body.hammer-construction-expanded #boot-status:not([data-error="true"]) {
   }
 
   .construction-list-item {
-    grid-template-columns: 21px minmax(0, 1fr);
+    grid-template-columns: 22px minmax(0, 1fr);
     gap: 5px;
-    min-height: 40px;
+    min-height: 44px;
     padding: 3px 5px;
   }
 
   .construction-list-item > img,
   .construction-list-placeholder {
-    width: 21px;
-    height: 21px;
+    width: 22px;
+    height: 22px;
   }
 
   .construction-list-item strong {
