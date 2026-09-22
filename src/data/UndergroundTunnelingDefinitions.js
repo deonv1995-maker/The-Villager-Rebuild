@@ -129,6 +129,16 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalConnectorBend: 8.5,
   naturalConnectorVerticalWave: 5.5,
 
+  // Lava belongs only to the deepest deterministic natural-cave floors. These
+  // values affect presentation/contact only; cave density remains the authority
+  // for rock, floors, ceilings and streaming.
+  naturalLavaMinimumFloorDepth: 28,
+  naturalLavaRadiusScale: 0.46,
+  naturalLavaSurfaceOffset: 0.08,
+  naturalLavaLightActivationRadius: 24,
+  naturalLavaLightDistance: 16,
+  naturalLavaLightIntensity: 3.2,
+
   // Underground pockets are deterministic empty chambers. Resources and treasure
   // will be layered into these spaces only after tunneling is device-verified.
   pocketCellSize: 28,
