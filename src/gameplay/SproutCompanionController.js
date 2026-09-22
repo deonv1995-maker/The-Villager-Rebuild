@@ -641,7 +641,7 @@ export class SproutCompanionController {
     }
 
     if (!command.target) {
-      const target = this.gatherables.findNearestLooseResource?.(
+      const target = this.#findNearestLooseResource(
         command.origin,
         SPROUT_COMPANION.resourceScanRange,
         resourceId => resourceId === command.definition.resourceId
@@ -766,7 +766,7 @@ export class SproutCompanionController {
     }
 
     if (!command.target) {
-      const target = this.gatherables.findNearestLooseResource?.(
+      const target = this.#findNearestLooseResource(
         command.origin,
         SPROUT_COMPANION.collectionRadius,
         resourceId => resourceId === command.definition.resourceId
@@ -891,7 +891,7 @@ export class SproutCompanionController {
     }
 
     if (!command.target) {
-      command.target = this.gatherables.findNearestLooseResource?.(
+      command.target = this.#findNearestLooseResource(
         command.treePosition,
         SPROUT_COMPANION.harvestLogCollectRadius,
         resourceId => resourceId === 'log'
@@ -918,8 +918,72 @@ export class SproutCompanionController {
     }
   }
 
+  #findNearestLooseResource(position, maxDistance, filter = null) {
+    const worldTarget = this.gatherables.findNearestLooseResource?.(
+      position,
+      maxDistance,
+      filter
+    ) ?? null;
+    const undergroundTarget = this.island.explorationPois?.findNearestLooseOre?.(
+      position,
+      maxDistance,
+      filter
+    ) ?? null;
+
+    const eligibleUnderground = undergroundTarget && this.inventory.canAdd(
+      undergroundTarget.resourceId,
+      undergroundTarget.quantity
+    )
+      ? undergroundTarget
+      : null;
+
+    if (!worldTarget) return eligibleUnderground;
+    if (!eligibleUnderground) return { ...worldTarget, source: 'world' };
+
+    const worldDistanceSq = worldTarget.position.distanceToSquared
+      ? worldTarget.position.distanceToSquared(position)
+      : (
+        (worldTarget.position.x - position.x) ** 2
+        + (worldTarget.position.y - position.y) ** 2
+        + (worldTarget.position.z - position.z) ** 2
+      );
+    const undergroundDistanceSq = eligibleUnderground.position.distanceToSquared
+      ? eligibleUnderground.position.distanceToSquared(position)
+      : (
+        (eligibleUnderground.position.x - position.x) ** 2
+        + (eligibleUnderground.position.y - position.y) ** 2
+        + (eligibleUnderground.position.z - position.z) ** 2
+      );
+
+    return undergroundDistanceSq < worldDistanceSq
+      ? eligibleUnderground
+      : { ...worldTarget, source: 'world' };
+  }
+
+  #reserveLooseResource(target) {
+    if (target?.source === 'underground-ore') {
+      return this.island.explorationPois?.reserveLooseOre?.(target.id, this.ownerToken) ?? null;
+    }
+    const reserved = this.gatherables.reserveLooseResource?.(target?.id, this.ownerToken) ?? null;
+    return reserved ? { ...reserved, source: 'world' } : null;
+  }
+
+  #takeReservedLooseResource(id, source) {
+    if (source === 'underground-ore') {
+      return this.island.explorationPois?.takeReservedLooseOre?.(id, this.ownerToken) ?? null;
+    }
+    return this.gatherables.takeReservedLooseResource?.(id, this.ownerToken) ?? null;
+  }
+
+  #releaseLooseResource(id, source) {
+    if (source === 'underground-ore') {
+      return this.island.explorationPois?.releaseLooseOre?.(id, this.ownerToken) ?? false;
+    }
+    return this.gatherables.releaseLooseResource?.(id, this.ownerToken) ?? false;
+  }
+
   #beginCompression(target) {
-    const reserved = this.gatherables.reserveLooseResource?.(target.id, this.ownerToken);
+    const reserved = this.#reserveLooseResource(target);
     if (!reserved || !this.root) return false;
 
     const visual = reserved.root.clone(true);
@@ -965,6 +1029,7 @@ export class SproutCompanionController {
 
     this.compression = {
       id: reserved.id,
+      source: reserved.source ?? target.source ?? 'world',
       resourceId: reserved.resourceId,
       quantity: reserved.quantity,
       visual,
@@ -997,7 +1062,7 @@ export class SproutCompanionController {
     this.#updateBeam();
 
     if (rawProgress < 1) return;
-    const pickup = this.gatherables.takeReservedLooseResource?.(state.id, this.ownerToken);
+    const pickup = this.#takeReservedLooseResource(state.id, state.source);
     if (!pickup) {
       this.#cancelCompression();
       return;
@@ -1096,7 +1161,7 @@ export class SproutCompanionController {
 
   #cancelCompression() {
     if (!this.compression) return;
-    this.gatherables.releaseLooseResource?.(this.compression.id, this.ownerToken);
+    this.#releaseLooseResource(this.compression.id, this.compression.source);
     this.#destroyCompressionVisuals();
     this.compression = null;
   }
