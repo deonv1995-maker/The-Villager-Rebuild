@@ -60,11 +60,23 @@ export const SPROUT_COMPANION = Object.freeze({
   compressionSeconds: 0.52,
   logCompressionSeconds: 0.78,
   commandPollIntervalSeconds: 0.18,
-  collectibleResourceIds: Object.freeze(['stick', 'stone', 'grass', 'mushroom', 'log']),
+  collectibleResourceIds: Object.freeze([
+    'stick',
+    'stone',
+    'copper',
+    'iron',
+    'diamond',
+    'grass',
+    'mushroom',
+    'log'
+  ]),
   commandOrder: Object.freeze([
     'find-stick',
     'find-grass',
     'find-stone',
+    'find-copper',
+    'find-iron',
+    'find-diamond',
     'find-mushroom',
     'collect-logs',
     'harvest-tree',
@@ -91,6 +103,27 @@ export const SPROUT_COMPANION = Object.freeze({
       resourceId: 'stone',
       label: 'Gather stone',
       energyCost: 4
+    }),
+    'find-copper': Object.freeze({
+      id: 'find-copper',
+      kind: 'gather-resource',
+      resourceId: 'copper',
+      label: 'Gather copper ore',
+      energyCost: 4
+    }),
+    'find-iron': Object.freeze({
+      id: 'find-iron',
+      kind: 'gather-resource',
+      resourceId: 'iron',
+      label: 'Gather iron ore',
+      energyCost: 4
+    }),
+    'find-diamond': Object.freeze({
+      id: 'find-diamond',
+      kind: 'gather-resource',
+      resourceId: 'diamond',
+      label: 'Gather diamond ore',
+      energyCost: 5
     }),
     'find-mushroom': Object.freeze({
       id: 'find-mushroom',
