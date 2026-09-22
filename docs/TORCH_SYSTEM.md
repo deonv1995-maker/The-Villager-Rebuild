@@ -19,8 +19,9 @@ The torch is a carried placeable item whose world illumination begins only after
 - Door and window openings are not treated as flat wall mounts. Jamb-specific mounting should be added only when those semantic geometry anchors are explicitly exposed.
 - The repository currently has no independent fence-post subsystem. Existing vertical frame/support posts provide the current post-mount contract. A future fence system should expose compatible wall/post mount targets instead of adding torch-specific fence logic.
 - Mounting transfers exactly one inventory torch into the world and reduces the available tool-belt quantity by one. Any remaining inventory torch can be equipped and placed normally.
-- With Hammer > REMOVE active, aiming at a placed Torch exposes **PICK UP**. Successful pickup removes the mounted light and returns exactly one Torch to inventory; it does **not** automatically enter torch placement mode. The player selects the Torch from inventory/tool belt again when ready to place it.
-- In first-person, a directly aimed Torch in front of a semantic Floor/Wall panel takes contextual priority over the panel underneath it, so the Torch can be retrieved without first dismantling the structure. Third-person keeps the established semantic-panel priority unless no panel target owns the Hammer action.
+- Mounted Torches are the current exception to tool-gated placeable pickup. In first-person, pointing the centre dot directly at a nearby placed Torch exposes the normal hand **COLLECT** action regardless of which tool is equipped, including empty hands.
+- Successful collection removes the mounted light and returns exactly one Torch to inventory; it does **not** automatically enter torch placement mode. The player selects the Torch from inventory/tool belt again when ready to place it.
+- A directly aimed Torch takes contextual priority over the tool action or semantic Floor/Wall panel behind it, so it can be collected without switching tools or dismantling the supporting structure first. Beds, Crafting Benches, Chests and Barrels remain Hammer > REMOVE pickups for now.
 - Once mounted, the torch becomes an actual local fire light. Mounted illumination radiates in all directions from the flame using the centralized fixed-light tuning.
 - Mounted torches use a fixed **38° outward/upward lean** relative to the resolved mount normal instead of remaining vertical in the wall plane. Wall-mounted visuals receive an additional **0.14 world-unit presentation clearance** in front of the canonical wall mount so the handle and flame stay visibly outside the wall rather than clipping into it.
 - Once placed, a mounted torch stays active indefinitely across day/night cycles and while the player is elsewhere.
@@ -40,7 +41,7 @@ The resolver's returned position remains the canonical gameplay/save anchor. `To
 
 `EquipmentRuntimeController` owns only the player-facing contextual **PLACE** action. It asks `TorchRuntimeController` for the currently valid mount and delegates placement back to the torch runtime. This keeps HUD interaction, structural target resolution and persistent torch-light state as separate responsibilities.
 
-Mounted-Torch retrieval reuses the shared placeable-utility Hammer path rather than introducing a torch-only removal control. `TorchRuntimeController` exposes read-only interaction targets/descriptions and remains the authority that removes a mounted Torch world entry. `PlaceableUtilityRuntimeController` coordinates the inventory-capacity check, Hammer use, save checkpoint and return of the packed Torch to inventory. `UtilityInteractionTargetingRules` remains the one first-person reticle selector for Torches, Beds, Crafting Benches and storage furniture.
+Mounted-Torch retrieval reuses the shared placeable-utility interaction coordinator without depending on Hammer mode. `TorchRuntimeController` exposes read-only interaction targets/descriptions and remains the authority that removes a mounted Torch world entry. `PlaceableUtilityRuntimeController` publishes the first-person reticle **COLLECT** action, checks inventory capacity, checkpoints the save and returns the packed Torch to inventory without consuming tool durability. `UtilityInteractionTargetingRules` remains the one first-person reticle selector; the Hammer-specific furniture path intentionally excludes Torches.
 
 The handheld torch still contains its dedicated flame anchor and presentation assets so carry alignment and flame animation do not need a parallel item implementation. In the production `VisibleHandTorchRuntimeController` path, however, the handheld `PointLight` never participates in the scene graph. This makes the mounted state the single source of actual torch illumination without duplicating torch gameplay logic.
 
@@ -93,7 +94,7 @@ The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity ba
 - mounted state stays inside the dedicated torch persistence boundary;
 - mounted Torch interaction targets can be described and removed through the shared utility boundary without mutating inventory inside the Torch runtime itself.
 
-`scripts/verify-placeable-utility-hammer-move.mjs` additionally protects Hammer REMOVE > **PICK UP** for mounted Torches, including return to inventory, no forced placement preview, and first-person priority over a construction panel directly behind the Torch.
+`scripts/verify-placeable-utility-hammer-move.mjs` additionally protects tool-agnostic mounted-Torch **COLLECT** behavior with empty hands, Sword, Pickaxe and Hammer, including return to inventory, no forced placement preview, no Hammer durability use, and first-person priority over a construction panel/tool action behind the Torch.
 
 `scripts/verify-celestial-shadows.mjs` protects the complementary renderer contract for the shared celestial key light.
 
@@ -111,7 +112,7 @@ Build a larger lit workspace/stronghold and place enough torches to exceed the e
 
 Leave several mounted torches in the world through multiple nights, then Save and Continue. Confirm that every torch remains present, active and at the same position/orientation, with no overnight disappearance or burnout.
 
-With Hammer > REMOVE active, aim directly at a mounted Torch on open ground, a building panel and a cave wall. Confirm **PICK UP** appears, the Torch returns to inventory, its world light disappears, and no placement preview begins automatically. On a Torch mounted against a Floor/Wall panel in first-person, confirm the Torch pickup action wins over the panel underneath it. Select the Torch from inventory afterward and confirm normal **PLACE** behavior still works.
+In first-person, point the centre dot directly at a mounted Torch on open ground, a building panel and a cave wall while testing empty hands and several equipped tools. Confirm the hand **COLLECT** action appears without changing tools, the Torch returns to inventory, its world light disappears, no tool durability is consumed, and no placement preview begins automatically. On a Torch mounted against a Floor/Wall panel, confirm **COLLECT** wins over the panel/tool action underneath it. Select the Torch from inventory afterward and confirm normal **PLACE** behavior still works.
 
 
 ## World and cave placement — 2026-09-21

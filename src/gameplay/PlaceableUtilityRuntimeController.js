@@ -14,6 +14,7 @@ const DISTANCE_OFFSETS = Object.freeze([0, 0.7, 1.4]);
 const PLACE_ACTION_ID = 'utility-place';
 const BENCH_CRAFT_ACTION_ID = 'crafting-bench-open';
 const HAMMER_MOVE_ACTION_ID = 'utility-hammer-move';
+const TORCH_PICKUP_ACTION_ID = 'torch-pickup';
 const PLACED_STORAGE_ID = /^placed-(?:chest|barrel)-(\d+)$/;
 const PLACEMENT_VERTICAL_EPSILON = 0.03;
 const PLACEMENT_LEVEL_TOLERANCE = PHYSICAL_LOG.stairMaxStepRise + PLACEMENT_VERTICAL_EPSILON;
@@ -68,6 +69,7 @@ export class PlaceableUtilityRuntimeController {
     this.#endBenchSession();
     this.game.hud?.setExternalAction(BENCH_CRAFT_ACTION_ID, null);
     this.game.hud?.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
+    this.game.hud?.setExternalAction(TORCH_PICKUP_ACTION_ID, null);
   }
 
   captureState() {
@@ -164,6 +166,7 @@ export class PlaceableUtilityRuntimeController {
     if (!this.running) return;
     this.#ensureHud();
     if (this.selectedItemId) this.#updatePlacement();
+    this.#syncTorchPickupInteraction();
     this.#syncHammerInteraction();
     this.#syncBenchInteraction();
     this.frameId = this.requestFrame?.(this.#frame) ?? null;
@@ -292,6 +295,60 @@ export class PlaceableUtilityRuntimeController {
     }) ?? true;
   }
 
+  #syncTorchPickupInteraction() {
+    const hud = this.game.hud;
+    const player = this.game.player;
+    const torchRuntime = this.game.torchRuntime;
+    if (
+      !hud ||
+      !player ||
+      !torchRuntime ||
+      !player.isFirstPerson?.() ||
+      this.selectedItemId ||
+      this.game.physicalLogs?.isCarrying?.()
+    ) {
+      hud?.setExternalAction(TORCH_PICKUP_ACTION_ID, null);
+      return;
+    }
+
+    player.getPosition(this.position);
+    const target = selectFirstPersonUtilityTarget({
+      torchRuntime,
+      playerPosition: this.position,
+      camera: this.game.sceneSystem?.camera
+    });
+    const torch = target?.kind === 'torch'
+      ? torchRuntime.describePlacedTorch?.(target.id) ?? null
+      : null;
+
+    hud.setExternalAction(TORCH_PICKUP_ACTION_ID, torch ? {
+      available: true,
+      priority: 1400,
+      icon: 'hand',
+      caption: 'COLLECT',
+      label: 'Collect Torch',
+      onTrigger: () => this.#collectPlacedTorch(torch)
+    } : null);
+  }
+
+  #collectPlacedTorch(target) {
+    const torchRuntime = this.game.torchRuntime;
+    if (!target || !torchRuntime?.describePlacedTorch?.(target.id)) return false;
+    if (!this.game.inventory.canAdd('torch', 1)) {
+      this.game.setStatus?.('TORCH · PACK FULL · FREE SPACE BEFORE COLLECTING');
+      return false;
+    }
+
+    const removed = torchRuntime.removePlacedTorch?.(target.id);
+    if (!removed) return false;
+
+    this.game.inventory.add('torch', 1);
+    this.game.equipmentRuntime?.syncHud?.();
+    this.game.saveController?.saveNow?.('reclaim-placeable-utility');
+    this.game.setStatus?.('TORCH · RETURNED TO INVENTORY');
+    return true;
+  }
+
   #syncHammerInteraction() {
     const hud = this.game.hud;
     if (!hud || !this.#isHammerRemoveMode() || this.selectedItemId) {
@@ -302,8 +359,8 @@ export class PlaceableUtilityRuntimeController {
     const target = this.#selectHammerUtilityTarget();
 
     // Third-person keeps semantic panel demolition priority. In first-person, an
-    // explicitly aimed utility may sit directly in front of a floor/wall panel, so
-    // the reticle-selected utility is allowed to override the panel underneath it.
+    // explicitly aimed furniture utility may sit directly in front of a floor/wall
+    // panel, so the reticle-selected utility is allowed to override the panel.
     if (this.game.currentInteractionTarget && !(target && this.game.player?.isFirstPerson?.())) {
       hud.setExternalAction(HAMMER_MOVE_ACTION_ID, null);
       return;
@@ -337,7 +394,6 @@ export class PlaceableUtilityRuntimeController {
         bedSystem: this.bedSystem,
         benchSystem: this.benchSystem,
         storageSystem,
-        torchRuntime: this.game.torchRuntime,
         playerPosition: this.position,
         camera: this.game.sceneSystem?.camera
       }));
@@ -355,17 +411,10 @@ export class PlaceableUtilityRuntimeController {
       this.position,
       PLACEABLE_UTILITY_INTERACTION_RADIUS
     );
-    const torchTargets = (this.game.torchRuntime?.getInteractionTargets?.(
-      this.position,
-      PLACEABLE_UTILITY_INTERACTION_RADIUS
-    ) ?? [])
-      .map(target => this.#describeHammerUtilityTarget(target))
-      .filter(Boolean);
     const targets = [
       bed ? this.#describeHammerUtilityTarget({ kind: 'bed', id: bed.id }) : null,
       bench ? this.#describeHammerUtilityTarget({ kind: 'crafting-bench', id: bench.id }) : null,
-      container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null,
-      ...torchTargets
+      container ? this.#describeHammerUtilityTarget({ kind: 'storage', id: container.id }) : null
     ].filter(Boolean);
     return targets.reduce((nearest, target) => {
       if (!nearest) return target;
@@ -400,14 +449,6 @@ export class PlaceableUtilityRuntimeController {
         itemId: container.type
       } : null;
     }
-    if (target?.kind === 'torch') {
-      const torch = this.game.torchRuntime?.describePlacedTorch?.(target.id);
-      return torch ? {
-        ...torch,
-        utilityKind: 'torch',
-        itemId: 'torch'
-      } : null;
-    }
     return null;
   }
 
@@ -426,8 +467,6 @@ export class PlaceableUtilityRuntimeController {
       if (!this.bedSystem.describe(target.id)) return false;
     } else if (target.utilityKind === 'crafting-bench') {
       if (!this.benchSystem.describe(target.id)) return false;
-    } else if (target.utilityKind === 'torch') {
-      if (!this.game.torchRuntime?.describePlacedTorch?.(target.id)) return false;
     } else {
       return false;
     }
@@ -444,9 +483,7 @@ export class PlaceableUtilityRuntimeController {
       ? this.game.storageRuntime.system.removeContainer(target.id)
       : target.utilityKind === 'bed'
         ? Boolean(this.bedSystem.removeBed(target.id))
-        : target.utilityKind === 'crafting-bench'
-          ? Boolean(this.benchSystem.removeBench(target.id))
-          : Boolean(this.game.torchRuntime?.removePlacedTorch?.(target.id));
+        : Boolean(this.benchSystem.removeBench(target.id));
     if (!removed) return false;
 
     this.game.inventory.add(target.itemId, 1);
@@ -488,7 +525,6 @@ export class PlaceableUtilityRuntimeController {
       bedSystem: this.bedSystem,
       benchSystem: this.benchSystem,
       storageSystem: this.game.storageRuntime?.system,
-      torchRuntime: this.game.torchRuntime,
       playerPosition: this.position,
       camera: this.game.sceneSystem?.camera
     });

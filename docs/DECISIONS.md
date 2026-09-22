@@ -325,23 +325,33 @@ geometry the player can actually see first.
 
 ## 2026-09-22 — Inventory-backed placeables are picked up before re-placement
 
-Decision: Hammer Remove mode treats placed Torches, Beds, Crafting Benches, empty Storage
-Chests and empty Food Barrels as reclaimable inventory items. The contextual action is
-**PICK UP** rather than an implicit move operation. A successful pickup removes the world
-instance, returns exactly one packed item to Ranger inventory, checkpoints the save, and
-stops there. Re-placement begins only after the player explicitly selects that item from
-inventory/tool belt again.
+Decision: Hammer Remove mode treats Beds, Crafting Benches, empty Storage Chests and empty
+Food Barrels as reclaimable inventory items. The contextual action is **PICK UP** rather
+than an implicit move operation. A successful pickup removes the world instance, returns
+exactly one packed item to Ranger inventory, checkpoints the save, and stops there.
+Re-placement begins only after the player explicitly selects that item from inventory again.
 
 Storage containers must still be empty and Ranger inventory must have capacity before the
-world instance is removed. Mounted Torches stay owned by the existing persistent torch
-runtime; the shared placeable-utility interaction layer coordinates inventory transfer and
-Hammer use instead of creating a second Torch removal system.
+world instance is removed. Mounted Torches are handled by the later tool-agnostic reticle
+collection decision instead of this Hammer-gated furniture path.
 
 In first-person, a directly aimed reclaimable utility may take contextual priority over a
 semantic construction panel directly behind it. Third-person keeps semantic panel
 demolition priority so nearby furniture does not unexpectedly steal structural Remove
 targets.
 
+
+## 2026-09-22 — Mounted Torch collection is tool-agnostic
+
+Decision: mounted Torches are the only current placeable exception to Hammer-gated pickup.
+In first-person, pointing the centre reticle directly at a nearby mounted Torch exposes the
+hand **COLLECT** action regardless of the equipped tool, including empty hands. Collection
+returns one Torch to inventory and does not enter placement mode automatically.
+
+The persistent Torch runtime remains world-state authority; the shared placeable-utility
+coordinator performs the inventory-capacity check, save checkpoint and inventory transfer.
+No Hammer swing or Hammer durability is consumed. Beds, Crafting Benches, empty Chests and
+empty Barrels remain Hammer > Remove > **PICK UP** interactions for now.
 
 ## 2026-09-22 — Deep cave distance is masked to black and lava uses cave-depth authority
 
