@@ -204,6 +204,36 @@ assert.ok(
   'Ground torches must not tilt sideways on flat terrain'
 );
 
+const reclaimFixture = torch.place({
+  kind: 'post',
+  id: 'reclaim-test-post',
+  label: 'post',
+  position: { x: 0.35, y: 1.25, z: 1.65 },
+  yaw: 0
+});
+assert.ok(reclaimFixture, 'A reclaim fixture Torch must place through the normal persistent runtime');
+const reclaimEntry = torch.describePlacedTorch(reclaimFixture.id);
+assert.equal(reclaimEntry?.label, 'Torch', 'Placed Torch interaction description must expose a stable player-facing label');
+assert.ok(
+  torch.getInteractionTargets(playerRoot.position, 2.8).some(target => target.id === reclaimFixture.id),
+  'Placed Torch interaction targets must expose nearby mounted roots to shared utility targeting'
+);
+const inventoryBeforeRuntimeRemoval = inventory.get('torch');
+const placedCountBeforeRuntimeRemoval = torch.placedTorches.length;
+const removedReclaimFixture = torch.removePlacedTorch(reclaimFixture.id);
+assert.equal(removedReclaimFixture?.id, reclaimFixture.id, 'Torch runtime must remove the requested mounted Torch');
+assert.equal(
+  torch.placedTorches.length,
+  placedCountBeforeRuntimeRemoval - 1,
+  'Removing a mounted Torch must release exactly one persistent world entry'
+);
+assert.equal(
+  inventory.get('torch'),
+  inventoryBeforeRuntimeRemoval,
+  'Torch runtime removal must leave inventory transfer to the shared placeable interaction coordinator'
+);
+assert.equal(torch.describePlacedTorch(reclaimFixture.id), null, 'Removed Torches must no longer be interaction targets');
+
 nowMs += 100;
 const placedCountBeforeTimeJump = torch.placedTorches.length;
 torch.apply({ day: 12, minuteOfDay: 4 * 60 });

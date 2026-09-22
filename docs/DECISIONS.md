@@ -323,3 +323,22 @@ geometry waited, and each density lattice point repeated avoidable lookup work. 
 same topology, mining, saves and frame-time ceiling while spending that bounded CPU time on the
 geometry the player can actually see first.
 
+## 2026-09-22 — Inventory-backed placeables are picked up before re-placement
+
+Decision: Hammer Remove mode treats placed Torches, Beds, Crafting Benches, empty Storage
+Chests and empty Food Barrels as reclaimable inventory items. The contextual action is
+**PICK UP** rather than an implicit move operation. A successful pickup removes the world
+instance, returns exactly one packed item to Ranger inventory, checkpoints the save, and
+stops there. Re-placement begins only after the player explicitly selects that item from
+inventory/tool belt again.
+
+Storage containers must still be empty and Ranger inventory must have capacity before the
+world instance is removed. Mounted Torches stay owned by the existing persistent torch
+runtime; the shared placeable-utility interaction layer coordinates inventory transfer and
+Hammer use instead of creating a second Torch removal system.
+
+In first-person, a directly aimed reclaimable utility may take contextual priority over a
+semantic construction panel directly behind it. Third-person keeps semantic panel
+demolition priority so nearby furniture does not unexpectedly steal structural Remove
+targets.
+

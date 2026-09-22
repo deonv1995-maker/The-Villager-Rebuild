@@ -19,6 +19,8 @@ The torch is a carried placeable item whose world illumination begins only after
 - Door and window openings are not treated as flat wall mounts. Jamb-specific mounting should be added only when those semantic geometry anchors are explicitly exposed.
 - The repository currently has no independent fence-post subsystem. Existing vertical frame/support posts provide the current post-mount contract. A future fence system should expose compatible wall/post mount targets instead of adding torch-specific fence logic.
 - Mounting transfers exactly one inventory torch into the world and reduces the available tool-belt quantity by one. Any remaining inventory torch can be equipped and placed normally.
+- With Hammer > REMOVE active, aiming at a placed Torch exposes **PICK UP**. Successful pickup removes the mounted light and returns exactly one Torch to inventory; it does **not** automatically enter torch placement mode. The player selects the Torch from inventory/tool belt again when ready to place it.
+- In first-person, a directly aimed Torch in front of a semantic Floor/Wall panel takes contextual priority over the panel underneath it, so the Torch can be retrieved without first dismantling the structure. Third-person keeps the established semantic-panel priority unless no panel target owns the Hammer action.
 - Once mounted, the torch becomes an actual local fire light. Mounted illumination radiates in all directions from the flame using the centralized fixed-light tuning.
 - Mounted torches use a fixed **38° outward/upward lean** relative to the resolved mount normal instead of remaining vertical in the wall plane. Wall-mounted visuals receive an additional **0.14 world-unit presentation clearance** in front of the canonical wall mount so the handle and flame stay visibly outside the wall rather than clipping into it.
 - Once placed, a mounted torch stays active indefinitely across day/night cycles and while the player is elsewhere.
@@ -37,6 +39,8 @@ The torch is a carried placeable item whose world illumination begins only after
 The resolver's returned position remains the canonical gameplay/save anchor. `TorchRuntimeController` derives the mounted presentation from that anchor: the saved yaw reconstructs the outward horizontal normal, the shared `TORCH.placement.outwardTiltDegrees` rotates the torch's local up axis toward that normal using explicit `YXZ` Euler order, and wall visuals alone receive `wallVisualOutwardOffset` along the same normal. This keeps anti-clipping presentation tuning out of target selection and means existing saves automatically receive the corrected wall presentation without changing their persisted coordinates.
 
 `EquipmentRuntimeController` owns only the player-facing contextual **PLACE** action. It asks `TorchRuntimeController` for the currently valid mount and delegates placement back to the torch runtime. This keeps HUD interaction, structural target resolution and persistent torch-light state as separate responsibilities.
+
+Mounted-Torch retrieval reuses the shared placeable-utility Hammer path rather than introducing a torch-only removal control. `TorchRuntimeController` exposes read-only interaction targets/descriptions and remains the authority that removes a mounted Torch world entry. `PlaceableUtilityRuntimeController` coordinates the inventory-capacity check, Hammer use, save checkpoint and return of the packed Torch to inventory. `UtilityInteractionTargetingRules` remains the one first-person reticle selector for Torches, Beds, Crafting Benches and storage furniture.
 
 The handheld torch still contains its dedicated flame anchor and presentation assets so carry alignment and flame animation do not need a parallel item implementation. In the production `VisibleHandTorchRuntimeController` path, however, the handheld `PointLight` never participates in the scene graph. This makes the mounted state the single source of actual torch illumination without duplicating torch gameplay logic.
 
@@ -86,7 +90,10 @@ The full eight-slot tool belt retains its narrow-screen sizing rule. Quantity ba
 - mounted torch state survives capture/restore without consuming inventory again, ignores legacy fuel values, and reconstructs the same outward wall angle;
 - semantic wall targeting remains tied to `PanelStructureRegistry`;
 - all actual tool slots display their available quantity;
-- mounted state stays inside the dedicated torch persistence boundary.
+- mounted state stays inside the dedicated torch persistence boundary;
+- mounted Torch interaction targets can be described and removed through the shared utility boundary without mutating inventory inside the Torch runtime itself.
+
+`scripts/verify-placeable-utility-hammer-move.mjs` additionally protects Hammer REMOVE > **PICK UP** for mounted Torches, including return to inventory, no forced placement preview, and first-person priority over a construction panel directly behind the Torch.
 
 `scripts/verify-celestial-shadows.mjs` protects the complementary renderer contract for the shared celestial key light.
 
@@ -103,6 +110,8 @@ While the torch is held, walk, run, turn, stop and start repeatedly. The right a
 Build a larger lit workspace/stronghold and place enough torches to exceed the eight-active-light budget. Walk through it and confirm that nearby areas remain warmly illuminated as the nearest active-light set changes without obvious popping, while distant mounted flames remain visible and frame rate stays comfortable on the target Android device.
 
 Leave several mounted torches in the world through multiple nights, then Save and Continue. Confirm that every torch remains present, active and at the same position/orientation, with no overnight disappearance or burnout.
+
+With Hammer > REMOVE active, aim directly at a mounted Torch on open ground, a building panel and a cave wall. Confirm **PICK UP** appears, the Torch returns to inventory, its world light disappears, and no placement preview begins automatically. On a Torch mounted against a Floor/Wall panel in first-person, confirm the Torch pickup action wins over the panel underneath it. Select the Torch from inventory afterward and confirm normal **PLACE** behavior still works.
 
 
 ## World and cave placement — 2026-09-21

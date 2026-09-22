@@ -79,6 +79,47 @@ export class TorchRuntimeController {
     return this.placementResolver.getTarget();
   }
 
+  getInteractionTargets(playerPosition, maxDistance = this.definition.placement.maxDistance) {
+    if (
+      !playerPosition ||
+      !Number.isFinite(playerPosition.x) ||
+      !Number.isFinite(playerPosition.z) ||
+      !Number.isFinite(maxDistance) ||
+      maxDistance <= 0
+    ) return [];
+
+    const maxDistanceSquared = maxDistance * maxDistance;
+    return this.placedTorches
+      .filter(entry => {
+        const dx = entry.position.x - playerPosition.x;
+        const dz = entry.position.z - playerPosition.z;
+        return dx * dx + dz * dz <= maxDistanceSquared;
+      })
+      .map(entry => ({
+        kind: 'torch',
+        id: entry.id,
+        root: entry.root
+      }));
+  }
+
+  describePlacedTorch(id) {
+    const entry = this.placedTorches.find(candidate => candidate.id === id);
+    return entry ? {
+      ...this.#placedSnapshot(entry),
+      label: 'Torch',
+      root: entry.root
+    } : null;
+  }
+
+  removePlacedTorch(id) {
+    const entry = this.placedTorches.find(candidate => candidate.id === id);
+    if (!entry) return null;
+    const snapshot = this.#placedSnapshot(entry);
+    this.#removePlacedTorch(entry);
+    this.#syncPlacedPresentation();
+    return snapshot;
+  }
+
   place(target = this.getPlacementTarget()) {
     if (!target || !this.game.inventory.has(this.definition.itemId, 1)) return null;
     if (this.game.toolbelt.getEquippedToolId() !== this.definition.itemId) return null;

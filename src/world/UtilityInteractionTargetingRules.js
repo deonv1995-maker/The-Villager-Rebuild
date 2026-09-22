@@ -23,7 +23,7 @@ export class FirstPersonUtilityTargeting {
     this.targetByMesh = new Map();
   }
 
-  select({ bedSystem, benchSystem, storageSystem, playerPosition, camera } = {}) {
+  select({ bedSystem, benchSystem, storageSystem, torchRuntime, playerPosition, camera } = {}) {
     if (!hasFinitePoint(playerPosition) || !camera?.getWorldPosition || !camera?.getWorldDirection) return null;
 
     this.meshes.length = 0;
@@ -54,6 +54,17 @@ export class FirstPersonUtilityTargeting {
         id: container.id,
         storageType: container.type,
         root: container.root
+      });
+    }
+
+    for (const torch of torchRuntime?.getInteractionTargets?.(
+      playerPosition,
+      PLACEABLE_UTILITY_INTERACTION_RADIUS
+    ) ?? []) {
+      this.#appendTarget({
+        kind: 'torch',
+        id: torch.id,
+        root: torch.root
       });
     }
 

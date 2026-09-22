@@ -6,6 +6,7 @@ import { InventorySystem } from '../src/gameplay/InventorySystem.js';
 import { PlaceableUtilityRuntimeController } from '../src/gameplay/PlaceableUtilityRuntimeController.js';
 import { PLACEABLE_WALL_SNAP_GAP } from '../src/world/PlaceableUtilityWallSnapRules.js';
 import { StorageContainerSystem } from '../src/world/StorageContainerSystem.js';
+import { resolveContextAction } from '../src/ui/ContextActionPolicy.js';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -57,6 +58,12 @@ const statuses = [];
 const saves = [];
 let hammerUses = 0;
 let queuedFrame = null;
+let firstPerson = false;
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+camera.position.set(0, 1.2, 0);
+camera.lookAt(0, 1.2, 2);
+camera.updateMatrixWorld(true);
 
 const hud = {
   setExternalAction(id, action) {
@@ -78,9 +85,10 @@ const game = {
     getFacingDirection(target) {
       target.set(0, 0, 1);
     },
-    isFirstPerson: () => false,
+    isFirstPerson: () => firstPerson,
     faceWorldPoint() {}
   },
+  sceneSystem: { camera },
   toolbelt: { getEquippedToolId: () => 'hammer' },
   panelConstructionRuntime: {
     ownsHammerInteraction: () => true,
@@ -132,13 +140,12 @@ const hammerMoveAction = () => externalActions.get('utility-hammer-move');
 
 storage.addContainer({ id: 'placed-chest-1', type: 'chest', x: 1, z: 0 });
 runFrame();
-assert(hammerMoveAction()?.caption === 'MOVE', 'Hammer REMOVE mode must offer MOVE for an empty placed Chest');
+assert(hammerMoveAction()?.caption === 'PICK UP', 'Hammer REMOVE mode must offer PICK UP for an empty placed Chest');
 hammerMoveAction().onTrigger();
-assert(!storage.describe('placed-chest-1'), 'Moving an empty Chest must remove its old world instance');
-assert(inventory.get('chest') === 1, 'Moving an empty Chest must reclaim exactly one Chest placeable');
-assert(externalActions.get('utility-place')?.caption === 'PLACE', 'Successful hammer removal must immediately re-enter the existing placement flow');
-assert(saves.at(-1) === 'move-placeable-utility', 'Hammer utility movement must checkpoint the removed world instance');
-runtime.cancelPlacement();
+assert(!storage.describe('placed-chest-1'), 'Picking up an empty Chest must remove its old world instance');
+assert(inventory.get('chest') === 1, 'Picking up an empty Chest must return exactly one Chest to inventory');
+assert(!externalActions.has('utility-place'), 'Picking up a Chest must not force immediate replacement mode');
+assert(saves.at(-1) === 'reclaim-placeable-utility', 'Hammer pickup must checkpoint the removed world instance');
 
 storage.addContainer({
   id: 'placed-chest-2',
@@ -150,29 +157,99 @@ storage.addContainer({
 runFrame();
 assert(hammerMoveAction(), 'A non-empty Chest must still be targetable so the player receives an explicit safety message');
 hammerMoveAction().onTrigger();
-assert(storage.describe('placed-chest-2'), 'A non-empty Chest must not be removed by the hammer move flow');
-assert(inventory.get('chest') === 1, 'Blocked Chest movement must not duplicate the placeable item');
-assert(statuses.at(-1)?.includes('EMPTY IT BEFORE MOVING'), 'Non-empty storage must explain why hammer movement is blocked');
+assert(storage.describe('placed-chest-2'), 'A non-empty Chest must not be removed by the hammer pickup flow');
+assert(inventory.get('chest') === 1, 'Blocked Chest pickup must not duplicate the placeable item');
+assert(statuses.at(-1)?.includes('EMPTY IT BEFORE PICKING UP'), 'Non-empty storage must explain why pickup is blocked');
 storage.removeContainer('placed-chest-2');
 
 const bench = runtime.benchSystem.createBench({ x: 1, z: 0, yaw: 0.2 });
 runFrame();
-assert(hammerMoveAction()?.label === 'Move Crafting Bench', 'Hammer REMOVE mode must target a placed Crafting Bench');
+assert(hammerMoveAction()?.label === 'Pick up Crafting Bench', 'Hammer REMOVE mode must target a placed Crafting Bench');
 hammerMoveAction().onTrigger();
-assert(!runtime.benchSystem.describe(bench.id), 'Moving a Crafting Bench must remove its old world instance');
-assert(inventory.get('crafting-bench') === 1, 'Moving a Crafting Bench must reclaim exactly one Bench placeable');
-assert(externalActions.get('utility-place')?.caption === 'PLACE', 'Bench movement must reuse the shared placement confirmation action');
-runtime.cancelPlacement();
+assert(!runtime.benchSystem.describe(bench.id), 'Picking up a Crafting Bench must remove its old world instance');
+assert(inventory.get('crafting-bench') === 1, 'Picking up a Crafting Bench must return exactly one Bench to inventory');
+assert(!externalActions.has('utility-place'), 'Crafting Bench pickup must leave placement under inventory control');
 
 const bed = runtime.bedSystem.createBed({ x: 1, z: 0, yaw: -0.15 });
 assert(runtime.bedSystem.beds.get(bed.id)?.root.children.length >= 10, 'Bed presentation must contain a complete frame, mattress and bedding');
 runFrame();
-assert(hammerMoveAction()?.label === 'Move Bed', 'Hammer REMOVE mode must target a placed Bed');
+assert(hammerMoveAction()?.label === 'Pick up Bed', 'Hammer REMOVE mode must target a placed Bed');
 hammerMoveAction().onTrigger();
-assert(!runtime.bedSystem.describe(bed.id), 'Moving a Bed must remove its old world instance');
-assert(inventory.get('bed') === 1, 'Moving a Bed must reclaim exactly one Bed placeable');
-assert(externalActions.get('utility-place')?.caption === 'PLACE', 'Bed movement must reuse the shared placement confirmation action');
-runtime.cancelPlacement();
+assert(!runtime.bedSystem.describe(bed.id), 'Picking up a Bed must remove its old world instance');
+assert(inventory.get('bed') === 1, 'Picking up a Bed must return exactly one Bed to inventory');
+assert(!externalActions.has('utility-place'), 'Bed pickup must leave placement under inventory control');
+
+assert(
+  inventory.consume([
+    { itemId: 'chest', quantity: 1 },
+    { itemId: 'crafting-bench', quantity: 1 },
+    { itemId: 'bed', quantity: 1 }
+  ]),
+  'Torch pickup fixture must temporarily free Ranger pack capacity'
+);
+
+const torchRoot = new THREE.Group();
+torchRoot.position.set(0, 1.2, 1.5);
+torchRoot.add(new THREE.Mesh(
+  new THREE.BoxGeometry(0.18, 0.72, 0.18),
+  new THREE.MeshBasicMaterial()
+));
+world.add(torchRoot);
+let placedTorch = {
+  id: 'placed-torch-test',
+  label: 'Torch',
+  position: { x: 0, y: 1.2, z: 1.5 },
+  root: torchRoot
+};
+game.torchRuntime = {
+  getInteractionTargets(playerPosition, maxDistance) {
+    if (!placedTorch) return [];
+    const dx = placedTorch.position.x - playerPosition.x;
+    const dz = placedTorch.position.z - playerPosition.z;
+    return dx * dx + dz * dz <= maxDistance * maxDistance
+      ? [{ kind: 'torch', id: placedTorch.id, root: placedTorch.root }]
+      : [];
+  },
+  describePlacedTorch(id) {
+    return placedTorch?.id === id ? placedTorch : null;
+  },
+  removePlacedTorch(id) {
+    if (placedTorch?.id !== id) return null;
+    const removed = placedTorch;
+    removed.root.parent?.remove(removed.root);
+    placedTorch = null;
+    return removed;
+  }
+};
+firstPerson = true;
+game.currentInteractionTarget = {
+  type: 'panel-construction',
+  id: 'floor-under-torch',
+  label: 'Floor Panel',
+  actionLabel: 'Remove Floor Panel'
+};
+runFrame();
+assert(hammerMoveAction()?.label === 'Pick up Torch', 'A directly aimed placed Torch must be pickable even when a panel is behind it');
+const resolvedTorchAction = resolveContextAction({
+  toolId: 'hammer',
+  interactionTarget: game.currentInteractionTarget,
+  externalActions: [{ ...hammerMoveAction(), id: 'utility-hammer-move' }]
+});
+assert(
+  resolvedTorchAction.source === 'external' && resolvedTorchAction.caption === 'PICK UP',
+  'The aimed Torch pickup must override the underlying panel REMOVE action in first-person'
+);
+hammerMoveAction().onTrigger();
+assert(!torchRoot.parent, 'Picking up a Torch must remove its mounted world visual');
+assert(inventory.get('torch') === 1, 'Picking up a Torch must return exactly one Torch to inventory');
+assert(!externalActions.has('utility-place'), 'Torch pickup must not force immediate placement mode');
+assert(saves.at(-1) === 'reclaim-placeable-utility', 'Torch pickup must use the shared reclaim checkpoint');
+assert(inventory.consume([{ itemId: 'torch', quantity: 1 }]), 'Torch pickup fixture cleanup must remove its temporary packed Torch');
+inventory.add('chest', 1);
+inventory.add('crafting-bench', 1);
+inventory.add('bed', 1);
+firstPerson = false;
+game.currentInteractionTarget = null;
 
 supportHeight = 2.8;
 playerHeight = supportHeight;
@@ -453,19 +530,20 @@ sleepRuntime.dispose();
 inventory.add('stick', 1000);
 storage.addContainer({ id: 'placed-barrel-3', type: 'barrel', x: 1, z: 0 });
 runFrame();
-assert(hammerMoveAction()?.label === 'Move Food Barrel', 'Hammer REMOVE mode must target a placed Food Barrel');
+assert(hammerMoveAction()?.label === 'Pick up Food Barrel', 'Hammer REMOVE mode must target a placed Food Barrel');
 hammerMoveAction().onTrigger();
 assert(storage.describe('placed-barrel-3'), 'Pack-full rejection must leave the Barrel world instance intact');
 assert(inventory.get('barrel') === 0, 'Pack-full rejection must not create a Barrel inventory item');
-assert(statuses.at(-1)?.includes('PACK FULL'), 'Pack-full rejection must explain why the Barrel cannot be moved');
-assert(hammerUses === 3, 'Hammer durability/use must be recorded only for successful utility disassembly');
-assert(saves.filter(reason => reason === 'move-placeable-utility').length === 3, 'Only successful utility moves may checkpoint the move-removal save reason');
+assert(statuses.at(-1)?.includes('PACK FULL'), 'Pack-full rejection must explain why the Barrel cannot be picked up');
+assert(hammerUses === 4, 'Hammer durability/use must be recorded only for successful utility disassembly');
+assert(saves.filter(reason => reason === 'reclaim-placeable-utility').length === 4, 'Only successful utility pickups may checkpoint the reclaim save reason');
 
 const runtimeSource = await readFile('src/gameplay/PlaceableUtilityRuntimeController.js', 'utf8');
 assert(runtimeSource.includes("import { BedSystem } from '../world/BedSystem.js';"), 'Placeable utility runtime must own Bed placement through a dedicated world system');
-assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility movement must reuse the shared first-person reticle selector');
+assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility pickup must reuse the shared first-person reticle selector');
+assert(runtimeSource.includes('torchRuntime: this.game.torchRuntime'), 'Shared utility targeting must include placed Torches without a second raycaster');
 assert(!runtimeSource.includes('new THREE.Raycaster()'), 'Placeable utility runtime must not introduce a competing first-person raycaster');
-assert(runtimeSource.includes('if (this.game.currentInteractionTarget)'), 'Semantic panel demolition must retain first ownership of REMOVE-mode hammer targets');
+assert(runtimeSource.includes('this.game.currentInteractionTarget && !(target && this.game.player?.isFirstPerson?.())'), 'Third-person panel priority must remain while direct first-person utility aim can override the underlying panel');
 assert(runtimeSource.includes('collision.supportHeightAt?.('), 'Utility placement must reuse the shared standable-surface resolver');
 assert(runtimeSource.includes('resolvePlaceableUtilityWallSnap({'), 'Utility placement must route wall alignment through the shared snap rule');
 assert(runtimeSource.includes('snapWallId: this.previewPlacement.snapWallId'), 'Placement confirmation must preserve snapped-wall clearance validation');
@@ -480,4 +558,4 @@ assert(storageSource.includes('lidProfile'), 'Storage Chest visual must retain i
 assert(storageSource.includes('flatShading: true'), 'Food Barrel visual must retain its low-poly segmented presentation');
 
 runtime.dispose();
-console.log('Bed/storage placement, semantic wall snapping, sleep and refreshed furniture presentation verified');
+console.log('Inventory-first Torch/Bed/Bench/Storage pickup, placement, sleep and furniture presentation verified');
