@@ -84,11 +84,19 @@ body:is(
     height: 38px;
   }
 
-  body.hammer-construction-open .camera-view-toggle {
+  body:is(
+    .hammer-construction-open,
+    .pickaxe-terrain-open,
+    .shovel-landscaping-open
+  ) .camera-view-toggle {
     right: max(142px, calc(env(safe-area-inset-right) + 139px));
   }
 
-  body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
+  body:is(
+    .hammer-construction-expanded,
+    .pickaxe-terrain-expanded,
+    .shovel-landscaping-expanded
+  ) .camera-view-toggle {
     right: min(
       max(196px, calc(env(safe-area-inset-right) + 193px)),
       calc(100vw - 54px)
