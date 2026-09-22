@@ -214,19 +214,19 @@ for (let index = 0; index <= cell; index += 1) {
   deterministicReplay.discoverPocket(buildPocket(index, -index - 3, 36));
 }
 assert.deepEqual(
-  deterministicReplay.getDebugState().nodes.map(({ id, resourceId, size, hitsRequired, yield }) => ({
+  deterministicReplay.getDebugState().nodes.map(({ id, resourceId, size, hitsRequired, yield: outputYield }) => ({
     id,
     resourceId,
     size,
     hitsRequired,
-    yield
+    yield: outputYield
   })),
-  debug.nodes.map(({ id, resourceId, size, hitsRequired, yield }) => ({
+  debug.nodes.map(({ id, resourceId, size, hitsRequired, yield: outputYield }) => ({
     id,
     resourceId,
     size,
     hitsRequired,
-    yield
+    yield: outputYield
   })),
   'cave ore identity and node sizing must be deterministic for the same pocket set'
 );
