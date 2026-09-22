@@ -34,7 +34,7 @@ const config = read('src/startup/TitleSceneConfig.js');
 const main = read('src/main.js');
 const index = read('index.html');
 const css = read('src/title.css');
-const titlePlayCss = css.match(/\\.title-play\\s*\\{([\\s\\S]*?)\\}/)?.[1] ?? '';
+const titlePlayCss = css.match(/\.title-play\s*\{([\s\S]*?)\}/)?.[1] ?? '';
 const movementAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_MovementBasic.glb');
 const generalAnimations = readGlbAnimationNames('public/assets/kaykit/animations/Rig_Medium_General.glb');
 const nativeCrawlAnimations = movementAnimations.filter(name => /crawl/i.test(name));
