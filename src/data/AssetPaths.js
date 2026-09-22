@@ -101,6 +101,9 @@ export const ASSET_PATHS = Object.freeze({
       resources: Object.freeze({
         stick: asset('ui/cosy/icon-resource-stick.webp'),
         stone: asset('ui/cosy/icon-resource-stone.webp'),
+        copper: asset('ui/mobile/icon-resource-copper.svg'),
+        iron: asset('ui/mobile/icon-resource-iron.svg'),
+        diamond: asset('ui/mobile/icon-resource-diamond.svg'),
         grass: asset('ui/cosy/icon-resource-grass.webp'),
         meat: asset('ui/cosy/icon-resource-meat.webp'),
         cooked_meat: asset('ui/cosy/icon-resource-meat.webp'),
