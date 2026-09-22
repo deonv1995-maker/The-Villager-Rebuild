@@ -134,6 +134,27 @@ export class UndergroundTunnelingSystem {
     this.root.userData.undergroundTunneling = true;
     this.group.add(this.root);
 
+    this.lavaMeshes = [];
+    this.lavaGeometry = new THREE.CircleGeometry(1, 32);
+    this.lavaMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff5a12,
+      emissive: 0xff2100,
+      emissiveIntensity: 3.1,
+      roughness: 0.58,
+      metalness: 0,
+      side: THREE.DoubleSide
+    });
+    this.lavaLight = new THREE.PointLight(
+      0xff4a12,
+      0,
+      this.config.naturalLavaLightDistance,
+      2
+    );
+    this.lavaLight.name = 'deep-cave-lava-light';
+    this.lavaLight.visible = false;
+    this.lavaLight.castShadow = false;
+    this.root.add(this.lavaLight);
+
     this.material = new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 1,
@@ -147,6 +168,7 @@ export class UndergroundTunnelingSystem {
 
   create() {
     this.#initializeNaturalCaveNetwork();
+    this.#createLavaPresentation();
     this.#syncSurfaceState();
     return 0;
   }
@@ -156,7 +178,11 @@ export class UndergroundTunnelingSystem {
     const x = Number(playerPosition?.x);
     const y = Number(playerPosition?.y);
     const z = Number(playerPosition?.z);
-    if (![x, z].every(Number.isFinite)) return 0;
+    if (![x, z].every(Number.isFinite)) {
+      this.lavaLight.visible = false;
+      return 0;
+    }
+    this.#updateLavaPresentation(playerPosition);
 
     let activated = 0;
     for (const feature of this.naturalCaveNetwork.features) {
@@ -196,6 +222,29 @@ export class UndergroundTunnelingSystem {
     const airSampleY = y + Math.max(0.72, this.config.cellSize);
     if (this.#densityAt(x, airSampleY, z) >= ISO_LEVEL) return 0;
     return depth;
+  }
+
+  getLavaContact(position) {
+    this.#initializeNaturalCaveNetwork();
+    const x = Number(position?.x);
+    const y = Number(position?.y);
+    const z = Number(position?.z);
+    if (![x, y, z].every(Number.isFinite)) return null;
+
+    for (const pool of this.naturalCaveNetwork.lavaPools ?? []) {
+      const horizontalDistance = Math.hypot(x - pool.x, z - pool.z);
+      if (horizontalDistance > pool.radius) continue;
+      if (y < pool.y - 0.5 || y > pool.y + 1.25) continue;
+      return {
+        id: pool.id,
+        chamberId: pool.chamberId,
+        x: pool.x,
+        y: pool.y,
+        z: pool.z,
+        radius: pool.radius
+      };
+    }
+    return null;
   }
 
   getTorchPlacementTarget({
@@ -671,6 +720,8 @@ export class UndergroundTunnelingSystem {
       naturalEntranceCount: this.naturalCaveNetwork?.entrances.length ?? 0,
       naturalSegmentCount: this.naturalCaveNetwork?.segments.length ?? 0,
       naturalChamberCount: this.naturalCaveNetwork?.chambers.length ?? 0,
+      naturalLavaPoolCount: this.naturalCaveNetwork?.lavaPools?.length ?? 0,
+      lavaLightActive: this.lavaLight.visible,
       activatedNaturalFeatureCount: this.activatedNaturalFeatureIds.size,
       pendingNaturalChunkRebuildCount: this.pendingNaturalChunkRebuildKeys.size,
       builtNaturalChunkCount: this.builtNaturalChunkKeys.size,
@@ -1402,6 +1453,72 @@ export class UndergroundTunnelingSystem {
       }
     }
     return keys;
+  }
+
+  #createLavaPresentation() {
+    if (this.lavaMeshes.length > 0) return this.lavaMeshes.length;
+    this.#initializeNaturalCaveNetwork();
+
+    for (const pool of this.naturalCaveNetwork.lavaPools ?? []) {
+      const mesh = new THREE.Mesh(this.lavaGeometry, this.lavaMaterial);
+      mesh.name = `deep-cave-lava-${pool.id}`;
+      mesh.userData.undergroundLava = true;
+      mesh.userData.lavaPoolId = pool.id;
+      mesh.position.set(pool.x, pool.y, pool.z);
+      mesh.rotation.x = -Math.PI * 0.5;
+      mesh.scale.setScalar(pool.radius);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+      this.root.add(mesh);
+      this.lavaMeshes.push(mesh);
+    }
+    return this.lavaMeshes.length;
+  }
+
+  #updateLavaPresentation(playerPosition) {
+    if (!this.lavaMeshes.length) this.#createLavaPresentation();
+    const x = Number(playerPosition?.x);
+    const y = Number(playerPosition?.y);
+    const z = Number(playerPosition?.z);
+    if (![x, y, z].every(Number.isFinite)) {
+      this.lavaLight.visible = false;
+      return false;
+    }
+
+    let nearestPool = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const pool of this.naturalCaveNetwork.lavaPools ?? []) {
+      const distance = Math.hypot(x - pool.x, y - pool.y, z - pool.z);
+      if (distance >= nearestDistance) continue;
+      nearestDistance = distance;
+      nearestPool = pool;
+    }
+
+    const activationRadius = Math.max(
+      1,
+      Number(this.config.naturalLavaLightActivationRadius) || 0
+    );
+    if (!nearestPool || nearestDistance > activationRadius) {
+      this.lavaLight.visible = false;
+      this.lavaLight.intensity = 0;
+      return false;
+    }
+
+    const proximity = 1 - THREE.MathUtils.clamp(
+      nearestDistance / activationRadius,
+      0,
+      1
+    );
+    this.lavaLight.position.set(
+      nearestPool.x,
+      nearestPool.y + 1.45,
+      nearestPool.z
+    );
+    this.lavaLight.intensity =
+      this.config.naturalLavaLightIntensity * (0.62 + proximity * 0.38);
+    this.lavaLight.distance = this.config.naturalLavaLightDistance;
+    this.lavaLight.visible = true;
+    return true;
   }
 
   #initializeNaturalCaveNetwork() {
