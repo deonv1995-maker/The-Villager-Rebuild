@@ -158,7 +158,17 @@ try {
   const prioritySystem = makeWorld();
   prioritySystem.update(player);
   const initialPriorityBuild = prioritySystem.naturalChunkBuild;
-  assert.ok(initialPriorityBuild, 'priority regression requires a suspended background chunk');
+  assert.ok(initialPriorityBuild, 'priority regression requires a suspended cave chunk');
+  assert.equal(
+    initialPriorityBuild.entryPriority,
+    true,
+    'surface approach must spend the first bounded mesh slice on the entrance/descent corridor'
+  );
+  assert.ok(
+    config.naturalEntryCriticalRenderRadius > config.naturalCriticalRenderRadius
+      && config.naturalEntryCriticalRenderRadius <= config.naturalRenderPrewarmRadius,
+    'entry recovery must begin earlier without escaping the local prewarm window'
+  );
   const [priorityIx, priorityIy, priorityIz] = initialPriorityBuild.key.split(':').map(Number);
   const caveChunkSize = config.cellSize * config.chunkCells;
   const initialPriorityCenter = {
@@ -167,7 +177,10 @@ try {
     z: (priorityIz + 0.5) * caveChunkSize
   };
   const effectiveCriticalRadius =
-    config.naturalCriticalRenderRadius + caveChunkSize * Math.sqrt(3) * 0.5;
+    (initialPriorityBuild.entryPriority
+      ? config.naturalEntryCriticalRenderRadius
+      : config.naturalCriticalRenderRadius)
+    + caveChunkSize * Math.sqrt(3) * 0.5;
   const moveTarget = prioritySystem.pendingNaturalChunkRebuilds
     .slice()
     .sort((a, b) => {
@@ -211,13 +224,18 @@ try {
   );
   const [activePriorityIx, activePriorityIy, activePriorityIz] =
     prioritySystem.naturalChunkBuild.key.split(':').map(Number);
+  const activeEffectiveCriticalRadius =
+    (prioritySystem.naturalChunkBuild.entryPriority
+      ? config.naturalEntryCriticalRenderRadius
+      : config.naturalCriticalRenderRadius)
+    + caveChunkSize * Math.sqrt(3) * 0.5;
   assert.ok(
     Math.hypot(
       (activePriorityIx + 0.5) * caveChunkSize - moveTarget.x,
       (activePriorityIy + 0.5) * caveChunkSize - moveTarget.y,
       (activePriorityIz + 0.5) * caveChunkSize - moveTarget.z
-    ) <= effectiveCriticalRadius + 0.0001,
-    'the resumed scheduler must immediately work inside the near-player critical volume'
+    ) <= activeEffectiveCriticalRadius + 0.0001,
+    'the resumed scheduler must immediately work inside the correct critical volume'
   );
 
   const oldIterator = system.naturalChunkBuild.iterator;

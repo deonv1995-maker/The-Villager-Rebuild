@@ -108,6 +108,7 @@ export class UndergroundTunnelingSystem {
     this.naturalCaveNetwork = null;
     this.naturalFeatureBuckets = new Map();
     this.naturalFeatureChunkKeys = new Map();
+    this.naturalEntryChunkKeys = new Set();
     this.activatedNaturalFeatureIds = new Set();
     this.pendingNaturalChunkRebuilds = [];
     this.pendingNaturalChunkRebuildKeys = new Set();
@@ -1671,6 +1672,7 @@ export class UndergroundTunnelingSystem {
     this.naturalCaveNetwork = buildNaturalCaveNetwork(this.terrain, this.config);
     this.naturalFeatureBuckets.clear();
     this.naturalFeatureChunkKeys.clear();
+    this.naturalEntryChunkKeys.clear();
 
     for (const feature of this.naturalCaveNetwork.features) {
       const bounds = naturalCaveFeatureBounds(feature, this.config);
@@ -1692,6 +1694,12 @@ export class UndergroundTunnelingSystem {
         ) renderKeys.push(key);
       }
       this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys));
+      if (
+        feature.type === 'segment'
+        && (feature.kind === 'entrance' || feature.kind === 'descent')
+      ) {
+        for (const key of renderKeys) this.naturalEntryChunkKeys.add(key);
+      }
     }
     return this.naturalCaveNetwork;
   }
@@ -1761,7 +1769,8 @@ export class UndergroundTunnelingSystem {
       key,
       x: (ix + 0.5) * this.chunkSize,
       y: (iy + 0.5) * this.chunkSize,
-      z: (iz + 0.5) * this.chunkSize
+      z: (iz + 0.5) * this.chunkSize,
+      entryPriority: this.naturalEntryChunkKeys.has(key)
     });
     return true;
   }
@@ -1829,22 +1838,35 @@ export class UndergroundTunnelingSystem {
       const dz = entry.z - pz;
       return dx * dx + dy * dy + dz * dz;
     };
-    const compareDistanceToPlayer = (a, b) =>
-      distanceSqToPlayer(a) - distanceSqToPlayer(b);
+    const entryPriorityOf = entry =>
+      Boolean(
+        entry?.entryPriority
+        ?? (entry?.key && this.naturalEntryChunkKeys.has(entry.key))
+      );
+    const compareDistanceToPlayer = (a, b) => {
+      const priorityDifference =
+        Number(entryPriorityOf(b)) - Number(entryPriorityOf(a));
+      if (priorityDifference !== 0) return priorityDifference;
+      return distanceSqToPlayer(a) - distanceSqToPlayer(b);
+    };
 
     if (hasPlayerPosition && this.pendingNaturalChunkRebuilds.length > 1) {
       this.pendingNaturalChunkRebuilds.sort(compareDistanceToPlayer);
     }
 
     // Treat a chunk as critical when any part of its volume can enter the
-    // near-player safety radius, not only when its center does.
+    // near-player safety radius, not only when its center does. Entry/descent
+    // chunks use a larger radius but the same hard recovery-time budget.
     const halfChunkDiagonal = this.chunkSize * Math.sqrt(3) * 0.5;
-    const criticalRadius =
-      Math.max(
-        this.chunkSize,
-        Number(this.config.naturalCriticalRenderRadius) || 0
-      ) + halfChunkDiagonal;
-    const criticalRadiusSq = criticalRadius * criticalRadius;
+    const criticalRadiusSqFor = entry => {
+      const configuredRadius = entryPriorityOf(entry)
+        ? this.config.naturalEntryCriticalRenderRadius
+        : this.config.naturalCriticalRenderRadius;
+      const radius =
+        Math.max(this.chunkSize, Number(configuredRadius) || 0)
+        + halfChunkDiagonal;
+      return radius * radius;
+    };
 
     // A partially sampled background chunk must never block geometry that has
     // become critical after the Ranger moves or drops. Preserve the iterator
@@ -1857,15 +1879,17 @@ export class UndergroundTunnelingSystem {
       const [activeIx, activeIy, activeIz] =
         this.naturalChunkBuild.key.split(':').map(Number);
       const activeEntry = {
+        key: this.naturalChunkBuild.key,
         x: (activeIx + 0.5) * this.chunkSize,
         y: (activeIy + 0.5) * this.chunkSize,
-        z: (activeIz + 0.5) * this.chunkSize
+        z: (activeIz + 0.5) * this.chunkSize,
+        entryPriority: this.naturalChunkBuild.entryPriority
       };
       const nearestPending = this.pendingNaturalChunkRebuilds[0];
       if (
         [activeIx, activeIy, activeIz].every(Number.isFinite)
-        && distanceSqToPlayer(activeEntry) > criticalRadiusSq
-        && distanceSqToPlayer(nearestPending) <= criticalRadiusSq
+        && distanceSqToPlayer(activeEntry) > criticalRadiusSqFor(activeEntry)
+        && distanceSqToPlayer(nearestPending) <= criticalRadiusSqFor(nearestPending)
       ) {
         const paused = this.naturalChunkBuild;
         this.pendingNaturalChunkRebuilds.push({
@@ -1873,6 +1897,7 @@ export class UndergroundTunnelingSystem {
           x: activeEntry.x,
           y: activeEntry.y,
           z: activeEntry.z,
+          entryPriority: entryPriorityOf(activeEntry),
           iterator: paused.iterator,
           revision: paused.revision
         });
@@ -1888,11 +1913,15 @@ export class UndergroundTunnelingSystem {
     if (nearestKey && hasPlayerPosition) {
       const [ix, iy, iz] = nearestKey.split(':').map(Number);
       if ([ix, iy, iz].every(Number.isFinite)) {
-        critical = distanceSqToPlayer({
+        const nearestEntry = {
+          key: nearestKey,
           x: (ix + 0.5) * this.chunkSize,
           y: (iy + 0.5) * this.chunkSize,
-          z: (iz + 0.5) * this.chunkSize
-        }) <= criticalRadiusSq;
+          z: (iz + 0.5) * this.chunkSize,
+          entryPriority: this.naturalEntryChunkKeys.has(nearestKey)
+        };
+        critical =
+          distanceSqToPlayer(nearestEntry) <= criticalRadiusSqFor(nearestEntry);
       }
     }
 
@@ -1921,6 +1950,7 @@ export class UndergroundTunnelingSystem {
         if (this.builtNaturalChunkKeys.has(entry.key)) continue;
         this.naturalChunkBuild = {
           key: entry.key,
+          entryPriority: entryPriorityOf(entry),
           revision: Number.isFinite(entry.revision)
             ? entry.revision
             : this.densityRevision,

@@ -373,3 +373,20 @@ irregular geometry and one shared fog-aware procedural shader, with deterministi
 rotation/stretch and frame-delta-driven molten flow. The existing single nearby non-shadow
 light may pulse subtly, but no per-pool lights, texture assets, collision meshes or additional
 cave streaming work are introduced.
+
+## 2026-09-22 — Surface cave entries get a bounded streaming priority lane
+
+Decision: keep natural-cave rendering inside the existing resumable
+`UndergroundTunnelingSystem` scheduler, but tag chunks belonging to each established
+surface **entrance** and immediate **descent** segment as entry-priority work. While those
+chunks are in the local prewarm window they sort ahead of ordinary cave jobs, and they may
+enter the existing critical recovery path from 30 m instead of 18 m.
+
+The frame-time architecture does not change: entry work uses the same generator, queue,
+retention rules, 4 ms critical deadline and three-completion cap. There is no synchronous
+mouth build, separate entrance mesh, collision proxy or save state.
+
+Reason: device feedback showed that a fast surface approach can still outrun the first cave
+geometry even when deep/near-player streaming is otherwise improved. Prioritizing only the
+small established entry corridor spends the existing bounded CPU budget where the player can
+see it first without globally increasing cave-generation work.

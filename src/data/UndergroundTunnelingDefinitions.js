@@ -58,6 +58,10 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   // When an unbuilt chunk is close enough to become visible, allow a small bounded
   // emergency budget rather than exposing the empty sky/background through the cave.
   naturalCriticalRenderRadius: 18,
+  // The surface entry corridor gets the same bounded recovery budget slightly
+  // earlier so a fast approach cannot outrun the first visible cave geometry.
+  // This remains inside the local prewarm radius and does not raise the 4 ms cap.
+  naturalEntryCriticalRenderRadius: 30,
   naturalCriticalChunkBuildsPerUpdate: 3,
   naturalCriticalMeshBudgetMs: 4,
   // Marching-tetrahedra cave geometry is deliberately time-sliced. Registering
