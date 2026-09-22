@@ -299,10 +299,11 @@ export class UndergroundOreSystem {
     };
   }
 
-  reserveLooseResource(id, owner) {
+  reserveLooseResource(id, owner, { canStore = null } = {}) {
     if (!owner) throw new Error('Underground ore reservations require an owner token');
     const entry = this.loose.get(id);
     if (!entry?.active || (entry.reservedBy && entry.reservedBy !== owner)) return null;
+    if (typeof canStore === 'function' && !canStore(entry.resourceId, entry.quantity)) return null;
     entry.reservedBy = owner;
     entry.root.visible = false;
     entry.root.getWorldPosition(this.tempWorld);
@@ -325,9 +326,14 @@ export class UndergroundOreSystem {
     return true;
   }
 
-  takeReservedLooseResource(id, owner) {
+  takeReservedLooseResource(id, owner, { canStore = null } = {}) {
     const entry = this.loose.get(id);
     if (!entry?.active || entry.reservedBy !== owner) return null;
+    if (typeof canStore === 'function' && !canStore(entry.resourceId, entry.quantity)) {
+      entry.reservedBy = null;
+      entry.root.visible = true;
+      return null;
+    }
     entry.reservedBy = null;
     entry.active = false;
     entry.root.visible = false;
