@@ -962,7 +962,11 @@ export class SproutCompanionController {
 
   #reserveLooseResource(target) {
     if (target?.source === 'underground-ore') {
-      return this.island.explorationPois?.reserveLooseOre?.(target.id, this.ownerToken) ?? null;
+      return this.island.explorationPois?.reserveLooseOre?.(
+        target.id,
+        this.ownerToken,
+        { canStore: (itemId, quantity) => this.inventory.canAdd(itemId, quantity) }
+      ) ?? null;
     }
     const reserved = this.gatherables.reserveLooseResource?.(target?.id, this.ownerToken) ?? null;
     return reserved ? { ...reserved, source: 'world' } : null;
@@ -970,7 +974,11 @@ export class SproutCompanionController {
 
   #takeReservedLooseResource(id, source) {
     if (source === 'underground-ore') {
-      return this.island.explorationPois?.takeReservedLooseOre?.(id, this.ownerToken) ?? null;
+      return this.island.explorationPois?.takeReservedLooseOre?.(
+        id,
+        this.ownerToken,
+        { canStore: (itemId, quantity) => this.inventory.canAdd(itemId, quantity) }
+      ) ?? null;
     }
     return this.gatherables.takeReservedLooseResource?.(id, this.ownerToken) ?? null;
   }
