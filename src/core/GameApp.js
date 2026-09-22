@@ -38,6 +38,7 @@ export class GameApp {
     this.firstPersonDemolitionTargeting = new FirstPersonDemolitionTargeting();
     this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
+    this.lavaContactActive = false;
   }
 
   async start() {
@@ -203,6 +204,7 @@ export class GameApp {
         );
       }
       this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
+      this.#updateEnvironmentalHazards(dt);
       if (this.gatherables && this.hunt) this.#refreshTargets(dt);
     }
 
@@ -215,6 +217,36 @@ export class GameApp {
     this.constructionAim.origin.copy(this.sceneSystem.camera.position);
     this.sceneSystem.camera.getWorldDirection(this.constructionAim.direction);
     return this.constructionAim;
+  }
+
+  #updateEnvironmentalHazards(dt) {
+    const contact =
+      this.island?.explorationPois?.getLavaContact?.(this.playerPosition) ?? null;
+    if (!contact) {
+      this.lavaContactActive = false;
+      return;
+    }
+
+    const damagePerSecond = Math.max(
+      0,
+      Number(this.survival?.definition?.lavaDamagePerSecond) || 0
+    );
+    const result = this.survival?.applyDamage?.(
+      damagePerSecond * Math.max(0, Number(dt) || 0),
+      { source: 'lava' }
+    );
+    if (result?.changed) this.#syncSurvivalHud();
+
+    if (!this.lavaContactActive) {
+      this.lavaContactActive = true;
+      this.setStatus('LAVA · TAKING DAMAGE');
+      this.hud?.setObjective('Move off the lava immediately');
+    }
+
+    if (result?.defeated) {
+      this.lavaContactActive = false;
+      this.#recoverPlayerFromDefeat('lava');
+    }
   }
 
   #refreshTargets(dt = 0) {
@@ -688,7 +720,12 @@ export class GameApp {
     this.#syncSurvivalHud();
     this.saveController?.saveNow?.('player-recovery');
 
-    const cause = source === 'starvation' ? 'STARVATION' : 'DAMAGE';
+    const cause =
+      source === 'starvation'
+        ? 'STARVATION'
+        : source === 'lava'
+          ? 'LAVA'
+          : 'DAMAGE';
     this.setStatus(`${cause} · RECOVERED AT SHORE`);
     this.hud?.setObjective(
       `Recovered with ${Math.round(recovery?.health ?? 0)} HP · hunger ${Math.round(recovery?.hunger ?? 0)}`
