@@ -5,6 +5,7 @@ export const PLAYER_SURVIVAL = Object.freeze({
   startingHunger: 100,
   hungerLossPerWorldDay: 60,
   starvationDamagePerWorldHour: 5,
+  lavaDamagePerSecond: 32,
   recoveryHealth: 50,
   recoveryHunger: 35
 });

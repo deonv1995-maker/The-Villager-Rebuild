@@ -53,6 +53,8 @@ export class DayNightLightingSystem {
         ? undergroundDepthProvider
         : null;
     this.colorScratch = new THREE.Color();
+    this.distanceBlackColor = new THREE.Color(UNDERGROUND_LIGHTING.distanceBlackColor);
+    this.surfaceFogDensity = Number(this.scene.fog?.density) || 0;
     this.keyDirection = new THREE.Vector3();
     this.lightFocus = new THREE.Vector3();
 
@@ -71,7 +73,18 @@ export class DayNightLightingSystem {
     const darkness = undergroundDarknessAtDepth(undergroundDepth);
 
     this.#lerpColor(this.scene.background, from.sky, to.sky, t);
-    if (this.scene.fog?.color) this.#lerpColor(this.scene.fog.color, from.fog, to.fog, t);
+    this.scene.background.lerp(this.distanceBlackColor, darkness);
+    if (this.scene.fog?.color) {
+      this.#lerpColor(this.scene.fog.color, from.fog, to.fog, t);
+      this.scene.fog.color.lerp(this.distanceBlackColor, darkness);
+      if (Number.isFinite(this.scene.fog.density)) {
+        this.scene.fog.density = lerp(
+          this.surfaceFogDensity,
+          UNDERGROUND_LIGHTING.distanceFogDensity,
+          darkness
+        );
+      }
+    }
 
     this.#lerpColor(this.lighting.hemi.color, from.hemiSky, to.hemiSky, t);
     this.#lerpColor(this.lighting.hemi.groundColor, from.hemiGround, to.hemiGround, t);

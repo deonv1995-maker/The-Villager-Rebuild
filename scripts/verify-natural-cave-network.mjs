@@ -108,11 +108,46 @@ for (let index = 0; index < UNDERGROUND_TUNNELING.naturalNetworkCount; index += 
   );
 }
 assert.equal(network.centralChamberId, 'natural-cave:central-hub');
+assert.ok(
+  network.lavaPools.length > 0,
+  'the deepest natural cave floors must expose deterministic lava pools'
+);
+const lavaEligibleRoles = new Set(['central', 'drop-room', 'deep-room', 'sealed-room']);
+for (const pool of network.lavaPools) {
+  const chamber = network.chambers.find(candidate => candidate.id === pool.chamberId);
+  assert.ok(chamber, `${pool.id} must belong to a natural cave chamber`);
+  assert.ok(
+    lavaEligibleRoles.has(chamber.role),
+    `${pool.id} must stay in a deep cave role rather than an entry/side room`
+  );
+  assert.ok(
+    pool.floorDepth >= UNDERGROUND_TUNNELING.naturalLavaMinimumFloorDepth,
+    `${pool.id} must satisfy the configured minimum floor depth`
+  );
+  assert.ok(pool.radius > UNDERGROUND_TUNNELING.cellSize, `${pool.id} must be visibly traversable`);
+  assert.ok(pool.y > chamber.floorY, `${pool.id} must sit just above the rock floor`);
+}
 
 const worldGroup = new THREE.Group();
 const world = new ExplorationPoiSystem({ group: worldGroup, terrain });
 world.create();
 assert.equal(world.getDebugState().activeChunkCount, 0, 'natural topology must remain unvoxelized at boot');
+assert.equal(
+  world.getDebugState().naturalLavaPoolCount,
+  network.lavaPools.length,
+  'lava presentation count must come from the shared natural-cave network'
+);
+const firstLava = network.lavaPools[0];
+assert.equal(
+  world.getLavaContact(new THREE.Vector3(firstLava.x, firstLava.y + 0.2, firstLava.z))?.id,
+  firstLava.id,
+  'standing inside a deep lava pool must expose one environment-hazard contact'
+);
+assert.equal(
+  world.getLavaContact(new THREE.Vector3(firstLava.x + firstLava.radius + 1, firstLava.y, firstLava.z)),
+  null,
+  'lava contact must stay bounded to the configured pool radius'
+);
 assert.equal(
   terrain.getTunnelingOpenings().length,
   network.entrances.length,

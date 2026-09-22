@@ -8,6 +8,7 @@ assert.equal(PLAYER_SURVIVAL.maxHealth, 100);
 assert.equal(PLAYER_SURVIVAL.maxHunger, 100);
 assert.ok(PLAYER_SURVIVAL.hungerLossPerWorldDay > 0);
 assert.ok(PLAYER_SURVIVAL.starvationDamagePerWorldHour > 0);
+assert.ok(PLAYER_SURVIVAL.lavaDamagePerSecond > 0, 'Lava damage must remain data-driven');
 
 const survival = new PlayerSurvivalSystem();
 assert.deepEqual(survival.captureState(), { health: 100, hunger: 100 });
@@ -55,6 +56,9 @@ for (const requirement of [
   'this.survival = new PlayerSurvivalSystem()',
   'this.survival?.advanceWorldMinutes',
   'this.survival?.applyDamage',
+  '#updateEnvironmentalHazards',
+  'getLavaContact',
+  "source: 'lava'",
   '#recoverPlayerFromDefeat',
   'setSurvivalVitals'
 ]) {

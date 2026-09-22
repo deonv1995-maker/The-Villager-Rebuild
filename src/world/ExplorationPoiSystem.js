@@ -65,6 +65,10 @@ export class ExplorationPoiSystem {
     return this.tunneling.getUndergroundDepth(position);
   }
 
+  getLavaContact(position) {
+    return this.tunneling.getLavaContact(position);
+  }
+
   applyFloorSculpt(mode, target) {
     return this.tunneling.applyFloorSculpt(mode, target);
   }

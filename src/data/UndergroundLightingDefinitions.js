@@ -15,7 +15,13 @@ export const UNDERGROUND_LIGHTING = Object.freeze({
   sunIntensityMultiplier: 0.015,
   skyFillIntensityMultiplier: 0.04,
   ambientIntensityMultiplier: 0.03,
-  exposureMultiplier: 0.78
+  exposureMultiplier: 0.78,
+
+  // Natural cave streaming remains deliberately local on mobile. Deep cave
+  // atmosphere fades unloaded distance into black instead of exposing bright
+  // sky/background through geometry that is still being meshed.
+  distanceFogDensity: 0.05,
+  distanceBlackColor: 0x000000
 });
 
 export const undergroundDarknessAtDepth = depth => {
