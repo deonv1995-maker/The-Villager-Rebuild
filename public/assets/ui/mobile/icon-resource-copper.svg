@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Copper ore">
+  <defs><linearGradient id="c" x1="18" y1="14" x2="77" y2="82" gradientUnits="userSpaceOnUse"><stop stop-color="#e2a071"/><stop offset=".52" stop-color="#b5663e"/><stop offset="1" stop-color="#6f3727"/></linearGradient></defs>
+  <path d="M18 33 35 13 66 18 81 39 72 72 48 85 21 68 12 48Z" fill="#55524b" stroke="#292824" stroke-width="5" stroke-linejoin="round"/>
+  <path d="m27 34 13-10 13 7 10-5 10 15-9 11 3 14-17 8-9-12-15 1-5-14Z" fill="url(#c)" stroke="#713d2c" stroke-width="4" stroke-linejoin="round"/>
+  <path d="m40 24 4 18 19-16M44 42l-3 20M44 42l20 10" fill="none" stroke="#f3c09a" stroke-width="3" stroke-linecap="round" opacity=".75"/>
+</svg>
