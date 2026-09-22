@@ -55,7 +55,9 @@ When Remove is selected:
 - semantic placement preview is disabled;
 - first person raycasts exact materialized semantic meshes;
 - third person uses the nearest valid semantic module target;
-- the unified Hammer action is **REMOVE**;
+- the unified Hammer action is **REMOVE** for semantic structure targets;
+- an inventory-backed utility directly targeted in Hammer Remove mode exposes **PICK UP** instead. Bed, Crafting Bench, empty Chest, empty Barrel and mounted Torch are returned to inventory and are not automatically put back into placement mode;
+- in first-person, a directly aimed utility can take the Action button over the semantic panel behind it, while third-person keeps the established semantic-panel priority;
 - structural dependency rules run before visual/collision removal or refunds;
 - dynamic Roof refunds use the stored covered-cell count rather than the one-cell base price.
 
