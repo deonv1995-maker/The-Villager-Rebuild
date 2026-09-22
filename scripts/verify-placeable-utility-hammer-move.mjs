@@ -59,6 +59,7 @@ const saves = [];
 let hammerUses = 0;
 let queuedFrame = null;
 let firstPerson = false;
+let equippedToolId = 'hammer';
 
 const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
 camera.position.set(0, 1.2, 0);
@@ -89,7 +90,7 @@ const game = {
     faceWorldPoint() {}
   },
   sceneSystem: { camera },
-  toolbelt: { getEquippedToolId: () => 'hammer' },
+  toolbelt: { getEquippedToolId: () => equippedToolId },
   panelConstructionRuntime: {
     ownsHammerInteraction: () => true,
     system: {
@@ -137,6 +138,7 @@ const runFrame = () => {
   frame();
 };
 const hammerMoveAction = () => externalActions.get('utility-hammer-move');
+const torchPickupAction = () => externalActions.get('torch-pickup');
 
 storage.addContainer({ id: 'placed-chest-1', type: 'chest', x: 1, z: 0 });
 runFrame();
@@ -172,6 +174,10 @@ assert(!externalActions.has('utility-place'), 'Crafting Bench pickup must leave 
 
 const bed = runtime.bedSystem.createBed({ x: 1, z: 0, yaw: -0.15 });
 assert(runtime.bedSystem.beds.get(bed.id)?.root.children.length >= 10, 'Bed presentation must contain a complete frame, mattress and bedding');
+equippedToolId = 'sword';
+runFrame();
+assert(!hammerMoveAction(), 'Bed pickup must remain Hammer-gated when another tool is equipped');
+equippedToolId = 'hammer';
 runFrame();
 assert(hammerMoveAction()?.label === 'Pick up Bed', 'Hammer REMOVE mode must target a placed Bed');
 hammerMoveAction().onTrigger();
@@ -228,27 +234,43 @@ game.currentInteractionTarget = {
   label: 'Floor Panel',
   actionLabel: 'Remove Floor Panel'
 };
-runFrame();
-assert(hammerMoveAction()?.label === 'Pick up Torch', 'A directly aimed placed Torch must be pickable even when a panel is behind it');
-const resolvedTorchAction = resolveContextAction({
-  toolId: 'hammer',
-  interactionTarget: game.currentInteractionTarget,
-  externalActions: [{ ...hammerMoveAction(), id: 'utility-hammer-move' }]
-});
+
+for (const toolId of [null, 'axe', 'hammer', 'pickaxe', 'shovel', 'spear', 'sword', 'torch']) {
+  equippedToolId = toolId;
+  runFrame();
+  assert(
+    torchPickupAction()?.caption === 'COLLECT' && torchPickupAction()?.label === 'Collect Torch',
+    `A directly aimed placed Torch must expose COLLECT with ${toolId ?? 'empty hands'}`
+  );
+  const resolvedTorchAction = resolveContextAction({
+    toolId,
+    interactionTarget: game.currentInteractionTarget,
+    externalActions: [{ ...torchPickupAction(), id: 'torch-pickup' }]
+  });
+  assert(
+    resolvedTorchAction.source === 'external' && resolvedTorchAction.caption === 'COLLECT',
+    `Torch collection must override the underlying/tool action with ${toolId ?? 'empty hands'}`
+  );
+}
+
+const hammerUsesBeforeTorchPickup = hammerUses;
+torchPickupAction().onTrigger();
+assert(!torchRoot.parent, 'Collecting a Torch must remove its mounted world visual');
+assert(inventory.get('torch') === 1, 'Collecting a Torch must return exactly one Torch to inventory');
+assert(!externalActions.has('utility-place'), 'Torch collection must not force immediate placement mode');
+assert(saves.at(-1) === 'reclaim-placeable-utility', 'Torch collection must use the shared reclaim checkpoint');
 assert(
-  resolvedTorchAction.source === 'external' && resolvedTorchAction.caption === 'PICK UP',
-  'The aimed Torch pickup must override the underlying panel REMOVE action in first-person'
+  hammerUses === hammerUsesBeforeTorchPickup,
+  'Tool-agnostic Torch collection must not consume Hammer durability'
 );
-hammerMoveAction().onTrigger();
-assert(!torchRoot.parent, 'Picking up a Torch must remove its mounted world visual');
-assert(inventory.get('torch') === 1, 'Picking up a Torch must return exactly one Torch to inventory');
-assert(!externalActions.has('utility-place'), 'Torch pickup must not force immediate placement mode');
-assert(saves.at(-1) === 'reclaim-placeable-utility', 'Torch pickup must use the shared reclaim checkpoint');
+runFrame();
+assert(!torchPickupAction(), 'Torch COLLECT must clear as soon as the reticle no longer has a mounted Torch target');
 assert(inventory.consume([{ itemId: 'torch', quantity: 1 }]), 'Torch pickup fixture cleanup must remove its temporary packed Torch');
 inventory.add('chest', 1);
 inventory.add('crafting-bench', 1);
 inventory.add('bed', 1);
 firstPerson = false;
+equippedToolId = 'hammer';
 game.currentInteractionTarget = null;
 
 supportHeight = 2.8;
@@ -535,13 +557,15 @@ hammerMoveAction().onTrigger();
 assert(storage.describe('placed-barrel-3'), 'Pack-full rejection must leave the Barrel world instance intact');
 assert(inventory.get('barrel') === 0, 'Pack-full rejection must not create a Barrel inventory item');
 assert(statuses.at(-1)?.includes('PACK FULL'), 'Pack-full rejection must explain why the Barrel cannot be picked up');
-assert(hammerUses === 4, 'Hammer durability/use must be recorded only for successful utility disassembly');
-assert(saves.filter(reason => reason === 'reclaim-placeable-utility').length === 4, 'Only successful utility pickups may checkpoint the reclaim save reason');
+assert(hammerUses === 3, 'Hammer durability/use must be recorded only for successful furniture pickup');
+assert(saves.filter(reason => reason === 'reclaim-placeable-utility').length === 4, 'Furniture and Torch pickups must checkpoint the shared reclaim save reason');
 
 const runtimeSource = await readFile('src/gameplay/PlaceableUtilityRuntimeController.js', 'utf8');
 assert(runtimeSource.includes("import { BedSystem } from '../world/BedSystem.js';"), 'Placeable utility runtime must own Bed placement through a dedicated world system');
 assert(runtimeSource.includes('selectFirstPersonUtilityTarget({'), 'Hammer utility pickup must reuse the shared first-person reticle selector');
-assert(runtimeSource.includes('torchRuntime: this.game.torchRuntime'), 'Shared utility targeting must include placed Torches without a second raycaster');
+assert(runtimeSource.includes("TORCH_PICKUP_ACTION_ID = 'torch-pickup'"), 'Placed Torches must expose a dedicated tool-agnostic pickup action');
+assert(runtimeSource.includes('selectFirstPersonUtilityTarget({\n      torchRuntime,'), 'Torch collection must reuse the shared first-person reticle selector without a second raycaster');
+assert(!runtimeSource.includes('...torchTargets'), 'Hammer furniture targeting must not keep a competing Torch pickup path');
 assert(!runtimeSource.includes('new THREE.Raycaster()'), 'Placeable utility runtime must not introduce a competing first-person raycaster');
 assert(runtimeSource.includes('this.game.currentInteractionTarget && !(target && this.game.player?.isFirstPerson?.())'), 'Third-person panel priority must remain while direct first-person utility aim can override the underlying panel');
 assert(runtimeSource.includes('collision.supportHeightAt?.('), 'Utility placement must reuse the shared standable-surface resolver');
@@ -558,4 +582,4 @@ assert(storageSource.includes('lidProfile'), 'Storage Chest visual must retain i
 assert(storageSource.includes('flatShading: true'), 'Food Barrel visual must retain its low-poly segmented presentation');
 
 runtime.dispose();
-console.log('Inventory-first Torch/Bed/Bench/Storage pickup, placement, sleep and furniture presentation verified');
+console.log('Tool-agnostic Torch collection plus Hammer furniture pickup, placement, sleep and presentation verified');
