@@ -212,6 +212,13 @@ assert.ok(
       < UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
   'critical recovery must cover at least two cave chunks while staying inside local prewarming'
 );
+assert.ok(
+  UNDERGROUND_TUNNELING.naturalEntryCriticalRenderRadius
+    > UNDERGROUND_TUNNELING.naturalCriticalRenderRadius
+    && UNDERGROUND_TUNNELING.naturalEntryCriticalRenderRadius
+      <= UNDERGROUND_TUNNELING.naturalRenderPrewarmRadius,
+  'surface entry recovery may start earlier but must remain inside local prewarming'
+);
 const naturalUpdateStart = tunnelingSource.indexOf('  update(playerPosition) {');
 const naturalUpdateEnd = tunnelingSource.indexOf('  getNaturalCaveNetwork()', naturalUpdateStart);
 const naturalUpdateSource = tunnelingSource.slice(naturalUpdateStart, naturalUpdateEnd);
@@ -274,6 +281,18 @@ assert.ok(
   tunnelingSource.includes('this.naturalFeatureChunkKeys = new Map()')
     && tunnelingSource.includes('this.naturalFeatureChunkKeys.set(feature.id, Object.freeze(renderKeys))'),
   'natural cave feature render keys must be filtered once and cached instead of rebuilding full feature bounds each frame'
+);
+assert.ok(
+  tunnelingSource.includes('this.naturalEntryChunkKeys = new Set()')
+    && tunnelingSource.includes("feature.kind === 'entrance' || feature.kind === 'descent'")
+    && tunnelingSource.includes('entryPriority: this.naturalEntryChunkKeys.has(key)'),
+  'entrance/descent render chunks must use one cached priority lane instead of a second streaming system'
+);
+assert.ok(
+  naturalActivationSource.includes('naturalEntryCriticalRenderRadius')
+    && naturalActivationSource.includes('entryPriorityOf')
+    && naturalActivationSource.includes('criticalRadiusSqFor'),
+  'entry priority must reuse the same bounded scheduler with only a larger critical distance'
 );
 assert.ok(
   naturalActivationSource.includes('naturalRenderPrewarmRadius')
