@@ -265,23 +265,24 @@ body.hammer-construction-expanded #boot-status:not([data-error="true"]) {
 
 @media (orientation: landscape) and (max-height: 520px) {
   .hammer-construction-menu:not(.collapsed) {
-    padding: 6px;
+    padding: 5px;
   }
 
   .hammer-construction-header {
-    padding-bottom: 4px;
+    gap: 5px;
+    padding-bottom: 3px;
   }
 
   .construction-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 4px;
+    gap: 3px;
   }
 
   .construction-list-item {
     grid-template-columns: 22px minmax(0, 1fr);
     gap: 5px;
     min-height: 44px;
-    padding: 4px 5px;
+    padding: 3px 5px;
   }
 
   .construction-list-item > img,
@@ -302,8 +303,9 @@ body.hammer-construction-expanded #boot-status:not([data-error="true"]) {
   }
 
   .hammer-construction-help {
-    margin-top: 4px;
+    margin-top: 3px;
     font-size: 6px;
+    line-height: 1.15;
   }
 }
 

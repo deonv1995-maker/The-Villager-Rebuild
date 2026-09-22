@@ -127,6 +127,9 @@ const mobileHudSource = fs.readFileSync(new URL('../src/ui/MobileHud.js', import
 const contextActionSource = fs.readFileSync(new URL('../src/ui/ContextActionPolicy.js', import.meta.url), 'utf8');
 const stylesSource = fs.readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 const inventoryMenuStyles = fs.readFileSync(new URL('../src/inventory-menu.css', import.meta.url), 'utf8');
+const hammerMenuStyles = fs.readFileSync(new URL('../src/hammer-construction-menu.css', import.meta.url), 'utf8');
+const cameraViewStyles = fs.readFileSync(new URL('../src/camera-view.css', import.meta.url), 'utf8');
+const sproutStyles = fs.readFileSync(new URL('../src/sprout.css', import.meta.url), 'utf8');
 const assetPathsSource = fs.readFileSync(new URL('../src/data/AssetPaths.js', import.meta.url), 'utf8');
 const equipmentRuntimeSource = fs.readFileSync(new URL('../src/gameplay/EquipmentRuntimeController.js', import.meta.url), 'utf8');
 const placeableRuntimeSource = fs.readFileSync(new URL('../src/gameplay/PlaceableUtilityRuntimeController.js', import.meta.url), 'utf8');
@@ -224,6 +227,34 @@ assert.match(
 );
 assert.match(inventoryMenuStyles, /\.inventory-grid\s*\{[\s\S]*?display: grid;/, 'Opened suitcase must expose a grid rather than a permanent resource stack');
 assert.match(stylesSource, /\.hud-button\.action\s*\{/, 'Unified Action button needs a dedicated mobile layout');
+assert.ok(
+  stylesSource.includes('max-width: min(360px, calc(50vw - 128px));') &&
+  stylesSource.includes('text-overflow: ellipsis;'),
+  'Short-landscape gameplay status must stay inside the left HUD lane instead of overlapping centered survival vitals'
+);
+for (const state of ['hammer-construction', 'pickaxe-terrain', 'shovel-landscaping']) {
+  assert.ok(
+    cameraViewStyles.includes('.' + state + '-open'),
+    'Camera View must react to the compact ' + state + ' drawer state'
+  );
+  assert.ok(
+    cameraViewStyles.includes('.' + state + '-expanded'),
+    'Camera View must move beside the expanded ' + state + ' drawer'
+  );
+  assert.ok(
+    sproutStyles.includes('.' + state + '-expanded'),
+    'Sprout must remain reachable beside the expanded ' + state + ' drawer'
+  );
+}
+assert.ok(
+  sproutStyles.includes('top: max(62px, calc(env(safe-area-inset-top) + 56px));'),
+  'Sprout compact access must sit below the short-landscape tool dock rather than touching it'
+);
+assert.ok(
+  hammerMenuStyles.includes('min-height: 44px;') &&
+  hammerMenuStyles.includes('grid-template-columns: repeat(2, minmax(0, 1fr));'),
+  'Short-landscape tool drawers must retain deliberate touch targets in the compact shared two-column layout'
+);
 
 assert.doesNotMatch(mobileHudSource, /data-role="joystick"/, 'The visible fixed walking thumb grip must be removed');
 assert.doesNotMatch(mobileHudSource, /<button class="hud-button sprint"/, 'Sprint must not remain a permanent standalone button');

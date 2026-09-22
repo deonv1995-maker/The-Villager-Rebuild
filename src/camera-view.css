@@ -22,11 +22,19 @@
   backdrop-filter: blur(6px);
 }
 
-body.hammer-construction-open .camera-view-toggle {
+body:is(
+  .hammer-construction-open,
+  .pickaxe-terrain-open,
+  .shovel-landscaping-open
+) .camera-view-toggle {
   right: max(156px, calc(env(safe-area-inset-right) + 152px));
 }
 
-body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
+body:is(
+  .hammer-construction-expanded,
+  .pickaxe-terrain-expanded,
+  .shovel-landscaping-expanded
+) .camera-view-toggle {
   right: min(
     max(208px, calc(env(safe-area-inset-right) + 204px)),
     calc(100vw - 56px)
@@ -76,11 +84,19 @@ body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
     height: 38px;
   }
 
-  body.hammer-construction-open .camera-view-toggle {
+  body:is(
+    .hammer-construction-open,
+    .pickaxe-terrain-open,
+    .shovel-landscaping-open
+  ) .camera-view-toggle {
     right: max(142px, calc(env(safe-area-inset-right) + 139px));
   }
 
-  body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle {
+  body:is(
+    .hammer-construction-expanded,
+    .pickaxe-terrain-expanded,
+    .shovel-landscaping-expanded
+  ) .camera-view-toggle {
     right: min(
       max(196px, calc(env(safe-area-inset-right) + 193px)),
       calc(100vw - 54px)

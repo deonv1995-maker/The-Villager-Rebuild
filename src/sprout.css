@@ -252,8 +252,16 @@ body.sprout-dialogue-active .mobile-hud .toolbelt {
 
 @media (orientation: landscape) and (max-height: 560px) {
   .sprout-command-access {
-    top: max(54px, calc(env(safe-area-inset-top) + 48px));
+    top: max(62px, calc(env(safe-area-inset-top) + 56px));
     width: 240px;
+  }
+
+  body:is(
+    .hammer-construction-expanded,
+    .pickaxe-terrain-expanded,
+    .shovel-landscaping-expanded
+  ) .sprout-command-access {
+    right: max(208px, calc(env(safe-area-inset-right) + 204px));
   }
 
   .sprout-command-list button {

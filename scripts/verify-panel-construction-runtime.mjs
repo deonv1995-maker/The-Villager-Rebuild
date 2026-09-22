@@ -623,9 +623,10 @@ assert.ok(
   'Compact construction styling must reserve the top HUD lane and prevent the expanded menu from overlapping status text'
 );
 assert.ok(
-  cameraStylesSource.includes('body.hammer-construction-open .camera-view-toggle') &&
+  cameraStylesSource.includes('.hammer-construction-open') &&
   cameraStylesSource.includes('max(156px, calc(env(safe-area-inset-right) + 152px))') &&
-  cameraStylesSource.includes('body.hammer-construction-open.hammer-construction-expanded .camera-view-toggle'),
+  cameraStylesSource.includes('.hammer-construction-expanded') &&
+  cameraStylesSource.includes('max(208px, calc(env(safe-area-inset-right) + 204px))'),
   'Camera control must use separate compact and expanded Hammer offsets instead of overlapping build controls'
 );
 assert.ok(
