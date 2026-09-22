@@ -112,16 +112,16 @@ export class ExplorationPoiSystem {
     return this.ores.findNearestLooseResource(position, maxDistance, filter);
   }
 
-  reserveLooseOre(id, owner) {
-    return this.ores.reserveLooseResource(id, owner);
+  reserveLooseOre(id, owner, options = {}) {
+    return this.ores.reserveLooseResource(id, owner, options);
   }
 
   releaseLooseOre(id, owner) {
     return this.ores.releaseLooseResource(id, owner);
   }
 
-  takeReservedLooseOre(id, owner) {
-    return this.ores.takeReservedLooseResource(id, owner);
+  takeReservedLooseOre(id, owner, options = {}) {
+    return this.ores.takeReservedLooseResource(id, owner, options);
   }
 
   mine(target) {
