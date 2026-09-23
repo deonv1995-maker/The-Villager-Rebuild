@@ -285,7 +285,7 @@ button.inventory-card { pointer-events: auto; touch-action: none; }
 
 
 /* Player menu shell: the existing inventory/crafting surface remains the single paused UI authority. */
-.player-menu-toggle {
+.inventory-menu-toggle {
   padding: 10px;
 }
 
