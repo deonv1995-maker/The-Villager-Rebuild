@@ -52,7 +52,7 @@ assert.ok(hud.includes('Find Relics to reveal Sprout upgrades.'), 'Upgrade shell
 assert.ok(hud.includes("tab === 'craft' || tab === 'crafting'"), 'Legacy crafting callers must map into the new Crafting section');
 assert.ok(hud.includes('openPlayerMenu(') && hud.includes('closePlayerMenu('), 'Player-menu API must be explicit while retaining compatibility aliases');
 assert.ok(placeable.includes("openInventory?.('craft')"), 'Existing Crafting Bench flow must stay on the compatibility surface');
-assert.ok(food.includes('closeInventory()'), 'Existing food flow must keep closing the shared menu surface');
+assert.ok(food.includes('closeInventory?.()'), 'Existing food flow must keep closing the shared menu surface');
 
 assert.ok(
   app.includes("onInventoryVisibilityChange: open => this.setPaused(open, 'inventory-menu')"),
