@@ -1,6 +1,6 @@
 # Inventory, Mining and Upgrade Progression
 
-Status: **design locked; implementation active. The first runtime slice is the ore/mining layer and Stone node correction.**
+Status: **design locked; implementation active. Ore/mining and slot-based shared inventory are implemented; the paused multi-function player menu is next.**
 
 This document defines the next shared progression layer for inventory organization, Sprout storage, cave materials, equipment production upgrades, relic schematics and Shards. Implementation must extend the existing shared inventory, crafting, equipment, gathering, Sprout, cave/mining and save authorities rather than introduce parallel systems.
 
@@ -265,15 +265,15 @@ Any save-format extension must preserve compatible existing profiles where pract
 
 ## Implementation order
 
-Implementation is proceeding incrementally from the stable current runtime. The ore/mining slice may land before the slot-based inventory refactor because it can extend the existing shared inventory safely without changing its authority. Until the slot refactor lands, Copper, Iron and Diamond use the current inventory-capacity accounting only as a compatibility bridge; the locked 14-item stack / 14 -> 28 -> 56 slot model remains the target.
+Implementation is proceeding incrementally from the stable current runtime. The ore/mining slice landed first, followed by the dedicated slot-based inventory migration. Copper, Iron and Diamond now use the same authoritative 14-item stack model as the other compact materials, while old quantity-only saves remain compatible and may temporarily restore over capacity without item loss.
 
 Implement in this order:
 
-1. shared item/resource metadata needed for categories, stack size and slot cost;
-2. slot-based shared inventory capacity and Sprout 14/28/56 storage progression;
-3. paused multi-function player menu with Inventory/Crafting/Upgrades and Shard balance;
-4. data-driven mining node size/hit/yield correction, including Stone;
-5. Copper, Iron and Diamond resource definitions and depth-weighted cave placement;
+1. **Implemented** — shared item/resource metadata for categories, stack size and slot cost;
+2. **Implemented** — slot-based shared inventory capacity and Sprout 14/28/56 storage progression;
+3. **Next** — paused multi-function player menu with Inventory/Crafting/Upgrades and Shard balance;
+4. **Implemented** — data-driven mining node size/hit/yield correction, including Stone;
+5. **Implemented** — Copper, Iron and Diamond resource definitions and depth-weighted cave placement;
 6. per-item equipment production tiers and immediate owned-item upgrade/reset behavior;
 7. Relic schematic discovery cards and persistent reveal state;
 8. universal Shard currency and Sprout upgrade activation;
