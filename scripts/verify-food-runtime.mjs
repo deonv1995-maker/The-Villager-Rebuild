@@ -139,14 +139,13 @@ assert.ok(
   'Selecting too few mushrooms must explain the missing recipe quantity'
 );
 
-const [app, main, hud, placeable, persistence, assetPaths, capacity] = await Promise.all([
+const [app, main, hud, placeable, persistence, assetPaths] = await Promise.all([
   readFile('src/core/GameApp.js', 'utf8'),
   readFile('src/main.js', 'utf8'),
   readFile('src/ui/MobileHud.js', 'utf8'),
   readFile('src/gameplay/PlaceableUtilityRuntimeController.js', 'utf8'),
   readFile('src/persistence/GameStatePersistence.js', 'utf8'),
-  readFile('src/data/AssetPaths.js', 'utf8'),
-  readFile('src/data/InventoryCapacityDefinitions.js', 'utf8')
+  readFile('src/data/AssetPaths.js', 'utf8')
 ]);
 
 assert.ok(app.includes('this.foodRuntime?.update(dt)'), 'GameApp must advance the shared food runtime');
@@ -162,8 +161,11 @@ assert.ok(persistence.includes('game.foodRuntime?.restoreState?.(state.food)'), 
 assert.ok(assetPaths.includes("cooked_meat: asset('ui/cosy/icon-resource-meat.webp')"), 'Cooked meat must resolve through the centralized resource icon registry');
 assert.ok(assetPaths.includes("mushroom: asset('ui/mobile/icon-resource-mushroom.svg')"), 'Mushrooms must resolve through the centralized resource icon registry');
 assert.ok(assetPaths.includes("mushroom_stew: asset('ui/mobile/icon-resource-mushroom-stew.svg')"), 'Mushroom stew must resolve through the centralized resource icon registry');
-assert.ok(capacity.includes('cooked_meat: 2'), 'Cooked meat must preserve raw-meat carrying bulk');
-assert.ok(capacity.includes('mushroom: 1'), 'Mushrooms must use lightweight carrying bulk');
-assert.ok(capacity.includes('mushroom_stew: 2'), 'Mushroom stew must use meal-sized carrying bulk');
+assert.equal(RESOURCE_DEFINITIONS.cooked_meat.stackSize, 14, 'Cooked meat must use the shared compact food stack');
+assert.equal(RESOURCE_DEFINITIONS.cooked_meat.slotCost, 1);
+assert.equal(RESOURCE_DEFINITIONS.mushroom.stackSize, 14, 'Mushrooms must use the shared compact food stack');
+assert.equal(RESOURCE_DEFINITIONS.mushroom.slotCost, 1);
+assert.equal(RESOURCE_DEFINITIONS.mushroom_stew.stackSize, 14, 'Mushroom stew must use the shared compact food stack');
+assert.equal(RESOURCE_DEFINITIONS.mushroom_stew.slotCost, 1);
 
 console.log('Shared campfire recipes, mushroom stew, cooked-food inventory actions, hunger restoration and cooking persistence verified.');
