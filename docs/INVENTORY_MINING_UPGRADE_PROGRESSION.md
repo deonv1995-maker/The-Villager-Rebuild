@@ -1,6 +1,6 @@
 # Inventory, Mining and Upgrade Progression
 
-Status: **design locked; implementation active. Ore/mining and slot-based shared inventory are implemented; the paused multi-function player menu is next.**
+Status: **design locked; implementation active. Ore/mining, slot-based shared inventory and the paused multi-function player menu are implemented; per-item equipment production tiers are next.**
 
 This document defines the next shared progression layer for inventory organization, Sprout storage, cave materials, equipment production upgrades, relic schematics and Shards. Implementation must extend the existing shared inventory, crafting, equipment, gathering, Sprout, cave/mining and save authorities rather than introduce parallel systems.
 
@@ -271,10 +271,10 @@ Implement in this order:
 
 1. **Implemented** — shared item/resource metadata for categories, stack size and slot cost;
 2. **Implemented** — slot-based shared inventory capacity and Sprout 14/28/56 storage progression;
-3. **Next** — paused multi-function player menu with Inventory/Crafting/Upgrades and Shard balance;
+3. **Implemented** — paused multi-function player menu with Inventory/Crafting/Upgrades and Shard balance;
 4. **Implemented** — data-driven mining node size/hit/yield correction, including Stone;
 5. **Implemented** — Copper, Iron and Diamond resource definitions and depth-weighted cave placement;
-6. per-item equipment production tiers and immediate owned-item upgrade/reset behavior;
+6. **Next** — per-item equipment production tiers and immediate owned-item upgrade/reset behavior;
 7. Relic schematic discovery cards and persistent reveal state;
 8. universal Shard currency and Sprout upgrade activation;
 9. progression/rarity tuning and device verification.
