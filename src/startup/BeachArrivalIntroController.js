@@ -18,33 +18,6 @@ const PHASE_DURATION = Object.freeze({
   [PHASE.SETTLE]: 0.65
 });
 
-const PHASE_SEQUENCE = Object.freeze([
-  PHASE.PRONE,
-  PHASE.CRAWL,
-  PHASE.RISE,
-  PHASE.DUST,
-  PHASE.SETTLE
-]);
-
-const PHASE_START = Object.freeze({
-  [PHASE.PRONE]: 0,
-  [PHASE.CRAWL]: PHASE_DURATION[PHASE.PRONE],
-  [PHASE.RISE]: PHASE_DURATION[PHASE.PRONE] + PHASE_DURATION[PHASE.CRAWL],
-  [PHASE.DUST]:
-    PHASE_DURATION[PHASE.PRONE]
-    + PHASE_DURATION[PHASE.CRAWL]
-    + PHASE_DURATION[PHASE.RISE],
-  [PHASE.SETTLE]:
-    PHASE_DURATION[PHASE.PRONE]
-    + PHASE_DURATION[PHASE.CRAWL]
-    + PHASE_DURATION[PHASE.RISE]
-    + PHASE_DURATION[PHASE.DUST]
-});
-
-const ARRIVAL_DURATION =
-  PHASE_START[PHASE.SETTLE] + PHASE_DURATION[PHASE.SETTLE];
-const ARRIVAL_WATCHDOG_GRACE_SECONDS = 2.5;
-
 const CRAWL_ANIMATIONS = Object.freeze([
   'Crawling_A',
   'Crawling',
@@ -94,9 +67,6 @@ export class BeachArrivalIntroController {
     this.onComplete = typeof onComplete === 'function' ? onComplete : null;
     this.phase = PHASE.COMPLETE;
     this.phaseElapsed = 0;
-    this.introElapsed = 0;
-    this.introStartedAt = null;
-    this.watchdogTimer = null;
     this.started = false;
     this.completed = false;
     this.phaseAnimation = null;
@@ -116,8 +86,6 @@ export class BeachArrivalIntroController {
 
     this.started = true;
     this.completed = false;
-    this.introElapsed = 0;
-    this.introStartedAt = globalThis.performance?.now?.() ?? null;
     this.spawn = this.island.getSpawnPoint?.() ?? { x: 0, z: 91 };
     const seawardDirection = this.#resolveSeawardDirection(this.spawn);
     this.wetSand = this.#findShallowWaterStart(this.spawn, seawardDirection);
@@ -138,37 +106,13 @@ export class BeachArrivalIntroController {
       snapCamera: true
     });
     this.setStatus?.('DAY 1 · WASHED ASHORE');
-    this.watchdogTimer = window.setTimeout(
-      () => this.#complete('watchdog'),
-      Math.ceil((ARRIVAL_DURATION + ARRIVAL_WATCHDOG_GRACE_SECONDS) * 1000)
-    );
     return true;
   }
 
   update(dt, player = this.player) {
     if (!this.started || this.completed || !player) return;
-
-    const now = globalThis.performance?.now?.();
-    if (Number.isFinite(now) && Number.isFinite(this.introStartedAt)) {
-      this.introElapsed = Math.max(0, (now - this.introStartedAt) / 1000);
-    } else {
-      this.introElapsed += Math.max(0, dt);
-    }
-
-    if (this.introElapsed >= ARRIVAL_DURATION) {
-      this.#complete();
-      return;
-    }
-
-    let currentPhase = PHASE.PRONE;
-    for (const phase of PHASE_SEQUENCE) {
-      if (this.introElapsed >= PHASE_START[phase]) currentPhase = phase;
-      else break;
-    }
-    if (currentPhase !== this.phase) this.#enterPhase(currentPhase);
-
+    this.phaseElapsed += dt;
     const duration = PHASE_DURATION[this.phase] ?? 0.01;
-    this.phaseElapsed = Math.max(0, this.introElapsed - (PHASE_START[this.phase] ?? 0));
     const progress = THREE.MathUtils.clamp(this.phaseElapsed / duration, 0, 1);
 
     if (this.phase === PHASE.PRONE) {
@@ -232,6 +176,7 @@ export class BeachArrivalIntroController {
       });
     }
 
+    if (progress >= 1) this.#advancePhase();
   }
 
   #terrainHeightAt(x, z) {
@@ -386,55 +331,33 @@ export class BeachArrivalIntroController {
     }
   }
 
-  #complete(reason = 'timeline') {
+  #advancePhase() {
+    if (this.phase === PHASE.PRONE) this.#enterPhase(PHASE.CRAWL);
+    else if (this.phase === PHASE.CRAWL) this.#enterPhase(PHASE.RISE);
+    else if (this.phase === PHASE.RISE) this.#enterPhase(PHASE.DUST);
+    else if (this.phase === PHASE.DUST) this.#enterPhase(PHASE.SETTLE);
+    else if (this.phase === PHASE.SETTLE) this.#complete();
+  }
+
+  #complete() {
     if (this.completed) return;
+    this.crawlPose.stop();
     this.completed = true;
     this.phase = PHASE.COMPLETE;
-
-    if (this.watchdogTimer !== null) {
-      window.clearTimeout(this.watchdogTimer);
-      this.watchdogTimer = null;
-    }
-
-    try {
-      this.crawlPose.stop();
-    } catch (error) {
-      console.warn('[ARRIVAL] Unable to stop crawl pose cleanly', error);
-    }
-
-    try {
-      this.player.setCinematicPose({
-        x: this.crawlEnd.x,
-        z: this.crawlEnd.z,
-        yaw: Math.PI,
-        modelPitch: 0,
-        modelYaw: 0,
-        modelRoll: 0,
-        modelYOffset: 0
-      });
-    } catch (error) {
-      console.warn('[ARRIVAL] Unable to apply final shore pose', error);
-    }
-
-    try {
-      this.player.endCinematic(this);
-    } catch (error) {
-      console.warn('[ARRIVAL] Unable to release Ranger cinematic ownership', error);
-    }
-
+    this.player.setCinematicPose({
+      x: this.crawlEnd.x,
+      z: this.crawlEnd.z,
+      yaw: Math.PI,
+      modelPitch: 0,
+      modelYaw: 0,
+      modelRoll: 0,
+      modelYOffset: 0
+    });
+    this.player.endCinematic(this);
     document.body.classList.remove('arrival-intro-active');
     document.body.classList.add('arrival-intro-revealing');
-    this.setStatus?.(
-      reason === 'watchdog'
-        ? 'DAY 1 · ASHORE · ARRIVAL RECOVERED'
-        : 'DAY 1 · GATHER A STICK + STONE'
-    );
+    this.setStatus?.('DAY 1 · GATHER A STICK + STONE');
     window.setTimeout(() => document.body.classList.remove('arrival-intro-revealing'), 1100);
-
-    try {
-      this.onComplete?.();
-    } catch (error) {
-      console.error('[ARRIVAL] Completion callback failed', error);
-    }
+    this.onComplete?.();
   }
 }
