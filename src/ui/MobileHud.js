@@ -87,7 +87,7 @@ export class MobileHud {
 
     this.root.innerHTML = `
       <div class="inventory-quick-access" data-role="inventory-quick-access">
-        <button class="inventory-menu-toggle player-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open player menu" aria-expanded="false">
+        <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open player menu" aria-expanded="false">
           <span class="player-menu-grid-icon" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
           </span>
