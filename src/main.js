@@ -50,9 +50,10 @@ function setStatus(message, error = false) {
 const setGameplayStatus = createGameplayStatusSink(setStatus);
 
 async function bootGameplay(titleScene = null, { resume = false, profile = null } = {}) {
+  titleScene?.dispose({ keepTransition: true });
+  const saveStore = new SaveGameStore({ profileId: profile?.id ?? null });
+
   try {
-    titleScene?.dispose({ keepTransition: true });
-    const saveStore = new SaveGameStore({ profileId: profile?.id ?? null });
     setStatus(resume ? 'CONTINUE · LOADING SAVE POINT' : 'FOUNDATION 0.3.8 · LOADING WORLD');
     const game = new GameApp({ canvas, setStatus: setGameplayStatus });
     await game.start();
