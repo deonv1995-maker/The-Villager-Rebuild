@@ -446,3 +446,20 @@ Reason: storage capacity, Ranger pickup, Sprout collection, storage withdrawal, 
 placeable pickup and future player-menu rendering all need the same item metadata and slot
 calculation so later progression does not reintroduce competing capacity rules.
 
+
+
+## 2026-09-23 — Beach arrival progression uses wall-clock time
+
+Decision: the new-game beach-arrival cinematic keeps its existing prone, crawl, rise, dust and
+settle presentation, but its phase timeline is measured from `performance.now()` instead of the
+render loop's capped gameplay delta. The gameplay loop may continue capping simulation delta for
+movement and world stability; cinematic elapsed time is a separate presentation concern.
+
+If a slow mobile device renders below the gameplay delta cap, the arrival timeline can skip
+directly to the phase matching real elapsed time and must release Ranger cinematic ownership and
+the intentionally hidden HUD once the established arrival duration has elapsed. No terrain,
+camera, controls, save, PWA, or gameplay-system authority changes are part of this fix.
+
+Reason: the arrival HUD is deliberately hidden while `arrival-intro-active` is set. Advancing that
+state only with the capped frame delta could make a roughly nine-second arrival last many times
+longer on a slow device, leaving a valid world render looking like a frozen blank gameplay screen.
