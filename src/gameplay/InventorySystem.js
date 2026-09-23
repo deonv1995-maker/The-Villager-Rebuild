@@ -1,9 +1,10 @@
 import { INVENTORY_DEFINITIONS } from '../data/ItemDefinitions.js';
 import { isCookingIngredient } from '../data/CookingRecipeDefinitions.js';
 import {
-  INVENTORY_ITEM_BULK,
   INVENTORY_STORAGE_MODE,
-  INVENTORY_STORAGE_PROFILES
+  INVENTORY_STORAGE_PROFILES,
+  SPROUT_STORAGE_CAPACITY_BY_LEVEL,
+  SPROUT_STORAGE_LEVELS
 } from '../data/InventoryCapacityDefinitions.js';
 
 export class InventorySystem {
@@ -11,6 +12,7 @@ export class InventorySystem {
     this.definitions = definitions;
     this.quantities = new Map(Object.keys(definitions).map(id => [id, 0]));
     this.storageMode = INVENTORY_STORAGE_MODE.RANGER;
+    this.sproutStorageLevel = SPROUT_STORAGE_LEVELS[0];
     this.listeners = new Set();
   }
 
@@ -44,9 +46,15 @@ export class InventorySystem {
   canAdd(itemId, amount = 1) {
     this.#validateItem(itemId);
     this.#validateAmount(amount);
+    const currentQuantity = this.get(itemId);
+    const currentSlots = this.getItemSlotUsage(itemId, currentQuantity);
+    const nextSlots = this.getItemSlotUsage(itemId, currentQuantity + amount);
+    const addedSlots = nextSlots - currentSlots;
+    if (addedSlots <= 0) return true;
+
     const state = this.getStorageState();
     if (state.overCapacity) return false;
-    return state.used + this.getItemStorageCost(itemId) * amount <= state.capacity;
+    return state.used + addedSlots <= state.capacity;
   }
 
   get(itemId) {
@@ -97,29 +105,62 @@ export class InventorySystem {
     return this.setStorageMode(INVENTORY_STORAGE_MODE.SPROUT);
   }
 
-  getItemStorageCost(itemId, mode = this.storageMode) {
+  setSproutStorageLevel(level) {
+    const normalized = Number(level);
+    if (!Number.isInteger(normalized) || !SPROUT_STORAGE_LEVELS.includes(normalized)) {
+      throw new Error(`Unknown Sprout storage level: ${level}`);
+    }
+    if (this.sproutStorageLevel === normalized) return this.getStorageState();
+    this.sproutStorageLevel = normalized;
+    this.#emitChange();
+    return this.getStorageState();
+  }
+
+  getItemStackSize(itemId) {
     this.#validateItem(itemId);
-    const profile = INVENTORY_STORAGE_PROFILES[mode];
-    if (!profile) throw new Error(`Unknown inventory storage mode: ${mode}`);
-    const rawBulk = INVENTORY_ITEM_BULK[itemId] ?? 1;
-    return Math.max(1, Math.ceil(rawBulk / profile.compressionRatio));
+    const stackSize = Number(this.definitions[itemId].stackSize);
+    return Number.isInteger(stackSize) && stackSize > 0 ? stackSize : 1;
+  }
+
+  getItemSlotCost(itemId) {
+    this.#validateItem(itemId);
+    const slotCost = Number(this.definitions[itemId].slotCost);
+    return Number.isInteger(slotCost) && slotCost >= 0 ? slotCost : 1;
+  }
+
+  getItemSlotUsage(itemId, quantity = this.get(itemId)) {
+    this.#validateItem(itemId);
+    const normalizedQuantity = Number(quantity);
+    if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 0) {
+      throw new Error(`Invalid inventory quantity: ${quantity}`);
+    }
+    if (normalizedQuantity === 0) return 0;
+    const slotCost = this.getItemSlotCost(itemId);
+    if (slotCost === 0) return 0;
+    return Math.ceil(normalizedQuantity / this.getItemStackSize(itemId)) * slotCost;
   }
 
   getStorageState() {
     const profile = INVENTORY_STORAGE_PROFILES[this.storageMode];
+    const capacity = this.storageMode === INVENTORY_STORAGE_MODE.SPROUT
+      ? SPROUT_STORAGE_CAPACITY_BY_LEVEL[this.sproutStorageLevel]
+      : profile.capacity;
     let used = 0;
     for (const definition of Object.values(this.definitions)) {
-      used += this.get(definition.id) * this.getItemStorageCost(definition.id);
+      used += this.getItemSlotUsage(definition.id, this.get(definition.id));
     }
     return {
       mode: profile.id,
       label: profile.label,
       hudLabel: profile.hudLabel,
       used,
-      capacity: profile.capacity,
-      remaining: Math.max(0, profile.capacity - used),
-      overCapacity: used > profile.capacity,
-      compressionRatio: profile.compressionRatio
+      capacity,
+      remaining: Math.max(0, capacity - used),
+      overCapacity: used > capacity,
+      storageLevel: this.storageMode === INVENTORY_STORAGE_MODE.SPROUT
+        ? this.sproutStorageLevel
+        : null,
+      unit: 'slots'
     };
   }
 
@@ -135,6 +176,9 @@ export class InventorySystem {
       label: definition.label,
       kind: definition.kind ?? 'resource',
       storageCategory: definition.storageCategory ?? null,
+      stackSize: this.getItemStackSize(definition.id),
+      slotCost: this.getItemSlotCost(definition.id),
+      slotsUsed: this.getItemSlotUsage(definition.id),
       edible: Boolean(definition.food?.edible),
       cookable: isCookingIngredient(definition.id),
       quantity: this.get(definition.id)
