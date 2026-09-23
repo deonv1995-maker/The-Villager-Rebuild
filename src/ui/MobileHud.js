@@ -99,8 +99,8 @@ export class MobileHud {
           <strong class="inventory-capacity-readout" data-role="inventory-capacity-readout">0 / 14</strong>
         </div>
       </div>
-      <section class="inventory-menu player-menu" data-role="inventory-menu" aria-label="Player menu" hidden>
-        <div class="inventory-menu-header player-menu-header">
+      <section class="inventory-menu" data-role="inventory-menu" aria-label="Player menu" hidden>
+        <div class="inventory-menu-header">
           <div class="player-menu-title">
             <strong>PLAYER MENU</strong>
             <span data-role="inventory-capacity">PACK</span>
@@ -113,7 +113,7 @@ export class MobileHud {
             <button class="inventory-menu-close" type="button" data-role="inventory-close" aria-label="Close player menu">×</button>
           </div>
         </div>
-        <nav class="inventory-tabs player-menu-tabs" aria-label="Player menu sections">
+        <nav class="inventory-tabs" aria-label="Player menu sections">
           <button class="inventory-tab active" type="button" data-inventory-tab="inventory" aria-pressed="true">INVENTORY</button>
           <button class="inventory-tab" type="button" data-inventory-tab="crafting" aria-pressed="false">CRAFTING</button>
           <button class="inventory-tab" type="button" data-inventory-tab="upgrades" aria-pressed="false">UPGRADES</button>
