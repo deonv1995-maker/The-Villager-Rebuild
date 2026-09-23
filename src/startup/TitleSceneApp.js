@@ -27,7 +27,6 @@ export class TitleSceneApp {
     this.state = 'loading';
     this.elapsed = 0;
     this.introElapsed = 0;
-    this.introStartedAt = null;
     this.stormDanger = 0;
     this.playStarted = false;
     this.onPlay = null;
@@ -111,7 +110,6 @@ export class TitleSceneApp {
     this.camera.updateProjectionMatrix();
     this.state = 'intro';
     this.introElapsed = 0;
-    this.introStartedAt = globalThis.performance?.now?.() ?? null;
     this.menuUi?.classList.add('is-leaving');
     this.setStatus('VOYAGE · ISLAND AHEAD');
   }
@@ -453,12 +451,7 @@ export class TitleSceneApp {
   }
 
   #updateIntro(dt) {
-    const now = globalThis.performance?.now?.();
-    if (Number.isFinite(now) && Number.isFinite(this.introStartedAt)) {
-      this.introElapsed = Math.max(0, (now - this.introStartedAt) / 1000);
-    } else {
-      this.introElapsed += dt;
-    }
+    this.introElapsed += dt;
     const t = THREE.MathUtils.clamp(this.introElapsed / TITLE_SCENE.introDuration, 0, 1);
     const danger = THREE.MathUtils.smoothstep(t, TITLE_SCENE.stormStart, TITLE_SCENE.stormFull);
     const severe = THREE.MathUtils.smoothstep(t, TITLE_SCENE.severeStormStart, TITLE_SCENE.severeStormFull);
@@ -528,25 +521,10 @@ export class TitleSceneApp {
     if (t >= 1 && this.state === 'intro') {
       this.state = 'handoff';
       this.running = false;
-      try {
-        const handoff = this.onPlay?.();
-        if (handoff && typeof handoff.then === 'function') {
-          void handoff.catch(error => this.#handleHandoffError(error));
-        } else if (!this.onPlay) {
-          this.#handleHandoffError(new Error('Gameplay handoff callback is unavailable'));
-        }
-      } catch (error) {
-        this.#handleHandoffError(error);
-      }
+      void this.onPlay?.();
     }
 
     return t;
-  }
-
-  #handleHandoffError(error) {
-    console.error('[TITLE HANDOFF]', error);
-    this.releaseTransition();
-    this.setStatus(`VOYAGE · ERROR · ${error?.message ?? error}`);
   }
 
   #beginRangerJump() {
