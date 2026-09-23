@@ -459,7 +459,7 @@ assert(equipmentRuntimeSource.includes("setCraftingStation(station = 'hand')"), 
 assert(equipmentRuntimeSource.includes("BENCH_PLACEABLE_RECIPE_IDS = Object.freeze(['chest', 'barrel', 'bed'])"), 'Chest, Barrel and Bed recipes must remain bench-gated');
 assert(hudSource.includes('class="inventory-menu-toggle"'), 'HUD must expose one suitcase inventory entry point');
 assert(hudSource.includes('class="inventory-grid"'), 'Suitcase must expose an inventory grid');
-assert(hudSource.includes('data-inventory-tab="craft"'), 'Crafting must live inside the suitcase panel');
+assert(hudSource.includes('data-inventory-tab="crafting"'), 'Crafting must live inside the paused player-menu panel');
 assert(!hudSource.includes('class="craft-menu-toggle"'), 'Standalone crafting button must not return to the HUD');
 assert(hudSource.includes('onInventoryVisibilityChange'), 'Suitcase visibility must keep an explicit HUD callback boundary');
 assert(hudSource.includes('onInventoryItemSelect'), 'Placeable inventory selection must route through an explicit HUD callback');
