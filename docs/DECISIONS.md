@@ -446,3 +446,31 @@ Reason: storage capacity, Ranger pickup, Sprout collection, storage withdrawal, 
 placeable pickup and future player-menu rendering all need the same item metadata and slot
 calculation so later progression does not reintroduce competing capacity rules.
 
+## 2026-09-23 — Player menu reuses the paused inventory/crafting UI boundary
+
+Decision: convert the existing full-screen suitcase surface into one **Player Menu** rather than
+adding a second overlay. Its top-level sections are **Inventory**, **Crafting** and **Upgrades**.
+Opening that surface continues to use the established `GameApp.setPaused(..., 'inventory-menu')`
+boundary, so gameplay simulation, world time and active gameplay systems stop while the scene
+continues to render.
+
+Inventory presentation is driven only by the shared item metadata introduced by the slot-storage
+pass. The visible categories are **Materials**, **Food**, **Equipment & Placeables** and **Relics**.
+Tools and weapons may therefore appear in Equipment & Placeables without changing the bottom
+toolbelt's authority for equipping them. Placeables, edible items and cookable items retain their
+existing interaction paths.
+
+`sprout_shard` remains persistent in the authoritative shared inventory/profile state for now,
+but it is treated as zero-slot currency and is not rendered as an inventory card. The Player Menu
+reads that quantity into a persistent top-right Shard balance. The Upgrades section is deliberately
+a read-only reveal shell in this pass: it explains that Relics reveal Sprout upgrades but does not
+create upgrade state, costs or transactions ahead of the dedicated progression passes.
+
+Existing callers such as Crafting Bench and food interactions keep the legacy
+`openInventory`/`closeInventory` compatibility methods; those methods route into the same Player
+Menu rather than creating a competing UI path.
+
+Reason: one paused menu authority keeps inventory rendering, crafting, future upgrade presentation,
+Shard display and established mobile pause behavior synchronized without moving gameplay state into
+the UI layer.
+
