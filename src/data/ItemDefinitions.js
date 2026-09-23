@@ -2,13 +2,28 @@ import { PLACEABLE_UTILITY_DEFINITIONS } from './PlaceableUtilityDefinitions.js'
 import { RESOURCE_DEFINITIONS } from './ResourceDefinitions.js';
 import { TOOL_DEFINITIONS } from './ToolDefinitions.js';
 
+export const INVENTORY_CATEGORY = Object.freeze({
+  MATERIAL: 'material',
+  FOOD: 'food',
+  EQUIPMENT_PLACEABLES: 'equipment-placeables',
+  RELIC: 'relic',
+  CURRENCY: 'currency'
+});
+
+const EQUIPMENT_STORAGE = Object.freeze({
+  storageCategory: INVENTORY_CATEGORY.EQUIPMENT_PLACEABLES,
+  stackSize: 1,
+  slotCost: 1
+});
+
 export const CRAFTED_ITEM_DEFINITIONS = Object.freeze({
   ...Object.fromEntries(Object.values(TOOL_DEFINITIONS).map(tool => [
     tool.id,
     Object.freeze({
       id: tool.id,
       label: tool.label,
-      kind: tool.role === 'projectile' || tool.role === 'melee' ? 'weapon' : 'tool'
+      kind: tool.role === 'projectile' || tool.role === 'melee' ? 'weapon' : 'tool',
+      ...EQUIPMENT_STORAGE
     })
   ])),
   ...Object.fromEntries(Object.values(PLACEABLE_UTILITY_DEFINITIONS).map(placeable => [
@@ -16,7 +31,8 @@ export const CRAFTED_ITEM_DEFINITIONS = Object.freeze({
     Object.freeze({
       id: placeable.id,
       label: placeable.label,
-      kind: 'placeable'
+      kind: 'placeable',
+      ...EQUIPMENT_STORAGE
     })
   ]))
 });
@@ -25,7 +41,12 @@ export const INVENTORY_RESOURCE_DEFINITIONS = Object.freeze(
   Object.fromEntries(
     Object.entries(RESOURCE_DEFINITIONS)
       .filter(([, definition]) => definition.storage === 'inventory')
-      .map(([id, definition]) => [id, Object.freeze({ ...definition, kind: 'resource' })])
+      .map(([id, definition]) => [id, Object.freeze({
+        ...definition,
+        kind: 'resource',
+        stackSize: definition.stackSize ?? 1,
+        slotCost: definition.slotCost ?? 1
+      })])
   )
 );
 
