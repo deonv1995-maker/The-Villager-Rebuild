@@ -463,3 +463,12 @@ camera, controls, save, PWA, or gameplay-system authority changes are part of th
 Reason: the arrival HUD is deliberately hidden while `arrival-intro-active` is set. Advancing that
 state only with the capped frame delta could make a roughly nine-second arrival last many times
 longer on a slow device, leaving a valid world render looking like a frozen blank gameplay screen.
+
+
+## 2026-09-23 — Beach arrival has a fail-open device watchdog
+
+Decision: keep the existing beach-arrival cinematic, but add a one-shot wall-clock watchdog that is independent of the gameplay render/update loop. If the normal arrival timeline has not completed shortly after its established duration, the watchdog forcibly releases Ranger cinematic ownership, clears `arrival-intro-active`, reveals the HUD, and continues normal Day-1 startup.
+
+The cleanup path is defensive: failure to stop a crawl animation, apply the final pose, or release cinematic ownership must not leave the entire gameplay UI hidden. Those presentation errors are logged while the application still fails open into playable state. The watchdog is cleared on normal completion and does not add a second gameplay, save, camera, terrain, or input authority.
+
+Reason: device feedback after the wall-clock timeline fix still reproduced the bare-world/hidden-HUD state. The hidden-HUD state therefore needs its own independent escape hatch rather than relying on the same animation/update path that may be malfunctioning on a device.

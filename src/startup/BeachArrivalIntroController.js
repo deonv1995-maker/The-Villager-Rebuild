@@ -43,6 +43,7 @@ const PHASE_START = Object.freeze({
 
 const ARRIVAL_DURATION =
   PHASE_START[PHASE.SETTLE] + PHASE_DURATION[PHASE.SETTLE];
+const ARRIVAL_WATCHDOG_GRACE_SECONDS = 2.5;
 
 const CRAWL_ANIMATIONS = Object.freeze([
   'Crawling_A',
@@ -95,6 +96,7 @@ export class BeachArrivalIntroController {
     this.phaseElapsed = 0;
     this.introElapsed = 0;
     this.introStartedAt = null;
+    this.watchdogTimer = null;
     this.started = false;
     this.completed = false;
     this.phaseAnimation = null;
@@ -136,6 +138,10 @@ export class BeachArrivalIntroController {
       snapCamera: true
     });
     this.setStatus?.('DAY 1 · WASHED ASHORE');
+    this.watchdogTimer = window.setTimeout(
+      () => this.#complete('watchdog'),
+      Math.ceil((ARRIVAL_DURATION + ARRIVAL_WATCHDOG_GRACE_SECONDS) * 1000)
+    );
     return true;
   }
 
@@ -380,25 +386,55 @@ export class BeachArrivalIntroController {
     }
   }
 
-  #complete() {
+  #complete(reason = 'timeline') {
     if (this.completed) return;
-    this.crawlPose.stop();
     this.completed = true;
     this.phase = PHASE.COMPLETE;
-    this.player.setCinematicPose({
-      x: this.crawlEnd.x,
-      z: this.crawlEnd.z,
-      yaw: Math.PI,
-      modelPitch: 0,
-      modelYaw: 0,
-      modelRoll: 0,
-      modelYOffset: 0
-    });
-    this.player.endCinematic(this);
+
+    if (this.watchdogTimer !== null) {
+      window.clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+
+    try {
+      this.crawlPose.stop();
+    } catch (error) {
+      console.warn('[ARRIVAL] Unable to stop crawl pose cleanly', error);
+    }
+
+    try {
+      this.player.setCinematicPose({
+        x: this.crawlEnd.x,
+        z: this.crawlEnd.z,
+        yaw: Math.PI,
+        modelPitch: 0,
+        modelYaw: 0,
+        modelRoll: 0,
+        modelYOffset: 0
+      });
+    } catch (error) {
+      console.warn('[ARRIVAL] Unable to apply final shore pose', error);
+    }
+
+    try {
+      this.player.endCinematic(this);
+    } catch (error) {
+      console.warn('[ARRIVAL] Unable to release Ranger cinematic ownership', error);
+    }
+
     document.body.classList.remove('arrival-intro-active');
     document.body.classList.add('arrival-intro-revealing');
-    this.setStatus?.('DAY 1 · GATHER A STICK + STONE');
+    this.setStatus?.(
+      reason === 'watchdog'
+        ? 'DAY 1 · ASHORE · ARRIVAL RECOVERED'
+        : 'DAY 1 · GATHER A STICK + STONE'
+    );
     window.setTimeout(() => document.body.classList.remove('arrival-intro-revealing'), 1100);
-    this.onComplete?.();
+
+    try {
+      this.onComplete?.();
+    } catch (error) {
+      console.error('[ARRIVAL] Completion callback failed', error);
+    }
   }
 }
