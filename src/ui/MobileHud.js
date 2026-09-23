@@ -90,7 +90,7 @@ export class MobileHud {
           <span class="inventory-capacity-track" aria-hidden="true">
             <span class="inventory-capacity-fill" data-role="inventory-capacity-fill"></span>
           </span>
-          <strong class="inventory-capacity-readout" data-role="inventory-capacity-readout">0 / 24</strong>
+          <strong class="inventory-capacity-readout" data-role="inventory-capacity-readout">0 / 14</strong>
         </div>
       </div>
       <section class="inventory-menu" data-role="inventory-menu" aria-label="Inventory and crafting" hidden>
@@ -280,7 +280,7 @@ export class MobileHud {
       this.inventoryCapacityGauge.dataset.overCapacity = overCapacity ? 'true' : 'false';
       this.inventoryCapacityGauge.setAttribute(
         'aria-label',
-        `${state.label} storage, ${used} of ${capacity} bulk used`
+        `${state.label}, ${used} of ${capacity} slots used`
       );
     }
     if (this.inventoryToggle) {
