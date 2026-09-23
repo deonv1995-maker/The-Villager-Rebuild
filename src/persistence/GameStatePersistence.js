@@ -5,6 +5,7 @@ import {
   PHYSICAL_LOG
 } from '../data/PhysicalLogDefinitions.js';
 import { TOOL_DEFINITIONS, TOOL_DURABILITY } from '../data/ToolDefinitions.js';
+import { SPROUT_STORAGE_LEVELS } from '../data/InventoryCapacityDefinitions.js';
 import { createConstructionLogVisual } from '../world/PhysicalLogVisual.js';
 import { THATCH_GRASS_COST } from '../world/RoofThatchSystem.js';
 
@@ -85,7 +86,8 @@ const restorePlayer = (game, state) => {
 const captureInventory = game => ({
   quantities: Object.fromEntries(
     game.inventory.snapshot().map(item => [item.id, item.quantity])
-  )
+  ),
+  sproutStorageLevel: game.inventory.sproutStorageLevel
 });
 
 const restoreInventory = (game, state) => {
@@ -98,6 +100,11 @@ const restoreInventory = (game, state) => {
   for (const item of game.inventory.snapshot()) {
     const quantity = clampInteger(state.quantities[item.id]);
     if (quantity > 0) game.inventory.add(item.id, quantity);
+  }
+
+  const savedStorageLevel = clampInteger(state.sproutStorageLevel, SPROUT_STORAGE_LEVELS[0]);
+  if (SPROUT_STORAGE_LEVELS.includes(savedStorageLevel)) {
+    game.inventory.setSproutStorageLevel(savedStorageLevel);
   }
 };
 

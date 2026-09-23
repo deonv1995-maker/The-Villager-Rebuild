@@ -3,49 +3,25 @@ export const INVENTORY_STORAGE_MODE = Object.freeze({
   SPROUT: 'sprout'
 });
 
+export const SPROUT_STORAGE_LEVELS = Object.freeze([1, 2, 3]);
+
+export const SPROUT_STORAGE_CAPACITY_BY_LEVEL = Object.freeze({
+  1: 14,
+  2: 28,
+  3: 56
+});
+
 export const INVENTORY_STORAGE_PROFILES = Object.freeze({
   [INVENTORY_STORAGE_MODE.RANGER]: Object.freeze({
     id: INVENTORY_STORAGE_MODE.RANGER,
     label: 'Ranger pack',
     hudLabel: 'PACK',
-    capacity: 24,
-    compressionRatio: 1
+    capacity: 14
   }),
   [INVENTORY_STORAGE_MODE.SPROUT]: Object.freeze({
     id: INVENTORY_STORAGE_MODE.SPROUT,
-    label: 'Sprout compressed storage',
+    label: 'Sprout storage',
     hudLabel: 'SPROUT',
-    capacity: 96,
-    compressionRatio: 4
+    capacity: SPROUT_STORAGE_CAPACITY_BY_LEVEL[1]
   })
-});
-
-// Bulk is an abstract carrying-volume unit rather than kilograms. Ranger storage pays the
-// full bulk cost; Sprout's compression profile divides that cost by its compression ratio,
-// with every item retaining a minimum stored cost of one unit.
-export const INVENTORY_ITEM_BULK = Object.freeze({
-  stick: 1,
-  stone: 2,
-  copper: 2,
-  iron: 2,
-  diamond: 2,
-  grass: 1,
-  meat: 2,
-  cooked_meat: 2,
-  mushroom: 1,
-  mushroom_stew: 2,
-  ancient_relic: 2,
-  sprout_shard: 1,
-  log: 8,
-  spear: 3,
-  axe: 4,
-  hammer: 3,
-  pickaxe: 4,
-  shovel: 4,
-  sword: 4,
-  torch: 3,
-  'crafting-bench': 8,
-  chest: 6,
-  barrel: 6,
-  bed: 8
 });

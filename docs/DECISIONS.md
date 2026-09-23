@@ -416,3 +416,33 @@ Overworld Stone mining now derives work and yield from the existing rock collide
 The existing bulk-capacity model remains temporarily in force for the new ore item ids during this isolated mining slice. It is not a replacement for the separately locked 14-item stack and 14 -> 28 -> 56 slot-storage design; that inventory migration remains a later dedicated pass.
 
 Reason: this adds the requested resource/mining progression without destabilizing working stairs, construction, cave geometry, controls or the current inventory authority, while keeping later production tiers and slot storage data-driven.
+
+## 2026-09-23 — Shared carried inventory uses item-defined slot accounting
+
+Decision: retire the temporary 24/96 abstract-bulk carrying model and keep one authoritative
+slot-based `InventorySystem`. Compact materials declare a stack size of **14** and consume one
+slot per started stack. Each Log consumes one full slot. Relics and Shards remain in persistent
+shared state but consume **zero** slots. Food uses explicit compact-stack metadata, while tools,
+weapons and placeable utilities explicitly use one item per slot rather than inheriting a
+material rule.
+
+The initial shared capacity is **14 slots**. Once Sprout is allied, the same inventory remains
+authoritative and Sprout storage progression can increase capacity to **28** and then **56**
+slots. The saved Sprout storage level belongs to inventory/progression state; switching storage
+presentation never copies quantities into a second companion inventory.
+
+Capacity is evaluated by the delta in occupied slots, so completing an already-open 14-item
+stack is legal even when all slots are allocated, while opening a new stack is rejected.
+Zero-slot Relics/Shards remain collectible at full capacity. Existing quantity-only saves are
+restored without deleting property; if their old quantities exceed the new slot limit they are
+grandfathered as over-capacity and cannot allocate additional slots until enough capacity is
+freed or legitimately upgraded.
+
+Crafting remains owned by `CraftingSystem`, but inventory-output recipes now commit through the
+same capacity boundary after ingredients are consumed. If an output cannot fit, the ingredients
+are restored instead of allowing an over-capacity craft.
+
+Reason: storage capacity, Ranger pickup, Sprout collection, storage withdrawal, crafting,
+placeable pickup and future player-menu rendering all need the same item metadata and slot
+calculation so later progression does not reintroduce competing capacity rules.
+

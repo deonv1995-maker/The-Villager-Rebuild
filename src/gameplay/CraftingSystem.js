@@ -31,8 +31,14 @@ export class CraftingSystem {
     if (!recipe.output) return null;
     if (!this.canCraft(recipeId, { station })) return null;
 
-    this.inventory.consume(recipe.ingredients);
-    this.inventory.add(recipe.output.itemId, recipe.output.quantity);
+    if (!this.inventory.consume(recipe.ingredients)) return null;
+    const added = this.inventory.tryAdd(recipe.output.itemId, recipe.output.quantity);
+    if (!added.added) {
+      for (const ingredient of recipe.ingredients) {
+        this.inventory.add(ingredient.itemId, ingredient.quantity);
+      }
+      return null;
+    }
 
     return {
       recipeId: recipe.id,
