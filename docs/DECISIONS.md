@@ -472,3 +472,12 @@ Decision: keep the existing beach-arrival cinematic, but add a one-shot wall-clo
 The cleanup path is defensive: failure to stop a crawl animation, apply the final pose, or release cinematic ownership must not leave the entire gameplay UI hidden. Those presentation errors are logged while the application still fails open into playable state. The watchdog is cleared on normal completion and does not add a second gameplay, save, camera, terrain, or input authority.
 
 Reason: device feedback after the wall-clock timeline fix still reproduced the bare-world/hidden-HUD state. The hidden-HUD state therefore needs its own independent escape hatch rather than relying on the same animation/update path that may be malfunctioning on a device.
+
+
+## 2026-09-23 — Restore the proven pre-cave startup handoff
+
+Decision: restore `src/main.js`, `TitleSceneApp`, `BeachArrivalIntroController`, and the title-scene regression contract to the exact runtime versions that were on `main` at commit `e03b5003a337f3f60efca2e64ab639cd45136c58`, immediately before the opening-handoff change and before Copper/Iron/Diamond cave mining plus slot inventory landed.
+
+The cave/mining implementation and the authoritative slot-based inventory remain intact. This rollback is intentionally limited to the title-to-gameplay and beach-arrival startup path because device feedback showed the blank post-load world persisted through two later timing/watchdog patches. Repeatedly patching that changed startup path would add more competing behavior without evidence that caves or inventory ownership were the direct cause.
+
+Reason: the user identified the regression window as the cave/inventory work period. Repository history shows the only startup-path runtime change immediately inside that window was the opening-scene handoff change; the ore and slot-inventory pull requests did not replace the title/arrival architecture. Returning the startup boundary to the last pre-window runtime gives a clean known-good baseline while preserving the requested cave resources and stacking system.
