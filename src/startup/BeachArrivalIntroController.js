@@ -18,6 +18,32 @@ const PHASE_DURATION = Object.freeze({
   [PHASE.SETTLE]: 0.65
 });
 
+const PHASE_SEQUENCE = Object.freeze([
+  PHASE.PRONE,
+  PHASE.CRAWL,
+  PHASE.RISE,
+  PHASE.DUST,
+  PHASE.SETTLE
+]);
+
+const PHASE_START = Object.freeze({
+  [PHASE.PRONE]: 0,
+  [PHASE.CRAWL]: PHASE_DURATION[PHASE.PRONE],
+  [PHASE.RISE]: PHASE_DURATION[PHASE.PRONE] + PHASE_DURATION[PHASE.CRAWL],
+  [PHASE.DUST]:
+    PHASE_DURATION[PHASE.PRONE]
+    + PHASE_DURATION[PHASE.CRAWL]
+    + PHASE_DURATION[PHASE.RISE],
+  [PHASE.SETTLE]:
+    PHASE_DURATION[PHASE.PRONE]
+    + PHASE_DURATION[PHASE.CRAWL]
+    + PHASE_DURATION[PHASE.RISE]
+    + PHASE_DURATION[PHASE.DUST]
+});
+
+const ARRIVAL_DURATION =
+  PHASE_START[PHASE.SETTLE] + PHASE_DURATION[PHASE.SETTLE];
+
 const CRAWL_ANIMATIONS = Object.freeze([
   'Crawling_A',
   'Crawling',
@@ -67,6 +93,8 @@ export class BeachArrivalIntroController {
     this.onComplete = typeof onComplete === 'function' ? onComplete : null;
     this.phase = PHASE.COMPLETE;
     this.phaseElapsed = 0;
+    this.introElapsed = 0;
+    this.introStartedAt = null;
     this.started = false;
     this.completed = false;
     this.phaseAnimation = null;
@@ -86,6 +114,8 @@ export class BeachArrivalIntroController {
 
     this.started = true;
     this.completed = false;
+    this.introElapsed = 0;
+    this.introStartedAt = globalThis.performance?.now?.() ?? null;
     this.spawn = this.island.getSpawnPoint?.() ?? { x: 0, z: 91 };
     const seawardDirection = this.#resolveSeawardDirection(this.spawn);
     this.wetSand = this.#findShallowWaterStart(this.spawn, seawardDirection);
@@ -111,8 +141,28 @@ export class BeachArrivalIntroController {
 
   update(dt, player = this.player) {
     if (!this.started || this.completed || !player) return;
-    this.phaseElapsed += dt;
+
+    const now = globalThis.performance?.now?.();
+    if (Number.isFinite(now) && Number.isFinite(this.introStartedAt)) {
+      this.introElapsed = Math.max(0, (now - this.introStartedAt) / 1000);
+    } else {
+      this.introElapsed += Math.max(0, dt);
+    }
+
+    if (this.introElapsed >= ARRIVAL_DURATION) {
+      this.#complete();
+      return;
+    }
+
+    let currentPhase = PHASE.PRONE;
+    for (const phase of PHASE_SEQUENCE) {
+      if (this.introElapsed >= PHASE_START[phase]) currentPhase = phase;
+      else break;
+    }
+    if (currentPhase !== this.phase) this.#enterPhase(currentPhase);
+
     const duration = PHASE_DURATION[this.phase] ?? 0.01;
+    this.phaseElapsed = Math.max(0, this.introElapsed - (PHASE_START[this.phase] ?? 0));
     const progress = THREE.MathUtils.clamp(this.phaseElapsed / duration, 0, 1);
 
     if (this.phase === PHASE.PRONE) {
@@ -176,7 +226,6 @@ export class BeachArrivalIntroController {
       });
     }
 
-    if (progress >= 1) this.#advancePhase();
   }
 
   #terrainHeightAt(x, z) {
@@ -329,14 +378,6 @@ export class BeachArrivalIntroController {
         timeScale: 1
       });
     }
-  }
-
-  #advancePhase() {
-    if (this.phase === PHASE.PRONE) this.#enterPhase(PHASE.CRAWL);
-    else if (this.phase === PHASE.CRAWL) this.#enterPhase(PHASE.RISE);
-    else if (this.phase === PHASE.RISE) this.#enterPhase(PHASE.DUST);
-    else if (this.phase === PHASE.DUST) this.#enterPhase(PHASE.SETTLE);
-    else if (this.phase === PHASE.SETTLE) this.#complete();
   }
 
   #complete() {
