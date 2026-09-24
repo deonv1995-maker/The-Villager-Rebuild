@@ -172,7 +172,12 @@ assert.match(placeableRuntimeSource, /caption: 'PLACE'/, 'Inventory placeables m
 assert.match(mobileHudSource, /shovel: ui\.shovel/, 'Mobile HUD must render a dedicated shovel icon');
 assert.match(assetPathsSource, /shovel: asset\('ui\/cosy\/icon-shovel\.webp'\)/, 'Shovel icon path must remain centralized');
 assert.ok(fs.existsSync(new URL('../public/assets/ui/cosy/icon-shovel.webp', import.meta.url)), 'Shovel icon asset must exist in public assets');
-assert.match(mobileHudSource, /entry\.kind !== 'tool' && entry\.kind !== 'weapon'/, 'Suitcase item grid must keep equipped tools in the existing toolbelt instead of duplicating them');
+assert.match(mobileHudSource, /data-inventory-category="equipment-placeables"/, 'Player menu must expose Equipment & Placeables as a display category');
+assert.match(
+  mobileHudSource,
+  /const selectable = entry\.quantity > 0 && \(entry\.kind === 'placeable' \|\| entry\.edible \|\| entry\.cookable\)/,
+  'Tools and weapons may be displayed in the player menu but must remain non-selectable so the toolbelt stays equip authority'
+);
 assert.match(mobileHudSource, /data-role="build-toggle"/, 'Build menu must expose a dedicated collapse control');
 assert.match(mobileHudSource, /data-role="build-toggle-icon"/, 'Collapsed build control must show the selected mode icon');
 assert.match(mobileHudSource, /#setBuildTrayCollapsed\(collapsed\)/, 'Build menu collapse state must be owned by MobileHud');
