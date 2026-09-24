@@ -465,7 +465,11 @@ assert(hudSource.includes('onInventoryVisibilityChange'), 'Suitcase visibility m
 assert(hudSource.includes('onInventoryItemSelect'), 'Placeable inventory selection must route through an explicit HUD callback');
 assert(gameAppSource.includes("onInventoryVisibilityChange: open => this.setPaused(open, 'inventory-menu')"), 'Suitcase visibility must route into centralized GameApp pause state');
 assert(gameAppSource.includes('this.pauseReasons = new Set()'), 'GameApp pause authority must remain reason-based for future overlays');
-assert(gameAppSource.includes('if (this.isPaused()) {'), 'The central gameplay frame must stop world simulation while paused');
+assert(
+  gameAppSource.includes('if (this.isPaused()) return;')
+    || gameAppSource.includes('if (this.isPaused()) {'),
+  'The central gameplay frame must stop world simulation while paused'
+);
 assert(gameAppSource.includes('event.repeat || this.isPaused()'), 'Keyboard gameplay input must be blocked while the suitcase is open');
 assert(inventoryMenuSource.includes('.inventory-menu {') && inventoryMenuSource.includes('inset: 0;'), 'Suitcase must remain a full-screen overlay');
 assert(inventoryMenuSource.includes('width: 100%;') && inventoryMenuSource.includes('height: 100%;'), 'Suitcase must fill the available HUD surface');
