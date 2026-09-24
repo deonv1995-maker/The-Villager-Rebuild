@@ -526,3 +526,22 @@ Reason: device reproduction showed the game entering the beach-arrival hidden-HU
 reaching the first save. The connected natural cave network had a surface branch close enough to
 the Day-1 spawn to enter its 68 m activation scheduler during startup. Natural-cave verification
 now requires zero cave activation and an empty cave mesh queue at the authoritative spawn.
+
+
+## 2026-09-24 — Cave streaming cannot terminate the gameplay frame
+
+Decision: the natural-cave streaming update is isolated at the existing `TestIslandSystem`
+world boundary. If that optional streaming step throws at runtime, the cave updater is disabled for
+the remainder of the session, its dynamic lava light is hidden, the error remains visible in the
+console, and the rest of the island presentation continues updating. This is a circuit breaker,
+not a second cave implementation or alternate collision authority.
+
+The main `GameApp` frame also guarantees rendering and scheduling of the next animation frame from
+`finally`. Runtime exceptions are therefore not swallowed, but one exception after Ranger update
+can no longer permanently stop all subsequent frames before the beach-arrival controller reaches its
+completion/save boundary.
+
+Reason: Android device reproduction still showed a rendered terrain frame, hidden arrival HUD and
+no saved world after cave-spawn exclusion. That symptom is consistent with a runtime exception
+terminating the frame after the Ranger/camera have rendered once. The new boundary preserves a
+playable session while keeping the original error observable for a narrower follow-up fix.
