@@ -40,7 +40,11 @@ export class MobileHud {
     this.buildPreviewValid = false;
     this.buildTrayCollapsed = false;
     this.inventoryMenuOpen = false;
-    this.inventoryTab = 'items';
+    this.inventoryTab = 'inventory';
+    this.inventoryCategory = 'material';
+    this.inventoryEntries = [];
+    this.inventoryStorageState = null;
+    this.shardBalance = 0;
     this.currentBuildMode = 'raw';
     this.currentToolId = null;
     this.currentInteractionTarget = null;
@@ -83,8 +87,10 @@ export class MobileHud {
 
     this.root.innerHTML = `
       <div class="inventory-quick-access" data-role="inventory-quick-access">
-        <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open inventory" aria-expanded="false">
-          <img src="${ui.suitcase}" alt="" aria-hidden="true">
+        <button class="inventory-menu-toggle" type="button" data-role="inventory-toggle" aria-label="Open player menu" aria-expanded="false">
+          <span class="player-menu-grid-icon" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </span>
         </button>
         <div class="inventory-capacity-gauge" data-role="inventory-capacity-gauge" aria-label="Storage capacity">
           <span class="inventory-capacity-track" aria-hidden="true">
@@ -93,21 +99,39 @@ export class MobileHud {
           <strong class="inventory-capacity-readout" data-role="inventory-capacity-readout">0 / 14</strong>
         </div>
       </div>
-      <section class="inventory-menu" data-role="inventory-menu" aria-label="Inventory and crafting" hidden>
+      <section class="inventory-menu" data-role="inventory-menu" aria-label="Player menu" hidden>
         <div class="inventory-menu-header">
-          <div>
-            <strong>SUITCASE</strong>
+          <div class="player-menu-title">
+            <strong>PLAYER MENU</strong>
             <span data-role="inventory-capacity">PACK</span>
           </div>
-          <button class="inventory-menu-close" type="button" data-role="inventory-close" aria-label="Close inventory">×</button>
+          <div class="player-menu-header-actions">
+            <div class="player-menu-shards" data-role="shard-balance-wrap" aria-label="0 Sprout Shards">
+              <img src="${this.resourceIcons.sprout_shard}" alt="" aria-hidden="true">
+              <strong data-role="shard-balance">0</strong>
+            </div>
+            <button class="inventory-menu-close" type="button" data-role="inventory-close" aria-label="Close player menu">×</button>
+          </div>
         </div>
-        <nav class="inventory-tabs" aria-label="Inventory sections">
-          <button class="inventory-tab active" type="button" data-inventory-tab="items" aria-pressed="true">ITEMS</button>
-          <button class="inventory-tab" type="button" data-inventory-tab="craft" aria-pressed="false">CRAFT</button>
+        <nav class="inventory-tabs" aria-label="Player menu sections">
+          <button class="inventory-tab active" type="button" data-inventory-tab="inventory" aria-pressed="true">INVENTORY</button>
+          <button class="inventory-tab" type="button" data-inventory-tab="crafting" aria-pressed="false">CRAFTING</button>
+          <button class="inventory-tab" type="button" data-inventory-tab="upgrades" aria-pressed="false">UPGRADES</button>
+        </nav>
+        <nav class="inventory-categories" data-role="inventory-categories" aria-label="Inventory categories">
+          <button class="inventory-category active" type="button" data-inventory-category="material" aria-pressed="true">MATERIALS</button>
+          <button class="inventory-category" type="button" data-inventory-category="food" aria-pressed="false">FOOD</button>
+          <button class="inventory-category" type="button" data-inventory-category="equipment-placeables" aria-pressed="false">EQUIPMENT &amp; PLACEABLES</button>
+          <button class="inventory-category" type="button" data-inventory-category="relic" aria-pressed="false">RELICS</button>
         </nav>
         <div class="inventory-tab-context" data-role="craft-context" hidden>Portable crafting</div>
         <div class="inventory-grid" data-role="inventory"></div>
         <div class="craft-menu-list" data-role="craft-list" hidden></div>
+        <section class="player-upgrades-panel" data-role="upgrades-panel" aria-label="Sprout upgrades" hidden>
+          <strong>SPROUT UPGRADES</strong>
+          <p>Find Relics to reveal Sprout upgrades.</p>
+          <small>Revealed upgrades will use Shards for activation.</small>
+        </section>
       </section>
       <section class="survival-vitals" data-role="survival-vitals" aria-label="Player survival status">
         <div class="survival-vital health" data-role="health-vital">
@@ -166,8 +190,12 @@ export class MobileHud {
     this.inventoryCapacityFill = this.root.querySelector('[data-role="inventory-capacity-fill"]');
     this.inventoryCapacityReadout = this.root.querySelector('[data-role="inventory-capacity-readout"]');
     this.inventoryElement = this.root.querySelector('[data-role="inventory"]');
+    this.inventoryCategories = this.root.querySelector('[data-role="inventory-categories"]');
     this.craftContext = this.root.querySelector('[data-role="craft-context"]');
     this.craftList = this.root.querySelector('[data-role="craft-list"]');
+    this.upgradesPanel = this.root.querySelector('[data-role="upgrades-panel"]');
+    this.shardBalanceElement = this.root.querySelector('[data-role="shard-balance"]');
+    this.shardBalanceWrap = this.root.querySelector('[data-role="shard-balance-wrap"]');
     this.objectiveElement = this.root.querySelector('[data-role="objective"]');
     this.survivalVitals = this.root.querySelector('[data-role="survival-vitals"]');
     this.healthVital = this.root.querySelector('[data-role="health-vital"]');
@@ -193,7 +221,8 @@ export class MobileHud {
       Array.from(this.root.querySelectorAll('[data-tool]')).map(button => [button.dataset.tool, button])
     );
     this.#setBuildTrayCollapsed(false);
-    this.#setInventoryTab('items');
+    this.#setInventoryTab('inventory');
+    this.#setInventoryCategory('material');
     this.#setInventoryMenuOpen(false, { notify: false });
     this.#bindMovement();
     this.#bindButtons();
@@ -204,9 +233,25 @@ export class MobileHud {
   }
 
   setInventory(entries) {
+    this.inventoryEntries = Array.isArray(entries) ? entries : [];
+    const shardEntry = this.inventoryEntries.find(entry => entry.id === 'sprout_shard');
+    this.shardBalance = Math.max(0, Number(shardEntry?.quantity) || 0);
+    if (this.shardBalanceElement) this.shardBalanceElement.textContent = String(this.shardBalance);
+    if (this.shardBalanceWrap) {
+      this.shardBalanceWrap.setAttribute(
+        'aria-label',
+        `${this.shardBalance} Sprout Shard${this.shardBalance === 1 ? '' : 's'}`
+      );
+    }
+    this.#renderInventoryCategory();
+  }
+
+  #renderInventoryCategory() {
+    if (!this.inventoryElement) return;
     const alwaysVisible = new Set(['stick', 'stone', 'grass']);
-    const visible = entries
-      .filter(entry => entry.kind !== 'tool' && entry.kind !== 'weapon')
+    const visible = this.inventoryEntries
+      .filter(entry => entry.storageCategory !== 'currency')
+      .filter(entry => entry.storageCategory === this.inventoryCategory)
       .filter(entry => entry.quantity > 0 || (entry.kind === 'resource' && alwaysVisible.has(entry.id)));
 
     this.inventoryElement.replaceChildren(...visible.map(entry => {
@@ -214,6 +259,7 @@ export class MobileHud {
       const card = document.createElement(selectable ? 'button' : 'div');
       card.className = 'inventory-card';
       card.dataset.resource = entry.id;
+      card.dataset.inventoryCategory = entry.storageCategory ?? '';
       if (selectable) {
         card.type = 'button';
         card.dataset.inventorySelect = entry.id;
@@ -257,10 +303,20 @@ export class MobileHud {
       }
       return card;
     }));
+
+    if (visible.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'inventory-empty-state';
+      empty.textContent = this.inventoryCategory === 'relic'
+        ? 'No Relics discovered yet.'
+        : 'Nothing in this category yet.';
+      this.inventoryElement.appendChild(empty);
+    }
   }
 
   setInventoryCapacity(state) {
     if (!state) return;
+    this.inventoryStorageState = state;
     const used = Math.max(0, Number(state.used) || 0);
     const capacity = Math.max(1, Number(state.capacity) || 1);
     const fillPercent = Math.max(0, Math.min(100, (used / capacity) * 100));
@@ -285,25 +341,38 @@ export class MobileHud {
     }
     if (this.inventoryToggle) {
       this.inventoryToggle.dataset.overCapacity = overCapacity ? 'true' : 'false';
-      this.inventoryToggle.title = `${state.label}: ${used}/${capacity} bulk units`;
+      this.inventoryToggle.title = `${state.label}: ${used}/${capacity} slots`;
       this.inventoryToggle.setAttribute(
         'aria-label',
-        `${this.inventoryMenuOpen ? 'Close' : 'Open'} inventory, ${used} of ${capacity} bulk used`
+        `${this.inventoryMenuOpen ? 'Close' : 'Open'} player menu, ${used} of ${capacity} slots used`
       );
     }
   }
 
-  openInventory(tab = 'items') {
+  openPlayerMenu(tab = 'inventory') {
     this.#setInventoryTab(tab);
     this.#setInventoryMenuOpen(true);
   }
 
-  closeInventory() {
+  closePlayerMenu() {
     this.#setInventoryMenuOpen(false);
   }
 
-  isInventoryOpen() {
+  isPlayerMenuOpen() {
     return this.inventoryMenuOpen;
+  }
+
+  // Compatibility surface for established food/placeable/crafting callers.
+  openInventory(tab = 'items') {
+    this.openPlayerMenu(tab === 'craft' ? 'crafting' : tab === 'upgrades' ? 'upgrades' : 'inventory');
+  }
+
+  closeInventory() {
+    this.closePlayerMenu();
+  }
+
+  isInventoryOpen() {
+    return this.isPlayerMenuOpen();
   }
 
   setObjective(message) {
@@ -544,20 +613,54 @@ export class MobileHud {
     this.inventoryMenu.hidden = !this.inventoryMenuOpen;
     this.inventoryToggle.classList.toggle('open', this.inventoryMenuOpen);
     this.inventoryToggle.setAttribute('aria-expanded', this.inventoryMenuOpen ? 'true' : 'false');
+    const state = this.inventoryStorageState;
+    if (state) {
+      const used = Math.max(0, Number(state.used) || 0);
+      const capacity = Math.max(1, Number(state.capacity) || 1);
+      this.inventoryToggle.setAttribute(
+        'aria-label',
+        `${this.inventoryMenuOpen ? 'Close' : 'Open'} player menu, ${used} of ${capacity} slots used`
+      );
+    } else {
+      this.inventoryToggle.setAttribute(
+        'aria-label',
+        this.inventoryMenuOpen ? 'Close player menu' : 'Open player menu'
+      );
+    }
     if (notify) this.onInventoryVisibilityChange?.(this.inventoryMenuOpen);
   }
 
   #setInventoryTab(tab) {
-    this.inventoryTab = tab === 'craft' ? 'craft' : 'items';
-    const crafting = this.inventoryTab === 'craft';
-    this.inventoryElement.hidden = crafting;
+    const normalized = tab === 'craft' || tab === 'crafting'
+      ? 'crafting'
+      : tab === 'upgrades'
+        ? 'upgrades'
+        : 'inventory';
+    this.inventoryTab = normalized;
+    const inventory = normalized === 'inventory';
+    const crafting = normalized === 'crafting';
+    const upgrades = normalized === 'upgrades';
+    this.inventoryElement.hidden = !inventory;
+    if (this.inventoryCategories) this.inventoryCategories.hidden = !inventory;
     this.craftList.hidden = !crafting;
     if (this.craftContext) this.craftContext.hidden = !crafting;
+    if (this.upgradesPanel) this.upgradesPanel.hidden = !upgrades;
     for (const button of this.root.querySelectorAll('[data-inventory-tab]')) {
       const active = button.dataset.inventoryTab === this.inventoryTab;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', active ? 'true' : 'false');
     }
+  }
+
+  #setInventoryCategory(category) {
+    const supported = new Set(['material', 'food', 'equipment-placeables', 'relic']);
+    this.inventoryCategory = supported.has(category) ? category : 'material';
+    for (const button of this.root.querySelectorAll('[data-inventory-category]')) {
+      const active = button.dataset.inventoryCategory === this.inventoryCategory;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+    this.#renderInventoryCategory();
   }
 
   #setBuildTrayCollapsed(collapsed) {
@@ -749,6 +852,13 @@ export class MobileHud {
       button.addEventListener('pointerdown', event => {
         event.preventDefault();
         this.#setInventoryTab(button.dataset.inventoryTab);
+      });
+    }
+
+    for (const button of this.root.querySelectorAll('[data-inventory-category]')) {
+      button.addEventListener('pointerdown', event => {
+        event.preventDefault();
+        this.#setInventoryCategory(button.dataset.inventoryCategory);
       });
     }
 
