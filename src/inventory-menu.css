@@ -143,7 +143,7 @@
 .inventory-tabs {
   display: grid;
   flex: 0 0 auto;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   padding: 10px 0 7px;
 }
@@ -281,4 +281,155 @@ button.inventory-card { pointer-events: auto; touch-action: none; }
 
 @media (max-width: 380px) and (orientation: portrait) {
   .inventory-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+
+/* Player menu shell: the existing inventory/crafting surface remains the single paused UI authority. */
+.inventory-menu-toggle {
+  padding: 10px;
+}
+
+.player-menu-grid-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+  gap: 4px;
+  pointer-events: none;
+}
+
+.player-menu-grid-icon > span {
+  display: block;
+  border: 1px solid rgba(255, 240, 203, .82);
+  border-radius: 3px;
+  background: rgba(240, 207, 118, .24);
+}
+
+.player-menu-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-menu-shards {
+  display: flex;
+  min-width: 70px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border: 1px solid rgba(225, 207, 151, .28);
+  border-radius: 11px;
+  background: rgba(45, 57, 43, .72);
+  color: #fff0cb;
+}
+
+.player-menu-shards img {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.player-menu-shards strong {
+  min-width: 18px;
+  color: #f0cf76;
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.inventory-categories {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 0 8px;
+}
+
+.inventory-categories[hidden] {
+  display: none;
+}
+
+.inventory-category {
+  min-width: 0;
+  min-height: 40px;
+  padding: 5px 4px;
+  border: 1px solid rgba(225, 207, 151, .22);
+  border-radius: 9px;
+  background: rgba(36, 48, 36, .68);
+  color: rgba(255, 240, 203, .68);
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1.12;
+  letter-spacing: .035em;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.inventory-category.active {
+  border-color: rgba(240, 207, 118, .82);
+  background: rgba(68, 79, 53, .92);
+  color: #fff0cb;
+}
+
+.inventory-category:active {
+  transform: scale(.97);
+}
+
+.inventory-empty-state {
+  grid-column: 1 / -1;
+  margin: 18px 8px;
+  color: rgba(255, 240, 203, .62);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.player-upgrades-panel {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  border: 1px solid rgba(225, 207, 151, .18);
+  border-radius: 12px;
+  background: rgba(34, 46, 35, .56);
+  color: #fff0cb;
+  text-align: center;
+}
+
+.player-upgrades-panel[hidden] {
+  display: none;
+}
+
+.player-upgrades-panel strong {
+  font-size: 14px;
+  letter-spacing: .06em;
+}
+
+.player-upgrades-panel p {
+  margin: 0;
+  color: rgba(255, 240, 203, .82);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.player-upgrades-panel small {
+  color: rgba(255, 240, 203, .58);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+@media (max-width: 700px) and (orientation: portrait) {
+  .player-menu-header-actions { gap: 5px; }
+  .player-menu-shards { min-width: 62px; padding-inline: 6px; }
+  .player-menu-shards img { width: 23px; height: 23px; }
+  .inventory-tabs { gap: 5px; }
+  .inventory-tab { min-height: 44px; font-size: 9px; }
+  .inventory-categories { gap: 4px; }
+  .inventory-category { min-height: 42px; font-size: 7px; padding-inline: 2px; }
 }
