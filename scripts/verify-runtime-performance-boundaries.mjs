@@ -126,7 +126,18 @@ assert.equal(
   'equivalent presentation exclusions must be detected without redundant invalidation'
 );
 
-const [grassSource, groundCoverSource, jungleSource, ambientSource, treeOcclusionSource, chunkSource, tunnelingSource, packageSource] = await Promise.all([
+const [
+  grassSource,
+  groundCoverSource,
+  jungleSource,
+  ambientSource,
+  treeOcclusionSource,
+  chunkSource,
+  tunnelingSource,
+  islandSource,
+  gameAppSource,
+  packageSource
+] = await Promise.all([
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
   readFile('src/world/GroundCoverPresentationSystem.js', 'utf8'),
   readFile('src/world/JungleFloorPresentationSystem.js', 'utf8'),
@@ -134,6 +145,8 @@ const [grassSource, groundCoverSource, jungleSource, ambientSource, treeOcclusio
   readFile('src/world/TreeOcclusionSystem.js', 'utf8'),
   readFile('src/world/WorldChunkSystem.js', 'utf8'),
   readFile('src/world/UndergroundTunnelingSystem.js', 'utf8'),
+  readFile('src/world/TestIslandSystem.js', 'utf8'),
+  readFile('src/core/GameApp.js', 'utf8'),
   readFile('package.json', 'utf8')
 ]);
 
@@ -186,6 +199,31 @@ assert.equal(
   chunkSource.slice(chunkUpdateStart, chunkStatsStart).includes('new THREE.Sphere'),
   false,
   'chunk culling must not allocate a new sphere for every chunk on every frame'
+);
+
+const islandUpdateStart = islandSource.indexOf('  update(dt, playerPosition, camera = null) {');
+const islandUpdateEnd = islandSource.indexOf('\n  }\n}', islandUpdateStart);
+const islandUpdateSource = islandSource.slice(islandUpdateStart, islandUpdateEnd);
+assert.ok(
+  islandSource.includes('this.explorationRuntimeEnabled = true')
+    && islandUpdateSource.includes('if (this.explorationRuntimeEnabled)')
+    && islandUpdateSource.includes('try {')
+    && islandUpdateSource.includes('this.explorationPois.update(playerPosition, dt)')
+    && islandUpdateSource.includes('this.explorationRuntimeEnabled = false')
+    && islandUpdateSource.includes("console.error('[CAVE RUNTIME DISABLED]', error)"),
+  'natural-cave streaming faults must trip one world-owned circuit breaker instead of killing the gameplay loop'
+);
+
+const gameFrameStart = gameAppSource.indexOf('  #frame = () => {');
+const gameFrameEnd = gameAppSource.indexOf('\n  };', gameFrameStart);
+const gameFrameSource = gameAppSource.slice(gameFrameStart, gameFrameEnd);
+assert.ok(
+  gameFrameSource.includes('} finally {')
+    && gameFrameSource.includes('this.sceneSystem.render();')
+    && gameFrameSource.includes('requestAnimationFrame(this.#frame);')
+    && gameFrameSource.indexOf('requestAnimationFrame(this.#frame);')
+      > gameFrameSource.indexOf('this.sceneSystem.render();'),
+  'the main gameplay frame must render and schedule its successor from finally so a subsystem exception cannot permanently freeze startup'
 );
 
 assert.ok(

@@ -62,6 +62,8 @@ export class TestIslandSystem {
       onPresentationExclusionsChanged: exclusions =>
         this.#replaceTunnelingPresentationExclusions(exclusions)
     });
+    this.explorationRuntimeEnabled = true;
+    this.explorationRuntimeError = null;
     this.collision.setVolumeQuery({
       supportHeightAt: (x, z, options) => this.explorationPois.supportHeightAt(x, z, options),
       isSolidAt: (x, y, z) => this.explorationPois.isSolidAt(x, y, z),
@@ -292,7 +294,20 @@ export class TestIslandSystem {
 
   update(dt, playerPosition, camera = null) {
     this.chunks.update(camera, playerPosition);
-    this.explorationPois.update(playerPosition, dt);
+
+    if (this.explorationRuntimeEnabled) {
+      try {
+        this.explorationPois.update(playerPosition, dt);
+      } catch (error) {
+        this.explorationRuntimeEnabled = false;
+        this.explorationRuntimeError = error;
+        if (this.explorationPois?.tunneling?.lavaLight) {
+          this.explorationPois.tunneling.lavaLight.visible = false;
+        }
+        console.error('[CAVE RUNTIME DISABLED]', error);
+      }
+    }
+
     this.groundCover.update();
     this.jungleFloor.update();
     this.grass.update(dt, playerPosition);
