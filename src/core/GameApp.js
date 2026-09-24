@@ -164,52 +164,53 @@ export class GameApp {
     if (!this.running) return;
     const dt = Math.min(this.clock.getDelta(), 1 / 20);
 
-    if (this.isPaused()) {
-      this.sceneSystem.render();
-      requestAnimationFrame(this.#frame);
-      return;
-    }
+    try {
+      if (this.isPaused()) return;
 
-    this.player?.update(dt);
-    this.toolPresentation?.update(dt);
-    this.demolitionPreview?.update(dt);
-    this.campfire?.update(dt);
-    this.foodRuntime?.update(dt);
+      this.player?.update(dt);
+      this.toolPresentation?.update(dt);
+      this.demolitionPreview?.update(dt);
+      this.campfire?.update(dt);
+      this.foodRuntime?.update(dt);
 
-    const survivalEvent = this.survival?.advanceWorldMinutes?.(
-      dt * (this.worldTime?.gameMinutesPerRealSecond ?? 1)
-    );
-    if (survivalEvent?.changed) this.#syncSurvivalHud();
-    if (this.survival?.isDefeated?.()) {
-      this.#recoverPlayerFromDefeat(survivalEvent?.source ?? 'starvation');
-    }
-
-    const projectileEvent = this.spearProjectiles?.update(dt);
-    if (projectileEvent) {
-      this.#syncEquippedToolPresentation();
-      if (projectileEvent.hit && projectileEvent.result) this.#handleCombatResult(projectileEvent.result);
-    }
-
-    if (this.player) {
-      this.player.getPosition(this.playerPosition);
-      this.player.getFacingDirection(this.playerFacing);
-      if (this.campfire?.isPreviewing()) {
-        this.campfire.updatePreview(this.playerPosition, this.playerFacing);
+      const survivalEvent = this.survival?.advanceWorldMinutes?.(
+        dt * (this.worldTime?.gameMinutesPerRealSecond ?? 1)
+      );
+      if (survivalEvent?.changed) this.#syncSurvivalHud();
+      if (this.survival?.isDefeated?.()) {
+        this.#recoverPlayerFromDefeat(survivalEvent?.source ?? 'starvation');
       }
-      if (this.physicalLogs?.isCarrying()) {
-        this.physicalLogs.update(
-          this.playerPosition,
-          this.playerFacing,
-          this.#currentConstructionAim()
-        );
-      }
-      this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
-      this.#updateEnvironmentalHazards(dt);
-      if (this.gatherables && this.hunt) this.#refreshTargets(dt);
-    }
 
-    this.sceneSystem.render();
-    requestAnimationFrame(this.#frame);
+      const projectileEvent = this.spearProjectiles?.update(dt);
+      if (projectileEvent) {
+        this.#syncEquippedToolPresentation();
+        if (projectileEvent.hit && projectileEvent.result) this.#handleCombatResult(projectileEvent.result);
+      }
+
+      if (this.player) {
+        this.player.getPosition(this.playerPosition);
+        this.player.getFacingDirection(this.playerFacing);
+        if (this.campfire?.isPreviewing()) {
+          this.campfire.updatePreview(this.playerPosition, this.playerFacing);
+        }
+        if (this.physicalLogs?.isCarrying()) {
+          this.physicalLogs.update(
+            this.playerPosition,
+            this.playerFacing,
+            this.#currentConstructionAim()
+          );
+        }
+        this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
+        this.#updateEnvironmentalHazards(dt);
+        if (this.gatherables && this.hunt) this.#refreshTargets(dt);
+      }
+    } finally {
+      try {
+        this.sceneSystem.render();
+      } finally {
+        requestAnimationFrame(this.#frame);
+      }
+    }
   };
 
   #currentConstructionAim() {
