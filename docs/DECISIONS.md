@@ -509,3 +509,20 @@ Menu rather than creating a competing UI path.
 Reason: one paused menu authority keeps inventory rendering, crafting, future upgrade presentation,
 Shard display and established mobile pause behavior synchronized without moving gameplay state into
 the UI layer.
+
+
+## 2026-09-24 — Natural cave mouths exclude the Day-1 arrival bay
+
+Decision: deterministic natural-cave entrance angles must stay outside a spawn-relative angular
+exclusion around the Day-1 arrival direction. The exclusion is derived from the authoritative
+terrain spawn rather than a hard-coded world coordinate, so later island/spawn changes keep one
+source of truth.
+
+The cave topology, scalar-density collision/mining authority, chunk mesher, ore systems, save
+schema and slot inventory remain unchanged. Only the affected entrance branch is repelled out of
+the starting bay before its normal deterministic anchor/path construction continues.
+
+Reason: device reproduction showed the game entering the beach-arrival hidden-HUD state but never
+reaching the first save. The connected natural cave network had a surface branch close enough to
+the Day-1 spawn to enter its 68 m activation scheduler during startup. Natural-cave verification
+now requires zero cave activation and an empty cave mesh queue at the authoritative spawn.

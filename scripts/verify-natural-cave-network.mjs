@@ -128,6 +128,25 @@ for (const pool of network.lavaPools) {
   assert.ok(pool.y > chamber.floorY, `${pool.id} must sit just above the rock floor`);
 }
 
+const spawn = terrain.getSpawnPoint();
+const spawnSurfaceY = terrain.naturalHeightAt(spawn.x, spawn.z);
+const startupWorld = new ExplorationPoiSystem({
+  group: new THREE.Group(),
+  terrain
+});
+startupWorld.create();
+const startupPlayer = new THREE.Vector3(spawn.x, spawnSurfaceY + 1, spawn.z);
+assert.equal(
+  startupWorld.update(startupPlayer, 0.05),
+  0,
+  'Day-1 spawn must not activate natural-cave streaming during beach arrival'
+);
+assert.equal(
+  startupWorld.getDebugState().pendingNaturalChunkRebuildCount,
+  0,
+  'Day-1 spawn must keep the natural-cave mesh queue empty'
+);
+
 const worldGroup = new THREE.Group();
 const world = new ExplorationPoiSystem({ group: worldGroup, terrain });
 world.create();

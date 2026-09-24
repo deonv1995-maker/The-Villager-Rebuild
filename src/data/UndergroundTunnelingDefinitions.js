@@ -85,6 +85,10 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   naturalRouteRadiusBulge: 1.5,
   naturalEntranceAngleOffset: 0.22,
   naturalEntranceAngleJitter: 0.24,
+  // Keep deterministic natural cave mouths out of the Day-1 arrival bay. The
+  // start direction is derived from the terrain spawn, so this remains data-driven
+  // if the island or spawn moves later.
+  naturalStartBayAngularExclusion: 0.58,
   naturalEntranceRadiusFractionMin: 0.5,
   naturalEntranceRadiusFractionMax: 0.66,
   naturalEntranceRadiusMin: 2.35,
