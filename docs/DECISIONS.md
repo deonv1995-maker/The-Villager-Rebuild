@@ -446,6 +446,42 @@ Reason: storage capacity, Ranger pickup, Sprout collection, storage withdrawal, 
 placeable pickup and future player-menu rendering all need the same item metadata and slot
 calculation so later progression does not reintroduce competing capacity rules.
 
+
+
+## 2026-09-23 — Beach arrival progression uses wall-clock time
+
+Decision: the new-game beach-arrival cinematic keeps its existing prone, crawl, rise, dust and
+settle presentation, but its phase timeline is measured from `performance.now()` instead of the
+render loop's capped gameplay delta. The gameplay loop may continue capping simulation delta for
+movement and world stability; cinematic elapsed time is a separate presentation concern.
+
+If a slow mobile device renders below the gameplay delta cap, the arrival timeline can skip
+directly to the phase matching real elapsed time and must release Ranger cinematic ownership and
+the intentionally hidden HUD once the established arrival duration has elapsed. No terrain,
+camera, controls, save, PWA, or gameplay-system authority changes are part of this fix.
+
+Reason: the arrival HUD is deliberately hidden while `arrival-intro-active` is set. Advancing that
+state only with the capped frame delta could make a roughly nine-second arrival last many times
+longer on a slow device, leaving a valid world render looking like a frozen blank gameplay screen.
+
+
+## 2026-09-23 — Beach arrival has a fail-open device watchdog
+
+Decision: keep the existing beach-arrival cinematic, but add a one-shot wall-clock watchdog that is independent of the gameplay render/update loop. If the normal arrival timeline has not completed shortly after its established duration, the watchdog forcibly releases Ranger cinematic ownership, clears `arrival-intro-active`, reveals the HUD, and continues normal Day-1 startup.
+
+The cleanup path is defensive: failure to stop a crawl animation, apply the final pose, or release cinematic ownership must not leave the entire gameplay UI hidden. Those presentation errors are logged while the application still fails open into playable state. The watchdog is cleared on normal completion and does not add a second gameplay, save, camera, terrain, or input authority.
+
+Reason: device feedback after the wall-clock timeline fix still reproduced the bare-world/hidden-HUD state. The hidden-HUD state therefore needs its own independent escape hatch rather than relying on the same animation/update path that may be malfunctioning on a device.
+
+
+## 2026-09-23 — Restore the proven pre-cave startup handoff
+
+Decision: restore `src/main.js`, `TitleSceneApp`, `BeachArrivalIntroController`, and the title-scene regression contract to the exact runtime versions that were on `main` at commit `e03b5003a337f3f60efca2e64ab639cd45136c58`, immediately before the opening-handoff change and before Copper/Iron/Diamond cave mining plus slot inventory landed.
+
+The cave/mining implementation and the authoritative slot-based inventory remain intact. This rollback is intentionally limited to the title-to-gameplay and beach-arrival startup path because device feedback showed the blank post-load world persisted through two later timing/watchdog patches. Repeatedly patching that changed startup path would add more competing behavior without evidence that caves or inventory ownership were the direct cause.
+
+Reason: the user identified the regression window as the cave/inventory work period. Repository history shows the only startup-path runtime change immediately inside that window was the opening-scene handoff change; the ore and slot-inventory pull requests did not replace the title/arrival architecture. Returning the startup boundary to the last pre-window runtime gives a clean known-good baseline while preserving the requested cave resources and stacking system.
+
 ## 2026-09-23 — Player menu reuses the paused inventory/crafting UI boundary
 
 Decision: convert the existing full-screen suitcase surface into one **Player Menu** rather than
@@ -473,4 +509,3 @@ Menu rather than creating a competing UI path.
 Reason: one paused menu authority keeps inventory rendering, crafting, future upgrade presentation,
 Shard display and established mobile pause behavior synchronized without moving gameplay state into
 the UI layer.
-
