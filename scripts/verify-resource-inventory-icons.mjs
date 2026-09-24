@@ -132,14 +132,14 @@ assert.match(hammerMenuSource, /door: ui\.build\.door,/, 'Hammer menu Door must 
 assert.match(hammerMenuSource, /window: ui\.build\.window,/, 'Hammer menu Window must resolve through the shared build icon map');
 
 assert.match(mobileHudSource, /this\.resourceIcons = ui\.resources;/, 'Mobile HUD must use the shared resource icon map');
-assert.match(mobileHudSource, /this\.itemIcons = Object\.freeze\(\{ \.\.\.this\.resourceIcons, \.\.\.this\.toolIcons \}\);/, 'Suitcase inventory must resolve resources and placeables through one icon map');
+assert.match(mobileHudSource, /this\.itemIcons = Object\.freeze\(\{ \.\.\.this\.resourceIcons, \.\.\.this\.toolIcons \}\);/, 'Player menu must resolve resources and placeables through one icon map');
 assert.match(mobileHudSource, /card\.dataset\.resource = entry\.id;/, 'Inventory cards must expose their item id');
 assert.match(mobileHudSource, /icon\.className = 'inventory-resource-icon';/, 'Inventory items must render as images');
 assert.match(mobileHudSource, /icon\.src = this\.itemIcons\[entry\.id\]/, 'Inventory images must resolve through AssetPaths');
-assert.match(mobileHudSource, /label\.textContent = entry\.label;/, 'Suitcase grid must expose collected item names alongside icons');
+assert.match(mobileHudSource, /label\.textContent = entry\.label;/, 'Player-menu inventory grid must expose collected item names alongside icons');
 assert.match(mobileHudSource, /card\.setAttribute\('aria-label'/, 'Inventory grid must retain accessible item labels');
-assert.match(mobileHudSource, /data-role="inventory-toggle"/, 'One suitcase toggle must replace the always-visible inventory strip');
-assert.match(mobileHudSource, /data-inventory-tab="craft"/, 'Crafting must share the suitcase panel');
+assert.match(mobileHudSource, /data-role="inventory-toggle"/, 'One player-menu toggle must replace the always-visible inventory strip');
+assert.match(mobileHudSource, /data-inventory-tab="crafting"/, 'Crafting must share the paused player-menu panel');
 assert.doesNotMatch(mobileHudSource, /class="craft-menu-toggle"/, 'Standalone craft toggle must stay retired');
 assert.match(
   mobileHudSource,
@@ -162,17 +162,17 @@ assert.doesNotMatch(
   'Visible crafting costs must not duplicate resource names beside their icons'
 );
 
-assert.match(indexSource, /inventory-menu\.css/, 'The suitcase inventory stylesheet must be loaded');
+assert.match(indexSource, /inventory-menu\.css/, 'The player-menu inventory stylesheet must be loaded');
 assert.match(indexSource, /cosy-icons\.css/, 'The cosy icon stylesheet must be loaded');
 assert.doesNotMatch(indexSource, /survival-icons\.css/, 'The retired survival icon stylesheet must not be loaded');
-assert.match(inventoryMenuStyles, /\.inventory-menu-toggle\s*\{[\s\S]*?width: 46px;[\s\S]*?height: 46px;/, 'Suitcase toggle must keep a compact mobile footprint');
+assert.match(inventoryMenuStyles, /\.inventory-menu-toggle\s*\{[\s\S]*?width: 46px;[\s\S]*?height: 46px;/, 'Player-menu toggle must keep a compact mobile footprint');
 assert.match(
   inventoryMenuStyles,
   /\.inventory-grid\s*\{[\s\S]*?grid-template-columns: repeat\(auto-fill, minmax\(82px, 96px\)\);[\s\S]*?justify-content: start;/,
-  'Suitcase contents must use a compact non-stretching inventory grid'
+  'Player-menu contents must use a compact non-stretching inventory grid'
 );
-assert.match(inventoryMenuStyles, /\.inventory-card\s*\{[\s\S]*?min-height: 82px;/, 'Suitcase item blocks must stay compact enough to expose more inventory at once');
-assert.match(inventoryMenuStyles, /\.inventory-card \.inventory-resource-icon\s*\{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/, 'Inventory item icons must remain readable inside the opened suitcase');
+assert.match(inventoryMenuStyles, /\.inventory-card\s*\{[\s\S]*?min-height: 82px;/, 'Player-menu item blocks must stay compact enough to expose more inventory at once');
+assert.match(inventoryMenuStyles, /\.inventory-card \.inventory-resource-icon\s*\{[\s\S]*?width: 38px;[\s\S]*?height: 38px;/, 'Inventory item icons must remain readable inside the opened player menu');
 assert.match(
   craftingStyles,
   /\.craft-cost-icon\s*\{[\s\S]*?width: 16px;[\s\S]*?height: 16px;/,
@@ -181,12 +181,12 @@ assert.match(
 assert.match(
   inventoryMenuStyles,
   /\.inventory-menu \.craft-cost-icon\s*\{[\s\S]*?width: 18px;[\s\S]*?height: 18px;/,
-  'Opened suitcase crafting costs must enlarge ingredient icons for mobile readability'
+  'Opened player-menu crafting costs must enlarge ingredient icons for mobile readability'
 );
 assert.match(
   inventoryMenuStyles,
   /\.inventory-menu \.craft-menu-list\[hidden\]\s*\{\s*display: none;\s*\}/,
-  'Inactive Craft tab must not leak crafting recipes into the Items view'
+  'Inactive Crafting tab must not leak recipes into the Inventory view'
 );
 assert.match(
   cosyIconStyles,
@@ -199,4 +199,4 @@ for (const toolId of ['spear', 'pickaxe', 'sword']) {
 }
 assert.match(cosyIconStyles, /transform: scale\(1\.12\);/, 'Slender cosy tool silhouettes must be enlarged without replacing their approved assets');
 
-console.log('Approved cosy gameplay icons plus suitcase resource/placeable inventory presentation verified');
+console.log('Approved cosy gameplay icons plus player-menu resource/placeable inventory presentation verified');

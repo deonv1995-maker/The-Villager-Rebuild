@@ -280,7 +280,7 @@ for (const requirement of [
   "['hand', ...TOOL_ORDER]",
   'class="inventory-menu-toggle"',
   'class="inventory-menu"',
-  'data-inventory-tab="craft"',
+  'data-inventory-tab="crafting"',
   "setCrafting(entries, { station = 'hand' } = {})",
   'class="log-build-tray"',
   'data-build="floor"',
@@ -291,7 +291,7 @@ for (const requirement of [
 ]) {
   assert.ok(hudSource.includes(requirement), `Mobile HUD is missing shared survival/build contract: ${requirement}`);
 }
-assert.ok(!hudSource.includes('class="craft-menu-toggle"'), 'Standalone Craft button must stay retired inside the suitcase flow');
+assert.ok(!hudSource.includes('class="craft-menu-toggle"'), 'Standalone Craft button must stay retired inside the player-menu flow');
 assert.ok(!hudSource.includes('class="hud-button interact"'));
 assert.ok(!hudSource.includes('class="hud-button attack"'));
 assert.ok(contextActionSource.includes("hammer: Object.freeze(new Set(['placed-log', 'panel-construction', 'campfire']))"), 'Hammer must route semantic panels through the unified Action policy');
