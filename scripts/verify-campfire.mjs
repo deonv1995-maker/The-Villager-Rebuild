@@ -127,7 +127,7 @@ for (const requirement of [
   assert(hudSource.includes(requirement), `Crafting HUD is missing campfire placement contract: ${requirement}`);
 }
 assert(hudSource.includes('class="inventory-menu-toggle"'), 'Campfire crafting must be reachable through the suitcase inventory/crafting menu');
-assert(hudSource.includes('data-inventory-tab="craft"'), 'Campfire recipe must share the suitcase Craft tab');
+assert(hudSource.includes('data-inventory-tab="crafting"'), 'Campfire recipe must share the player-menu Crafting section');
 assert(!hudSource.includes("if (action.source === 'campfire')"), 'Unified Action trigger must not own campfire construction');
 assert(!contextActionSource.includes("source: 'campfire'"), 'Context Action policy must not offer campfire BUILD or PLACE');
 assert(!hudSource.includes('class="hud-button craft"'), 'Campfire must not restore a separate round craft button');
