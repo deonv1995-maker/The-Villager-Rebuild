@@ -481,3 +481,31 @@ Decision: restore `src/main.js`, `TitleSceneApp`, `BeachArrivalIntroController`,
 The cave/mining implementation and the authoritative slot-based inventory remain intact. This rollback is intentionally limited to the title-to-gameplay and beach-arrival startup path because device feedback showed the blank post-load world persisted through two later timing/watchdog patches. Repeatedly patching that changed startup path would add more competing behavior without evidence that caves or inventory ownership were the direct cause.
 
 Reason: the user identified the regression window as the cave/inventory work period. Repository history shows the only startup-path runtime change immediately inside that window was the opening-scene handoff change; the ore and slot-inventory pull requests did not replace the title/arrival architecture. Returning the startup boundary to the last pre-window runtime gives a clean known-good baseline while preserving the requested cave resources and stacking system.
+
+## 2026-09-23 — Player menu reuses the paused inventory/crafting UI boundary
+
+Decision: convert the existing full-screen suitcase surface into one **Player Menu** rather than
+adding a second overlay. Its top-level sections are **Inventory**, **Crafting** and **Upgrades**.
+Opening that surface continues to use the established `GameApp.setPaused(..., 'inventory-menu')`
+boundary, so gameplay simulation, world time and active gameplay systems stop while the scene
+continues to render.
+
+Inventory presentation is driven only by the shared item metadata introduced by the slot-storage
+pass. The visible categories are **Materials**, **Food**, **Equipment & Placeables** and **Relics**.
+Tools and weapons may therefore appear in Equipment & Placeables without changing the bottom
+toolbelt's authority for equipping them. Placeables, edible items and cookable items retain their
+existing interaction paths.
+
+`sprout_shard` remains persistent in the authoritative shared inventory/profile state for now,
+but it is treated as zero-slot currency and is not rendered as an inventory card. The Player Menu
+reads that quantity into a persistent top-right Shard balance. The Upgrades section is deliberately
+a read-only reveal shell in this pass: it explains that Relics reveal Sprout upgrades but does not
+create upgrade state, costs or transactions ahead of the dedicated progression passes.
+
+Existing callers such as Crafting Bench and food interactions keep the legacy
+`openInventory`/`closeInventory` compatibility methods; those methods route into the same Player
+Menu rather than creating a competing UI path.
+
+Reason: one paused menu authority keeps inventory rendering, crafting, future upgrade presentation,
+Shard display and established mobile pause behavior synchronized without moving gameplay state into
+the UI layer.
