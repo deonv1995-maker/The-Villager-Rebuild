@@ -7,6 +7,30 @@ import { undergroundPocketFieldAt } from './UndergroundPocketProfile.js';
 
 const clamp01 = value => Math.max(0, Math.min(1, value));
 const lerp = (a, b, t) => a + (b - a) * clamp01(t);
+const wrappedAngleDelta = (a, b) =>
+  Math.atan2(Math.sin(a - b), Math.cos(a - b));
+
+const keepEntranceOutOfStartBay = (terrain, config, angle, networkIndex) => {
+  const exclusion = Math.max(0, Number(config.naturalStartBayAngularExclusion) || 0);
+  const spawn = terrain.getSpawnPoint?.();
+  if (
+    exclusion <= 0
+    || !Number.isFinite(spawn?.x)
+    || !Number.isFinite(spawn?.z)
+  ) return angle;
+
+  const spawnAngle = Math.atan2(
+    spawn.z - (Number(terrain.centerZ) || 0),
+    spawn.x
+  );
+  const delta = wrappedAngleDelta(angle, spawnAngle);
+  if (Math.abs(delta) >= exclusion) return angle;
+
+  const side = Math.abs(delta) > 0.0001
+    ? Math.sign(delta)
+    : (networkIndex % 2 === 0 ? -1 : 1);
+  return spawnAngle + side * exclusion;
+};
 
 const hash01 = (x, z, salt = 0) => {
   let value = Math.imul((x | 0) ^ Math.imul(salt | 0, 374761393), 668265263);
@@ -612,10 +636,16 @@ export const buildNaturalCaveNetwork = (terrain, config) => {
   chambers.push(centralChamber);
 
   for (let index = 0; index < networkCount; index += 1) {
-    const baseAngle =
+    const generatedAngle =
       config.naturalEntranceAngleOffset
       + index * Math.PI * 2 / networkCount
       + (hash01(index, networkCount, 401) - 0.5) * config.naturalEntranceAngleJitter;
+    const baseAngle = keepEntranceOutOfStartBay(
+      terrain,
+      config,
+      generatedAngle,
+      index
+    );
     const radialFraction = lerp(
       config.naturalEntranceRadiusFractionMin,
       config.naturalEntranceRadiusFractionMax,
