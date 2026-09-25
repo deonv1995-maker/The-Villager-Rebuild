@@ -109,6 +109,8 @@ export class UndergroundTunnelingSystem {
     this.naturalFeatureBuckets = new Map();
     this.naturalFeatureChunkKeys = new Map();
     this.naturalEntryChunkKeys = new Set();
+    this.naturalEntryChunkKeysByNetwork = new Map();
+    this.publishedNaturalEntranceIds = new Set();
     this.activatedNaturalFeatureIds = new Set();
     this.pendingNaturalChunkRebuilds = [];
     this.pendingNaturalChunkRebuildKeys = new Set();
@@ -794,6 +796,7 @@ export class UndergroundTunnelingSystem {
       activeColumnCount: this.activeColumns.size,
       surfaceOpeningCount: this.surfaceOpenings.length,
       naturalEntranceCount: this.naturalCaveNetwork?.entrances.length ?? 0,
+      publishedNaturalEntranceCount: this.publishedNaturalEntranceIds.size,
       naturalSegmentCount: this.naturalCaveNetwork?.segments.length ?? 0,
       naturalChamberCount: this.naturalCaveNetwork?.chambers.length ?? 0,
       naturalLavaPoolCount: this.naturalCaveNetwork?.lavaPools?.length ?? 0,
@@ -1678,6 +1681,12 @@ export class UndergroundTunnelingSystem {
     this.naturalFeatureBuckets.clear();
     this.naturalFeatureChunkKeys.clear();
     this.naturalEntryChunkKeys.clear();
+    this.naturalEntryChunkKeysByNetwork.clear();
+    this.publishedNaturalEntranceIds.clear();
+
+    const entranceByNetwork = new Map(
+      this.naturalCaveNetwork.entrances.map(entrance => [entrance.networkIndex, entrance])
+    );
 
     for (const feature of this.naturalCaveNetwork.features) {
       const bounds = naturalCaveFeatureBounds(feature, this.config);
@@ -1703,7 +1712,35 @@ export class UndergroundTunnelingSystem {
         feature.type === 'segment'
         && (feature.kind === 'entrance' || feature.kind === 'descent')
       ) {
-        for (const key of renderKeys) this.naturalEntryChunkKeys.add(key);
+        const entrance = entranceByNetwork.get(feature.networkIndex);
+        const requiredKeys =
+          this.naturalEntryChunkKeysByNetwork.get(feature.networkIndex) ?? new Set();
+        const entranceSurfaceY = entrance
+          ? this.#naturalSurfaceHeightAt(entrance.x, entrance.z)
+          : null;
+        const horizontalLimit =
+          Math.max(this.chunkSize, Number(this.config.naturalEntryCriticalRenderRadius) || 0)
+          + this.chunkSize * Math.SQRT1_2;
+        const verticalLimit =
+          Math.max(
+            this.chunkSize * 0.5,
+            Number(this.config.naturalRenderPrewarmVerticalRadius) || 0
+          )
+          + this.chunkSize * 0.5;
+
+        for (const key of renderKeys) {
+          this.naturalEntryChunkKeys.add(key);
+          if (!entrance || !Number.isFinite(entranceSurfaceY)) continue;
+          const [ix, iy, iz] = key.split(':').map(Number);
+          if (![ix, iy, iz].every(Number.isFinite)) continue;
+          const centerX = (ix + 0.5) * this.chunkSize;
+          const centerY = (iy + 0.5) * this.chunkSize;
+          const centerZ = (iz + 0.5) * this.chunkSize;
+          if (Math.hypot(centerX - entrance.x, centerZ - entrance.z) > horizontalLimit) continue;
+          if (Math.abs(centerY - entranceSurfaceY) > verticalLimit) continue;
+          requiredKeys.add(key);
+        }
+        this.naturalEntryChunkKeysByNetwork.set(feature.networkIndex, requiredKeys);
       }
     }
     return this.naturalCaveNetwork;
@@ -1746,7 +1783,6 @@ export class UndergroundTunnelingSystem {
       ) continue;
 
       touchedFeature = true;
-      this.#activateChunkColumn(key);
       if (this.#queueNaturalChunkRebuild(key)) queuedChunks += 1;
     }
     if (touchedFeature) this.activatedNaturalFeatureIds.add(feature.id);
@@ -2157,6 +2193,7 @@ export class UndergroundTunnelingSystem {
     chunk.mesh.userData.discoveredPocketCount = this.discoveredPocketIds.size;
     this.builtNaturalChunkKeys.add(key);
     this.pendingNaturalChunkRebuildKeys.delete(key);
+    this.#publishReadyNaturalEntrances();
   }
 
   #polygonizeTetrahedron(
@@ -2390,13 +2427,42 @@ export class UndergroundTunnelingSystem {
       radius: horizontalRadius + this.config.surfaceOpeningPadding
     };
   }
+  #publishReadyNaturalEntrances() {
+    if (!this.naturalCaveNetwork) return false;
+
+    let changed = false;
+    for (const entrance of this.naturalCaveNetwork.entrances) {
+      if (this.publishedNaturalEntranceIds.has(entrance.id)) continue;
+      const requiredKeys =
+        this.naturalEntryChunkKeysByNetwork.get(entrance.networkIndex);
+      if (!requiredKeys?.size) continue;
+
+      let ready = true;
+      for (const key of requiredKeys) {
+        if (!this.builtNaturalChunkKeys.has(key)) {
+          ready = false;
+          break;
+        }
+      }
+      if (!ready) continue;
+
+      this.publishedNaturalEntranceIds.add(entrance.id);
+      changed = true;
+    }
+
+    if (changed) this.#syncSurfaceState();
+    return changed;
+  }
+
   #syncSurfaceState() {
     this.#initializeNaturalCaveNetwork();
+    const naturalOpenings = this.naturalCaveNetwork.entrances
+      .filter(entrance => this.publishedNaturalEntranceIds.has(entrance.id));
     const excavationOpenings = this.excavations
       .map(excavation => this.#surfaceOpeningFor(excavation))
       .filter(Boolean);
     this.surfaceOpenings = [
-      ...this.naturalCaveNetwork.entrances,
+      ...naturalOpenings,
       ...excavationOpenings
     ];
     this.terrain.setTunnelingOpenings?.(this.surfaceOpenings);
@@ -2422,6 +2488,7 @@ export class UndergroundTunnelingSystem {
     this.pendingNaturalChunkRebuilds.length = 0;
     this.pendingNaturalChunkRebuildKeys.clear();
     this.builtNaturalChunkKeys.clear();
+    this.publishedNaturalEntranceIds.clear();
     this.surfaceOpenings.length = 0;
   }
 }

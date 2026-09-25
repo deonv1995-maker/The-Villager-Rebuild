@@ -38,8 +38,8 @@ export const UNDERGROUND_TUNNELING = Object.freeze({
   presentationPadding: 0.9,
 
   // The natural underworld is deterministic topology inside the same density
-  // authority as player mining. Surface mouths are always known to the terrain,
-  // while 3D passage/chamber meshes are activated only near the Ranger.
+  // authority as player mining. Mouth topology is known immediately, but the
+  // terrain cut is published only after the nearby entry corridor mesh is ready.
   naturalNetworkCount: 6,
   naturalActivationRadius: 68,
   // Horizontal prewarming can start early, but unrelated deep strata must not

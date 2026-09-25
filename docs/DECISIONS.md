@@ -545,3 +545,12 @@ Reason: Android device reproduction still showed a rendered terrain frame, hidde
 no saved world after cave-spawn exclusion. That symptom is consistent with a runtime exception
 terminating the frame after the Ranger/camera have rendered once. The new boundary preserves a
 playable session while keeping the original error observable for a narrower follow-up fix.
+
+
+## 2026-09-25 — Cave mouths publish only after entry geometry is ready
+
+Decision: natural cave topology remains deterministic and lazy-streamed, but a surface mouth is no longer cut into the terrain at world boot. Each entrance keeps the terrain visually and physically closed while its bounded mouth/descent chunks are still being meshed. Once the required entry chunks have materialized, that entrance alone is published to the terrain and presentation-exclusion systems.
+
+Natural-cave collision columns now activate with materialized chunk geometry instead of when work is merely queued. This keeps visual mesh, cave-air collision and the surface cut on the same readiness boundary and prevents the Ranger from seeing or falling through an unrendered void.
+
+Reason: device screenshots showed a valid surface cave from normal view, but aiming down into it exposed the scene sky/background through a polygonal terrain cut while nearby world presentation appeared to vanish. The prior architecture cut all six cave mouths during boot while their 3D entry meshes were intentionally lazy. Delaying mouth publication also removes those six terrain rebuilds from the opening-scene handoff, reducing avoidable startup work without changing cave topology, mining, ores, inventory or save authority.

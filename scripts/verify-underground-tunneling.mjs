@@ -158,8 +158,8 @@ assert.ok(
 const naturalOpenings = terrain.getTunnelingOpenings();
 assert.equal(
   naturalOpenings.length,
-  UNDERGROUND_TUNNELING.naturalNetworkCount,
-  'world boot must publish deterministic walk-in natural cave mouths without materializing their 3D interiors'
+  0,
+  'world boot must keep natural cave mouths capped until their entry geometry has materialized'
 );
 const exclusionsBeforeMining = publishedExclusions.length;
 
@@ -221,7 +221,7 @@ assert.equal(
   true,
   'one Ranger-clear strike must activate only a small local set of 3D chunks'
 );
-assert.equal(publishedExclusions.length > exclusionsBeforeMining, true, 'player-made surface breakthrough must add a vegetation exclusion beyond the natural cave mouths');
+assert.equal(publishedExclusions.length > exclusionsBeforeMining, true, 'player-made surface breakthrough must add a vegetation exclusion without depending on unpublished natural cave mouths');
 
 assert.equal(
   firstTerrainChunk.userData.terrainSegments,
