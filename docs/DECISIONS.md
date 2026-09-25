@@ -554,3 +554,10 @@ Decision: natural cave topology remains deterministic and lazy-streamed, but a s
 Natural-cave collision columns now activate with materialized chunk geometry instead of when work is merely queued. This keeps visual mesh, cave-air collision and the surface cut on the same readiness boundary and prevents the Ranger from seeing or falling through an unrendered void.
 
 Reason: device screenshots showed a valid surface cave from normal view, but aiming down into it exposed the scene sky/background through a polygonal terrain cut while nearby world presentation appeared to vanish. The prior architecture cut all six cave mouths during boot while their 3D entry meshes were intentionally lazy. Delaying mouth publication also removes those six terrain rebuilds from the opening-scene handoff, reducing avoidable startup work without changing cave topology, mining, ores, inventory or save authority.
+
+
+## 2026-09-25 — Surface third-person camera cannot descend into cave air
+
+Decision: third-person camera collision keeps the terrain surface authoritative while the camera anchor is still above ground. An active cave-density column no longer makes below-surface cave air a valid orbit position for a surface Ranger. Once the camera anchor itself is genuinely underground, the existing cave density volume resumes authority for cave walls, ceilings and floors.
+
+Reason: Android device screenshots after cave-mouth readiness fixes still showed the HUD alive while the visible surface world disappeared as soon as the player looked down into a cave. The camera collision path previously treated any active tunneling column as density-only, allowing a surface camera orbit to pass below the terrain skin through cave air. This change fixes that camera/world boundary without changing cave topology, terrain generation, mining, collision for the Ranger, inventory, stacking or save data.

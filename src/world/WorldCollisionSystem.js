@@ -287,6 +287,10 @@ export class WorldCollisionSystem {
     const dirX = dx * invDistance;
     const dirY = dy * invDistance;
     const dirZ = dz * invDistance;
+    const originSurfaceY = this.baseHeightAt(origin.x, origin.z);
+    const undergroundCameraMode =
+      Number.isFinite(originSurfaceY)
+      && origin.y < originSurfaceY - Math.max(0.12, Math.max(0, surfacePadding));
     const sampleStep = Math.max(0.06, Number(step) || 0.14);
     const safeRadius = Math.max(0, Number(radius) || 0);
     let safeDistance = 0;
@@ -299,7 +303,14 @@ export class WorldCollisionSystem {
       const x = origin.x + dirX * travel;
       const y = origin.y + dirY * travel;
       const z = origin.z + dirZ * travel;
-      if (this.#cameraVolumeBlocked(x, y, z, safeRadius, surfacePadding)) {
+      if (this.#cameraVolumeBlocked(
+        x,
+        y,
+        z,
+        safeRadius,
+        surfacePadding,
+        undergroundCameraMode
+      )) {
         const retreat = Math.max(0, safeDistance - safeRadius * 0.18);
         return {
           x: origin.x + dirX * retreat,
@@ -413,14 +424,38 @@ export class WorldCollisionSystem {
     return false;
   }
 
-  #worldSolidAt(x, y, z, surfacePadding = 0.06) {
+  #worldSolidAt(
+    x,
+    y,
+    z,
+    surfacePadding = 0.06,
+    undergroundCameraMode = false
+  ) {
+    const surfaceY = this.baseHeightAt(x, z);
+    const paddedSurfaceY = surfaceY - Math.max(0, surfacePadding);
+
+    // A surface-anchored third-person camera must never use cave air as permission
+    // to move below the terrain skin. Otherwise orbiting over a published cave
+    // mouth can drop the camera underground and make the surface world disappear.
+    // Once the camera anchor itself is genuinely underground, switch back to the
+    // density volume so cave walls, floors and ceilings remain authoritative.
+    if (!undergroundCameraMode && Number.isFinite(surfaceY) && y < paddedSurfaceY) {
+      return true;
+    }
     if (this.volumeActivityAt?.(x, z)) {
       return Boolean(this.volumeSolidAt?.(x, y, z));
     }
-    return y < this.baseHeightAt(x, z) - Math.max(0, surfacePadding);
+    return Number.isFinite(surfaceY) && y < paddedSurfaceY;
   }
 
-  #cameraVolumeBlocked(x, y, z, radius, surfacePadding) {
+  #cameraVolumeBlocked(
+    x,
+    y,
+    z,
+    radius,
+    surfacePadding,
+    undergroundCameraMode = false
+  ) {
     const offsets = radius > 0
       ? [
         [0, 0, 0],
@@ -437,7 +472,8 @@ export class WorldCollisionSystem {
         x + offsetX,
         y + offsetY,
         z + offsetZ,
-        surfacePadding
+        surfacePadding,
+        undergroundCameraMode
       )
     );
   }
