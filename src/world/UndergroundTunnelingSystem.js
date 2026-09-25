@@ -1783,7 +1783,6 @@ export class UndergroundTunnelingSystem {
       ) continue;
 
       touchedFeature = true;
-      this.#activateChunkColumn(key);
       if (this.#queueNaturalChunkRebuild(key)) queuedChunks += 1;
     }
     if (touchedFeature) this.activatedNaturalFeatureIds.add(feature.id);
