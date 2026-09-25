@@ -81,6 +81,41 @@ assert.ok(
   'third-person camera must use the collision-resolved position instead of the through-ground orbit point'
 );
 
+
+const caveCameraCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  baseHeightAt: () => 0,
+  isPlayable: () => true
+});
+caveCameraCollision.setVolumeQuery({
+  hasActivityAt: () => true,
+  isSolidAt: () => false
+});
+const surfaceCameraResult = caveCameraCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 0, y: -2.4, z: 0 },
+  { radius: 0, step: 0.08 }
+);
+assert.equal(
+  surfaceCameraResult.blocked,
+  true,
+  'surface-anchored third-person camera must not descend through cave air below the terrain skin'
+);
+assert.ok(
+  surfaceCameraResult.y > -0.15,
+  'surface camera collision must keep the orbit point on the surface side of a cave mouth'
+);
+const undergroundCameraResult = caveCameraCollision.resolveCameraPosition(
+  { x: 0, y: -1.5, z: 0 },
+  { x: 0, y: -3.2, z: 0 },
+  { radius: 0, step: 0.08 }
+);
+assert.equal(
+  undergroundCameraResult.blocked,
+  false,
+  'an already-underground camera anchor must continue using cave-air volume traversal'
+);
+
 // Stair treads legitimately raise the Ranger in discrete steps. Third-person framing must
 // absorb that vertical step instead of snapping the look target upward in one frame.
 let steppedGroundY = 0;
