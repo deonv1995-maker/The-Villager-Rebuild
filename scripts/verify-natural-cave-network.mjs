@@ -188,8 +188,8 @@ assert.equal(
 );
 assert.equal(
   terrain.getTunnelingOpenings().length,
-  network.entrances.length,
-  'natural cave mouths must cut the terrain surface immediately'
+  0,
+  'natural cave mouths must stay visually capped until their entry mesh is ready'
 );
 
 const entrance = network.entrances[0];
@@ -233,9 +233,10 @@ assertNaturalQueueWithin(
 );
 const debug = world.getDebugState();
 assert.ok(debug.activatedNaturalFeatureCount > 0, 'natural feature activation must be tracked explicitly');
-assert.ok(
-  debug.activeColumnCount > debug.activeChunkCount,
-  'natural cave collision columns must activate immediately without synchronously meshing every queued chunk'
+assert.equal(
+  debug.activeColumnCount,
+  debug.activeChunkCount,
+  'natural cave collision must activate only for chunks whose geometry has materialized'
 );
 assert.ok(
   debug.activeChunkCount <= UNDERGROUND_TUNNELING.naturalCriticalChunkBuildsPerUpdate,
@@ -262,10 +263,32 @@ assert.ok(
   secondDebug.activeChunkCount < 90,
   'approaching one cave mouth must not materialize the entire connected underworld'
 );
+
+assert.equal(
+  terrain.getTunnelingOpenings().length,
+  0,
+  'surface opening must remain capped while critical entry chunks are still streaming'
+);
+
+let published = world.getDebugState().publishedNaturalEntranceCount;
+for (let frame = 0; frame < 500 && published === 0; frame += 1) {
+  world.update(playerAtEntrance, 0.05);
+  published = world.getDebugState().publishedNaturalEntranceCount;
+}
+assert.ok(
+  published > 0,
+  'approaching a cave must publish its mouth after the entry corridor mesh is complete'
+);
+assert.ok(
+  terrain.getTunnelingOpenings().some(opening =>
+    Math.hypot(opening.x - entrance.x, opening.z - entrance.z) < 0.01
+  ),
+  'published cave mouth must cut the terrain only after its matching entry mesh is ready'
+);
 assert.equal(
   world.isSolidAt(entrance.x, surfaceY - 0.45, entrance.z),
   false,
-  'walk-in cave mouth collision must be available immediately even while later visual chunks remain queued'
+  'walk-in cave mouth collision must be available once the visible entry corridor is ready'
 );
 
 const farEntrance = network.entrances
