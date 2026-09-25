@@ -13,6 +13,7 @@ globalThis.window = {
 globalThis.requestAnimationFrame = () => 0;
 
 const { RangerController } = await import('../src/player/RangerController.js');
+const { WorldCollisionSystem } = await import('../src/world/WorldCollisionSystem.js');
 const { RangerToolPresentation } = await import('../src/player/RangerToolPresentation.js');
 const { StructureInteriorOcclusionController } = await import('../src/gameplay/StructureInteriorOcclusionController.js');
 
