@@ -106,6 +106,35 @@ assert.ok(
   surfaceCameraResult.y > -0.15,
   'surface camera collision must keep the orbit point on the surface side of a cave mouth'
 );
+
+const caveLipCollision = new WorldCollisionSystem({
+  heightAt: (_x, z) => (z > 1.4 && z < 3.6 ? 1.9 : 0),
+  baseHeightAt: (_x, z) => (z > 1.4 && z < 3.6 ? 1.9 : 0),
+  isPlayable: () => true
+});
+caveLipCollision.setVolumeQuery({
+  hasActivityAt: () => true,
+  isSolidAt: () => false
+});
+const caveLipCameraResult = caveLipCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 0, y: 0.7, z: 6.2 },
+  { radius: 0.26, step: 0.08 }
+);
+assert.equal(
+  caveLipCameraResult.blocked,
+  true,
+  'surface camera must detect a cave lip that crosses the third-person sight line'
+);
+assert.ok(
+  caveLipCameraResult.z > 6.1,
+  'surface cave collision must preserve the third-person horizontal orbit instead of collapsing onto the Ranger'
+);
+assert.ok(
+  caveLipCameraResult.y > 2.4,
+  'surface cave collision must lift the orbit above the terrain lip'
+);
+
 const undergroundCameraResult = caveCameraCollision.resolveCameraPosition(
   { x: 0, y: -1.5, z: 0 },
   { x: 0, y: -3.2, z: 0 },
