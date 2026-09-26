@@ -5,6 +5,7 @@ const DEFAULT_PLAYER_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.height;
 const DEFAULT_SUPPORT_STEP_HEIGHT = 0.58;
 const AIRBORNE_SUPPORT_TOLERANCE = 0.16;
 const SUPPORT_ENTRY_RADIUS_FACTOR = 0.85;
+const MAX_SURFACE_CAMERA_CLEARANCE_LIFT = 4.5;
 
 export class WorldCollisionSystem {
   constructor({
@@ -376,6 +377,15 @@ export class WorldCollisionSystem {
         origin.y + (minimumY - origin.y) / Math.max(t, 0.000001);
       resolvedY = Math.max(resolvedY, requiredEndpointY);
     }
+
+    // A near-vertical terrain lip can make the sight-line equation demand an
+    // arbitrarily high endpoint when its sample is close to the Ranger anchor.
+    // Keep the camera in a bounded orbit so a cave entrance cannot throw the
+    // surface view far above the world and make nearby objects disappear.
+    resolvedY = Math.min(
+      resolvedY,
+      desired.y + MAX_SURFACE_CAMERA_CLEARANCE_LIFT
+    );
 
     const lifted = resolvedY > desired.y + 0.000001;
     return {

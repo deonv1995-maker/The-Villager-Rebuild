@@ -135,6 +135,25 @@ assert.ok(
   'surface cave collision must lift the orbit above the terrain lip'
 );
 
+const sharpCaveLipCollision = new WorldCollisionSystem({
+  heightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
+  baseHeightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
+  isPlayable: () => true
+});
+const sharpCaveLipCameraResult = sharpCaveLipCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 0, y: 1.94, z: 6.2 },
+  { radius: 0.26, step: 0.08 }
+);
+assert.ok(
+  sharpCaveLipCameraResult.y <= 1.94 + 4.500001,
+  'a close cave lip must not launch the surface camera outside its bounded follow orbit'
+);
+assert.ok(
+  sharpCaveLipCameraResult.z > 6.1,
+  'bounded surface clearance must preserve the horizontal camera orbit'
+);
+
 const undergroundCameraResult = caveCameraCollision.resolveCameraPosition(
   { x: 0, y: -1.5, z: 0 },
   { x: 0, y: -3.2, z: 0 },
