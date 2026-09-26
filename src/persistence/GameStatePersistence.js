@@ -58,10 +58,72 @@ export function constructionFacingYaw({ mode, yaw, root }) {
   return Math.atan2(-axis.z, axis.x);
 }
 
+const LEGACY_CAVE_RECOVERY_STEP = 0.6;
+const LEGACY_CAVE_RECOVERY_RADIUS = 10;
+const LEGACY_CAVE_RECOVERY_DIRECTIONS = 16;
+const LEGACY_CAVE_SURFACE_PROBE = 0.18;
+
+const legacySurfaceHeightAt = (game, x, z) => {
+  const island = game?.island;
+  for (const query of [
+    island?.constructionHeightAt?.bind(island),
+    island?.baseHeightAt?.bind(island),
+    island?.heightAt?.bind(island)
+  ]) {
+    const height = query?.(x, z);
+    if (Number.isFinite(height)) return height;
+  }
+  return Number.NaN;
+};
+
+const legacySurfaceCandidate = (game, x, z) => {
+  const island = game?.island;
+  const exploration = island?.explorationPois;
+  if (typeof island?.isPlayable === 'function' && !island.isPlayable(x, z, 0.55)) return null;
+
+  const y = legacySurfaceHeightAt(game, x, z);
+  if (!Number.isFinite(y)) return null;
+
+  if (exploration?.hasTunnelingActivityAt?.(x, z) && exploration?.isSolidAt) {
+    const solidBelow = exploration.isSolidAt(x, y - LEGACY_CAVE_SURFACE_PROBE, z);
+    const clearAbove = !exploration.isSolidAt(x, y + LEGACY_CAVE_SURFACE_PROBE, z);
+    if (!solidBelow || !clearAbove) return null;
+  }
+
+  return { x, y, z };
+};
+
+const recoverLegacyCavePlacement = (game, x, z) => {
+  const exploration = game?.island?.explorationPois;
+  if (!exploration?.hasTunnelingActivityAt?.(x, z)) return null;
+
+  const direct = legacySurfaceCandidate(game, x, z);
+  if (direct) return direct;
+
+  for (
+    let radius = LEGACY_CAVE_RECOVERY_STEP;
+    radius <= LEGACY_CAVE_RECOVERY_RADIUS + 0.000001;
+    radius += LEGACY_CAVE_RECOVERY_STEP
+  ) {
+    for (let index = 0; index < LEGACY_CAVE_RECOVERY_DIRECTIONS; index += 1) {
+      const angle = (index / LEGACY_CAVE_RECOVERY_DIRECTIONS) * Math.PI * 2;
+      const candidate = legacySurfaceCandidate(
+        game,
+        x + Math.cos(angle) * radius,
+        z + Math.sin(angle) * radius
+      );
+      if (candidate) return candidate;
+    }
+  }
+
+  const fallbackY = legacySurfaceHeightAt(game, x, z);
+  return Number.isFinite(fallbackY) ? { x, y: fallbackY, z } : null;
+};
+
 const capturePlayer = game => {
   const position = game.player.getPosition(new THREE.Vector3());
   return {
-    position: { x: position.x, z: position.z },
+    position: { x: position.x, y: position.y, z: position.z },
     rootYaw: game.player.root.rotation.y,
     cameraYaw: game.player.yaw,
     cameraPitch: game.player.pitch
@@ -71,13 +133,33 @@ const capturePlayer = game => {
 const restorePlayer = (game, state) => {
   if (!isRecord(state?.position)) throw new Error('Save is missing Ranger position state');
   const x = finiteNumber(state.position.x, Number.NaN);
+  const savedY = finiteNumber(state.position.y, Number.NaN);
   const z = finiteNumber(state.position.z, Number.NaN);
   if (!Number.isFinite(x) || !Number.isFinite(z)) throw new Error('Saved Ranger position is invalid');
+
+  // Schema-2 saves created before underground traversal stored X/Z only. Once cave
+  // openings became real 3D spaces, reconstructing Y through the generic highest-support
+  // query could place Continue on a cave floor. Preserve those saves by recovering the
+  // nearest solid surface only when the old 2D save lies in a tunneling-active column.
+  const legacyPlacement = Number.isFinite(savedY)
+    ? null
+    : recoverLegacyCavePlacement(game, x, z);
+  const placement = legacyPlacement ?? {
+    x,
+    y: Number.isFinite(savedY) ? savedY : null,
+    z
+  };
 
   const rootYaw = finiteNumber(state.rootYaw, Math.PI);
   const driver = { id: 'save-game-restore' };
   if (!game.player.beginCinematic(driver)) throw new Error('Ranger is busy and cannot restore a save point');
-  game.player.setCinematicPose({ x, z, yaw: rootYaw, snapCamera: true });
+  game.player.setCinematicPose({
+    x: placement.x,
+    ...(Number.isFinite(placement.y) ? { y: placement.y } : {}),
+    z: placement.z,
+    yaw: rootYaw,
+    snapCamera: true
+  });
   game.player.endCinematic(driver);
   game.player.yaw = finiteNumber(state.cameraYaw, rootYaw + Math.PI);
   game.player.pitch = THREE.MathUtils.clamp(finiteNumber(state.cameraPitch, -0.22), -0.75, 0.25);

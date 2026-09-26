@@ -50,7 +50,7 @@ An old schema-1 record fails the compatibility check, so Continue is hidden rath
 
 The current save preserves:
 
-- Ranger world position, facing and camera orientation;
+- Ranger full 3D world position (X/Y/Z), facing and camera orientation;
 - inventory quantities, including inventory-backed Logs;
 - equipped tool selection and per-tool durability units;
 - tree and rock harvest state;
@@ -104,6 +104,8 @@ The effective ordering is:
 12. tree-regrowth/resource-renewal timers.
 
 This keeps standable building collision available before the saved Ranger transform is applied.
+
+Ranger Y is part of the authoritative save position because surface ground, upper construction floors and underground cave floors can now share the same X/Z. Schema-2 records written before this vertical-position addition remain readable: when such an older 2D save lies in a tunneling-active column, Continue searches outward for the nearest solid surface skin and resumes there rather than asking the unbounded support query to guess between surface and cave floor. Once that recovered session autosaves, the exact 3D Ranger position is stored normally.
 
 ## Demolition/save invariant
 

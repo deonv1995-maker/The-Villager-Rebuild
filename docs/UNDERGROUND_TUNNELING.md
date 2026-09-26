@@ -154,7 +154,7 @@ Inside an active tunneling column:
 - surface players resolve to the normal surface;
 - underground players resolve to the nearest valid tunnel floor below their current level;
 - upward jump motion is swept against the same solid-density query, preventing the Ranger from jumping through a cave ceiling;
-- third-person camera travel is ray-resolved against the same density, so orbiting the view cannot place the camera outside a tunnel wall/roof and reveal the underside of the world;
+- a surface-anchored third-person camera keeps its horizontal orbit and raises the endpoint only enough for the sight line to clear the heightfield, so looking down a cave mouth cannot collapse the camera onto the Ranger or drop it through the opening; once the Ranger anchor is underground, third-person travel is ray-resolved against the density volume so the camera cannot pass through tunnel walls/floors/roof;
 - excavated walls, floors, ceilings, and pockets all come from the same density function used to render the mesh.
 
 ## Terrain sculpting integration
