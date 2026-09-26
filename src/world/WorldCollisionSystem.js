@@ -293,8 +293,22 @@ export class WorldCollisionSystem {
       && origin.y < originSurfaceY - Math.max(0.12, Math.max(0, surfacePadding));
     const sampleStep = Math.max(0.06, Number(step) || 0.14);
     const safeRadius = Math.max(0, Number(radius) || 0);
-    let safeDistance = 0;
 
+    // Surface third-person cameras need a different response from underground cameras.
+    // Shortening the orbit ray when it touches the terrain skin can collapse the camera
+    // onto the Ranger's shoulder at a cave lip. Preserve the horizontal orbit instead
+    // and raise its endpoint just enough for the whole sight line to clear the surface.
+    // Underground, the density volume remains authoritative and keeps the existing
+    // shorten-on-contact behavior for cave walls, floors and ceilings.
+    if (!undergroundCameraMode) {
+      return this.#resolveSurfaceCameraPosition(origin, desired, {
+        radius: safeRadius,
+        step: sampleStep,
+        surfacePadding
+      });
+    }
+
+    let safeDistance = 0;
     for (
       let travel = Math.min(sampleStep, distance);
       travel <= distance + 0.000001;
@@ -309,7 +323,7 @@ export class WorldCollisionSystem {
         z,
         safeRadius,
         surfacePadding,
-        undergroundCameraMode
+        true
       )) {
         const retreat = Math.max(0, safeDistance - safeRadius * 0.18);
         return {
@@ -324,6 +338,77 @@ export class WorldCollisionSystem {
     }
 
     return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
+  }
+
+  #resolveSurfaceCameraPosition(origin, desired, {
+    radius,
+    step,
+    surfacePadding
+  }) {
+    const dx = desired.x - origin.x;
+    const dy = desired.y - origin.y;
+    const dz = desired.z - origin.z;
+    const distance = Math.hypot(dx, dy, dz);
+    if (distance <= 0.000001) {
+      return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
+    }
+
+    const sampleCount = Math.max(1, Math.ceil(distance / step));
+    let resolvedY = desired.y;
+
+    for (let index = 1; index <= sampleCount; index += 1) {
+      const t = index / sampleCount;
+      const x = origin.x + dx * t;
+      const z = origin.z + dz * t;
+      const minimumY = this.#surfaceCameraMinimumY(
+        x,
+        z,
+        radius,
+        surfacePadding
+      );
+      if (!Number.isFinite(minimumY)) continue;
+
+      // The camera follows one straight sight line from the Ranger anchor to its
+      // endpoint. Solve the endpoint Y needed for this sample to clear the terrain;
+      // taking the maximum across samples produces the lowest clear line without
+      // shortening the horizontal orbit.
+      const requiredEndpointY =
+        origin.y + (minimumY - origin.y) / Math.max(t, 0.000001);
+      resolvedY = Math.max(resolvedY, requiredEndpointY);
+    }
+
+    const lifted = resolvedY > desired.y + 0.000001;
+    return {
+      x: desired.x,
+      y: resolvedY,
+      z: desired.z,
+      blocked: lifted,
+      surfaceLifted: lifted
+    };
+  }
+
+  #surfaceCameraMinimumY(x, z, radius, surfacePadding) {
+    const padding = Math.max(0, Number(surfacePadding) || 0);
+    const centerSurface = this.baseHeightAt(x, z);
+    let minimumY = Number.isFinite(centerSurface)
+      ? centerSurface + radius - padding
+      : -Infinity;
+
+    if (radius > 0) {
+      for (const [offsetX, offsetZ] of [
+        [radius, 0],
+        [-radius, 0],
+        [0, radius],
+        [0, -radius]
+      ]) {
+        const surface = this.baseHeightAt(x + offsetX, z + offsetZ);
+        if (Number.isFinite(surface)) {
+          minimumY = Math.max(minimumY, surface - padding);
+        }
+      }
+    }
+
+    return minimumY;
   }
 
   resolveVerticalMove(from, desiredY, {
