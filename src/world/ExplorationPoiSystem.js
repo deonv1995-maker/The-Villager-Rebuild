@@ -80,6 +80,10 @@ export class ExplorationPoiSystem {
     return this.tunneling.hasActivityAt(x, z);
   }
 
+  isSurfaceOpenAt(x, z) {
+    return this.tunneling.isSurfaceOpenAt(x, z);
+  }
+
   getInteractionTarget(playerPosition) {
     const pocketTarget = this.pocketContents.getInteractionTarget(playerPosition);
     const oreTarget = this.ores.getInteractionTarget(playerPosition);
