@@ -8,7 +8,7 @@ The playable mainland is intentionally larger than the original Foundation islan
 
 `ExpandedIslandTerrainSystem` owns world shape, terrain height, playability, slope, sand, shallow-water classification and deterministic satellite-island layout. These queries work anywhere in the world whether a visual chunk is currently rendered or not.
 
-`WorldChunkSystem` owns presentation only. It partitions terrain meshes, shallow-water meshes, tree instancing, grass, ferns and static environment dressing into 72-unit chunks. Each frame it keeps the Ranger's immediate neighborhood available and uses the active camera frustum plus a bounded render distance for the surrounding chunks. Off-screen/distant chunk roots are hidden as a unit.
+`WorldChunkSystem` owns presentation only. It partitions terrain meshes, shallow-water meshes, tree instancing, grass, ferns and static environment dressing into 72-unit chunks. Each frame it keeps the Ranger's immediate neighborhood available and uses the active camera frustum plus a bounded render distance for the surrounding chunks. Off-screen/distant chunk roots are hidden as a unit. Chunk roots are the single culling authority: renderable descendants have renderer-level frustum culling disabled when they enter a chunk, preventing stale instanced/dynamic child bounds from hiding content inside an otherwise-visible chunk.
 
 This separation is deliberate: collision, harvesting and future NPC navigation must not depend on whether a mesh happens to be on screen. Camera culling controls what is drawn; it is not permission to defer authoritative world queries or physics.
 
