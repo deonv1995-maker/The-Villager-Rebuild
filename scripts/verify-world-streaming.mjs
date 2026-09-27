@@ -128,6 +128,33 @@ assert.equal(near.parent.visible, true, 'player/camera neighborhood chunk must r
 assert.equal(far.parent.visible, false, 'distant off-screen chunk must not render');
 assert.equal(chunks.getStats().visible < chunks.getStats().total, true, 'chunk system must cull at least one registered off-screen chunk');
 
+const nestedChunkVisual = new THREE.Group();
+const nestedChunkMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshBasicMaterial()
+);
+nestedChunkVisual.add(nestedChunkMesh);
+chunks.addObjectAt(nestedChunkVisual, 8, -18);
+assert.equal(
+  nestedChunkMesh.frustumCulled,
+  false,
+  'chunk-owned renderables must defer visibility to the chunk root instead of competing child frustum bounds'
+);
+
+const adoptedChunkVisual = new THREE.Group();
+const adoptedChunkMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshBasicMaterial()
+);
+adoptedChunkVisual.add(adoptedChunkMesh);
+chunkGroup.add(adoptedChunkVisual);
+chunks.adoptObject(adoptedChunkVisual, 10, -16);
+assert.equal(
+  adoptedChunkMesh.frustumCulled,
+  false,
+  'adopted environment meshes must use the same single chunk-culling authority'
+);
+
 const treeGeometry = new THREE.BoxGeometry(1, 4, 1);
 const treeMaterial = new THREE.MeshStandardMaterial({ color: 0x3b733c });
 const treeBatch = new THREE.InstancedMesh(treeGeometry, treeMaterial, 4);
