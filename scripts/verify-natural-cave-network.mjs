@@ -301,6 +301,46 @@ assert.equal(
   'walk-in cave mouth collision must be available once the visible entry corridor is ready'
 );
 
+// Cave render chunks share the collision density, but they must not redraw the
+// ordinary exterior terrain skin. A second opaque terrain shell can look like
+// normal ground while depth-occluding every surface prop behind it as the view
+// rotates. Only real cavity boundaries should survive outside the mouth seam.
+let caveTriangleCount = 0;
+let terrainOwnedCaveTriangleCount = 0;
+const surfaceOwnershipTolerance = UNDERGROUND_TUNNELING.cellSize * 0.35;
+const mouthAllowance = entrance.radius + UNDERGROUND_TUNNELING.cellSize * 3;
+for (const chunk of world.tunneling.activeChunks.values()) {
+  const positions = chunk.mesh.geometry.getAttribute('position');
+  if (!positions) continue;
+  for (let index = 0; index + 2 < positions.count; index += 3) {
+    caveTriangleCount += 1;
+    let terrainOwned = true;
+    let centroidX = 0;
+    let centroidZ = 0;
+    for (let corner = 0; corner < 3; corner += 1) {
+      const vertexIndex = index + corner;
+      const x = positions.getX(vertexIndex);
+      const y = positions.getY(vertexIndex);
+      const z = positions.getZ(vertexIndex);
+      centroidX += x;
+      centroidZ += z;
+      const depth = terrain.heightAt(x, z) - y;
+      if (Math.abs(depth) > surfaceOwnershipTolerance) terrainOwned = false;
+    }
+    centroidX /= 3;
+    centroidZ /= 3;
+    const outsideMouthSeam =
+      Math.hypot(centroidX - entrance.x, centroidZ - entrance.z) > mouthAllowance;
+    if (terrainOwned && outsideMouthSeam) terrainOwnedCaveTriangleCount += 1;
+  }
+}
+assert.ok(caveTriangleCount > 0, 'published natural cave must retain visible cavity geometry');
+assert.equal(
+  terrainOwnedCaveTriangleCount,
+  0,
+  'cave meshing must not duplicate the ordinary exterior terrain skin outside the mouth seam'
+);
+
 const farEntrance = network.entrances
   .slice(1)
   .sort((a, b) =>
