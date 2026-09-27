@@ -574,3 +574,20 @@ Reason: after the earlier cave-camera fixes, device testing still reported surfa
 Decision: the surface third-person camera keeps its full horizontal orbit when terrain can be cleared within the existing bounded lift. If a close or steep terrain lip would require more than that lift, the collision solver now computes the farthest shortened orbit that remains clear at the bounded height. The solver must never satisfy the height bound by returning a camera ray that still intersects intact terrain.
 
 Reason: device testing showed that looking inland could leave the ground and sky visible while trees, water, rocks, grass and loose resources disappeared together. Nearby render chunks are deliberately forced visible, so the cross-system disappearance was not ordinary world streaming. The bounded surface-camera solver could clamp an excessive clearance request without re-establishing a clear sight line, leaving the camera inside/behind the terrain skin. The hybrid full-orbit-then-retreat rule preserves the anti-collapse and anti-skyrocket safeguards while restoring a valid surface viewpoint.
+
+## 2026-09-27 — Exterior terrain has one render owner
+
+Decision: the cave collision density may continue to include the terrain solid field, but streamed
+cave geometry must not polygonize a cell whose only isosurface crossing is the ordinary exterior
+terrain boundary. The cave mesher now tracks a cave-only ownership field alongside the combined
+density and emits only cells touched by an excavation, natural cave, pocket or cave-floor boundary.
+`ExpandedIslandTerrainSystem` remains the sole renderer of intact surface terrain and published
+mouth cuts.
+
+Reason: Android screenshots showed the same terrain silhouette while trees, rocks, grass, loose
+resources and water vanished together at particular view directions. The cave mesher was feeding
+`surfaceY - y` into marching tetrahedra, so every active cave column could generate a second
+opaque, double-sided, terrain-coloured surface mesh on top of the real terrain. That competing
+depth-writing shell explains a direction-dependent disappearance without requiring the world
+objects themselves to unload. The fix separates render ownership without changing collision,
+cave topology, mining, inventory, saves, terrain generation or chunk-streaming policy.
