@@ -367,6 +367,15 @@ export class UndergroundTunnelingSystem {
     return this.#columnHasActivity(x, z);
   }
 
+  isSurfaceOpenAt(x, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
+    return this.surfaceOpenings.some(opening => {
+      const dx = x - opening.x;
+      const dz = z - opening.z;
+      return dx * dx + dz * dz <= opening.radius * opening.radius;
+    });
+  }
+
   getMineTarget({ aim, playerPosition = null } = {}) {
     if (!aim?.origin || !aim?.direction) return null;
     const direction = this.tempA.copy(aim.direction);
