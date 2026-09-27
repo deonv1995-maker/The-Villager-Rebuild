@@ -29,16 +29,19 @@ export class WorldCollisionSystem {
     this.volumeSupportAt = null;
     this.volumeSolidAt = null;
     this.volumeActivityAt = null;
+    this.volumeSurfaceOpenAt = null;
   }
 
   setVolumeQuery({
     supportHeightAt = null,
     isSolidAt = null,
-    hasActivityAt = null
+    hasActivityAt = null,
+    isSurfaceOpenAt = null
   } = {}) {
     this.volumeSupportAt = typeof supportHeightAt === 'function' ? supportHeightAt : null;
     this.volumeSolidAt = typeof isSolidAt === 'function' ? isSolidAt : null;
     this.volumeActivityAt = typeof hasActivityAt === 'function' ? hasActivityAt : null;
+    this.volumeSurfaceOpenAt = typeof isSurfaceOpenAt === 'function' ? isSurfaceOpenAt : null;
   }
 
   clear() {
@@ -399,7 +402,7 @@ export class WorldCollisionSystem {
 
   #surfaceCameraMinimumY(x, z, radius, surfacePadding) {
     const padding = Math.max(0, Number(surfacePadding) || 0);
-    const centerSurface = this.baseHeightAt(x, z);
+    const centerSurface = this.#surfaceCameraTerrainY(x, z);
     let minimumY = Number.isFinite(centerSurface)
       ? centerSurface + radius - padding
       : -Infinity;
@@ -411,7 +414,7 @@ export class WorldCollisionSystem {
         [0, radius],
         [0, -radius]
       ]) {
-        const surface = this.baseHeightAt(x + offsetX, z + offsetZ);
+        const surface = this.#surfaceCameraTerrainY(x + offsetX, z + offsetZ);
         if (Number.isFinite(surface)) {
           minimumY = Math.max(minimumY, surface - padding);
         }
@@ -419,6 +422,15 @@ export class WorldCollisionSystem {
     }
 
     return minimumY;
+  }
+
+  #surfaceCameraTerrainY(x, z) {
+    // Published cave openings have already removed the matching surface triangles.
+    // Do not keep colliding the camera against the original heightfield there or
+    // the invisible terrain sheet will lift the orbit while looking into a cave.
+    if (this.volumeSurfaceOpenAt?.(x, z)) return -Infinity;
+    const surface = this.baseHeightAt(x, z);
+    return Number.isFinite(surface) ? surface : -Infinity;
   }
 
   resolveVerticalMove(from, desiredY, {
