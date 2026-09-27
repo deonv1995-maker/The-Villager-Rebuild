@@ -357,7 +357,8 @@ export class WorldCollisionSystem {
       return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
     }
 
-    const sampleCount = Math.max(1, Math.ceil(distance / step));
+    const surfaceSampleStep = Math.min(step, 0.08);
+    const sampleCount = Math.max(1, Math.ceil(distance / surfaceSampleStep));
     let requiredY = desired.y;
 
     for (let index = 1; index <= sampleCount; index += 1) {
@@ -423,8 +424,12 @@ export class WorldCollisionSystem {
         break;
       }
 
+      // The obstacle can begin anywhere between the previous sample and this
+      // one. Treat the previous sample as the conservative contact point so a
+      // steep lip cannot be tunneled through between discrete height queries.
+      const conservativeT = Math.max(0, (index - 1) / sampleCount);
       const allowedScale =
-        t * availableRise / Math.max(0.000001, minimumY - origin.y);
+        conservativeT * availableRise / Math.max(0.000001, minimumY - origin.y);
       clearScale = Math.min(clearScale, Math.max(0, allowedScale));
     }
 
