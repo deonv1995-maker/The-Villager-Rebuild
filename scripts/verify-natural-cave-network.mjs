@@ -193,6 +193,11 @@ assert.equal(
 );
 
 const entrance = network.entrances[0];
+assert.equal(
+  world.isSurfaceOpenAt(entrance.x, entrance.z),
+  false,
+  'unpublished natural cave mouths must not report a surface opening'
+);
 const surfaceY = terrain.naturalHeightAt(entrance.x, entrance.z);
 const playerAtEntrance = new THREE.Vector3(entrance.x, surfaceY + 1, entrance.z);
 const lavaTimeBeforeUpdate = world.tunneling.lavaMaterial.uniforms.uTime.value;
@@ -284,6 +289,11 @@ assert.ok(
     Math.hypot(opening.x - entrance.x, opening.z - entrance.z) < 0.01
   ),
   'published cave mouth must cut the terrain only after its matching entry mesh is ready'
+);
+assert.equal(
+  world.isSurfaceOpenAt(entrance.x, entrance.z),
+  true,
+  'published cave mouth must expose the same opening authority used by camera collision'
 );
 assert.equal(
   world.isSolidAt(entrance.x, surfaceY - 0.45, entrance.z),
