@@ -580,3 +580,21 @@ Reason: device testing showed that looking inland could leave the ground and sky
 Decision: renderables owned by `WorldChunkSystem` do not perform a second Three.js child-level frustum test. The chunk root remains responsible for camera-frustum and render-distance visibility, while descendant meshes render whenever that root is visible.
 
 Reason: device evidence showed terrain remaining visible while trees, rocks, grass, loose dressing and shallow-water presentation disappeared together at a camera rotation. These layers share chunk ownership but use different geometry and instancing paths. Applying renderer frustum culling again to each child creates a competing visibility authority and makes stale or dynamic child bounds capable of rejecting content that the chunk streamer has already declared visible. Removing the redundant child test preserves bounded mobile streaming while making visibility deterministic at the chunk boundary.
+
+## 2026-09-27 — Exterior terrain has one render owner
+
+Decision: the cave collision density may continue to include the terrain solid field, but streamed
+cave geometry must not polygonize a cell whose only isosurface crossing is the ordinary exterior
+terrain boundary. The cave mesher now tracks a cave-only ownership field alongside the combined
+density. Terrain-only cells are rejected immediately; mixed cells carry cave ownership through
+marching-edge interpolation so terrain-owned triangles can be discarded while real cave
+walls/floors/ceilings and mouth seams remain. `ExpandedIslandTerrainSystem` remains the sole
+renderer of intact surface terrain and published mouth cuts.
+
+Reason: Android screenshots showed the same terrain silhouette while trees, rocks, grass, loose
+resources and water vanished together at particular view directions. The cave mesher was feeding
+`surfaceY - y` into marching tetrahedra, so active cave columns could generate a second opaque,
+double-sided, terrain-coloured surface mesh on top of the real terrain. That competing
+depth-writing shell explains a direction-dependent disappearance without requiring the world
+objects themselves to unload. The fix separates render ownership without changing collision,
+cave topology, mining, inventory, saves, terrain generation or chunk-streaming policy.
