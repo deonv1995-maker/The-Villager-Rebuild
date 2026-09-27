@@ -1081,7 +1081,34 @@ export class UndergroundTunnelingSystem {
     pockets,
     floorBucket
   ) {
-    let density = surfaceY - y;
+    const carvedDensity = this.#carveDensityFromBuckets(
+      surfaceY - y,
+      x,
+      y,
+      z,
+      excavationBucket,
+      naturalFeatures,
+      pockets
+    );
+    return this.#applyFloorEditsFromBucket(
+      carvedDensity,
+      x,
+      y,
+      z,
+      floorBucket
+    );
+  }
+
+  #carveDensityFromBuckets(
+    initialDensity,
+    x,
+    y,
+    z,
+    excavationBucket,
+    naturalFeatures,
+    pockets
+  ) {
+    let density = initialDensity;
 
     if (excavationBucket) {
       for (const excavation of excavationBucket) {
@@ -1113,12 +1140,22 @@ export class UndergroundTunnelingSystem {
       }
     }
 
-    if (floorBucket) {
-      for (const edit of floorBucket) {
-        density = this.#applyFloorEditDensity(density, x, y, z, edit);
-      }
-    }
     return density;
+  }
+
+  #applyFloorEditsFromBucket(density, x, y, z, floorBucket) {
+    if (!floorBucket) return density;
+    let editedDensity = density;
+    for (const edit of floorBucket) {
+      editedDensity = this.#applyFloorEditDensity(
+        editedDensity,
+        x,
+        y,
+        z,
+        edit
+      );
+    }
+    return editedDensity;
   }
 
   #registerExcavation(excavation) {
@@ -2117,8 +2154,15 @@ export class UndergroundTunnelingSystem {
     }
 
     // Shared corners are sampled once: 13^3 rather than 8 * 12^3 queries.
+    // Keep a second cave-only scalar field so rendering can distinguish an actual
+    // cavity wall from the ordinary terrain/air boundary. Collision still uses the
+    // combined density; the surface terrain renderer remains the sole owner of the
+    // intact exterior skin.
     const stride = cells + 1;
     const samples = new Float64Array(stride * stride * stride);
+    const caveSamples = new Float64Array(stride * stride * stride);
+    const caveSolidBaseline =
+      Math.max(this.config.cellSize, this.config.maxDepth + this.config.cellSize * 4);
     for (let iz = 0; iz <= cells; iz += 1) {
       const z = minZ + iz * step;
       for (let ix = 0; ix <= cells; ix += 1) {
@@ -2130,19 +2174,33 @@ export class UndergroundTunnelingSystem {
         // 13-sample vertical lattice column instead of once per density sample.
         const columnPockets = this.#candidatePocketsAround(x, z);
         for (let iy = 0; iy <= cells; iy += 1) {
+          const sampleIndex = ix + stride * (iy + stride * iz);
+          const y = minY + iy * step;
           const bucket =
             sampleBuckets[horizontalBucketIndex | (iy === cells ? 2 : 0)];
-          samples[ix + stride * (iy + stride * iz)] =
-            this.#densityAtFromBuckets(
-              x,
-              minY + iy * step,
-              z,
-              surfaceY,
-              bucket.excavations,
-              bucket.naturalFeatures,
-              columnPockets,
-              bucket.floorEdits
-            );
+          const caveCarvedDensity = this.#carveDensityFromBuckets(
+            caveSolidBaseline,
+            x,
+            y,
+            z,
+            bucket.excavations,
+            bucket.naturalFeatures,
+            columnPockets
+          );
+          caveSamples[sampleIndex] = this.#applyFloorEditsFromBucket(
+            caveCarvedDensity,
+            x,
+            y,
+            z,
+            bucket.floorEdits
+          );
+          samples[sampleIndex] = this.#applyFloorEditsFromBucket(
+            Math.min(surfaceY - y, caveCarvedDensity),
+            x,
+            y,
+            z,
+            bucket.floorEdits
+          );
         }
         yield;
       }
@@ -2152,17 +2210,27 @@ export class UndergroundTunnelingSystem {
       for (let iy = 0; iy < cells; iy += 1) {
         for (let ix = 0; ix < cells; ix += 1) {
           let insideCornerCount = 0;
+          let caveSolidCornerCount = 0;
           for (let corner = 0; corner < 8; corner += 1) {
             const [ox, oy, oz] = CUBE_CORNERS[corner];
-            const value =
-              samples[ix + ox + stride * (iy + oy + stride * (iz + oz))];
+            const sampleIndex =
+              ix + ox + stride * (iy + oy + stride * (iz + oz));
+            const value = samples[sampleIndex];
             cubeValues[corner] = value;
             if (value >= ISO_LEVEL) insideCornerCount += 1;
+            if (caveSamples[sampleIndex] >= ISO_LEVEL) caveSolidCornerCount += 1;
           }
 
           // Most cubes are entirely rock or entirely air. Do not populate the
           // eight Vector3 corner positions until a cell actually crosses rock/air.
           if (insideCornerCount === 0 || insideCornerCount === 8) continue;
+
+          // The combined density also crosses zero at the normal terrain surface.
+          // Those triangles are already rendered by ExpandedIslandTerrainSystem.
+          // If the cave-only field is solid at every corner, this cell contains no
+          // cavity boundary and emitting it would create a second opaque terrain
+          // skin that can depth-occlude trees, grass, rocks and water by view angle.
+          if (caveSolidCornerCount === 8) continue;
           for (let corner = 0; corner < 8; corner += 1) {
             const [ox, oy, oz] = CUBE_CORNERS[corner];
             cubePoints[corner].set(
