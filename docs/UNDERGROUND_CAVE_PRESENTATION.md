@@ -305,3 +305,27 @@ walking, sprinting and Sprout-assisted fast approaches from several angles and c
 the surface opening and first descent no longer appear several beats late while sustained
 frame pacing remains acceptable.
 
+
+
+## Surface/cave render ownership — 2026-09-27
+
+The scalar density used for collision intentionally starts from the terrain solid field
+(`surfaceY - y`) and then subtracts excavations, natural cave features and pockets. That combined
+field is correct for physics because it represents both intact ground and cave air. It must not,
+however, be interpreted as permission for the cave mesher to render the ordinary terrain/air
+boundary a second time.
+
+Streamed cave meshing now samples the same carving fields twice in one lattice pass: the normal
+combined world density and a cave-only ownership field. A marching cell is emitted only when the
+combined density crosses the isosurface **and** the cave-only field indicates that a real cavity
+boundary reaches that cell. Cells whose only zero crossing is the intact exterior terrain surface
+are skipped.
+
+This keeps one renderer authoritative for each boundary: `ExpandedIslandTerrainSystem` owns the
+surface skin and its published mouth cut; `UndergroundTunnelingSystem` owns subterranean walls,
+floors, ceilings and the opening seam. Collision, mining, floor edits, cave topology and save state
+continue to use the existing shared world-density authority.
+
+Device acceptance must rotate the first-person and third-person camera through inland and ocean
+views near an activated cave and confirm that trees, rocks, grass, loose resources and shoreline
+water remain visible while cave walls still materialize normally.
