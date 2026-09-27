@@ -316,10 +316,12 @@ however, be interpreted as permission for the cave mesher to render the ordinary
 boundary a second time.
 
 Streamed cave meshing now samples the same carving fields twice in one lattice pass: the normal
-combined world density and a cave-only ownership field. A marching cell is emitted only when the
-combined density crosses the isosurface **and** the cave-only field indicates that a real cavity
-boundary reaches that cell. Cells whose only zero crossing is the intact exterior terrain surface
-are skipped.
+combined world density and a cave-only ownership field. Cells whose cave-only corners are all
+solid are rejected immediately. Mixed cells carry the cave-only values through the same edge
+interpolation used by marching tetrahedra, so each generated triangle can be classified: a
+triangle whose interpolated vertices are still solid in the cave-only field belongs to the
+exterior terrain renderer and is discarded, while a triangle that actually reaches the cave
+isosurface is retained.
 
 This keeps one renderer authoritative for each boundary: `ExpandedIslandTerrainSystem` owns the
 surface skin and its published mouth cut; `UndergroundTunnelingSystem` owns subterranean walls,
