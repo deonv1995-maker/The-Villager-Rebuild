@@ -431,7 +431,7 @@ export class WorldCollisionSystem {
     // Stay just inside the sampled clearance boundary so floating-point noise cannot
     // put the camera sphere back into the terrain on the following frame.
     const scalePadding = Math.min(0.01, 0.5 / sampleCount);
-    clearScale = THREE.MathUtils.clamp(clearScale - scalePadding, 0, 1);
+    clearScale = Math.max(0, Math.min(1, clearScale - scalePadding));
 
     return {
       x: origin.x + dx * clearScale,
