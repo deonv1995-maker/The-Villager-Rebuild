@@ -121,6 +121,38 @@ body.arrival-intro-revealing .mobile-hud {
 .title-play:disabled { opacity: .78; }
 .title-play-mark { color: #f3cc72; font-size: .72em; }
 
+.title-skip-intro {
+  position: fixed;
+  z-index: 55;
+  right: max(14px, calc(env(safe-area-inset-right) + 10px));
+  bottom: max(14px, calc(env(safe-area-inset-bottom) + 10px));
+  min-width: 124px;
+  min-height: 48px;
+  padding: 10px 16px;
+  border: 1px solid rgba(229, 193, 110, .72);
+  border-radius: 12px;
+  background: rgba(9, 27, 35, .84);
+  box-shadow: 0 8px 24px rgba(5, 16, 21, .32);
+  color: #fff4d4;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+  touch-action: manipulation;
+}
+
+.title-skip-intro[hidden] { display: none; }
+
+.title-skip-intro:active {
+  transform: translateY(2px);
+}
+
+.title-skip-intro:disabled {
+  opacity: .58;
+}
+
+
 .title-menu-actions p {
   margin: 6px 0 0;
   padding: 5px 12px;
