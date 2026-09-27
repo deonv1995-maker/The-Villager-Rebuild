@@ -31,6 +31,7 @@ export class TitleSceneApp {
     this.playStarted = false;
     this.onPlay = null;
     this.onNewGameRequest = null;
+    this.skipIntroButton = null;
     this.profilePrompt = null;
     this.profileFocus = 0;
     this.profileFocusTarget = 0;
@@ -111,6 +112,7 @@ export class TitleSceneApp {
     this.state = 'intro';
     this.introElapsed = 0;
     this.menuUi?.classList.add('is-leaving');
+    this.skipIntroButton?.removeAttribute('hidden');
     this.setStatus('VOYAGE · ISLAND AHEAD');
   }
 
@@ -202,6 +204,8 @@ export class TitleSceneApp {
     this.#closeProfilePrompt({ restoreMenu: false });
     this.menuUi?.remove();
     this.menuUi = null;
+    this.skipIntroButton?.remove();
+    this.skipIntroButton = null;
     this.titleHeroPresentation?.dispose();
     this.titleHeroPresentation = null;
 
@@ -330,6 +334,16 @@ export class TitleSceneApp {
       if (this.onNewGameRequest) void this.onNewGameRequest();
       else void this.playIntro();
     });
+
+    const skipButton = document.createElement('button');
+    skipButton.className = 'title-skip-intro';
+    skipButton.type = 'button';
+    skipButton.textContent = 'SKIP INTRO';
+    skipButton.setAttribute('aria-label', 'Skip shipwreck intro');
+    skipButton.hidden = true;
+    skipButton.addEventListener('click', () => this.#completeIntro());
+    document.body.appendChild(skipButton);
+    this.skipIntroButton = skipButton;
 
     const transition = document.createElement('div');
     transition.className = 'title-transition';
@@ -518,13 +532,22 @@ export class TitleSceneApp {
     this.camera.lookAt(this.ship.position.x, 1.45, this.ship.position.z - 9.5);
 
     if (t >= TITLE_SCENE.transitionCoverStart) this.transitionCover?.classList.add('is-covering');
-    if (t >= 1 && this.state === 'intro') {
-      this.state = 'handoff';
-      this.running = false;
-      void this.onPlay?.();
-    }
+    if (t >= 1) this.#completeIntro();
 
     return t;
+  }
+
+  #completeIntro() {
+    if (this.state !== 'intro') return false;
+    this.transitionCover?.classList.add('is-covering');
+    if (this.skipIntroButton) {
+      this.skipIntroButton.disabled = true;
+      this.skipIntroButton.hidden = true;
+    }
+    this.state = 'handoff';
+    this.running = false;
+    void this.onPlay?.();
+    return true;
   }
 
   #beginRangerJump() {
