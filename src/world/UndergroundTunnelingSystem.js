@@ -128,6 +128,7 @@ export class UndergroundTunnelingSystem {
     this.tetraInsideCorners = new Int8Array(4);
     this.tetraOutsideCorners = new Int8Array(4);
     this.tetraPoints = Array.from({ length: 4 }, () => new THREE.Vector3());
+    this.tetraPointCaveValues = new Float64Array(4);
     this.tempColor = new THREE.Color();
     this.tempSurfaceColor = new THREE.Color();
     this.stoneColor = new THREE.Color(0x625f57);
@@ -2128,6 +2129,7 @@ export class UndergroundTunnelingSystem {
     const colors = [];
     const cubePoints = Array.from({ length: 8 }, () => new THREE.Vector3());
     const cubeValues = new Array(8);
+    const cubeCaveValues = new Array(8);
     const cells = this.config.chunkCells;
     const step = this.config.cellSize;
 
@@ -2216,9 +2218,11 @@ export class UndergroundTunnelingSystem {
             const sampleIndex =
               ix + ox + stride * (iy + oy + stride * (iz + oz));
             const value = samples[sampleIndex];
+            const caveValue = caveSamples[sampleIndex];
             cubeValues[corner] = value;
+            cubeCaveValues[corner] = caveValue;
             if (value >= ISO_LEVEL) insideCornerCount += 1;
-            if (caveSamples[sampleIndex] >= ISO_LEVEL) caveSolidCornerCount += 1;
+            if (caveValue >= ISO_LEVEL) caveSolidCornerCount += 1;
           }
 
           // Most cubes are entirely rock or entirely air. Do not populate the
@@ -2244,6 +2248,7 @@ export class UndergroundTunnelingSystem {
               tetra,
               cubePoints,
               cubeValues,
+              cubeCaveValues,
               positions,
               normals,
               colors
@@ -2277,12 +2282,14 @@ export class UndergroundTunnelingSystem {
     tetra,
     cubePoints,
     cubeValues,
+    cubeCaveValues,
     positions,
     normals,
     colors
   ) {
     const inside = this.tetraInsideCorners;
     const outside = this.tetraOutsideCorners;
+    const pointCaveValues = this.tetraPointCaveValues;
     let insideCount = 0;
     let outsideCount = 0;
 
@@ -2300,12 +2307,17 @@ export class UndergroundTunnelingSystem {
 
       for (let index = 0; index < emptyCount; index += 1) {
         const corner = empty[index];
-        this.#interpolateIso(
+        const t = this.#interpolateIso(
           cubePoints[pivot],
           cubePoints[corner],
           cubeValues[pivot],
           cubeValues[corner],
           points[index]
+        );
+        pointCaveValues[index] = lerp(
+          cubeCaveValues[pivot],
+          cubeCaveValues[corner],
+          t
         );
       }
 
@@ -2332,6 +2344,9 @@ export class UndergroundTunnelingSystem {
         points[0],
         points[1],
         points[2],
+        pointCaveValues[0],
+        pointCaveValues[1],
+        pointCaveValues[2],
         this.tempD,
         positions,
         normals,
@@ -2344,33 +2359,49 @@ export class UndergroundTunnelingSystem {
     const insideB = inside[1];
     const outsideA = outside[0];
     const outsideB = outside[1];
-    this.#interpolateIso(
-      cubePoints[insideA],
-      cubePoints[outsideA],
-      cubeValues[insideA],
-      cubeValues[outsideA],
-      points[0]
+    pointCaveValues[0] = lerp(
+      cubeCaveValues[insideA],
+      cubeCaveValues[outsideA],
+      this.#interpolateIso(
+        cubePoints[insideA],
+        cubePoints[outsideA],
+        cubeValues[insideA],
+        cubeValues[outsideA],
+        points[0]
+      )
     );
-    this.#interpolateIso(
-      cubePoints[insideB],
-      cubePoints[outsideA],
-      cubeValues[insideB],
-      cubeValues[outsideA],
-      points[1]
+    pointCaveValues[1] = lerp(
+      cubeCaveValues[insideB],
+      cubeCaveValues[outsideA],
+      this.#interpolateIso(
+        cubePoints[insideB],
+        cubePoints[outsideA],
+        cubeValues[insideB],
+        cubeValues[outsideA],
+        points[1]
+      )
     );
-    this.#interpolateIso(
-      cubePoints[insideB],
-      cubePoints[outsideB],
-      cubeValues[insideB],
-      cubeValues[outsideB],
-      points[2]
+    pointCaveValues[2] = lerp(
+      cubeCaveValues[insideB],
+      cubeCaveValues[outsideB],
+      this.#interpolateIso(
+        cubePoints[insideB],
+        cubePoints[outsideB],
+        cubeValues[insideB],
+        cubeValues[outsideB],
+        points[2]
+      )
     );
-    this.#interpolateIso(
-      cubePoints[insideA],
-      cubePoints[outsideB],
-      cubeValues[insideA],
-      cubeValues[outsideB],
-      points[3]
+    pointCaveValues[3] = lerp(
+      cubeCaveValues[insideA],
+      cubeCaveValues[outsideB],
+      this.#interpolateIso(
+        cubePoints[insideA],
+        cubePoints[outsideB],
+        cubeValues[insideA],
+        cubeValues[outsideB],
+        points[3]
+      )
     );
     this.tempD
       .copy(cubePoints[outsideA])
@@ -2382,6 +2413,9 @@ export class UndergroundTunnelingSystem {
       points[0],
       points[1],
       points[2],
+      pointCaveValues[0],
+      pointCaveValues[1],
+      pointCaveValues[2],
       this.tempD,
       positions,
       normals,
@@ -2391,6 +2425,9 @@ export class UndergroundTunnelingSystem {
       points[0],
       points[2],
       points[3],
+      pointCaveValues[0],
+      pointCaveValues[2],
+      pointCaveValues[3],
       this.tempD,
       positions,
       normals,
@@ -2403,10 +2440,33 @@ export class UndergroundTunnelingSystem {
     const t = Math.abs(denominator) > 0.000001
       ? THREE.MathUtils.clamp((densityA - ISO_LEVEL) / denominator, 0, 1)
       : 0.5;
-    return target.lerpVectors(pointA, pointB, t);
+    target.lerpVectors(pointA, pointB, t);
+    return t;
   }
 
-  #pushTriangle(a, b, c, outward, positions, normals, colors) {
+  #pushTriangle(
+    a,
+    b,
+    c,
+    caveDensityA,
+    caveDensityB,
+    caveDensityC,
+    outward,
+    positions,
+    normals,
+    colors
+  ) {
+    // The combined world field also reaches zero at the ordinary terrain surface.
+    // If the cave-only field is still solid at every interpolated vertex, this
+    // triangle belongs to the exterior terrain renderer rather than the cave.
+    // Reject it even when the same marching cell also contains a real cave wall.
+    const ownershipEpsilon = Math.max(0.00001, this.config.cellSize * 0.0001);
+    if (
+      caveDensityA > ownershipEpsilon
+      && caveDensityB > ownershipEpsilon
+      && caveDensityC > ownershipEpsilon
+    ) return;
+
     this.tempNormal
       .copy(this.tempB.subVectors(b, a))
       .cross(this.tempC.subVectors(c, a));
