@@ -164,24 +164,61 @@ assert.ok(
   'published cave mouth clearance must preserve the third-person horizontal orbit'
 );
 
+const sharpCaveLipHeightAt = (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0);
 const sharpCaveLipCollision = new WorldCollisionSystem({
-  heightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
-  baseHeightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
+  heightAt: sharpCaveLipHeightAt,
+  baseHeightAt: sharpCaveLipHeightAt,
   isPlayable: () => true
 });
+const sharpCaveLipOrigin = { x: 0, y: 1.35, z: 0 };
+const sharpCaveLipDesired = { x: 0, y: 1.94, z: 6.2 };
+const sharpCaveLipRadius = 0.26;
+const sharpCaveLipPadding = 0.06;
 const sharpCaveLipCameraResult = sharpCaveLipCollision.resolveCameraPosition(
-  { x: 0, y: 1.35, z: 0 },
-  { x: 0, y: 1.94, z: 6.2 },
-  { radius: 0.26, step: 0.08 }
+  sharpCaveLipOrigin,
+  sharpCaveLipDesired,
+  { radius: sharpCaveLipRadius, step: 0.08, surfacePadding: sharpCaveLipPadding }
 );
 assert.ok(
-  sharpCaveLipCameraResult.y <= 1.94 + 4.500001,
+  sharpCaveLipCameraResult.y <= sharpCaveLipDesired.y + 4.500001,
   'a close cave lip must not launch the surface camera outside its bounded follow orbit'
 );
-assert.ok(
-  sharpCaveLipCameraResult.z > 6.1,
-  'bounded surface clearance must preserve the horizontal camera orbit'
+assert.equal(
+  sharpCaveLipCameraResult.surfaceShortened,
+  true,
+  'when bounded lift cannot clear a close lip, the surface camera must shorten instead of returning an intersecting endpoint'
 );
+assert.ok(
+  sharpCaveLipCameraResult.z < sharpCaveLipDesired.z - 0.1,
+  'an uncleared bounded surface orbit must retreat horizontally'
+);
+
+const sharpCaveLipDistance = Math.hypot(
+  sharpCaveLipCameraResult.x - sharpCaveLipOrigin.x,
+  sharpCaveLipCameraResult.y - sharpCaveLipOrigin.y,
+  sharpCaveLipCameraResult.z - sharpCaveLipOrigin.z
+);
+const sharpCaveLipSamples = Math.max(1, Math.ceil(sharpCaveLipDistance / 0.08));
+for (let index = 1; index <= sharpCaveLipSamples; index += 1) {
+  const t = index / sharpCaveLipSamples;
+  const x = sharpCaveLipOrigin.x
+    + (sharpCaveLipCameraResult.x - sharpCaveLipOrigin.x) * t;
+  const y = sharpCaveLipOrigin.y
+    + (sharpCaveLipCameraResult.y - sharpCaveLipOrigin.y) * t;
+  const z = sharpCaveLipOrigin.z
+    + (sharpCaveLipCameraResult.z - sharpCaveLipOrigin.z) * t;
+  const minimumSurfaceY = Math.max(
+    sharpCaveLipHeightAt(x, z) + sharpCaveLipRadius - sharpCaveLipPadding,
+    sharpCaveLipHeightAt(x + sharpCaveLipRadius, z) - sharpCaveLipPadding,
+    sharpCaveLipHeightAt(x - sharpCaveLipRadius, z) - sharpCaveLipPadding,
+    sharpCaveLipHeightAt(x, z + sharpCaveLipRadius) - sharpCaveLipPadding,
+    sharpCaveLipHeightAt(x, z - sharpCaveLipRadius) - sharpCaveLipPadding
+  );
+  assert.ok(
+    y >= minimumSurfaceY - 0.000001,
+    'bounded surface-camera fallback must leave the entire returned sight line clear of terrain'
+  );
+}
 
 const undergroundCameraResult = caveCameraCollision.resolveCameraPosition(
   { x: 0, y: -1.5, z: 0 },
