@@ -63,20 +63,34 @@ export class WorldChunkSystem {
 
   addObjectAt(object, x, z) {
     const chunk = this.getChunk(x, z);
+    this.#prepareChunkRenderable(object);
     chunk.root.add(object);
     return chunk.key;
   }
 
   addObjectToKey(object, key) {
     const chunk = this.getChunk(key);
+    this.#prepareChunkRenderable(object);
     chunk.root.add(object);
     return chunk.key;
   }
 
   adoptObject(object, x = object.position.x, z = object.position.z) {
     const chunk = this.getChunk(x, z);
+    this.#prepareChunkRenderable(object);
     chunk.root.attach(object);
     return chunk.key;
+  }
+
+  #prepareChunkRenderable(object) {
+    if (!object) return;
+    // WorldChunkSystem is the presentation visibility authority for chunk-owned
+    // content. Renderer-level child frustum tests are redundant and can reject
+    // instanced/dynamic meshes whose local bounds lag their world-space content.
+    // Keep child renderables available whenever their owning chunk is visible.
+    object.traverse?.(child => {
+      if (child.isMesh || child.isLine || child.isPoints) child.frustumCulled = false;
+    });
   }
 
   adoptNamedObjects(sourceGroup, predicate) {
