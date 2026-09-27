@@ -135,6 +135,35 @@ assert.ok(
   'surface cave collision must lift the orbit above the terrain lip'
 );
 
+const publishedCaveMouthCollision = new WorldCollisionSystem({
+  heightAt: (_x, z) => (z > 1.4 && z < 3.6 ? 1.9 : 0),
+  baseHeightAt: (_x, z) => (z > 1.4 && z < 3.6 ? 1.9 : 0),
+  isPlayable: () => true
+});
+publishedCaveMouthCollision.setVolumeQuery({
+  hasActivityAt: () => true,
+  isSolidAt: () => false,
+  isSurfaceOpenAt: (_x, z) => z > 1.0 && z < 4.0
+});
+const publishedCaveMouthCameraResult = publishedCaveMouthCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 0, y: 0.7, z: 6.2 },
+  { radius: 0.26, step: 0.08 }
+);
+assert.equal(
+  publishedCaveMouthCameraResult.blocked,
+  false,
+  'published cave mouths must not behave like an invisible heightfield sheet'
+);
+assert.ok(
+  Math.abs(publishedCaveMouthCameraResult.y - 0.7) < 0.000001,
+  'looking through a published cave mouth must preserve the intended third-person camera height'
+);
+assert.ok(
+  publishedCaveMouthCameraResult.z > 6.1,
+  'published cave mouth clearance must preserve the third-person horizontal orbit'
+);
+
 const sharpCaveLipCollision = new WorldCollisionSystem({
   heightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
   baseHeightAt: (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0),
