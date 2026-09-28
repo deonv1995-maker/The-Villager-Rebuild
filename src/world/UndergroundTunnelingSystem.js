@@ -24,6 +24,11 @@ import {
 const ISO_LEVEL = 0;
 const STATE_KIND = 'global-tunneling-v1';
 const TERRAIN_COLOR_DEPTH = 0.42;
+// The normal heightfield is the sole exterior surface renderer. Marching the
+// underground density field also crosses density=0 at the terrain skin, so
+// suppress upward-facing triangles that merely duplicate that top surface.
+const TERRAIN_SURFACE_OWNERSHIP_DEPTH_FACTOR = 0.3;
+const TERRAIN_SURFACE_OWNERSHIP_NORMAL_Y_MIN = 0.35;
 const SUPPORT_SCAN_FRACTION = 0.25;
 const TARGET_RAY_STEP_FRACTION = 0.22;
 const TARGET_REFINE_STEPS = 7;
@@ -2357,9 +2362,26 @@ export class UndergroundTunnelingSystem {
       this.tempNormal.set(0, 1, 0);
     }
 
+    if (this.#isTerrainOwnedSurfaceTriangle(a, p1, p2, this.tempNormal)) return;
+
     this.#pushTriangleVertex(a, positions, normals, colors);
     this.#pushTriangleVertex(p1, positions, normals, colors);
     this.#pushTriangleVertex(p2, positions, normals, colors);
+  }
+
+  #isTerrainOwnedSurfaceTriangle(a, b, c, normal) {
+    if (!normal || normal.y < TERRAIN_SURFACE_OWNERSHIP_NORMAL_Y_MIN) return false;
+    const tolerance = Math.max(
+      0.08,
+      this.config.cellSize * TERRAIN_SURFACE_OWNERSHIP_DEPTH_FACTOR
+    );
+    for (const point of [a, b, c]) {
+      const surfaceY = this.terrain.heightAt(point.x, point.z);
+      if (!Number.isFinite(surfaceY) || Math.abs(surfaceY - point.y) > tolerance) {
+        return false;
+      }
+    }
+    return true;
   }
 
   #pushTriangleVertex(point, positions, normals, colors) {
