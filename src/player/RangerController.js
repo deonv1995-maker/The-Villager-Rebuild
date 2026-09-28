@@ -23,6 +23,7 @@ const CAMERA_POSITION_RESPONSE = 4.2;
 const THIRD_PERSON_CAMERA_COLLISION_RADIUS = 0.26;
 const CAMERA_RETURN_DELAY = 1.25;
 const THIRD_PERSON_LOOK_AHEAD = 2;
+const THIRD_PERSON_LOOK_TERRAIN_CLEARANCE = 0.65;
 const THIRD_PERSON_TARGET_HEIGHT = 1.35;
 const FIRST_PERSON_EYE_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.eyeHeight;
 const FIRST_PERSON_BOB_WALK_PHASE_PER_METER = 2.4;
@@ -1367,7 +1368,32 @@ export class RangerController {
           .set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
           .multiplyScalar(lookAhead)
       );
+
+    // The forward framing target must stay above the same surface the Ranger is
+    // looking across. Around the outer coast the mainland rises toward the island
+    // centre; aiming the fixed-height 2 m look-ahead into that uphill terrain makes
+    // the terrain itself occlude the Ranger and every separate surface-world layer.
+    // Use the terrain/ground authority only for this presentation target. Camera
+    // position collision remains owned by WorldCollisionSystem.
+    if (lookAhead > 0) {
+      const surfaceY = this.#thirdPersonLookSurfaceHeightAt(lookTarget.x, lookTarget.z);
+      if (Number.isFinite(surfaceY)) {
+        lookTarget.y = Math.max(
+          lookTarget.y,
+          surfaceY + THIRD_PERSON_LOOK_TERRAIN_CLEARANCE
+        );
+      }
+    }
+
     this.camera.lookAt(lookTarget);
+  }
+
+  #thirdPersonLookSurfaceHeightAt(x, z) {
+    const constructionY = this.terrain?.constructionHeightAt?.(x, z);
+    if (Number.isFinite(constructionY)) return constructionY;
+
+    const terrainY = this.terrain?.heightAt?.(x, z);
+    return Number.isFinite(terrainY) ? terrainY : null;
   }
 
   #bindKeyboard() {
