@@ -11,6 +11,7 @@ import {
   presentationExclusionCoversVegetation
 } from './GrassFieldSystem.js';
 import { terrainJungleSurfaceFieldsAt } from './TerrainSurfacePresentation.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 const clamp01 = value => THREE.MathUtils.clamp(value, 0, 1);
 
@@ -246,7 +247,12 @@ export class JungleFloorPresentationSystem {
         if (!this.scatter?.isGrassClear?.(x, z, clearance)) continue;
 
         const scale = scaleAt(column, row);
-        const naturalY = this.terrain.heightAt(x, z) + heightOffset;
+        const naturalY = surfacePresentationHeightAt(
+          this.terrain,
+          this.constructionTerrain,
+          x,
+          z
+        ) + heightOffset;
         const entry = {
           kind,
           x,
@@ -342,8 +348,12 @@ export class JungleFloorPresentationSystem {
       const hidden = floors.some(floor => constructionFloorCoversVegetation(entry, floor, 0.08));
       const adaptedY = hidden
         ? entry.y
-        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z)
-          ?? this.terrain.heightAt(entry.x, entry.z)) + entry.heightOffset;
+        : surfacePresentationHeightAt(
+            this.terrain,
+            this.constructionTerrain,
+            entry.x,
+            entry.z
+          ) + entry.heightOffset;
       if (hidden === entry.constructionHidden && Math.abs(adaptedY - entry.y) <= 0.002) continue;
       entry.constructionHidden = hidden;
       entry.y = adaptedY;
