@@ -10,6 +10,7 @@ export class WorldCollisionSystem {
   constructor({
     heightAt,
     baseHeightAt = null,
+    cameraSurfaceHeightAt = null,
     isPlayable,
     maxSlopeDegrees = 50,
     dropFallThreshold = 0.5,
@@ -17,6 +18,10 @@ export class WorldCollisionSystem {
   }) {
     this.heightAt = heightAt;
     this.baseHeightAt = typeof baseHeightAt === 'function' ? baseHeightAt : heightAt;
+    this.cameraSurfaceHeightAt =
+      typeof cameraSurfaceHeightAt === 'function'
+        ? cameraSurfaceHeightAt
+        : this.baseHeightAt;
     this.isPlayable = isPlayable;
     this.maxSlopeGradient = Math.tan((maxSlopeDegrees * Math.PI) / 180);
     this.dropFallThreshold = dropFallThreshold;
@@ -457,6 +462,9 @@ export class WorldCollisionSystem {
     // opening. The camera may look into the opening, but it must not physically
     // drop through that hole ahead of the Ranger. Once the anchor is genuinely
     // underground, resolveCameraPosition switches to the cave density volume.
+    const renderedSurface = this.cameraSurfaceHeightAt?.(x, z);
+    if (Number.isFinite(renderedSurface)) return renderedSurface;
+
     const surface = this.baseHeightAt(x, z);
     return Number.isFinite(surface) ? surface : -Infinity;
   }
