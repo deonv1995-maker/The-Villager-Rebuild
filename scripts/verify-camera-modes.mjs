@@ -69,7 +69,7 @@ const renderedTerrainAdapter = new ConstructionTerrainAdaptationSystem({
   terrain: renderedTerrainSource,
   chunks: renderedTerrainChunks
 });
-const renderedTerrainGeometry = new THREE.PlaneGeometry(4, 4, 1, 1);
+const renderedTerrainGeometry = new THREE.PlaneGeometry(4, 4, 2, 2);
 renderedTerrainGeometry.rotateX(-Math.PI / 2);
 const renderedTerrainPositions = renderedTerrainGeometry.getAttribute('position');
 for (let index = 0; index < renderedTerrainPositions.count; index += 1) {
