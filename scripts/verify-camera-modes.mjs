@@ -73,7 +73,9 @@ const renderedTerrainGeometry = new THREE.PlaneGeometry(4, 4, 1, 1);
 renderedTerrainGeometry.rotateX(-Math.PI / 2);
 const renderedTerrainPositions = renderedTerrainGeometry.getAttribute('position');
 for (let index = 0; index < renderedTerrainPositions.count; index += 1) {
-  renderedTerrainPositions.setY(index, 2.4);
+  const localX = renderedTerrainPositions.getX(index);
+  const localZ = renderedTerrainPositions.getZ(index);
+  renderedTerrainPositions.setY(index, 2 + localX * 0.25 + localZ * 0.5);
 }
 renderedTerrainPositions.needsUpdate = true;
 const renderedTerrainMesh = new THREE.Mesh(
@@ -89,8 +91,12 @@ assert.equal(
   'camera regression fixture must capture the visible terrain mesh'
 );
 assert.ok(
-  Math.abs(renderedTerrainAdapter.renderedHeightAt(1, 1) - 2.4) < 0.0001,
-  'rendered terrain query must return the triangle surface instead of the lower analytical height'
+  Math.abs(renderedTerrainAdapter.renderedHeightAt(1, 1) - 1.25) < 0.0001,
+  'rendered terrain query must follow the actual Three.js X/Z grid order and interpolate the visible triangle surface'
+);
+assert.ok(
+  Math.abs(renderedTerrainAdapter.renderedHeightAt(3, 3) - 2.75) < 0.0001,
+  'rendered terrain query must not mirror the sampled cell across the chunk Z axis'
 );
 
 const renderedSurfaceCollision = new WorldCollisionSystem({
