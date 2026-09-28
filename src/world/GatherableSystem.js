@@ -727,7 +727,7 @@ export class GatherableSystem {
   }
 
   #surfaceHeightAt(x, z) {
-    return surfacePresentationHeightAt({ terrain: this.terrain }, x, z);
+    return surfacePresentationHeightAt(this.terrain, null, x, z);
   }
 
   #groundY(resourceId, x, z) {
