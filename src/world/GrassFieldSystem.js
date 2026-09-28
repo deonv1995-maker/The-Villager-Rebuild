@@ -6,6 +6,7 @@ import {
   samePresentationExclusions,
   vegetationConstructionCollisionRevision
 } from './VegetationInvalidation.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 export function constructionFloorCoversVegetation(entry, floor, padding = 0.12) {
   if (!entry || !floor || floor.shape !== 'box') return false;
@@ -181,7 +182,12 @@ export class ReactiveVegetationFieldSystem {
       if (!this.scatter.isGrassClear(x, z, this.clearancePadding)) continue;
 
       const scale = this.scaleAt(this.random.bind(this));
-      const naturalY = this.terrain.heightAt(x, z) + this.heightOffset;
+      const naturalY = surfacePresentationHeightAt(
+        this.terrain,
+        this.constructionTerrain,
+        x,
+        z
+      ) + this.heightOffset;
       const entry = {
         index: -1,
         mesh: null,
@@ -315,7 +321,12 @@ export class ReactiveVegetationFieldSystem {
       );
       const adaptedY = hidden
         ? entry.y
-        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z) ?? this.terrain.heightAt(entry.x, entry.z)) + this.heightOffset;
+        : surfacePresentationHeightAt(
+            this.terrain,
+            this.constructionTerrain,
+            entry.x,
+            entry.z
+          ) + this.heightOffset;
       if (hidden === entry.constructionHidden && Math.abs(adaptedY - entry.y) <= 0.002) continue;
       entry.constructionHidden = hidden;
       entry.y = adaptedY;
