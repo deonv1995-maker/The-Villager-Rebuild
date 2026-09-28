@@ -82,6 +82,35 @@ assert.ok(
   'third-person camera must use the collision-resolved position instead of the through-ground orbit point'
 );
 
+let cinematicCollisionCalls = 0;
+const cinematicCollisionCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const cinematicCollisionPlayer = new RangerController({
+  scene,
+  camera: cinematicCollisionCamera,
+  terrain,
+  collision: {
+    resolveCameraPosition(origin, desired) {
+      cinematicCollisionCalls += 1;
+      return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
+    }
+  }
+});
+cinematicCollisionPlayer.model = new THREE.Group();
+cinematicCollisionPlayer.root.add(cinematicCollisionPlayer.model);
+cinematicCollisionPlayer.assetMode = 'kaykit';
+const collisionCinematicDriver = { update() {} };
+assert.equal(
+  cinematicCollisionPlayer.beginCinematic(collisionCinematicDriver),
+  true,
+  'third-person story camera collision regression must enter cinematic ownership'
+);
+cinematicCollisionPlayer.update(1 / 60);
+assert.ok(
+  cinematicCollisionCalls > 0,
+  'third-person story cinematics must keep consulting shared world camera collision'
+);
+cinematicCollisionPlayer.endCinematic(collisionCinematicDriver);
+
 
 const caveCameraCollision = new WorldCollisionSystem({
   heightAt: () => 0,
@@ -153,16 +182,22 @@ const publishedCaveMouthCameraResult = publishedCaveMouthCollision.resolveCamera
 );
 assert.equal(
   publishedCaveMouthCameraResult.blocked,
+  true,
+  'a surface-anchored third-person camera must remain on the surface side of a published cave mouth'
+);
+assert.equal(
+  publishedCaveMouthCameraResult.surfaceShortened,
+  true,
+  'published cave mouths must shorten a surface camera ray instead of allowing the camera to enter the opening ahead of the Ranger'
+);
+assert.equal(
+  publishedCaveMouthCameraResult.surfaceLifted,
   false,
-  'published cave mouths must not behave like an invisible heightfield sheet'
+  'published cave-mouth protection must preserve the straight surface camera ray'
 );
 assert.ok(
-  Math.abs(publishedCaveMouthCameraResult.y - 0.7) < 0.000001,
-  'looking through a published cave mouth must preserve the intended third-person camera height'
-);
-assert.ok(
-  publishedCaveMouthCameraResult.z > 6.1,
-  'published cave mouth clearance must preserve the third-person horizontal orbit'
+  publishedCaveMouthCameraResult.z > 0.5 && publishedCaveMouthCameraResult.z < 1.5,
+  'surface camera must retreat before the cave-lip heightfield while the Ranger remains above ground'
 );
 
 const sharpCaveLipHeightAt = (_x, z) => (z > 0.35 && z < 0.9 ? 2.1 : 0);
