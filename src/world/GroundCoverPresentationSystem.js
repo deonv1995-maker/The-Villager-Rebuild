@@ -8,6 +8,7 @@ import {
 } from './VegetationInvalidation.js';
 import { constructionFloorCoversVegetation, presentationExclusionCoversVegetation } from './GrassFieldSystem.js';
 import { terrainSurfacePatchFieldsAt } from './TerrainSurfacePresentation.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 const COVER_SPACING = 1.55;
 const COVER_HEIGHT_OFFSET = 0.012;
@@ -128,7 +129,12 @@ export class GroundCoverPresentationSystem {
         if (hash01(column, row, 11) > density) continue;
         if (!this.scatter?.isGrassClear?.(x, z, 0.025)) continue;
 
-        const naturalY = this.terrain.heightAt(x, z) + COVER_HEIGHT_OFFSET;
+        const naturalY = surfacePresentationHeightAt(
+          this.terrain,
+          this.constructionTerrain,
+          x,
+          z
+        ) + COVER_HEIGHT_OFFSET;
         const scaleVariation = hash01(column, row, 17);
         const heightVariation = hash01(column, row, 19);
         const entry = {
@@ -254,7 +260,12 @@ export class GroundCoverPresentationSystem {
       const hidden = floors.some(floor => constructionFloorCoversVegetation(entry, floor, 0.08));
       const adaptedY = hidden
         ? entry.y
-        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z) ?? this.terrain.heightAt(entry.x, entry.z)) + COVER_HEIGHT_OFFSET;
+        : surfacePresentationHeightAt(
+            this.terrain,
+            this.constructionTerrain,
+            entry.x,
+            entry.z
+          ) + COVER_HEIGHT_OFFSET;
       if (hidden === entry.constructionHidden && Math.abs(adaptedY - entry.y) <= 0.002) continue;
       entry.constructionHidden = hidden;
       entry.y = adaptedY;
