@@ -14,6 +14,8 @@ globalThis.requestAnimationFrame = () => 0;
 
 const { RangerController } = await import('../src/player/RangerController.js');
 const { WorldCollisionSystem } = await import('../src/world/WorldCollisionSystem.js');
+const { WorldChunkSystem } = await import('../src/world/WorldChunkSystem.js');
+const { ConstructionTerrainAdaptationSystem } = await import('../src/world/ConstructionTerrainAdaptationSystem.js');
 const { RangerToolPresentation } = await import('../src/player/RangerToolPresentation.js');
 const { StructureInteriorOcclusionController } = await import('../src/gameplay/StructureInteriorOcclusionController.js');
 
@@ -52,12 +54,73 @@ assert.ok(
   'Third-person Ranger must sit below screen centre so more forward landscape stays visible'
 );
 
+const renderedTerrainGroup = new THREE.Group();
+const renderedTerrainChunks = new WorldChunkSystem({
+  group: renderedTerrainGroup,
+  chunkSize: 4,
+  renderDistance: 20
+});
+const renderedTerrainSource = {
+  heightAt: () => 0,
+  onTerrainChunkGeometryChanged: () => () => {}
+};
+const renderedTerrainAdapter = new ConstructionTerrainAdaptationSystem({
+  group: renderedTerrainGroup,
+  terrain: renderedTerrainSource,
+  chunks: renderedTerrainChunks
+});
+const renderedTerrainGeometry = new THREE.PlaneGeometry(4, 4, 1, 1);
+renderedTerrainGeometry.rotateX(-Math.PI / 2);
+const renderedTerrainPositions = renderedTerrainGeometry.getAttribute('position');
+for (let index = 0; index < renderedTerrainPositions.count; index += 1) {
+  renderedTerrainPositions.setY(index, 2.4);
+}
+renderedTerrainPositions.needsUpdate = true;
+const renderedTerrainMesh = new THREE.Mesh(
+  renderedTerrainGeometry,
+  new THREE.MeshBasicMaterial()
+);
+renderedTerrainMesh.name = 'terrain-chunk-0-0';
+renderedTerrainMesh.position.set(2, 0, 2);
+renderedTerrainGroup.add(renderedTerrainMesh);
+assert.equal(
+  renderedTerrainAdapter.captureTerrainMeshes(),
+  1,
+  'camera regression fixture must capture the visible terrain mesh'
+);
+assert.ok(
+  Math.abs(renderedTerrainAdapter.renderedHeightAt(1, 1) - 2.4) < 0.0001,
+  'rendered terrain query must return the triangle surface instead of the lower analytical height'
+);
+
+const renderedSurfaceCollision = new WorldCollisionSystem({
+  heightAt: () => 0,
+  baseHeightAt: () => 0,
+  cameraSurfaceHeightAt: (_x, z) => z >= 1.2 && z <= 3.8 ? 2.4 : 0,
+  isPlayable: () => true
+});
+const renderedSurfaceCameraResult = renderedSurfaceCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 0, y: 1.8, z: 4.2 },
+  { radius: 0.24, step: 0.08 }
+);
+assert.equal(
+  renderedSurfaceCameraResult.surfaceShortened,
+  true,
+  'camera collision must retreat before a rendered terrain ridge even when the analytical heightfield is lower'
+);
+assert.ok(
+  renderedSurfaceCameraResult.z < 1.2,
+  'camera must remain on the Ranger side of the visible rendered terrain surface'
+);
+
 const inlandRiseHeightAt = (_x, z) => z >= 1.2 ? 2.4 : 0;
 const inlandCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
 const inlandTerrain = {
   getSpawnPoint: () => ({ x: 0, z: 0 }),
-  constructionHeightAt: inlandRiseHeightAt,
-  heightAt: inlandRiseHeightAt
+  renderedSurfaceHeightAt: inlandRiseHeightAt,
+  constructionHeightAt: () => 0,
+  heightAt: () => 0
 };
 const inlandPlayer = new RangerController({
   scene,
