@@ -290,6 +290,10 @@ export class GameApp {
       if (this.isPaused()) return;
 
       this.player?.update(dt);
+      // Finalize any owner-scoped story framing before camera-dependent world
+      // visibility is evaluated. SceneSystem.render() no longer changes the view
+      // direction after chunk streaming has already culled the world.
+      this.sceneSystem?.prepareCamera?.();
       this.toolPresentation?.update(dt);
       this.demolitionPreview?.update(dt);
       this.campfire?.update(dt);
