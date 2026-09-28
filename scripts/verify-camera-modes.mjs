@@ -127,12 +127,13 @@ assert.equal(
   'surface camera must detect a cave lip that crosses the third-person sight line'
 );
 assert.ok(
-  caveLipCameraResult.z > 6.1,
-  'surface cave collision must preserve the third-person horizontal orbit instead of collapsing onto the Ranger'
+  caveLipCameraResult.z > 0.5 && caveLipCameraResult.z < 1.5,
+  'surface terrain between Ranger and camera must shorten the orbit before the blocking lip'
 );
-assert.ok(
-  caveLipCameraResult.y > 2.4,
-  'surface cave collision must lift the orbit above the terrain lip'
+assert.equal(
+  caveLipCameraResult.surfaceLifted,
+  false,
+  'surface terrain collision must not solve an occluded view by lifting the camera above the far orbit'
 );
 
 const publishedCaveMouthCollision = new WorldCollisionSystem({
@@ -172,53 +173,60 @@ const sharpCaveLipCollision = new WorldCollisionSystem({
 });
 const sharpCaveLipOrigin = { x: 0, y: 1.35, z: 0 };
 const sharpCaveLipDesired = { x: 0, y: 1.94, z: 6.2 };
-const sharpCaveLipRadius = 0.26;
-const sharpCaveLipPadding = 0.06;
 const sharpCaveLipCameraResult = sharpCaveLipCollision.resolveCameraPosition(
   sharpCaveLipOrigin,
   sharpCaveLipDesired,
-  { radius: sharpCaveLipRadius, step: 0.08, surfacePadding: sharpCaveLipPadding }
-);
-assert.ok(
-  sharpCaveLipCameraResult.y <= sharpCaveLipDesired.y + 4.500001,
-  'a close cave lip must not launch the surface camera outside its bounded follow orbit'
+  { radius: 0.26, step: 0.08, surfacePadding: 0.06 }
 );
 assert.equal(
   sharpCaveLipCameraResult.surfaceShortened,
   true,
-  'when bounded lift cannot clear a close lip, the surface camera must shorten instead of returning an intersecting endpoint'
+  'a close surface lip must shorten the third-person camera before the terrain'
+);
+assert.equal(
+  sharpCaveLipCameraResult.surfaceLifted,
+  false,
+  'a close surface lip must not vertically displace the third-person orbit'
 );
 assert.ok(
-  sharpCaveLipCameraResult.z < sharpCaveLipDesired.z - 0.1,
-  'an uncleared bounded surface orbit must retreat horizontally'
+  sharpCaveLipCameraResult.z < 0.35,
+  'the resolved surface camera must remain on the Ranger side of a close blocking ridge'
 );
 
-const sharpCaveLipDistance = Math.hypot(
-  sharpCaveLipCameraResult.x - sharpCaveLipOrigin.x,
-  sharpCaveLipCameraResult.y - sharpCaveLipOrigin.y,
-  sharpCaveLipCameraResult.z - sharpCaveLipOrigin.z
+const sideRidgeHeightAt = (x, z) =>
+  x > 0.45 && x < 1.25 && z > 0.8 && z < 2.4 ? 1.9 : 0;
+const sideRidgeCollision = new WorldCollisionSystem({
+  heightAt: sideRidgeHeightAt,
+  baseHeightAt: sideRidgeHeightAt,
+  isPlayable: () => true
+});
+const clearAngleResult = sideRidgeCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: -4.6, y: 2.1, z: 4.1 },
+  { radius: 0.26, step: 0.08 }
 );
-const sharpCaveLipSamples = Math.max(1, Math.ceil(sharpCaveLipDistance / 0.08));
-for (let index = 1; index <= sharpCaveLipSamples; index += 1) {
-  const t = index / sharpCaveLipSamples;
-  const x = sharpCaveLipOrigin.x
-    + (sharpCaveLipCameraResult.x - sharpCaveLipOrigin.x) * t;
-  const y = sharpCaveLipOrigin.y
-    + (sharpCaveLipCameraResult.y - sharpCaveLipOrigin.y) * t;
-  const z = sharpCaveLipOrigin.z
-    + (sharpCaveLipCameraResult.z - sharpCaveLipOrigin.z) * t;
-  const minimumSurfaceY = Math.max(
-    sharpCaveLipHeightAt(x, z) + sharpCaveLipRadius - sharpCaveLipPadding,
-    sharpCaveLipHeightAt(x + sharpCaveLipRadius, z) - sharpCaveLipPadding,
-    sharpCaveLipHeightAt(x - sharpCaveLipRadius, z) - sharpCaveLipPadding,
-    sharpCaveLipHeightAt(x, z + sharpCaveLipRadius) - sharpCaveLipPadding,
-    sharpCaveLipHeightAt(x, z - sharpCaveLipRadius) - sharpCaveLipPadding
-  );
-  assert.ok(
-    y >= minimumSurfaceY - 0.000001,
-    'bounded surface-camera fallback must leave the entire returned sight line clear of terrain'
-  );
-}
+const blockedAngleResult = sideRidgeCollision.resolveCameraPosition(
+  { x: 0, y: 1.35, z: 0 },
+  { x: 2.1, y: 2.1, z: 5.8 },
+  { radius: 0.26, step: 0.08 }
+);
+assert.equal(
+  clearAngleResult.blocked,
+  false,
+  'rotating toward a clear surface direction must preserve the normal third-person orbit'
+);
+assert.equal(
+  blockedAngleResult.surfaceShortened,
+  true,
+  'rotating toward an intervening ridge must retreat the camera instead of allowing terrain to hide the Ranger'
+);
+assert.ok(
+  Math.hypot(
+    blockedAngleResult.x - sharpCaveLipOrigin.x,
+    blockedAngleResult.z - sharpCaveLipOrigin.z
+  ) < Math.hypot(2.1, 5.8),
+  'direction-dependent surface obstruction must reduce camera distance rather than alter world-content visibility'
+);
 
 const undergroundCameraResult = caveCameraCollision.resolveCameraPosition(
   { x: 0, y: -1.5, z: 0 },
