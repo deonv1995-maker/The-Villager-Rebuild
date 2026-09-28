@@ -43,6 +43,7 @@ export class TestIslandSystem {
     this.collision = new WorldCollisionSystem({
       heightAt: (x, z) => this.heightAt(x, z),
       baseHeightAt: (x, z) => this.constructionHeightAt(x, z),
+      cameraSurfaceHeightAt: (x, z) => this.renderedSurfaceHeightAt(x, z),
       isPlayable: (x, z, margin) => this.isPlayable(x, z, margin),
       maxSlopeDegrees: 58,
       dropFallThreshold: 0.5
@@ -134,6 +135,10 @@ export class TestIslandSystem {
 
   constructionHeightAt(x, z) {
     return this.constructionTerrain.heightAt(x, z);
+  }
+
+  renderedSurfaceHeightAt(x, z) {
+    return this.constructionTerrain.renderedHeightAt(x, z);
   }
 
   heightAt(x, z) {

@@ -16,6 +16,7 @@ export class ConstructionTerrainAdaptationSystem {
     this.floors = new Map();
     this.floorSignature = '';
     this.meshRecords = [];
+    this.meshRecordByChunkKey = new Map();
     this.renderSamplingPadding = 0;
     this.revision = 0;
     this.soilColor = new THREE.Color(0x72593d);
@@ -27,6 +28,7 @@ export class ConstructionTerrainAdaptationSystem {
 
   captureTerrainMeshes() {
     this.meshRecords.length = 0;
+    this.meshRecordByChunkKey.clear();
     this.renderSamplingPadding = 0;
     this.group.updateWorldMatrix(true, true);
 
@@ -41,7 +43,7 @@ export class ConstructionTerrainAdaptationSystem {
       const renderSamplingPadding = this.#renderSamplingPadding(bounds, position);
       this.renderSamplingPadding = Math.max(this.renderSamplingPadding, renderSamplingPadding);
 
-      this.meshRecords.push({
+      const record = {
         mesh: object,
         position,
         color,
@@ -50,10 +52,13 @@ export class ConstructionTerrainAdaptationSystem {
         originX: this.tempWorldPosition.x,
         originZ: this.tempWorldPosition.z,
         renderSamplingPadding,
+        renderGrid: this.#createRenderGrid(bounds, position),
         horizontalRadius: bounds
           ? Math.hypot((bounds.max.x - bounds.min.x) * 0.5, (bounds.max.z - bounds.min.z) * 0.5)
           : (this.chunks?.chunkSize ?? 72) * Math.SQRT1_2
-      });
+      };
+      this.meshRecords.push(record);
+      this.#indexRenderRecord(record);
       object.userData.constructionTerrainTracked = true;
     });
 
@@ -73,6 +78,7 @@ export class ConstructionTerrainAdaptationSystem {
     const renderSamplingPadding = this.#renderSamplingPadding(bounds, position);
     this.renderSamplingPadding = Math.max(this.renderSamplingPadding, renderSamplingPadding);
 
+    const previousRecord = this.meshRecords[recordIndex];
     const record = {
       mesh,
       position,
@@ -85,6 +91,7 @@ export class ConstructionTerrainAdaptationSystem {
       originX: this.tempWorldPosition.x,
       originZ: this.tempWorldPosition.z,
       renderSamplingPadding,
+      renderGrid: this.#createRenderGrid(bounds, position),
       horizontalRadius: bounds
         ? Math.hypot(
             (bounds.max.x - bounds.min.x) * 0.5,
@@ -93,6 +100,8 @@ export class ConstructionTerrainAdaptationSystem {
         : (this.chunks?.chunkSize ?? 72) * Math.SQRT1_2
     };
     this.meshRecords[recordIndex] = record;
+    this.#unindexRenderRecord(previousRecord);
+    this.#indexRenderRecord(record);
     mesh.userData.constructionTerrainTracked = true;
 
     // Dynamic terrain geometry may be replaced by tunneling or Pickaxe surface
@@ -114,6 +123,41 @@ export class ConstructionTerrainAdaptationSystem {
   heightAt(x, z) {
     const naturalY = this.terrain.heightAt(x, z);
     return this.#adaptedHeightFrom(naturalY, x, z, this.floors.values());
+  }
+
+  renderedHeightAt(x, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(z)) return null;
+
+    const key = this.chunks?.keyForPosition?.(x, z) ?? null;
+    let record = key ? this.meshRecordByChunkKey.get(key) ?? null : null;
+    if (!record) {
+      record = this.meshRecords.find(candidate => this.#recordContains(candidate, x, z)) ?? null;
+    }
+    if (!record?.renderGrid) return this.heightAt(x, z);
+
+    const localX = x - record.originX;
+    const localZ = z - record.originZ;
+    const grid = record.renderGrid;
+    const column = THREE.MathUtils.clamp(
+      Math.floor((localX - grid.minX) / grid.stepX),
+      0,
+      grid.size - 2
+    );
+    const row = THREE.MathUtils.clamp(
+      Math.floor((grid.maxZ - localZ) / grid.stepZ),
+      0,
+      grid.size - 2
+    );
+
+    const a = row * grid.size + column;
+    const b = (row + 1) * grid.size + column;
+    const c = (row + 1) * grid.size + column + 1;
+    const d = row * grid.size + column + 1;
+    const first = this.#triangleHeightAt(record.position, a, b, d, localX, localZ);
+    if (Number.isFinite(first)) return first;
+
+    const second = this.#triangleHeightAt(record.position, b, c, d, localX, localZ);
+    return Number.isFinite(second) ? second : this.heightAt(x, z);
   }
 
   setFloors(floors = []) {
@@ -258,6 +302,79 @@ export class ConstructionTerrainAdaptationSystem {
     const outsideX = Math.max(Math.abs(u) - floor.halfX, 0);
     const outsideZ = Math.max(Math.abs(v) - floor.halfZ, 0);
     return Math.hypot(outsideX, outsideZ);
+  }
+
+  #indexRenderRecord(record) {
+    if (!record || !this.chunks?.keyForPosition) return;
+    this.meshRecordByChunkKey.set(
+      this.chunks.keyForPosition(record.originX, record.originZ),
+      record
+    );
+  }
+
+  #unindexRenderRecord(record) {
+    if (!record || !this.chunks?.keyForPosition) return;
+    const key = this.chunks.keyForPosition(record.originX, record.originZ);
+    if (this.meshRecordByChunkKey.get(key) === record) {
+      this.meshRecordByChunkKey.delete(key);
+    }
+  }
+
+  #createRenderGrid(bounds, position) {
+    if (!bounds || !position?.count || position.itemSize < 3) return null;
+    const size = Math.round(Math.sqrt(position.count));
+    if (size <= 1 || size * size !== position.count) return null;
+
+    const spanX = bounds.max.x - bounds.min.x;
+    const spanZ = bounds.max.z - bounds.min.z;
+    const stepX = spanX / (size - 1);
+    const stepZ = spanZ / (size - 1);
+    if (!(stepX > 0) || !(stepZ > 0)) return null;
+
+    return {
+      size,
+      minX: bounds.min.x,
+      maxX: bounds.max.x,
+      minZ: bounds.min.z,
+      maxZ: bounds.max.z,
+      stepX,
+      stepZ
+    };
+  }
+
+  #recordContains(record, x, z) {
+    const grid = record?.renderGrid;
+    if (!grid) return false;
+    const localX = x - record.originX;
+    const localZ = z - record.originZ;
+    const epsilon = 0.0001;
+    return (
+      localX >= grid.minX - epsilon &&
+      localX <= grid.maxX + epsilon &&
+      localZ >= grid.minZ - epsilon &&
+      localZ <= grid.maxZ + epsilon
+    );
+  }
+
+  #triangleHeightAt(position, ia, ib, ic, x, z) {
+    const ax = position.getX(ia);
+    const ay = position.getY(ia);
+    const az = position.getZ(ia);
+    const bx = position.getX(ib);
+    const by = position.getY(ib);
+    const bz = position.getZ(ib);
+    const cx = position.getX(ic);
+    const cy = position.getY(ic);
+    const cz = position.getZ(ic);
+    const denominator = (bz - cz) * (ax - cx) + (cx - bx) * (az - cz);
+    if (Math.abs(denominator) <= 0.0000001) return null;
+
+    const wa = ((bz - cz) * (x - cx) + (cx - bx) * (z - cz)) / denominator;
+    const wb = ((cz - az) * (x - cx) + (ax - cx) * (z - cz)) / denominator;
+    const wc = 1 - wa - wb;
+    const epsilon = -0.00001;
+    if (wa < epsilon || wb < epsilon || wc < epsilon) return null;
+    return wa * ay + wb * by + wc * cy;
   }
 
   #renderSamplingPadding(bounds, position) {

@@ -1389,6 +1389,9 @@ export class RangerController {
   }
 
   #thirdPersonLookSurfaceHeightAt(x, z) {
+    const renderedY = this.terrain?.renderedSurfaceHeightAt?.(x, z);
+    if (Number.isFinite(renderedY)) return renderedY;
+
     const constructionY = this.terrain?.constructionHeightAt?.(x, z);
     if (Number.isFinite(constructionY)) return constructionY;
 
