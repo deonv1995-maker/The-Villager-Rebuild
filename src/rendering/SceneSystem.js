@@ -103,6 +103,15 @@ export class SceneSystem {
     return true;
   }
 
+  prepareCamera() {
+    // Story framing is part of the authoritative camera for the frame, not a
+    // render-time post-process. Camera-dependent world systems (chunk streaming,
+    // occlusion and diagnostics) must observe the exact view that will be rendered.
+    this.#applyCameraFrame();
+    this.camera.updateMatrixWorld(true);
+    return this.camera;
+  }
+
   triggerCameraShake({
     durationSeconds = 0.5,
     positionAmplitude = 0.1,
@@ -193,7 +202,6 @@ export class SceneSystem {
   }
 
   render() {
-    this.#applyCameraFrame();
     const shaken = this.#applyCameraShake();
     try {
       this.renderer.render(this.scene, this.camera);
