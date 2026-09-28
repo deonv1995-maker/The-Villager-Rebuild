@@ -1329,7 +1329,7 @@ export class RangerController {
         .lerp(desired, 1 - Math.exp(-CAMERA_POSITION_RESPONSE * dt));
     }
 
-    if (!this.cinematicDriver && this.collision?.resolveCameraPosition) {
+    if (this.collision?.resolveCameraPosition) {
       const resolvedCamera = this.collision.resolveCameraPosition(
         target,
         cameraCandidate,
