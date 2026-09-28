@@ -38,7 +38,8 @@ const collision = {
 
 const constructionTerrain = {
   getRevision: () => 0,
-  heightAt: () => 0
+  heightAt: () => 0,
+  renderedHeightAt: () => 1.4
 };
 
 const group = new THREE.Group();
@@ -70,6 +71,11 @@ assert.equal(group.children.length, 3, 'ambient details should batch each decora
 assert.equal(group.children.every(child => child.isInstancedMesh), true, 'ambient details must remain instanced for mobile rendering');
 assert.equal(group.children.every(child => child.castShadow === false), true, 'ambient details must not add per-instance shadow cost');
 assert.equal(details.entries.every(entry => entry.constructionHidden === false), true, 'ambient details must start visible when no floor covers them');
+assert.equal(
+  details.entries.every(entry => entry.y >= 1.4),
+  true,
+  'flowers, mushrooms and coastal grass must anchor to the visible rendered terrain surface'
+);
 
 activeFloorType = 'panel-floor';
 collisionRevision += 1;
