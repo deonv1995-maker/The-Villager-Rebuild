@@ -194,7 +194,8 @@ const cover = new GroundCoverPresentationSystem({
   collision: coverCollision,
   constructionTerrain: {
     getRevision: () => 0,
-    heightAt: () => 0
+    heightAt: () => 0,
+    renderedHeightAt: () => 1.5
   },
   spacing: 1.2
 });
@@ -204,6 +205,11 @@ assert.equal(cover.meshes.length > 0, true, 'ground cover must build batched ren
 assert.equal(cover.meshes.every(mesh => mesh.isInstancedMesh), true, 'ground cover must remain instanced for mobile rendering');
 assert.ok(cover.geometry.getAttribute('color'), 'ground-cover blades must carry low-poly green colour variation');
 assert.equal(cover.material.vertexColors, true, 'ground-cover material must consume blade colour variation');
+assert.equal(
+  cover.entries.every(entry => Math.abs(entry.y - (1.5 + 0.012)) < 0.0001),
+  true,
+  'ground-cover instances must anchor to the rendered terrain surface instead of the analytical heightfield'
+);
 
 const coverPositions = cover.geometry.getAttribute('position');
 let maxHorizontalRadius = 0;
@@ -315,7 +321,8 @@ const jungleDetailTerrain = {
 };
 const jungleDetailConstruction = {
   getRevision: () => 0,
-  heightAt: () => 0
+  heightAt: () => 0,
+  renderedHeightAt: () => 1.75
 };
 const jungleDetailGroup = new THREE.Group();
 const jungleDetails = new JungleFloorPresentationSystem({
@@ -337,6 +344,11 @@ assert.equal(jungleDetailStats.rootFans <= 12, true, 'surface roots must respect
 assert.equal(jungleDetails.meshes.length >= 2, true, 'jungle floor kinds must build separate batched render meshes');
 assert.equal(jungleDetails.meshes.every(mesh => mesh.isInstancedMesh), true, 'jungle floor layers must remain instanced for mobile rendering');
 assert.equal(jungleDetails.meshes.every(mesh => mesh.castShadow === false), true, 'jungle micro-layers must avoid per-instance shadow cost');
+assert.equal(
+  jungleDetails.entries.every(entry => entry.y >= 1.75),
+  true,
+  'jungle litter and surface roots must remain above the rendered terrain triangles'
+);
 assert.ok(jungleDetails.geometries.leafLitter.getAttribute('color'), 'leaf litter must use low-poly vertex colour variation');
 assert.ok(jungleDetails.geometries.rootFan.getAttribute('color'), 'surface roots must use low-poly vertex colour variation');
 
