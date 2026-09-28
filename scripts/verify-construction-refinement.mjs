@@ -178,7 +178,7 @@ ferns.update(1 / 60, { x: 2, z: 2 });
 assert.equal(grass.entries.some(entry => entry.constructionHidden), false, 'Demolition must restore grass ecology entries');
 assert.equal(ferns.entries.some(entry => entry.constructionHidden), false, 'Demolition must restore fern ecology entries');
 
-const [logSource, supportSource, adaptationSource, collisionSource, grassSource, fernSource, islandSource, definitionsSource] = await Promise.all([
+const [logSource, supportSource, adaptationSource, collisionSource, grassSource, fernSource, islandSource, definitionsSource, surfacePresentationSource] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/FloorSupportVisual.js', 'utf8'),
   readFile('src/world/ConstructionTerrainAdaptationSystem.js', 'utf8'),
@@ -186,7 +186,8 @@ const [logSource, supportSource, adaptationSource, collisionSource, grassSource,
   readFile('src/world/GrassFieldSystem.js', 'utf8'),
   readFile('src/world/FernFieldSystem.js', 'utf8'),
   readFile('src/world/TestIslandSystem.js', 'utf8'),
-  readFile('src/data/PhysicalLogDefinitions.js', 'utf8')
+  readFile('src/data/PhysicalLogDefinitions.js', 'utf8'),
+  readFile('src/world/SurfacePresentationHeight.js', 'utf8')
 ]);
 
 for (const requirement of [
@@ -217,7 +218,12 @@ assert.ok(collisionSource.includes('supportOverridesBase'), 'Standable floors mu
 assert.ok(collisionSource.includes('escapingStandableEdge'), 'Existing platform edge traversal must remain intact');
 assert.ok(grassSource.includes('constructionFloorCoversVegetation'), 'Vegetation-floor overlap must remain isolated from procedural terrain generation');
 assert.ok(!grassSource.includes('entry.y + 0.9 < floor.bottomY'), 'Floor vegetation clearing must not depend on the pre-cut vertical position');
-assert.ok(grassSource.includes('constructionTerrain?.heightAt?.'), 'Visible vegetation around a terrain cut must reproject to the reversible construction surface');
+assert.ok(grassSource.includes('surfacePresentationHeightAt('), 'Visible vegetation around a terrain cut must use the shared presentation-ground boundary');
+assert.ok(
+  surfacePresentationSource.includes('constructionTerrain?.renderedHeightAt?.')
+    && surfacePresentationSource.includes('constructionTerrain?.heightAt?.'),
+  'Presentation ground must prefer the current rendered construction surface while retaining analytical construction fallback'
+);
 assert.ok(fernSource.includes('collision = null') && fernSource.includes('constructionTerrain = null'), 'Ferns must receive the same dynamic construction boundaries as grass');
 assert.ok(islandSource.includes('new ConstructionTerrainAdaptationSystem'), 'Island composition must own one construction-local terrain adapter');
 assert.ok(islandSource.includes('baseHeightAt(x, z)') && islandSource.includes('return this.terrain.heightAt(x, z)'), 'Immutable procedural height must remain separately accessible to construction/support systems');
