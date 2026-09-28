@@ -595,6 +595,13 @@ Decision: keep the established 2 m third-person forward framing bias, but never 
 Reason: device testing isolated the remaining disappearance to looking from the island perimeter toward its centre. The camera position could be valid while the fixed Ranger-height forward target sat inside the uphill terrain two metres ahead. In that orientation the terrain itself occupied the centre view and depth-occluded the Ranger, vegetation, rocks, grass, water and loose gatherables together. Looking back toward the sea lowered that same target into open air, explaining the direction-specific recovery. The fix therefore belongs at the third-person aim boundary rather than in chunk streaming, resource rendering or world generation.
 
 
+## 2026-09-28 — Camera clearance follows the rendered terrain triangle
+
+Decision: keep the continuous terrain height function authoritative for gameplay movement, NPC/world queries and placement logic, but use the current low-poly terrain mesh surface for third-person camera clearance and forward framing. `ConstructionTerrainAdaptationSystem` exposes the interpolated height of the actual terrain triangle under an X/Z point, including current terrain rebuilds and construction cuts. `WorldCollisionSystem` consumes that value only through a dedicated camera-surface provider; ordinary collision remains on the established analytical surface.
+
+Reason: the expanded mainland renders each 72 m chunk with an 18-segment grid, so the visible ground is piecewise-planar at roughly 4 m cells while collision and camera clearance previously sampled the smooth mathematical height function. Between vertices, a rendered triangle can sit above that analytical surface. A camera can therefore be mathematically clear yet physically behind the visible ground, producing the exact device symptom where terrain remains visible while unrelated objects behind it disappear together. The fix aligns only the camera with what the GPU actually draws rather than changing world physics or increasing render cost.
+
+
 ## 2026-09-28 — One final camera and one exterior terrain surface per frame
 
 Decision: camera presentation, world visibility and cave rendering must use single authorities. Owner-scoped story framing is finalized immediately after the Ranger authors the base camera and before chunk/frustum/occlusion systems evaluate visibility; the renderer itself may add only transient shake and must not change the persistent view direction or FOV after culling. Third-person camera collision remains active during story cinematics. While the Ranger anchor is surface-side, the normal heightfield remains camera-solid even across a published cave mouth; density-volume camera traversal begins only after the Ranger anchor is genuinely underground.
