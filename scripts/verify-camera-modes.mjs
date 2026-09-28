@@ -52,6 +52,38 @@ assert.ok(
   'Third-person Ranger must sit below screen centre so more forward landscape stays visible'
 );
 
+const inlandRiseHeightAt = (_x, z) => z >= 1.2 ? 2.4 : 0;
+const inlandCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
+const inlandTerrain = {
+  getSpawnPoint: () => ({ x: 0, z: 0 }),
+  constructionHeightAt: inlandRiseHeightAt,
+  heightAt: inlandRiseHeightAt
+};
+const inlandPlayer = new RangerController({
+  scene,
+  camera: inlandCamera,
+  terrain: inlandTerrain
+});
+inlandPlayer.model = new THREE.Group();
+inlandPlayer.root.add(inlandPlayer.model);
+inlandPlayer.assetMode = 'kaykit';
+for (let frame = 0; frame < 120; frame += 1) inlandPlayer.update(1 / 60);
+
+inlandCamera.updateMatrixWorld(true);
+const inlandForward = new THREE.Vector3();
+inlandCamera.getWorldDirection(inlandForward);
+const inlandProbeZ = 2;
+const inlandProbeTravel = (inlandProbeZ - inlandCamera.position.z) / inlandForward.z;
+const inlandCenterRayY = inlandCamera.position.y + inlandForward.y * inlandProbeTravel;
+assert.ok(
+  inlandProbeTravel > 0,
+  'inland camera regression must probe the forward centre ray'
+);
+assert.ok(
+  inlandCenterRayY >= inlandRiseHeightAt(0, inlandProbeZ) + 0.64,
+  'third-person forward framing must stay above rising inland terrain instead of aiming the centre ray into the ground'
+);
+
 let cameraCollisionCalls = 0;
 const collisionCamera = new THREE.PerspectiveCamera(55, 1, 0.05, 1000);
 const collisionPlayer = new RangerController({
