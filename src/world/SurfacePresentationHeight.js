@@ -1,7 +1,4 @@
-export function surfacePresentationHeightAt({
-  terrain,
-  constructionTerrain = null
-}, x, z) {
+export function surfacePresentationHeightAt(terrain, constructionTerrain, x, z) {
   const constructionRendered = constructionTerrain?.renderedHeightAt?.(x, z);
   if (Number.isFinite(constructionRendered)) return constructionRendered;
 
