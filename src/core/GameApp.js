@@ -79,8 +79,15 @@ class RenderDiagnostics {
     };
     const playerTerrainY = terrainHeight(player.x, player.z);
     const cameraTerrainY = terrainHeight(camera.position.x, camera.position.z);
+    const renderedCameraTerrainY = island.renderedSurfaceHeightAt?.(
+      camera.position.x,
+      camera.position.z
+    );
     const playerClearance = playerTerrainY === null ? null : player.y - playerTerrainY;
     const cameraClearance = cameraTerrainY === null ? null : camera.position.y - cameraTerrainY;
+    const renderedCameraClearance = Number.isFinite(renderedCameraTerrainY)
+      ? camera.position.y - renderedCameraTerrainY
+      : null;
     const chunks = island.chunks?.getStats?.() ?? {};
     const cave = island.explorationPois?.getDebugState?.() ?? {};
     const depth = island.explorationPois?.getUndergroundDepth?.(player) ?? 0;
@@ -103,7 +110,7 @@ class RenderDiagnostics {
       'RENDER DEBUG · screenshot this when world disappears',
       `mode ${game.player?.isFirstPerson?.() ? '1P' : '3P'}`,
       `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}`,
-      `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}`,
+      `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}  renderΔ ${fixed(renderedCameraClearance)}`,
       `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}`,
       `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}`,
       `cave active ${cave.activeChunkCount ?? 0}  built ${cave.builtNaturalChunkCount ?? 0}  pending ${cave.pendingNaturalChunkRebuildCount ?? 0}`,
