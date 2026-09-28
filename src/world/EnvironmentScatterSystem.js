@@ -4,6 +4,7 @@ import { ASSET_PATHS } from '../data/AssetPaths.js';
 import { COASTAL_ROCK_PRESENTATION } from '../data/CoastalRockDefinitions.js';
 import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 import { addCoastalRockFormations } from './CoastalRockSystem.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -60,10 +61,11 @@ class ReservationGrid {
 }
 
 export class EnvironmentScatterSystem {
-  constructor({ group, terrain, collision }) {
+  constructor({ group, terrain, collision, constructionTerrain = null }) {
     this.group = group;
     this.terrain = terrain;
     this.collision = collision;
+    this.constructionTerrain = constructionTerrain;
     this.reservations = new ReservationGrid();
     this.state = 0x8f213;
     this.coastalRockCount = 0;
@@ -154,6 +156,13 @@ export class EnvironmentScatterSystem {
     };
   }
 
+  #surfaceHeightAt(x, z) {
+    return surfacePresentationHeightAt({
+      terrain: this.terrain,
+      constructionTerrain: this.constructionTerrain
+    }, x, z);
+  }
+
   #pathClearance(x, z, width) {
     const strength = this.terrain.routeCorridorStrengthAt?.(z) ?? (z <= 90 && z >= -90 ? 1 : 0);
     if (strength <= 0.08) return true;
@@ -220,7 +229,7 @@ export class EnvironmentScatterSystem {
       const typeIndex = treesPlaced % trees.length;
       placementsByType[typeIndex].push({
         x,
-        y: this.terrain.heightAt(x, z),
+        y: this.#surfaceHeightAt(x, z),
         z,
         yaw: this.random() * Math.PI * 2,
         scale,
@@ -296,7 +305,7 @@ export class EnvironmentScatterSystem {
       const depth = scale * (0.58 + this.random() * 0.9);
       rock.scale.set(width, height, depth);
       rock.rotation.set((this.random() - 0.5) * 0.22, this.random() * Math.PI * 2, (this.random() - 0.5) * 0.18);
-      rock.position.set(x, this.terrain.heightAt(x, z) - 0.05, z);
+      rock.position.set(x, this.#surfaceHeightAt(x, z) - 0.05, z);
       rock.name = `forest-rock-${rocksPlaced}`;
       this.group.add(rock);
       this.#registerStandableObject(rock, 'rock', large ? 0.85 : 0.58);
@@ -368,7 +377,7 @@ export class EnvironmentScatterSystem {
         const lobeScale = size * (0.72 + lobe * 0.09);
         dummy.position.set(
           x + Math.cos(angle) * size * 0.48,
-          this.terrain.heightAt(x, z) + size * (0.5 + lobe * 0.08),
+          this.#surfaceHeightAt(x, z) + size * (0.5 + lobe * 0.08),
           z + Math.sin(angle) * size * 0.48
         );
         dummy.rotation.set(0, angle, 0);
