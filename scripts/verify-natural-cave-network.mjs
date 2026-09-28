@@ -301,6 +301,51 @@ assert.equal(
   'walk-in cave mouth collision must be available once the visible entry corridor is ready'
 );
 
+const surfaceOwnershipTolerance = Math.max(
+  0.08,
+  UNDERGROUND_TUNNELING.cellSize * 0.3
+);
+let inspectedTunnelTriangles = 0;
+let duplicateExteriorSurfaceTriangles = 0;
+for (const chunk of world.tunneling.activeChunks.values()) {
+  const position = chunk.mesh.geometry.getAttribute('position');
+  const normal = chunk.mesh.geometry.getAttribute('normal');
+  if (!position || !normal) continue;
+
+  for (let offset = 0; offset + 2 < position.count; offset += 3) {
+    inspectedTunnelTriangles += 1;
+    const normalY =
+      (normal.getY(offset) + normal.getY(offset + 1) + normal.getY(offset + 2)) / 3;
+    if (normalY < 0.35) continue;
+
+    let terrainOwned = true;
+    for (let vertex = 0; vertex < 3; vertex += 1) {
+      const index = offset + vertex;
+      const x = position.getX(index);
+      const y = position.getY(index);
+      const z = position.getZ(index);
+      const terrainY = terrain.heightAt(x, z);
+      if (
+        !Number.isFinite(terrainY)
+        || Math.abs(terrainY - y) > surfaceOwnershipTolerance
+      ) {
+        terrainOwned = false;
+        break;
+      }
+    }
+    if (terrainOwned) duplicateExteriorSurfaceTriangles += 1;
+  }
+}
+assert.ok(
+  inspectedTunnelTriangles > 0,
+  'natural cave streaming regression must inspect materialized tunnel geometry'
+);
+assert.equal(
+  duplicateExteriorSurfaceTriangles,
+  0,
+  'tunnel density meshes must not render a second upward-facing copy of the authoritative exterior terrain skin'
+);
+
 const farEntrance = network.entrances
   .slice(1)
   .sort((a, b) =>

@@ -452,10 +452,11 @@ export class WorldCollisionSystem {
   }
 
   #surfaceCameraTerrainY(x, z) {
-    // Published cave openings have already removed the matching surface triangles.
-    // Do not keep colliding the camera against the original heightfield there or
-    // the invisible terrain sheet will lift the orbit while looking into a cave.
-    if (this.volumeSurfaceOpenAt?.(x, z)) return -Infinity;
+    // While the Ranger anchor is still on the surface, the heightfield remains
+    // authoritative for the third-person camera even across a published cave
+    // opening. The camera may look into the opening, but it must not physically
+    // drop through that hole ahead of the Ranger. Once the anchor is genuinely
+    // underground, resolveCameraPosition switches to the cave density volume.
     const surface = this.baseHeightAt(x, z);
     return Number.isFinite(surface) ? surface : -Infinity;
   }

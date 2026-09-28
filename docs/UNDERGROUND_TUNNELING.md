@@ -77,7 +77,7 @@ Target acquisition remains active while the Pickaxe swing animation is busy. The
 
 ## Dynamic surface openings
 
-The normal island heightfield remains the surface authority. Natural cave mouths publish deterministic elliptical openings at boot, while player excavation publishes a circular opening only when a strike actually intersects the surface.
+The normal island heightfield remains the sole exterior surface-rendering authority. Natural cave mouths publish deterministic elliptical openings only after their entry geometry is ready, while player excavation publishes a circular opening only when a strike actually intersects the surface.
 
 For either kind of opening:
 
@@ -85,7 +85,7 @@ For either kind of opening:
 - only terrain chunks touched by a changed opening are rebuilt;
 - those chunks temporarily refine from the ordinary 18×18 terrain grid to a 72×72 grid;
 - heightfield triangles intersecting the opening are removed;
-- the tunneling density mesh supplies the matching ground around and below the opening;
+- the tunneling density mesh supplies cave walls, floors, ceilings and the matching interior around/below the opening, but suppresses upward-facing triangles that merely duplicate the exterior heightfield skin;
 - affected terrain renders double-sided so underground viewing does not expose culled surface backfaces.
 
 This replaces the old single fixed cave-mouth approach with multiple deterministic entrances distributed around the enlarged island, while preserving fully freeform player-made openings elsewhere.
@@ -154,7 +154,7 @@ Inside an active tunneling column:
 - surface players resolve to the normal surface;
 - underground players resolve to the nearest valid tunnel floor below their current level;
 - upward jump motion is swept against the same solid-density query, preventing the Ranger from jumping through a cave ceiling;
-- a surface-anchored third-person camera keeps its horizontal orbit and raises the endpoint only enough for the sight line to clear the heightfield, so looking down a cave mouth cannot collapse the camera onto the Ranger or drop it through the opening; once the Ranger anchor is underground, third-person travel is ray-resolved against the density volume so the camera cannot pass through tunnel walls/floors/roof;
+- a surface-anchored third-person camera remains on the surface side of the authoritative heightfield, including across a published cave mouth, and shortens its straight follow ray rather than entering the opening ahead of the Ranger; once the Ranger anchor is genuinely underground, third-person travel is ray-resolved against the density volume so the camera cannot pass through tunnel walls/floors/roof;
 - excavated walls, floors, ceilings, and pockets all come from the same density function used to render the mesh.
 
 ## Terrain sculpting integration

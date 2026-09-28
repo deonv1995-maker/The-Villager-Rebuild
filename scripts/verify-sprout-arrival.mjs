@@ -8,6 +8,7 @@ const config = read('src/startup/TitleSceneConfig.js');
 const arrivalDefinitions = read('src/data/SproutArrivalDefinitions.js');
 const arrivalController = read('src/gameplay/SproutArrivalController.js');
 const sceneSystem = read('src/rendering/SceneSystem.js');
+const gameApp = read('src/core/GameApp.js');
 const shipwreckDoc = read('docs/SHIPWRECK_TITLE_INTRO.md');
 const sproutDoc = read('docs/SPROUT_COMPANION.md');
 const cameraDoc = read('docs/CAMERA_MODES.md');
@@ -36,7 +37,7 @@ const checks = [
   ['shipwreck documentation preserves the title/gameplay ownership boundary', shipwreckDoc.includes('TitleCelestialEvent') && shipwreckDoc.includes('does not create the Sprout crash site')],
   ['Sprout companion architecture documents one shared inventory', sproutDoc.includes('InventorySystem') && sproutDoc.includes('There is no second Sprout inventory')],
   ['Sprout companion architecture preserves shared tree and collection authorities', sproutDoc.includes('TreeHarvestSystem') && sproutDoc.includes('single tree-felling authority') && sproutDoc.includes('Collect Logs uses')],
-  ['SceneSystem owns a scoped render-boundary cinematic frame instead of a second movement camera', sceneSystem.includes('setCameraFrame(owner, {') && sceneSystem.includes('clearCameraFrame(owner)') && sceneSystem.includes('#applyCameraFrame()') && sceneSystem.indexOf('this.#applyCameraFrame();') < sceneSystem.indexOf('this.renderer.render(this.scene, this.camera);')],
+  ['story framing is finalized before camera-dependent world culling instead of mutating the camera inside render', sceneSystem.includes('setCameraFrame(owner, {') && sceneSystem.includes('clearCameraFrame(owner)') && sceneSystem.includes('prepareCamera()') && sceneSystem.includes('this.#applyCameraFrame();') && !sceneSystem.slice(sceneSystem.indexOf('  render() {'), sceneSystem.indexOf('  dispose() {')).includes('#applyCameraFrame') && gameApp.indexOf('this.sceneSystem?.prepareCamera?.();') > gameApp.indexOf('this.player?.update(dt);') && gameApp.indexOf('this.sceneSystem?.prepareCamera?.();') < gameApp.indexOf('this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);')],
   ['Sprout camera tuning keeps close dialogue and a wider first-Log reveal data-driven', arrivalDefinitions.includes('cinematicCamera: Object.freeze({') && arrivalDefinitions.includes('dialogueFov: 38') && arrivalDefinitions.includes('firstLogFov: 48') && arrivalDefinitions.includes('response: 3.6')],
   ['dialogue dynamically frames the actual Sprout presentation through the shared scene camera boundary', arrivalController.includes("this.introCinematicBeat = 'dialogue'") && arrivalController.includes('this.companionPresentation ?? this.crashSite.sprout') && arrivalController.includes('this.game.sceneSystem?.setCameraFrame?.(this, {')],
   ['final dialogue widens into the first-Log demonstration without immediately releasing Ranger cinematic control', advanceDialogueBlock.includes("this.introCinematicBeat = this.rescueCinematicOwned ? 'first-log' : 'none'") && advanceDialogueBlock.includes("this.game.inventory?.get?.('log')") && !advanceDialogueBlock.includes('this.#releaseCinematic();')],
