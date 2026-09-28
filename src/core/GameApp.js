@@ -21,6 +21,127 @@ import { TOOL_DEFINITIONS, TOOL_ORDER } from '../data/ToolDefinitions.js';
 
 const TOOLBELT_INPUT_ORDER = Object.freeze(['hand', ...TOOL_ORDER]);
 
+const RENDER_DIAGNOSTICS_QUERY = 'renderDebug';
+
+class RenderDiagnostics {
+  constructor(game) {
+    this.game = game;
+    this.elapsed = 0;
+    this.forward = new THREE.Vector3();
+    this.raycaster = new THREE.Raycaster();
+    this.raycaster.near = 0.01;
+    this.raycaster.far = 80;
+
+    const params = new URLSearchParams(globalThis.location?.search ?? '');
+    this.enabled = params.get(RENDER_DIAGNOSTICS_QUERY) === '1';
+    this.element = null;
+    if (!this.enabled || typeof document === 'undefined') return;
+
+    this.element = document.createElement('pre');
+    this.element.id = 'render-diagnostics';
+    Object.assign(this.element.style, {
+      position: 'fixed',
+      right: '10px',
+      top: '108px',
+      zIndex: '99999',
+      margin: '0',
+      padding: '8px 10px',
+      maxWidth: '44vw',
+      border: '1px solid rgba(160, 255, 180, 0.7)',
+      borderRadius: '8px',
+      background: 'rgba(0, 12, 8, 0.82)',
+      color: '#baffc8',
+      font: '10px/1.25 monospace',
+      whiteSpace: 'pre-wrap',
+      pointerEvents: 'none',
+      textShadow: '0 1px 1px #000'
+    });
+    this.element.textContent = 'RENDER DEBUG · waiting for world state';
+    document.body.appendChild(this.element);
+    globalThis.__renderDiagnostics = this;
+  }
+
+  update(dt) {
+    if (!this.enabled || !this.element) return;
+    this.elapsed += Math.max(0, Number(dt) || 0);
+    if (this.elapsed < 0.2) return;
+    this.elapsed = 0;
+
+    const game = this.game;
+    const camera = game.sceneSystem?.camera;
+    const island = game.island;
+    const player = game.playerPosition;
+    if (!camera || !island || !player) return;
+
+    const terrainHeight = (x, z) => {
+      const value = island.heightAt?.(x, z);
+      return Number.isFinite(value) ? value : null;
+    };
+    const playerTerrainY = terrainHeight(player.x, player.z);
+    const cameraTerrainY = terrainHeight(camera.position.x, camera.position.z);
+    const playerClearance = playerTerrainY === null ? null : player.y - playerTerrainY;
+    const cameraClearance = cameraTerrainY === null ? null : camera.position.y - cameraTerrainY;
+    const chunks = island.chunks?.getStats?.() ?? {};
+    const cave = island.explorationPois?.getDebugState?.() ?? {};
+    const depth = island.explorationPois?.getUndergroundDepth?.(player) ?? 0;
+    const fogDensity = Number(game.sceneSystem?.scene?.fog?.density);
+    const playerSurfaceOpen = island.explorationPois?.isSurfaceOpenAt?.(player.x, player.z) ?? false;
+    const cameraSurfaceOpen = island.explorationPois?.isSurfaceOpenAt?.(
+      camera.position.x,
+      camera.position.z
+    ) ?? false;
+
+    camera.getWorldDirection(this.forward);
+    const { terrainHit, tunnelHit } = this.#centerRayHits(camera);
+
+    const fixed = value => Number.isFinite(value) ? value.toFixed(2) : 'n/a';
+    const hitLabel = hit => hit
+      ? `${hit.object.name || '(unnamed)'} @ ${hit.distance.toFixed(2)}m`
+      : 'none';
+
+    this.element.textContent = [
+      'RENDER DEBUG · screenshot this when world disappears',
+      `mode ${game.player?.isFirstPerson?.() ? '1P' : '3P'}`,
+      `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}`,
+      `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}`,
+      `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}`,
+      `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}`,
+      `cave active ${cave.activeChunkCount ?? 0}  built ${cave.builtNaturalChunkCount ?? 0}  pending ${cave.pendingNaturalChunkRebuildCount ?? 0}`,
+      `openings ${cave.surfaceOpeningCount ?? 0}  published ${cave.publishedNaturalEntranceCount ?? 0}`,
+      `depth ${fixed(depth)}  fog ${fixed(fogDensity)}  open P/C ${Number(playerSurfaceOpen)}/${Number(cameraSurfaceOpen)}`,
+      `ray terrain: ${hitLabel(terrainHit)}`,
+      `ray tunnel:  ${hitLabel(tunnelHit)}`
+    ].join('\n');
+  }
+
+  #centerRayHits(camera) {
+    this.raycaster.set(camera.position, this.forward);
+    const terrainMeshes = [];
+    const tunnelMeshes = [];
+    this.game.island?.group?.traverse?.(object => {
+      if (!object?.isMesh || !this.#isWorldVisible(object)) return;
+      if (object.name?.startsWith('terrain-chunk-')) terrainMeshes.push(object);
+      else if (object.name?.startsWith('tunnel-volume-')) tunnelMeshes.push(object);
+    });
+    const terrainHit = terrainMeshes.length
+      ? this.raycaster.intersectObjects(terrainMeshes, false)[0] ?? null
+      : null;
+    const tunnelHit = tunnelMeshes.length
+      ? this.raycaster.intersectObjects(tunnelMeshes, false)[0] ?? null
+      : null;
+    return { terrainHit, tunnelHit };
+  }
+
+  #isWorldVisible(object) {
+    let current = object;
+    while (current) {
+      if (current.visible === false) return false;
+      current = current.parent;
+    }
+    return true;
+  }
+}
+
 export class GameApp {
   constructor({ canvas, setStatus }) {
     this.canvas = canvas;
@@ -39,6 +160,7 @@ export class GameApp {
     this.currentHuntTarget = null;
     this.currentInteractionTarget = null;
     this.lavaContactActive = false;
+    this.renderDiagnostics = new RenderDiagnostics(this);
   }
 
   async start() {
@@ -201,6 +323,7 @@ export class GameApp {
           );
         }
         this.island?.update(dt, this.playerPosition, this.sceneSystem.camera);
+        this.renderDiagnostics?.update(dt);
         this.#updateEnvironmentalHazards(dt);
         if (this.gatherables && this.hunt) this.#refreshTargets(dt);
       }
