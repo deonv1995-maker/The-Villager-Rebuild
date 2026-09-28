@@ -157,10 +157,12 @@ export class EnvironmentScatterSystem {
   }
 
   #surfaceHeightAt(x, z) {
-    return surfacePresentationHeightAt({
-      terrain: this.terrain,
-      constructionTerrain: this.constructionTerrain
-    }, x, z);
+    return surfacePresentationHeightAt(
+      this.terrain,
+      this.constructionTerrain,
+      x,
+      z
+    );
   }
 
   #pathClearance(x, z, width) {
