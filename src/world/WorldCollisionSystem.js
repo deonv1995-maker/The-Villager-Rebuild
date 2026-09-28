@@ -5,7 +5,6 @@ const DEFAULT_PLAYER_HEIGHT = PLAYER_TRAVERSAL_TUNING.body.height;
 const DEFAULT_SUPPORT_STEP_HEIGHT = 0.58;
 const AIRBORNE_SUPPORT_TOLERANCE = 0.16;
 const SUPPORT_ENTRY_RADIUS_FACTOR = 0.85;
-const MAX_SURFACE_CAMERA_CLEARANCE_LIFT = 4.5;
 
 export class WorldCollisionSystem {
   constructor({
@@ -357,94 +356,74 @@ export class WorldCollisionSystem {
       return { x: desired.x, y: desired.y, z: desired.z, blocked: false };
     }
 
-    const surfaceSampleStep = Math.min(step, 0.08);
-    const sampleCount = Math.max(1, Math.ceil(distance / surfaceSampleStep));
-    let requiredY = desired.y;
+    const invDistance = 1 / distance;
+    const dirX = dx * invDistance;
+    const dirY = dy * invDistance;
+    const dirZ = dz * invDistance;
+    const sampleStep = Math.min(Math.max(0.06, step), 0.08);
+    let safeDistance = 0;
 
-    for (let index = 1; index <= sampleCount; index += 1) {
-      const t = index / sampleCount;
-      const x = origin.x + dx * t;
-      const z = origin.z + dz * t;
+    for (
+      let travel = Math.min(sampleStep, distance);
+      travel <= distance + 0.000001;
+      travel = Math.min(distance, travel + sampleStep)
+    ) {
+      const x = origin.x + dirX * travel;
+      const y = origin.y + dirY * travel;
+      const z = origin.z + dirZ * travel;
       const minimumY = this.#surfaceCameraMinimumY(
         x,
         z,
         radius,
         surfacePadding
       );
-      if (!Number.isFinite(minimumY)) continue;
 
-      // The camera follows one straight sight line from the Ranger anchor to its
-      // endpoint. Solve the endpoint Y needed for this sample to clear the terrain;
-      // taking the maximum across samples produces the lowest clear line without
-      // shortening the horizontal orbit.
-      const requiredEndpointY =
-        origin.y + (minimumY - origin.y) / Math.max(t, 0.000001);
-      requiredY = Math.max(requiredY, requiredEndpointY);
-    }
+      if (Number.isFinite(minimumY) && y < minimumY) {
+        // Keep the surface camera on the Ranger side of intact terrain.
+        // Raising the far orbit point changes the view direction and can put a
+        // hillside between the camera and Ranger even though the endpoint itself
+        // is technically above ground. The pre-cave camera contract was a
+        // straight, shortened follow ray; restore that contract for surface play
+        // while published cave openings remain excluded from the heightfield.
+        let low = safeDistance;
+        let high = travel;
+        for (let refine = 0; refine < 7; refine += 1) {
+          const mid = (low + high) * 0.5;
+          const midX = origin.x + dirX * mid;
+          const midY = origin.y + dirY * mid;
+          const midZ = origin.z + dirZ * mid;
+          const midMinimumY = this.#surfaceCameraMinimumY(
+            midX,
+            midZ,
+            radius,
+            surfacePadding
+          );
+          if (Number.isFinite(midMinimumY) && midY < midMinimumY) high = mid;
+          else low = mid;
+        }
 
-    const maximumY = desired.y + MAX_SURFACE_CAMERA_CLEARANCE_LIFT;
-    if (requiredY <= maximumY + 0.000001) {
-      const lifted = requiredY > desired.y + 0.000001;
-      return {
-        x: desired.x,
-        y: requiredY,
-        z: desired.z,
-        blocked: lifted,
-        surfaceLifted: lifted,
-        surfaceShortened: false
-      };
-    }
-
-    // A close terrain lip can demand more vertical clearance than the bounded
-    // third-person orbit permits. Clamping Y alone would leave the camera ray
-    // intersecting terrain, which can put the rendered viewpoint under the surface.
-    // Instead, keep the bounded height and find the farthest horizontal orbit scale
-    // whose sight line still clears every sampled surface point. This preserves the
-    // normal full orbit whenever possible while guaranteeing that the fallback is a
-    // valid surface-side camera position rather than an intersecting one.
-    const availableRise = maximumY - origin.y;
-    let clearScale = 1;
-
-    for (let index = 1; index <= sampleCount; index += 1) {
-      const t = index / sampleCount;
-      if (t > clearScale + 0.000001) break;
-
-      const x = origin.x + dx * t;
-      const z = origin.z + dz * t;
-      const minimumY = this.#surfaceCameraMinimumY(
-        x,
-        z,
-        radius,
-        surfacePadding
-      );
-      if (!Number.isFinite(minimumY) || minimumY <= origin.y + 0.000001) continue;
-
-      if (availableRise <= 0.000001) {
-        clearScale = Math.max(0, t - 1 / sampleCount);
-        break;
+        const retreat = Math.max(0, low - radius * 0.18);
+        return {
+          x: origin.x + dirX * retreat,
+          y: origin.y + dirY * retreat,
+          z: origin.z + dirZ * retreat,
+          blocked: true,
+          surfaceLifted: false,
+          surfaceShortened: true
+        };
       }
 
-      // The obstacle can begin anywhere between the previous sample and this
-      // one. Treat the previous sample as the conservative contact point so a
-      // steep lip cannot be tunneled through between discrete height queries.
-      const conservativeT = Math.max(0, (index - 1) / sampleCount);
-      const allowedScale =
-        conservativeT * availableRise / Math.max(0.000001, minimumY - origin.y);
-      clearScale = Math.min(clearScale, Math.max(0, allowedScale));
+      safeDistance = travel;
+      if (travel >= distance) break;
     }
 
-    // Stay just inside the sampled clearance boundary so floating-point noise cannot
-    // put the camera sphere back into the terrain on the following frame.
-    const scalePadding = Math.min(0.01, 0.5 / sampleCount);
-    clearScale = Math.max(0, Math.min(1, clearScale - scalePadding));
-
     return {
-      x: origin.x + dx * clearScale,
-      y: maximumY,
-      z: origin.z + dz * clearScale,
-      blocked: true,
-      surfaceLifted: true,
-      surfaceShortened: clearScale < 0.999999
+      x: desired.x,
+      y: desired.y,
+      z: desired.z,
+      blocked: false,
+      surfaceLifted: false,
+      surfaceShortened: false
     };
   }
 
