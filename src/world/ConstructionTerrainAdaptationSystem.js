@@ -144,7 +144,7 @@ export class ConstructionTerrainAdaptationSystem {
       grid.size - 2
     );
     const row = THREE.MathUtils.clamp(
-      Math.floor((grid.maxZ - localZ) / grid.stepZ),
+      Math.floor((localZ - grid.minZ) / grid.stepZ),
       0,
       grid.size - 2
     );

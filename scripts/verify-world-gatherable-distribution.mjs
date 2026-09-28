@@ -22,11 +22,13 @@ const grassField = new GrassFieldSystem({
   maxInstances: 2016
 });
 grassField.populate();
+const PRESENTATION_SURFACE_OFFSET = 1.25;
 const islandFacade = {
   terrain: ecology,
   scatter,
   grass: grassField,
-  heightAt: (x, z) => ecology.heightAt(x, z)
+  heightAt: (x, z) => ecology.heightAt(x, z),
+  renderedSurfaceHeightAt: (x, z) => ecology.heightAt(x, z) + PRESENTATION_SURFACE_OFFSET
 };
 const scene = new THREE.Scene();
 const gatherables = new GatherableSystem({ scene, terrain: islandFacade });
@@ -48,6 +50,16 @@ assert.equal(
   Object.hasOwn(WORLD_RESOURCE_DISTRIBUTION.resources, 'grass'),
   false,
   'grass must come from the visible grass field instead of a second island-wide pickup distribution'
+);
+
+const surfaceAnchoredItem = gatherables.items.find(item => item.resourceId === 'stick' || item.resourceId === 'stone');
+assert.ok(surfaceAnchoredItem, 'rendered-surface regression requires a loose surface resource');
+assert.ok(
+  Math.abs(
+    surfaceAnchoredItem.root.position.y
+      - (ecology.heightAt(surfaceAnchoredItem.root.position.x, surfaceAnchoredItem.root.position.z) + PRESENTATION_SURFACE_OFFSET)
+  ) < 0.0001,
+  'loose sticks and stones must sit on the rendered surface rather than the lower analytical heightfield'
 );
 
 const ambient = gatherables.items.filter(item => item.id.startsWith('ambient-'));

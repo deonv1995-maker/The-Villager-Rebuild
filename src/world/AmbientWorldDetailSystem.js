@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { constructionFloorCoversVegetation } from './GrassFieldSystem.js';
 import { vegetationConstructionCollisionRevision } from './VegetationInvalidation.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const smoothstep = (value, min, max) => {
@@ -216,7 +217,12 @@ export class AmbientWorldDetailSystem {
       if (!this.scatter?.isGrassClear?.(x, z, clearance)) continue;
 
       const scale = scaleAt();
-      const naturalY = this.terrain.heightAt(x, z) + heightOffset;
+      const naturalY = surfacePresentationHeightAt(
+        this.terrain,
+        this.constructionTerrain,
+        x,
+        z
+      ) + heightOffset;
       this.entries.push({
         kind,
         x,
@@ -406,7 +412,12 @@ export class AmbientWorldDetailSystem {
       const hidden = floors.some(floor => constructionFloorCoversVegetation(entry, floor, 0.1));
       const adaptedY = hidden
         ? entry.y
-        : (this.constructionTerrain?.heightAt?.(entry.x, entry.z) ?? this.terrain.heightAt(entry.x, entry.z)) + entry.heightOffset;
+        : surfacePresentationHeightAt(
+            this.terrain,
+            this.constructionTerrain,
+            entry.x,
+            entry.z
+          ) + entry.heightOffset;
       if (hidden === entry.constructionHidden && Math.abs(adaptedY - entry.y) <= 0.002) continue;
       entry.constructionHidden = hidden;
       entry.y = adaptedY;

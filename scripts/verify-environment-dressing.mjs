@@ -36,6 +36,16 @@ assert.equal(
   'KayKit natural forest-rock dressing should remain enabled'
 );
 assert.equal(
+  scatterSource.includes("surfacePresentationHeightAt"),
+  true,
+  'trees, inland rocks and understory must resolve against the visible rendered terrain surface'
+);
+assert.equal(
+  islandSource.includes('constructionTerrain: this.constructionTerrain'),
+  true,
+  'environment scatter must receive the rendered construction-terrain authority used by surface presentation'
+);
+assert.equal(
   islandSource.includes("object.name.startsWith('terrain-face-dressing-')"),
   false,
   'World chunk adoption must not retain the removed broad cliff-dressing layer'

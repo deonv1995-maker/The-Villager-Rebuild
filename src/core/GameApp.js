@@ -79,11 +79,15 @@ class RenderDiagnostics {
     };
     const playerTerrainY = terrainHeight(player.x, player.z);
     const cameraTerrainY = terrainHeight(camera.position.x, camera.position.z);
+    const renderedPlayerTerrainY = island.renderedSurfaceHeightAt?.(player.x, player.z);
     const renderedCameraTerrainY = island.renderedSurfaceHeightAt?.(
       camera.position.x,
       camera.position.z
     );
     const playerClearance = playerTerrainY === null ? null : player.y - playerTerrainY;
+    const renderedPlayerClearance = Number.isFinite(renderedPlayerTerrainY)
+      ? player.y - renderedPlayerTerrainY
+      : null;
     const cameraClearance = cameraTerrainY === null ? null : camera.position.y - cameraTerrainY;
     const renderedCameraClearance = Number.isFinite(renderedCameraTerrainY)
       ? camera.position.y - renderedCameraTerrainY
@@ -109,7 +113,7 @@ class RenderDiagnostics {
     this.element.textContent = [
       'RENDER DEBUG · screenshot this when world disappears',
       `mode ${game.player?.isFirstPerson?.() ? '1P' : '3P'}`,
-      `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}`,
+      `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}  renderΔ ${fixed(renderedPlayerClearance)}`,
       `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}  renderΔ ${fixed(renderedCameraClearance)}`,
       `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}`,
       `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}`,

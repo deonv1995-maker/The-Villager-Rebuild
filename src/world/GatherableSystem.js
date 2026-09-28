@@ -4,6 +4,7 @@ import { WORLD_LAYOUT } from '../data/WorldLayout.js';
 import { WORLD_RESOURCE_DISTRIBUTION } from '../data/WorldResourceDistribution.js';
 import { PHYSICAL_LOG } from '../data/PhysicalLogDefinitions.js';
 import { createPhysicalLogVisual } from './PhysicalLogVisual.js';
+import { surfacePresentationHeightAt } from './SurfacePresentationHeight.js';
 
 const INTERACTION_RADIUS = 2.4;
 const GRASS_PATCH_COUNT = 210;
@@ -94,7 +95,7 @@ export class GatherableSystem {
     if (nearestTarget) {
       this.indicator.position.set(
         nearestTarget.x,
-        this.terrain.heightAt(nearestTarget.x, nearestTarget.z) + 0.035,
+        this.#surfaceHeightAt(nearestTarget.x, nearestTarget.z) + 0.035,
         nearestTarget.z
       );
     }
@@ -725,8 +726,12 @@ export class GatherableSystem {
     return this.grassRandomState / 0x100000000;
   }
 
+  #surfaceHeightAt(x, z) {
+    return surfacePresentationHeightAt(this.terrain, null, x, z);
+  }
+
   #groundY(resourceId, x, z) {
-    const ground = this.terrain.heightAt(x, z);
+    const ground = this.#surfaceHeightAt(x, z);
     return resourceId === 'log' ? ground + PHYSICAL_LOG.radius : ground;
   }
 

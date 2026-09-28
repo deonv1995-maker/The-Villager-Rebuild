@@ -51,7 +51,8 @@ export class TestIslandSystem {
     this.scatter = new EnvironmentScatterSystem({
       group: this.group,
       terrain: this.terrain,
-      collision: this.collision
+      collision: this.collision,
+      constructionTerrain: this.constructionTerrain
     });
     this.presentationExclusions = new Map();
     this.tunnelingPresentationExclusionIds = new Set();
