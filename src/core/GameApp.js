@@ -28,6 +28,9 @@ class RenderDiagnostics {
     this.game = game;
     this.elapsed = 0;
     this.forward = new THREE.Vector3();
+    this.playerProbeTarget = new THREE.Vector3();
+    this.playerProbeDirection = new THREE.Vector3();
+    this.playerProjected = new THREE.Vector3();
     this.raycaster = new THREE.Raycaster();
     this.raycaster.near = 0.01;
     this.raycaster.far = 80;
@@ -104,6 +107,14 @@ class RenderDiagnostics {
 
     camera.getWorldDirection(this.forward);
     const { terrainHit, tunnelHit } = this.#centerRayHits(camera);
+    const centerDepthHit = this.#firstDepthHit(
+      camera.position,
+      this.forward,
+      80
+    );
+    const playerProbe = this.#playerProbe(camera, player);
+    const playerRender = this.#playerRenderState(camera, player);
+    const playerChunkKey = island.chunks?.keyForPosition?.(player.x, player.z) ?? '?';
 
     const fixed = value => Number.isFinite(value) ? value.toFixed(2) : 'n/a';
     const hitLabel = hit => hit
@@ -111,18 +122,121 @@ class RenderDiagnostics {
       : 'none';
 
     this.element.textContent = [
-      'RENDER DEBUG · screenshot this when world disappears',
-      `mode ${game.player?.isFirstPerson?.() ? '1P' : '3P'}`,
+      'RENDER DEBUG · screenshot bad + good angle',
+      `mode ${game.player?.isFirstPerson?.() ? '1P' : '3P'}  Pvis R${Number(playerRender.rootVisible)} M${Number(playerRender.modelVisible)} mesh ${playerRender.visibleMeshes}/${playerRender.meshes} fc ${playerRender.frustumCulledMeshes}`,
       `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}  renderΔ ${fixed(renderedPlayerClearance)}`,
       `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}  renderΔ ${fixed(renderedCameraClearance)}`,
-      `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}`,
-      `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}`,
-      `cave active ${cave.activeChunkCount ?? 0}  built ${cave.builtNaturalChunkCount ?? 0}  pending ${cave.pendingNaturalChunkRebuildCount ?? 0}`,
-      `openings ${cave.surfaceOpeningCount ?? 0}  published ${cave.publishedNaturalEntranceCount ?? 0}`,
+      `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}  Pndc ${fixed(playerRender.ndcX)},${fixed(playerRender.ndcY)} in ${Number(playerRender.inFrustum)}`,
+      `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}  Pchunk ${playerChunkKey}`,
+      `LOS→Ranger ${hitLabel(playerProbe.hit)} / ${fixed(playerProbe.distance)}m`,
+      `ray depth ${hitLabel(centerDepthHit)}`,
+      `cave A/B/P ${cave.activeChunkCount ?? 0}/${cave.builtNaturalChunkCount ?? 0}/${cave.pendingNaturalChunkRebuildCount ?? 0}  openings ${cave.surfaceOpeningCount ?? 0}/${cave.publishedNaturalEntranceCount ?? 0}`,
       `depth ${fixed(depth)}  fog ${fixed(fogDensity)}  open P/C ${Number(playerSurfaceOpen)}/${Number(cameraSurfaceOpen)}`,
-      `ray terrain: ${hitLabel(terrainHit)}`,
-      `ray tunnel:  ${hitLabel(tunnelHit)}`
+      `ray T ${hitLabel(terrainHit)}  U ${hitLabel(tunnelHit)}`
     ].join('\n');
+  }
+
+  #playerProbe(camera, player) {
+    this.playerProbeTarget.set(player.x, player.y + 1.35, player.z);
+    this.playerProbeDirection.copy(this.playerProbeTarget).sub(camera.position);
+    const distance = this.playerProbeDirection.length();
+    if (distance <= 0.001) return { hit: null, distance: 0 };
+    this.playerProbeDirection.multiplyScalar(1 / distance);
+    return {
+      hit: this.#firstDepthHit(
+        camera.position,
+        this.playerProbeDirection,
+        Math.max(0.01, distance - 0.08),
+        this.game.player?.root ?? null
+      ),
+      distance
+    };
+  }
+
+  #playerRenderState(camera, player) {
+    const root = this.game.player?.root ?? null;
+    const model = this.game.player?.model ?? null;
+    let meshes = 0;
+    let visibleMeshes = 0;
+    let frustumCulledMeshes = 0;
+
+    root?.traverse?.(object => {
+      if (!object?.isMesh) return;
+      meshes += 1;
+      if (this.#isWorldVisible(object)) visibleMeshes += 1;
+      if (object.frustumCulled !== false) frustumCulledMeshes += 1;
+    });
+
+    this.playerProjected.set(player.x, player.y + 1.35, player.z).project(camera);
+    const inFrustum = (
+      this.playerProjected.z >= -1 &&
+      this.playerProjected.z <= 1 &&
+      Math.abs(this.playerProjected.x) <= 1 &&
+      Math.abs(this.playerProjected.y) <= 1
+    );
+
+    return {
+      rootVisible: root ? this.#isWorldVisible(root) : false,
+      modelVisible: model ? this.#isWorldVisible(model) : false,
+      meshes,
+      visibleMeshes,
+      frustumCulledMeshes,
+      ndcX: this.playerProjected.x,
+      ndcY: this.playerProjected.y,
+      inFrustum
+    };
+  }
+
+  #firstDepthHit(origin, direction, far, excludeRoot = null) {
+    const candidates = [];
+    this.game.sceneSystem?.scene?.traverse?.(object => {
+      if (!object?.isMesh || !this.#isWorldVisible(object)) return;
+      if (excludeRoot && this.#isDescendantOf(object, excludeRoot)) return;
+      if (!this.#materialCanWriteDepth(object.material)) return;
+      if (this.#skipDepthProbeObject(object)) return;
+      candidates.push(object);
+    });
+    if (!candidates.length) return null;
+
+    this.raycaster.near = 0.01;
+    this.raycaster.far = Math.max(0.01, far);
+    this.raycaster.set(origin, direction);
+    return this.raycaster.intersectObjects(candidates, false)[0] ?? null;
+  }
+
+  #materialCanWriteDepth(material) {
+    const materials = Array.isArray(material) ? material : [material];
+    return materials.some(item => (
+      item &&
+      item.visible !== false &&
+      item.depthTest !== false &&
+      item.depthWrite !== false &&
+      (!item.transparent || Number(item.opacity) > 0.01)
+    ));
+  }
+
+  #skipDepthProbeObject(object) {
+    const name = String(object.name ?? '').toLowerCase();
+    return [
+      'interactive-grass',
+      'interactive-fern',
+      'ground-cover',
+      'jungle-floor',
+      'ambient-world-detail',
+      'water-reactive-ripple',
+      'ranger-contact-shadow',
+      'indicator',
+      'preview'
+    ].some(part => name.includes(part));
+  }
+
+  #isDescendantOf(object, root) {
+    let current = object;
+    while (current) {
+      if (current === root) return true;
+      current = current.parent;
+    }
+    return false;
   }
 
   #centerRayHits(camera) {
