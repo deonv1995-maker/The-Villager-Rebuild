@@ -114,11 +114,12 @@ class RenderDiagnostics {
     );
     const playerProbe = this.#playerProbe(camera, player);
     const playerRender = this.#playerRenderState(camera, player);
+    const cameraTree = this.#cameraTreeState(camera, player);
     const playerChunkKey = island.chunks?.keyForPosition?.(player.x, player.z) ?? '?';
 
     const fixed = value => Number.isFinite(value) ? value.toFixed(2) : 'n/a';
     const hitLabel = hit => hit
-      ? `${hit.object.name || '(unnamed)'} @ ${hit.distance.toFixed(2)}m`
+      ? `${hit.object.name || '(unnamed)'}${Number.isInteger(hit.instanceId) ? `#${hit.instanceId}` : ''} @ ${hit.distance.toFixed(2)}m`
       : 'none';
 
     this.element.textContent = [
@@ -128,6 +129,7 @@ class RenderDiagnostics {
       `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}  renderΔ ${fixed(renderedCameraClearance)}`,
       `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}  Pndc ${fixed(playerRender.ndcX)},${fixed(playerRender.ndcY)} in ${Number(playerRender.inFrustum)}`,
       `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}  Pchunk ${playerChunkKey}`,
+      `treeCam ${cameraTree.label} d/r ${fixed(cameraTree.distance)}/${fixed(cameraTree.canopyRadius)} in ${Number(cameraTree.inside)} Pdist ${fixed(cameraTree.playerDistance)}`,
       `LOS→Ranger ${hitLabel(playerProbe.hit)} / ${fixed(playerProbe.distance)}m`,
       `ray depth ${hitLabel(centerDepthHit)}`,
       `cave A/B/P ${cave.activeChunkCount ?? 0}/${cave.builtNaturalChunkCount ?? 0}/${cave.pendingNaturalChunkRebuildCount ?? 0}  openings ${cave.surfaceOpeningCount ?? 0}/${cave.publishedNaturalEntranceCount ?? 0}`,
@@ -184,6 +186,47 @@ class RenderDiagnostics {
       ndcX: this.playerProjected.x,
       ndcY: this.playerProjected.y,
       inFrustum
+    };
+  }
+
+  #cameraTreeState(camera, player) {
+    const trees = this.game.island?.collision?.getObstaclesByType?.('tree') ?? [];
+    let nearest = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const tree of trees) {
+      const distance = Math.hypot(
+        tree.x - camera.position.x,
+        tree.z - camera.position.z
+      );
+      if (distance >= nearestDistance) continue;
+      nearest = tree;
+      nearestDistance = distance;
+    }
+    if (!nearest) {
+      return {
+        label: 'none',
+        distance: null,
+        canopyRadius: null,
+        inside: false,
+        playerDistance: null
+      };
+    }
+
+    const inferredScale = Math.max(
+      0.9,
+      (Number(nearest.radius) - 0.34) / 0.15
+    );
+    const canopyRadius = Math.max(2.35, inferredScale * 1.85);
+    const playerDistance = Math.hypot(
+      nearest.x - player.x,
+      nearest.z - player.z
+    );
+    return {
+      label: nearest.label ?? 'tree',
+      distance: nearestDistance,
+      canopyRadius,
+      inside: nearestDistance < canopyRadius,
+      playerDistance
     };
   }
 
