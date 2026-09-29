@@ -22,6 +22,8 @@ import { TOOL_DEFINITIONS, TOOL_ORDER } from '../data/ToolDefinitions.js';
 const TOOLBELT_INPUT_ORDER = Object.freeze(['hand', ...TOOL_ORDER]);
 
 const RENDER_DIAGNOSTICS_QUERY = 'renderDebug';
+const CHUNK_CULL_QUERY = 'chunkCull';
+const CHUNK_CULL_DISTANCE_ONLY = 'distance';
 
 class RenderDiagnostics {
   constructor(game) {
@@ -128,7 +130,7 @@ class RenderDiagnostics {
       `P ${fixed(player.x)}, ${fixed(player.y)}, ${fixed(player.z)}  terrainΔ ${fixed(playerClearance)}  renderΔ ${fixed(renderedPlayerClearance)}`,
       `C ${fixed(camera.position.x)}, ${fixed(camera.position.y)}, ${fixed(camera.position.z)}  terrainΔ ${fixed(cameraClearance)}  renderΔ ${fixed(renderedCameraClearance)}`,
       `F ${fixed(this.forward.x)}, ${fixed(this.forward.y)}, ${fixed(this.forward.z)}  Pndc ${fixed(playerRender.ndcX)},${fixed(playerRender.ndcY)} in ${Number(playerRender.inFrustum)}`,
-      `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}  Pchunk ${playerChunkKey}`,
+      `chunks ${chunks.visible ?? '?'} / ${chunks.total ?? '?'}  cull ${chunks.culling ?? '?'}  Pchunk ${playerChunkKey}`,
       `treeCam ${cameraTree.label} d/r ${fixed(cameraTree.distance)}/${fixed(cameraTree.canopyRadius)} in ${Number(cameraTree.inside)} Pdist ${fixed(cameraTree.playerDistance)}`,
       `LOS→Ranger ${hitLabel(playerProbe.hit)} / ${fixed(playerProbe.distance)}m`,
       `ray depth ${hitLabel(centerDepthHit)}`,
@@ -336,6 +338,10 @@ export class GameApp {
     this.setStatus('FOUNDATION 0.3.8 · LOADING ISLAND');
 
     this.island = new TestIslandSystem(this.sceneSystem.scene);
+    const params = new URLSearchParams(globalThis.location?.search ?? '');
+    if (params.get(CHUNK_CULL_QUERY) === CHUNK_CULL_DISTANCE_ONLY) {
+      this.island.chunks?.setFrustumCullingEnabled?.(false);
+    }
     await this.island.load();
 
     this.setStatus('FOUNDATION 0.3.8 · LOADING RANGER');
