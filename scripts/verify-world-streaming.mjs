@@ -128,6 +128,18 @@ assert.equal(near.parent.visible, true, 'player/camera neighborhood chunk must r
 assert.equal(far.parent.visible, false, 'distant off-screen chunk must not render');
 assert.equal(chunks.getStats().visible < chunks.getStats().total, true, 'chunk system must cull at least one registered off-screen chunk');
 
+const side = new THREE.Object3D();
+side.name = 'side-chunk-object';
+chunks.addObjectAt(side, 144, 0);
+chunks.update(camera, new THREE.Vector3(0, 0, 0));
+assert.equal(side.parent.visible, false, 'frustum mode must reject an off-screen chunk inside render distance');
+chunks.setFrustumCullingEnabled(false);
+chunks.update(camera, new THREE.Vector3(0, 0, 0));
+assert.equal(side.parent.visible, true, 'distance-only debug mode must keep in-range off-screen chunks visible for device A/B diagnosis');
+assert.equal(far.parent.visible, false, 'distance-only debug mode must still reject chunks beyond render distance');
+assert.equal(chunks.getStats().culling, 'distance', 'chunk stats must expose the active visibility mode');
+chunks.setFrustumCullingEnabled(true);
+
 const nestedChunkVisual = new THREE.Group();
 const nestedChunkMesh = new THREE.Mesh(
   new THREE.BoxGeometry(1, 1, 1),
