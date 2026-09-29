@@ -250,6 +250,26 @@ assert.ok(
 );
 
 assert.ok(
+  gameAppSource.includes('beforeRender()') &&
+  gameAppSource.includes('afterRender()') &&
+  gameAppSource.includes('#recordRenderSubmission(object)') &&
+  gameAppSource.includes('object.onBeforeRender = (...args) =>'),
+  'Render diagnostics must capture the meshes Three.js actually submits instead of inferring draw state from scene visibility'
+);
+assert.ok(
+  gameAppSource.includes("return 'Tr'") &&
+  gameAppSource.includes("return 'G'") &&
+  gameAppSource.includes("return 'P'") &&
+  gameAppSource.includes('renderer?.info?.render'),
+  'Render submission telemetry must separately expose trees, grass, Ranger and renderer draw-call totals'
+);
+assert.ok(
+  gameAppSource.includes('this.renderDiagnostics?.beforeRender?.()') &&
+  gameAppSource.includes('this.renderDiagnostics?.afterRender?.()'),
+  'Render submission sampling must bracket the real SceneSystem render call'
+);
+
+assert.ok(
   hammerMenuSource.includes("const MENU_OPEN_BODY_CLASS = 'hammer-construction-open'") &&
   hammerMenuSource.includes("document.body.classList.toggle(MENU_OPEN_BODY_CLASS, this.open)") &&
   hammerMenuSource.includes('document.body.classList.remove(MENU_OPEN_BODY_CLASS)'),
