@@ -238,7 +238,9 @@ assert.ok(
   gameAppSource.includes('LOS→Ranger') &&
   gameAppSource.includes('#firstDepthHit(') &&
   gameAppSource.includes('Pvis R') &&
-  gameAppSource.includes('Pndc'),
+  gameAppSource.includes('Pndc') &&
+  gameAppSource.includes('treeCam') &&
+  gameAppSource.includes('#cameraTreeState('),
   'Render debug mode must preserve player visibility, projection and first depth-occluder telemetry for Android direction-dependent world disappearance'
 );
 assert.ok(
