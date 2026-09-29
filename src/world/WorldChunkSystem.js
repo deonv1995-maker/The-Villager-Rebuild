@@ -16,6 +16,7 @@ export class WorldChunkSystem {
     this.cameraPosition = new THREE.Vector3();
     this.chunkFrustumSphere = new THREE.Sphere(new THREE.Vector3(), 1);
     this.playerChunk = { ix: 0, iz: 0 };
+    this.frustumCullingEnabled = true;
   }
 
   keyForPosition(x, z) {
@@ -191,6 +192,11 @@ export class WorldChunkSystem {
     return this.treeTemplates.size;
   }
 
+  setFrustumCullingEnabled(enabled) {
+    this.frustumCullingEnabled = Boolean(enabled);
+    return this.frustumCullingEnabled;
+  }
+
   update(camera, playerPosition) {
     if (!camera || !playerPosition) return;
 
@@ -209,9 +215,13 @@ export class WorldChunkSystem {
       let visible = local;
 
       if (!visible && distanceSq <= renderDistanceSq) {
-        this.chunkFrustumSphere.center.set(chunk.centerX, 2.5, chunk.centerZ);
-        this.chunkFrustumSphere.radius = chunk.radius;
-        visible = this.frustum.intersectsSphere(this.chunkFrustumSphere);
+        if (!this.frustumCullingEnabled) {
+          visible = true;
+        } else {
+          this.chunkFrustumSphere.center.set(chunk.centerX, 2.5, chunk.centerZ);
+          this.chunkFrustumSphere.radius = chunk.radius;
+          visible = this.frustum.intersectsSphere(this.chunkFrustumSphere);
+        }
       }
 
       chunk.root.visible = visible;
@@ -224,7 +234,8 @@ export class WorldChunkSystem {
     return {
       chunkSize: this.chunkSize,
       total: this.chunks.size,
-      visible
+      visible,
+      culling: this.frustumCullingEnabled ? 'frustum' : 'distance'
     };
   }
 }
