@@ -36,6 +36,10 @@ class RenderDiagnostics {
     this.raycaster = new THREE.Raycaster();
     this.raycaster.near = 0.01;
     this.raycaster.far = 80;
+    this.instrumentedMeshes = new WeakSet();
+    this.renderSubmittedMeshes = new Map();
+    this.lastRenderSubmissions = Object.freeze({});
+    this.lastRenderInfo = Object.freeze({ calls: 0, triangles: 0 });
 
     const params = new URLSearchParams(globalThis.location?.search ?? '');
     this.enabled = params.get(RENDER_DIAGNOSTICS_QUERY) === '1';
@@ -134,10 +138,90 @@ class RenderDiagnostics {
       `treeCam ${cameraTree.label} d/r ${fixed(cameraTree.distance)}/${fixed(cameraTree.canopyRadius)} in ${Number(cameraTree.inside)} Pdist ${fixed(cameraTree.playerDistance)}`,
       `LOS→Ranger ${hitLabel(playerProbe.hit)} / ${fixed(playerProbe.distance)}m`,
       `ray depth ${hitLabel(centerDepthHit)}`,
+      this.#renderSubmissionLine(),
+      `gpu calls ${this.lastRenderInfo.calls ?? 0}  tris ${this.lastRenderInfo.triangles ?? 0}`,
       `cave A/B/P ${cave.activeChunkCount ?? 0}/${cave.builtNaturalChunkCount ?? 0}/${cave.pendingNaturalChunkRebuildCount ?? 0}  openings ${cave.surfaceOpeningCount ?? 0}/${cave.publishedNaturalEntranceCount ?? 0}`,
       `depth ${fixed(depth)}  fog ${fixed(fogDensity)}  open P/C ${Number(playerSurfaceOpen)}/${Number(cameraSurfaceOpen)}`,
       `ray T ${hitLabel(terrainHit)}  U ${hitLabel(tunnelHit)}`
     ].join('\n');
+  }
+
+  beforeRender() {
+    if (!this.enabled) return;
+    const scene = this.game.sceneSystem?.scene;
+    if (!scene) return;
+
+    this.renderSubmittedMeshes = new Map();
+    scene.traverse(object => {
+      if (!object?.isMesh || this.instrumentedMeshes.has(object)) return;
+      const previous = object.onBeforeRender;
+      object.onBeforeRender = (...args) => {
+        previous?.apply(object, args);
+        this.#recordRenderSubmission(object);
+      };
+      this.instrumentedMeshes.add(object);
+    });
+  }
+
+  afterRender() {
+    if (!this.enabled) return;
+    const snapshot = {};
+    for (const [category, objects] of this.renderSubmittedMeshes) {
+      snapshot[category] = objects.size;
+    }
+    this.lastRenderSubmissions = Object.freeze(snapshot);
+
+    const info = this.game.sceneSystem?.renderer?.info?.render;
+    this.lastRenderInfo = Object.freeze({
+      calls: Number(info?.calls) || 0,
+      triangles: Number(info?.triangles) || 0
+    });
+  }
+
+  #recordRenderSubmission(object) {
+    const category = this.#renderCategory(object);
+    if (!category) return;
+    const bucket = this.renderSubmittedMeshes.get(category) ?? new Set();
+    bucket.add(object);
+    this.renderSubmittedMeshes.set(category, bucket);
+  }
+
+  #renderCategory(object) {
+    let current = object;
+    while (current) {
+      const name = String(current.name ?? '').toLowerCase();
+      if (name.startsWith('terrain-chunk-') || name === 'continuous-regional-terrain') return 'T';
+      if (name.startsWith('forest-tree-')) return 'Tr';
+      if (name.includes('interactive-grass')) return 'G';
+      if (name.includes('interactive-fern')) return 'F';
+      if (
+        name.includes('ground-cover')
+        || name.includes('jungle-floor')
+        || name.includes('ambient-')
+      ) return 'D';
+      if (
+        name.startsWith('forest-rock-')
+        || name.includes('coastal-rock')
+      ) return 'R';
+      if (
+        name === 'world-gatherables'
+        || name.startsWith('gatherable-')
+        || name.includes('grass-patch')
+      ) return 'Res';
+      if (
+        name.includes('hero-m')
+        || name.includes('ranger-player')
+        || name.includes('player-presentation')
+      ) return 'P';
+      if (name.includes('water')) return 'W';
+      current = current.parent;
+    }
+    return null;
+  }
+
+  #renderSubmissionLine() {
+    const value = key => this.lastRenderSubmissions[key] ?? 0;
+    return `draw T${value('T')} Tr${value('Tr')} G${value('G')} F${value('F')} D${value('D')} R${value('R')} Res${value('Res')} P${value('P')} W${value('W')}`;
   }
 
   #playerProbe(camera, player) {
@@ -506,9 +590,11 @@ export class GameApp {
         if (this.gatherables && this.hunt) this.#refreshTargets(dt);
       }
     } finally {
+      this.renderDiagnostics?.beforeRender?.();
       try {
         this.sceneSystem.render();
       } finally {
+        this.renderDiagnostics?.afterRender?.();
         requestAnimationFrame(this.#frame);
       }
     }
