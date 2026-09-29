@@ -207,14 +207,16 @@ const [
   collisionSource,
   hammerMenuSource,
   hammerMenuStylesSource,
-  cameraStylesSource
+  cameraStylesSource,
+  gameAppSource
 ] = await Promise.all([
   readFile('src/world/PhysicalLogSystem.js', 'utf8'),
   readFile('src/world/TreeOcclusionSystem.js', 'utf8'),
   readFile('src/world/WorldCollisionSystem.js', 'utf8'),
   readFile('src/ui/HammerConstructionMenu.js', 'utf8'),
   readFile('src/hammer-construction-menu.css', 'utf8'),
-  readFile('src/camera-view.css', 'utf8')
+  readFile('src/camera-view.css', 'utf8'),
+  readFile('src/core/GameApp.js', 'utf8')
 ]);
 
 for (const contract of [
@@ -231,6 +233,21 @@ for (const contract of [
 assert.ok(collisionSource.includes('supportOverridesBase'), 'World collision must support explicit construction surface ownership');
 assert.ok(treeOcclusionSource.includes('TREE_INTERACTION_OPAQUE_RADIUS = 3.1'), 'Harvest-range trees must remain on the shakeable opaque render path');
 assert.ok(nearlyEqual(PHYSICAL_LOG.floorSupportSeamPadding, 0.06), 'Floor seam support padding must remain deliberate and bounded');
+
+assert.ok(
+  gameAppSource.includes('LOS→Ranger') &&
+  gameAppSource.includes('#firstDepthHit(') &&
+  gameAppSource.includes('Pvis R') &&
+  gameAppSource.includes('Pndc') &&
+  gameAppSource.includes('treeCam') &&
+  gameAppSource.includes('#cameraTreeState('),
+  'Render debug mode must preserve player visibility, projection and first depth-occluder telemetry for Android direction-dependent world disappearance'
+);
+assert.ok(
+  gameAppSource.includes('item.depthWrite !== false') &&
+  gameAppSource.includes('excludeRoot && this.#isDescendantOf(object, excludeRoot)'),
+  'Render depth diagnostics must report real depth-writing blockers while excluding the Ranger from its own line-of-sight probe'
+);
 
 assert.ok(
   hammerMenuSource.includes("const MENU_OPEN_BODY_CLASS = 'hammer-construction-open'") &&
